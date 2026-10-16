@@ -14,7 +14,7 @@ constexpr const char *kind_names[] = {"instance", "physical_device", "device", "
 
 }  // namespace
 
-HandleRegistry::HandleRegistry(BlockSource &memory) : tree_(memory)
+HandleRegistry::HandleRegistry(BlockSource &memory) : tree_(memory), index_(memory, Pool::paged), unindexed_(0u)
 {
     AV_SCOPE("HandleRegistry::HandleRegistry");
 }
@@ -28,7 +28,36 @@ Status HandleRegistry::wrap(LoaderHandle::Kind kind, uint64_t host, Connection *
     if (!parent_fits(kind, connection, parent)) return Status::invalid_parameter;
     handle = existing(kind, host, connection);
     if (handle != nullptr) return Status::ok;
-    return tree_.make(handle, kind, host, connection, parent);
+    const Status made = tree_.make(handle, kind, host, connection, parent);
+    if (made != Status::ok) return made;
+    /* A handle the index cannot take is still found, by the walk. */
+    uint32_t slot = 0u;
+    if (index_.insert(key_of(kind, host, connection), handle, slot) != Status::ok) unindexed_++;
+    return Status::ok;
+}
+
+/* splitmix64's finaliser over the three. */
+uint64_t HandleRegistry::key_of(LoaderHandle::Kind kind, uint64_t host, const Connection *connection) const
+{
+    AV_SCOPE("HandleRegistry::key_of");
+    uint64_t mixed = host ^ (static_cast<uint64_t>(reinterpret_cast<uintptr_t>(connection)) * 0x9E3779B97F4A7C15u) ^
+                     (static_cast<uint64_t>(kind) << 56u);
+    mixed ^= mixed >> 30u;
+    mixed *= 0xBF58476D1CE4E5B9u;
+    mixed ^= mixed >> 27u;
+    mixed *= 0x94D049BB133111EBu;
+    return mixed ^ (mixed >> 31u);
+}
+
+void HandleRegistry::unindex(const LoaderHandle &handle)
+{
+    AV_SCOPE("HandleRegistry::unindex");
+    const uint64_t             key = key_of(handle.kind(), handle.host(), handle.connection());
+    LoaderHandle *const *const indexed = index_.find(key);
+    if (indexed != nullptr && *indexed == &handle)
+        static_cast<void>(index_.erase(key));
+    else
+        unindexed_--;
 }
 
 bool HandleRegistry::parent_fits(LoaderHandle::Kind kind, const Connection *connection, LoaderHandle *parent) const
@@ -41,6 +70,9 @@ bool HandleRegistry::parent_fits(LoaderHandle::Kind kind, const Connection *conn
 LoaderHandle *HandleRegistry::existing(LoaderHandle::Kind kind, uint64_t host, const Connection *connection) const
 {
     AV_SCOPE("HandleRegistry::existing");
+    LoaderHandle *const *const indexed = index_.find(key_of(kind, host, connection));
+    if (indexed != nullptr && (*indexed)->names(kind, host, connection)) return *indexed;
+    if (unindexed_ == 0u) return nullptr;
     LoaderHandle *found = nullptr;
     static_cast<void>(tree_.nodes().all_of([&](const LoaderHandle &handle) {
         if (!handle.names(kind, host, connection)) return true;
@@ -86,6 +118,9 @@ Status HandleRegistry::destroy(LoaderHandle *handle)
 {
     AV_SCOPE("HandleRegistry::destroy");
     if (!tree_.holds(handle)) return Status::invalid_parameter;
+    tree_.nodes().for_each([this, handle](const LoaderHandle &going) {
+        if (&going == handle || going.descends_from(*handle)) unindex(going);
+    });
     static_cast<void>(tree_.destroy(*handle));
     return Status::ok;
 }
@@ -184,9 +219,14 @@ bool HandleRegistry::invariants_hold() const
 {
     AV_SCOPE("HandleRegistry::invariants_hold");
     /* A parent is proven live before the handle's own invariants read it. */
-    if (!tree_.invariants_hold()) return false;
-    return tree_.nodes().all_of(
-        [&](const LoaderHandle &handle) { return handle.invariants_hold() && unique(handle); });
+    if (!tree_.invariants_hold() || !index_.invariants_hold()) return false;
+    uint32_t   indexed = 0u;
+    const bool whole = tree_.nodes().all_of([&](const LoaderHandle &handle) {
+        LoaderHandle *const *const entry = index_.find(key_of(handle.kind(), handle.host(), handle.connection()));
+        if (entry != nullptr && *entry == &handle) indexed++;
+        return handle.invariants_hold() && unique(handle);
+    });
+    return whole && indexed == index_.count() && indexed + unindexed_ == tree_.live();
 }
 
 }  // namespace av::icd

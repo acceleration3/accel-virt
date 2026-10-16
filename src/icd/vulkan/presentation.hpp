@@ -3,7 +3,8 @@
 #ifndef AV_PRESENTATION_HPP
 #define AV_PRESENTATION_HPP
 
-#include "core/support/object_storage.hpp"
+#include "core/support/keyed_slots.hpp"
+#include "core/support/object_pool.hpp"
 #include "icd/vulkan/entry_lookup.hpp"
 #include "icd/vulkan/surface_table.hpp"
 #include "icd/vulkan/swapchain.hpp"
@@ -30,16 +31,8 @@ class WindowChains;
 class WindowSurface;
 struct PresentationProbe;
 
-/* One swapchain's storage; a swapchain's handle is its slot's address. A type
- * of its own so the table's slots are a complete type (tools/header_scan.py). */
-struct SwapchainSlot {
-    ObjectStorage<Swapchain> chain_;
-};
-
 class Presentation {
 public:
-    static constexpr uint32_t max_swapchains = 16u;
-
     Presentation(BlockSource &memory, Kmt &kmt, WindowSurface &windows, WindowChains &chains, LogSink &log,
                  IcdRoot &root, EntryLookup &entries);
     ~Presentation();
@@ -77,7 +70,7 @@ public:
 
 private:
     Swapchain *find(VkDevice device, VkSwapchainKHR swapchain);
-    void       destroy(SwapchainSlot &slot);
+    void       destroy(Swapchain *chain);
     VkResult   worse(VkResult kept, VkResult result) const;
 
     BlockSource   &memory_;
@@ -88,7 +81,10 @@ private:
     IcdRoot       &root_;
     EntryLookup   &entries_;
     SurfaceTable   surfaces_;
-    SwapchainSlot  slots_[max_swapchains];
+    /* As many swapchains as the application makes, a swapchain's handle its
+     * address, found through its handle. */
+    ObjectPool<Swapchain>              chains_made_;
+    KeyedSlots<uint64_t, Swapchain *>  swapchains_;
 
     friend struct PresentationProbe;
 };

@@ -6,6 +6,7 @@ RtlCreateSecurityDescriptor
 RtlSetDaclSecurityDescriptor
 memcmp
 memcpy
+memmove
 memset
 strcmp
 strlen

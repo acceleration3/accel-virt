@@ -7,6 +7,7 @@
 #ifndef AV_VENDOR_VENDOR_ADAPTERS_HPP
 #define AV_VENDOR_VENDOR_ADAPTERS_HPP
 
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "core/support/status.hpp"
 #include "icd/vendor/vendor_adapter.hpp"
 
@@ -21,7 +22,7 @@ namespace av::vendor {
 
 class VendorAdapters {
 public:
-    static constexpr uint32_t max_adapters = 16u;
+    static constexpr uint32_t max_adapters = AvgpuAdapters::max_adapters;
 
     explicit VendorAdapters(Kmt &kmt);
     VendorAdapters(const VendorAdapters &) = delete;

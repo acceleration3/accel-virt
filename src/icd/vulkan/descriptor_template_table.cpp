@@ -7,9 +7,20 @@
 
 namespace av::icd {
 
-DescriptorTemplateTable::DescriptorTemplateTable(ThreadLock &lock) : lock_(lock), slots_{}
+DescriptorTemplateTable::DescriptorTemplateTable(BlockSource &memory, ThreadLock &lock)
+    : lock_(lock), slots_(memory, Pool::paged)
 {
     AV_SCOPE("DescriptorTemplateTable::DescriptorTemplateTable");
+}
+
+/* A non-dispatchable handle is a pointer on 64-bit Windows and a 64-bit
+ * integer on 32-bit, so its bytes are what is compared. */
+uint64_t DescriptorTemplateTable::key_of(VkDescriptorUpdateTemplate made) const
+{
+    AV_SCOPE("DescriptorTemplateTable::key_of");
+    uint64_t key = 0u;
+    __builtin_memcpy(&key, &made, sizeof made);
+    return key;
 }
 
 VkResult DescriptorTemplateTable::record(VkDevice device, VkDescriptorUpdateTemplate made,
@@ -21,48 +32,38 @@ VkResult DescriptorTemplateTable::record(VkDevice device, VkDescriptorUpdateTemp
     DescriptorTemplateLayout layout;
     if (layout.take(info->pDescriptorUpdateEntries, info->descriptorUpdateEntryCount) != Status::ok)
         return VK_ERROR_INITIALIZATION_FAILED;
-    const icd::ThreadLockHold released(lock_);
-    DescriptorTemplateSlot *free_slot = nullptr;
-    for (DescriptorTemplateSlot &slot : slots_) {
-        /* A handle a driver handed out again is this template now, not the one
-         * that was destroyed at the same address. */
-        if (slot.template_ == made) {
-            free_slot = &slot;
-            break;
-        }
-        if (slot.template_ == VK_NULL_HANDLE && free_slot == nullptr) free_slot = &slot;
+    const icd::ThreadLockHold    released(lock_);
+    const DescriptorTemplateSlot recorded{device, made, layout.bytes()};
+    /* A handle a driver handed out again is this template now, not the one
+     * that was destroyed at the same address. */
+    DescriptorTemplateSlot *const known = slots_.find(key_of(made));
+    if (known != nullptr) {
+        *known = recorded;
+        return VK_SUCCESS;
     }
-    if (free_slot == nullptr) return VK_ERROR_OUT_OF_HOST_MEMORY;
-    free_slot->device_ = device;
-    free_slot->template_ = made;
-    free_slot->bytes_ = layout.bytes();
-    return VK_SUCCESS;
+    uint32_t slot = 0u;
+    return slots_.insert(key_of(made), recorded, slot) == Status::ok ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
 void DescriptorTemplateTable::forget(VkDescriptorUpdateTemplate made)
 {
     AV_SCOPE("DescriptorTemplateTable::forget");
     const icd::ThreadLockHold released(lock_);
-    for (DescriptorTemplateSlot &slot : slots_) {
-        if (slot.template_ != made || made == VK_NULL_HANDLE) continue;
-        slot = DescriptorTemplateSlot{};
-        return;
-    }
+    if (made != VK_NULL_HANDLE) static_cast<void>(slots_.erase(key_of(made)));
 }
 
 void DescriptorTemplateTable::forget_device(VkDevice device)
 {
     AV_SCOPE("DescriptorTemplateTable::forget_device");
     const icd::ThreadLockHold released(lock_);
-    for (DescriptorTemplateSlot &slot : slots_)
-        if (slot.device_ == device && device != VK_NULL_HANDLE) slot = DescriptorTemplateSlot{};
+    slots_.erase_if([device](uint64_t, DescriptorTemplateSlot &slot) { return slot.device_ == device; });
 }
 
 uint64_t DescriptorTemplateTable::bytes_of(VkDescriptorUpdateTemplate made) const
 {
     AV_SCOPE("DescriptorTemplateTable::bytes_of");
     const icd::ThreadLockHold released(lock_);
-    const DescriptorTemplateSlot *const slot = slot_of(made);
+    const DescriptorTemplateSlot *const slot = made != VK_NULL_HANDLE ? slots_.find(key_of(made)) : nullptr;
     return slot != nullptr ? slot->bytes_ : 0u;
 }
 
@@ -70,34 +71,17 @@ uint32_t DescriptorTemplateTable::live() const
 {
     AV_SCOPE("DescriptorTemplateTable::live");
     const icd::ThreadLockHold released(lock_);
-    uint32_t found = 0u;
-    for (const DescriptorTemplateSlot &slot : slots_) found += slot.template_ != VK_NULL_HANDLE ? 1u : 0u;
-    return found;
-}
-
-const DescriptorTemplateSlot *DescriptorTemplateTable::slot_of(VkDescriptorUpdateTemplate made) const
-{
-    AV_SCOPE("DescriptorTemplateTable::slot_of");
-    if (made == VK_NULL_HANDLE) return nullptr;
-    for (const DescriptorTemplateSlot &slot : slots_)
-        if (slot.template_ == made) return &slot;
-    return nullptr;
+    return slots_.count();
 }
 
 bool DescriptorTemplateTable::invariants_hold() const
 {
     AV_SCOPE("DescriptorTemplateTable::invariants_hold");
-    for (uint32_t index = 0u; index < max_templates; index++) {
-        const DescriptorTemplateSlot &slot = slots_[index];
-        if (slot.template_ == VK_NULL_HANDLE) {
-            if (slot.device_ != VK_NULL_HANDLE || slot.bytes_ != 0u) return false;
-            continue;
-        }
-        if (slot.device_ == VK_NULL_HANDLE) return false;
-        for (uint32_t earlier = 0u; earlier < index; earlier++)
-            if (slots_[earlier].template_ == slot.template_) return false;
-    }
-    return true;
+    bool named = true;
+    slots_.for_each([this, &named](uint64_t key, const DescriptorTemplateSlot &slot) {
+        named = named && slot.device_ != VK_NULL_HANDLE && key_of(slot.template_) == key;
+    });
+    return named && slots_.invariants_hold();
 }
 
 }  // namespace av::icd

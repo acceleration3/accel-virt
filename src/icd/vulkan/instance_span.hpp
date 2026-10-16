@@ -11,6 +11,7 @@
 #ifndef AV_VKICD_INSTANCE_SPAN_HPP
 #define AV_VKICD_INSTANCE_SPAN_HPP
 
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "core/support/status.hpp"
 
 #include <stdint.h>
@@ -21,7 +22,7 @@ namespace av::icd {
 class InstanceSpan {
 public:
     /* One per avgpu adapter, as AvgpuAdapters lists at most. */
-    static constexpr uint32_t max_instances = 16u;
+    static constexpr uint32_t max_instances = AvgpuAdapters::max_adapters;
 
     explicit InstanceSpan(VkInstance own);
     InstanceSpan(const InstanceSpan &) = delete;

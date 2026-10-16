@@ -1,11 +1,19 @@
 /* The surfaces vkCreateWin32SurfaceKHR made (feature 046): a window and the
- * instance it was made for; a surface's handle is its slot's address. */
+ * instance it was made for, as many as an application makes. A surface's
+ * handle is a number minted for it and never minted again, so a destroyed
+ * surface's handle names nothing. */
 #ifndef AV_SURFACE_TABLE_HPP
 #define AV_SURFACE_TABLE_HPP
+
+#include "core/support/keyed_slots.hpp"
 
 #include <stdint.h>
 
 #include <vulkan/vulkan_core.h>
+
+namespace av {
+class BlockSource;
+}  // namespace av
 
 namespace av::icd {
 
@@ -21,14 +29,12 @@ struct SurfaceSlot {
 
 class SurfaceTable {
 public:
-    static constexpr uint32_t max_surfaces = 32u;
-
-    SurfaceTable();
+    explicit SurfaceTable(BlockSource &memory);
     SurfaceTable(const SurfaceTable &) = delete;
     SurfaceTable &operator=(const SurfaceTable &) = delete;
 
     /* VK_ERROR_INITIALIZATION_FAILED for no window;
-     * VK_ERROR_OUT_OF_HOST_MEMORY when every slot is taken. */
+     * VK_ERROR_OUT_OF_HOST_MEMORY when there is no memory to keep it. */
     VkResult     create(VkInstance instance, void *window, VkSurfaceKHR &surface);
     /* A handle this table did not make, or one destroyed, is ignored. */
     void         destroy(VkInstance instance, VkSurfaceKHR surface);
@@ -41,9 +47,9 @@ public:
     bool invariants_hold() const;
 
 private:
-    const SurfaceSlot *slot_of(VkSurfaceKHR surface) const;
-
-    SurfaceSlot slots_[max_surfaces];
+    /* Each surface by its handle's bits. */
+    KeyedSlots<uint64_t, SurfaceSlot> slots_;
+    uint64_t                          next_;
 
     friend struct SurfaceTableProbe;
 };

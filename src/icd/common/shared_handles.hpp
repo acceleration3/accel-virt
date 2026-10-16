@@ -17,7 +17,7 @@
 #ifndef AV_ICD_SHARED_HANDLES_HPP
 #define AV_ICD_SHARED_HANDLES_HPP
 
-#include "core/support/object_pool.hpp"
+#include "core/support/keyed_slots.hpp"
 #include "core/support/status.hpp"
 
 #include <stdint.h>
@@ -89,18 +89,22 @@ public:
 private:
     friend struct SharedHandlesProbe;
 
-    /* The row `handle` is in, or null. The caller holds the lock. */
-    SharedHandleSlot       *row_of(uint64_t handle);
-    const SharedHandleSlot *row_of(uint64_t handle) const;
-    /* The row `object_id` is in, or null. The caller holds the lock. */
-    SharedHandleSlot       *row_for(uint64_t object_id);
-    /* Its handle closed and the resource an adopt opened for it destroyed;
-     * dropping the row is the caller's. The caller holds the lock. */
-    void                    give_back(const SharedHandleSlot &row);
+    /* Room for one more row, so a handle the kernel makes always has one.
+     * The caller holds the lock. */
+    [[nodiscard]] Status make_room();
+    /* `row` kept under its handle and its object. The caller holds the lock. */
+    void                 keep(const SharedHandleSlot &row);
+    /* Its handle closed and the resource an adopt opened for it destroyed,
+     * and its object let go of; dropping the row is the caller's. The caller
+     * holds the lock. */
+    void                 give_back(const SharedHandleSlot &row);
 
-    Kmt                                  &kmt_;
-    ThreadLock                           &lock_;
-    mutable ObjectPool<SharedHandleSlot> slots_;
+    Kmt                                    &kmt_;
+    ThreadLock                             &lock_;
+    /* Every row by its handle. */
+    KeyedSlots<uint64_t, SharedHandleSlot> slots_;
+    /* Each object's handle, which a second mint of it answers. */
+    KeyedSlots<uint64_t, uint64_t>         handles_of_;
 };
 
 }  // namespace av::icd

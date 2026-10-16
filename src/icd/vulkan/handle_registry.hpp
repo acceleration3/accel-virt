@@ -6,10 +6,17 @@
  * so one host object on one connection is one handle however often it is
  * wrapped. A pointer from outside is only ever looked at after the pool says it
  * is a live handle of this registry. The registry takes no lock: IcdRoot
- * serializes it. */
+ * serializes it.
+ *
+ * Which handle a host object already has is found through an index by a key
+ * mixed from the kind, the host object and the connection, so wrapping the
+ * command buffers of one allocation is not a walk of every handle per buffer.
+ * Two objects whose keys meet - which a 64-bit mix makes rare - leave the
+ * second out of the index, counted, and only then is a miss walked for. */
 #ifndef AV_ICD_HANDLE_REGISTRY_HPP
 #define AV_ICD_HANDLE_REGISTRY_HPP
 
+#include "core/support/keyed_slots.hpp"
 #include "core/support/status.hpp"
 #include "icd/common/handle_tree.hpp"
 #include "icd/vulkan/loader_handle.hpp"
@@ -70,8 +77,14 @@ private:
     LoaderHandle *existing(LoaderHandle::Kind kind, uint64_t host, const Connection *connection) const;
     bool          parent_fits(LoaderHandle::Kind kind, const Connection *connection, LoaderHandle *parent) const;
     bool          unique(const LoaderHandle &handle) const;
+    uint64_t      key_of(LoaderHandle::Kind kind, uint64_t host, const Connection *connection) const;
+    /* `handle` out of the index, or out of the count of those it left out. */
+    void          unindex(const LoaderHandle &handle);
 
-    HandleTree<LoaderHandle> tree_;
+    HandleTree<LoaderHandle>             tree_;
+    KeyedSlots<uint64_t, LoaderHandle *> index_;
+    /* Live handles the index has no entry for. */
+    uint32_t                             unindexed_;
 
     friend struct HandleRegistryProbe;
 };

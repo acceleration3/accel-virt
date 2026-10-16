@@ -14,12 +14,16 @@
  * in one pass would destroy a queue before the event made on it is judged, and
  * walk the event's parent into storage the pool may already have freed.
  *
+ * Each node is found by its address through a KeyedSlots index, so judging a
+ * pointer is one probe however many objects an application holds.
+ *
  * `Node` has a `Kind` enumeration ordered from the roots down, `kind()`,
  * `parent()`, and `descends_from(other)`, true when `other` is above it. The
  * tree takes no lock: its owner serializes it. */
 #ifndef AV_ICD_HANDLE_TREE_HPP
 #define AV_ICD_HANDLE_TREE_HPP
 
+#include "core/support/keyed_slots.hpp"
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
@@ -69,12 +73,15 @@ private:
     friend struct HandleTreeProbe;
 
     uint32_t deepest_kind() const;
+    uint64_t key_of(const void *pointer) const;
 
-    ObjectPool<Node> pool_;
+    ObjectPool<Node>             pool_;
+    /* Every node by its address. */
+    KeyedSlots<uint64_t, Node *> index_;
 };
 
 template <typename Node>
-HandleTree<Node>::HandleTree(BlockSource &memory) : pool_(memory)
+HandleTree<Node>::HandleTree(BlockSource &memory) : pool_(memory), index_(memory, Pool::paged)
 {
     AV_SCOPE("HandleTree::HandleTree");
 }
@@ -84,7 +91,22 @@ template <typename... Arguments>
 Status HandleTree<Node>::make(Node *&made, Arguments &&...arguments)
 {
     AV_SCOPE("HandleTree::make");
-    return pool_.create(made, static_cast<Arguments &&>(arguments)...);
+    made = nullptr;
+    /* Room to index the node first, so a node made is always found. */
+    const Status room = index_.reserve(index_.count() + 1u);
+    if (room != Status::ok) return room;
+    const Status created = pool_.create(made, static_cast<Arguments &&>(arguments)...);
+    if (created != Status::ok) return created;
+    uint32_t slot = 0u;
+    static_cast<void>(index_.insert(key_of(made), made, slot));
+    return Status::ok;
+}
+
+template <typename Node>
+uint64_t HandleTree<Node>::key_of(const void *pointer) const
+{
+    AV_SCOPE("HandleTree::key_of");
+    return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pointer));
 }
 
 template <typename Node>
@@ -99,7 +121,7 @@ template <typename Node>
 bool HandleTree<Node>::holds(const Node *node) const
 {
     AV_SCOPE("HandleTree::holds");
-    return node != nullptr && pool_.find(const_cast<Node *>(node)) != nullptr;
+    return node != nullptr && index_.find(key_of(node)) != nullptr;
 }
 
 template <typename Node>
@@ -107,8 +129,8 @@ Node *HandleTree<Node>::made(const void *pointer, Kind kind) const
 {
     AV_SCOPE("HandleTree::made");
     if (pointer == nullptr) return nullptr;
-    Node *const node = pool_.find(const_cast<void *>(pointer));
-    return node != nullptr && node->kind() == kind ? node : nullptr;
+    Node *const *const node = index_.find(key_of(pointer));
+    return node != nullptr && (*node)->kind() == kind ? *node : nullptr;
 }
 
 template <typename Node>
@@ -131,11 +153,14 @@ uint32_t HandleTree<Node>::destroy(Node &node)
     const uint32_t before = pool_.live();
     const auto     top = static_cast<uint32_t>(node.kind());
     for (uint32_t kind = deepest_kind(); kind > top; kind--) {
-        pool_.destroy_if([&node, kind](const Node &candidate) {
-            return static_cast<uint32_t>(candidate.kind()) == kind && candidate.descends_from(node);
+        pool_.destroy_if([this, &node, kind](const Node &candidate) {
+            if (static_cast<uint32_t>(candidate.kind()) != kind || !candidate.descends_from(node)) return false;
+            static_cast<void>(index_.erase(key_of(&candidate)));
+            return true;
         });
     }
     /* holds() said it is there, so the destroy cannot refuse. */
+    static_cast<void>(index_.erase(key_of(&node)));
     static_cast<void>(pool_.destroy(&node));
     return before - pool_.live();
 }
@@ -158,8 +183,11 @@ template <typename Node>
 bool HandleTree<Node>::invariants_hold() const
 {
     AV_SCOPE("HandleTree::invariants_hold");
-    if (!pool_.invariants_hold()) return false;
-    return pool_.all_of([this](const Node &node) { return node.parent() == nullptr || holds(node.parent()); });
+    if (!pool_.invariants_hold() || !index_.invariants_hold() || index_.count() != pool_.live()) return false;
+    return pool_.all_of([this](const Node &node) {
+        Node *const *const indexed = index_.find(key_of(&node));
+        return indexed != nullptr && *indexed == &node && (node.parent() == nullptr || holds(node.parent()));
+    });
 }
 
 }  // namespace av::icd

@@ -4,7 +4,8 @@
  * first context made on it and closes with the last one gone. When one
  * context's transport faults, its whole device is lost (050 US3, T040): the
  * contexts on it keep their link until they are deleted, and the next context
- * made opens a new device beside it.
+ * made opens a new device beside it, however many lost ones contexts still
+ * hold.
  *
  * Nothing here is any one API's. It was the OpenGL ICD's `IcdConnection` until
  * the OpenCL ICD needed the same thing, which is the same thing down to the
@@ -15,7 +16,8 @@
 #ifndef AV_ICD_CONNECTION_HPP
 #define AV_ICD_CONNECTION_HPP
 
-#include "core/support/object_storage.hpp"
+#include "core/support/keyed_slots.hpp"
+#include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "guest/kmt/adapter_search.hpp"
 #include "guest/transport/guest_connection.hpp"
@@ -23,6 +25,7 @@
 #include <stdint.h>
 
 namespace av {
+class BlockSource;
 class Kmt;
 class StateWriter;
 }  // namespace av
@@ -31,14 +34,12 @@ namespace av::icd {
 
 class IcdConnection {
 public:
-    /* A process that loses a device three times while contexts on each stay
-     * alive has had enough devices. */
-    static constexpr uint32_t max_links = 4u;
-    static constexpr uint32_t no_link = max_links;
+    /* What names no link: never minted. */
+    static constexpr uint32_t no_link = 0xFFFFFFFFu;
 
     /* On the avgpu adapter whose LUID is `luid`; 0 takes the one the primary
      * display is on (AdapterSearch::find_avgpu). */
-    IcdConnection(Kmt &kmt, uint64_t luid);
+    IcdConnection(BlockSource &memory, Kmt &kmt, uint64_t luid);
     ~IcdConnection();
     IcdConnection(const IcdConnection &) = delete;
     IcdConnection &operator=(const IcdConnection &) = delete;
@@ -46,7 +47,7 @@ public:
     /* One more context uses a device: the device new contexts share, or a
      * new one when there is none or it was lost. `link` names it; no_link on
      * failure. not_supported with no avgpu adapter or no device made on it,
-     * no_space with every link lost and still held - nothing opened for
+     * no_memory when there is no memory for a new link - nothing opened for
      * either. */
     [[nodiscard]] Status acquire(uint32_t &link);
     /* One context fewer on `link`; its last closes the device, and the last
@@ -67,16 +68,25 @@ public:
     bool invariants_hold() const;
 
 private:
-    bool held(uint32_t link) const;
-    [[nodiscard]] Status open_link(uint32_t link);
+    struct Link {
+        GuestConnection *device_;
+        uint32_t         users_;
+        bool             lost_;
+    };
+
+    bool                 held(uint32_t link) const;
+    [[nodiscard]] Status open_link(uint32_t &link);
     void                 close_adapter_if_idle();
+    /* A link number no held link has. */
+    uint32_t             mint();
 
     Kmt                           &kmt_;
     uint64_t                       luid_;
     AdapterSearch                  search_;
-    ObjectStorage<GuestConnection> devices_[max_links];
-    uint32_t                       users_[max_links];
-    bool                           lost_[max_links];
+    ObjectPool<GuestConnection>    devices_;
+    /* Every held link by its number. */
+    KeyedSlots<uint32_t, Link>     links_;
+    uint32_t                       next_;
     /* The link new contexts join: held and not lost, or no_link. */
     uint32_t                       current_;
 

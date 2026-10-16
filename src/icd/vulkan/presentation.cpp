@@ -13,7 +13,7 @@ namespace av::icd {
 Presentation::Presentation(BlockSource &memory, Kmt &kmt, WindowSurface &windows, WindowChains &chains,
                            LogSink &log, IcdRoot &root, EntryLookup &entries)
     : memory_(memory), kmt_(kmt), windows_(windows), chains_(chains), log_(log), root_(root), entries_(entries),
-      surfaces_(), slots_{}
+      surfaces_(memory), chains_made_(memory), swapchains_(memory, Pool::paged)
 {
     AV_SCOPE("Presentation::Presentation");
 }
@@ -21,7 +21,10 @@ Presentation::Presentation(BlockSource &memory, Kmt &kmt, WindowSurface &windows
 Presentation::~Presentation()
 {
     AV_SCOPE("Presentation::~Presentation");
-    for (SwapchainSlot &slot : slots_) destroy(slot);
+    swapchains_.erase_if([this](uint64_t, Swapchain *&chain) {
+        static_cast<void>(chains_made_.destroy(chain));
+        return true;
+    });
 }
 
 VkResult Presentation::create_surface(VkInstance instance, const Win32SurfaceCreateRecord *info,
@@ -111,27 +114,29 @@ VkResult Presentation::create_swapchain(VkDevice device, const VkSwapchainCreate
      * the old one's slot of the window's chain is given back before the new
      * one opens the chain again. */
     if (Swapchain *const old = find(device, info->oldSwapchain); old != nullptr) old->retire();
-    for (SwapchainSlot &slot : slots_) {
-        if (slot.chain_.constructed()) continue;
-        static_cast<void>(slot.chain_.construct(memory_, windows_, chains_, entries_, device, physical, kmt_, log_,
-                                                *connection));
-        SurfaceProperties properties(windows_, window);
-        const VkResult made = slot.chain_.object().initialize(*info, window, properties);
-        if (made != VK_SUCCESS) {
-            destroy(slot);
-            return made;
-        }
-        *swapchain = HandleBits(&slot).as<VkSwapchainKHR>();
-        return VK_SUCCESS;
+    Swapchain *chain = nullptr;
+    /* Room to name it first, so a swapchain made always has a handle. */
+    if (swapchains_.reserve(swapchains_.count() + 1u) != Status::ok ||
+        chains_made_.create(chain, memory_, windows_, chains_, entries_, device, physical, kmt_, log_, *connection) !=
+            Status::ok)
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    SurfaceProperties properties(windows_, window);
+    const VkResult    made = chain->initialize(*info, window, properties);
+    if (made != VK_SUCCESS) {
+        static_cast<void>(chains_made_.destroy(chain));
+        return made;
     }
-    return VK_ERROR_OUT_OF_HOST_MEMORY;
+    uint32_t slot = 0u;
+    static_cast<void>(swapchains_.insert(HandleBits(chain).value(), chain, slot));
+    *swapchain = HandleBits(chain).as<VkSwapchainKHR>();
+    return VK_SUCCESS;
 }
 
 void Presentation::destroy_swapchain(VkDevice device, VkSwapchainKHR swapchain)
 {
     AV_SCOPE("Presentation::destroy_swapchain");
-    for (SwapchainSlot &slot : slots_)
-        if (HandleBits(&slot).as<VkSwapchainKHR>() == swapchain && find(device, swapchain) != nullptr) destroy(slot);
+    Swapchain *const chain = find(device, swapchain);
+    if (chain != nullptr) destroy(chain);
 }
 
 VkResult Presentation::swapchain_images(VkDevice device, VkSwapchainKHR swapchain, uint32_t *count,
@@ -180,8 +185,11 @@ void Presentation::forget_instance(VkInstance instance)
 void Presentation::forget_device(VkDevice device)
 {
     AV_SCOPE("Presentation::forget_device");
-    for (SwapchainSlot &slot : slots_)
-        if (slot.chain_.constructed() && slot.chain_.object().device() == device) destroy(slot);
+    swapchains_.erase_if([this, device](uint64_t, Swapchain *&chain) {
+        if (chain->device() != device) return false;
+        static_cast<void>(chains_made_.destroy(chain));
+        return true;
+    });
 }
 
 uint32_t Presentation::surfaces() const
@@ -193,9 +201,7 @@ uint32_t Presentation::surfaces() const
 uint32_t Presentation::swapchains() const
 {
     AV_SCOPE("Presentation::swapchains");
-    uint32_t count = 0u;
-    for (const SwapchainSlot &slot : slots_) count += slot.chain_.constructed() ? 1u : 0u;
-    return count;
+    return swapchains_.count();
 }
 
 void Presentation::report(StateWriter &writer) const
@@ -205,12 +211,11 @@ void Presentation::report(StateWriter &writer) const
     writer.number("surfaces", surfaces());
     writer.number("swapchains", swapchains());
     uint64_t number = 0u;
-    for (const SwapchainSlot &slot : slots_) {
-        if (!slot.chain_.constructed()) continue;
+    swapchains_.for_each([&writer, &number](uint64_t, Swapchain *const &chain) {
         writer.open("swapchain", number++);
-        writer.number("presented", slot.chain_.object().presented());
+        writer.number("presented", chain->presented());
         writer.close();
-    }
+    });
     writer.close();
 }
 
@@ -218,29 +223,28 @@ void Presentation::report(StateWriter &writer) const
 bool Presentation::invariants_hold() const
 {
     AV_SCOPE("Presentation::invariants_hold");
-    if (!surfaces_.invariants_hold()) return false;
-    for (const SwapchainSlot &slot : slots_) {
-        if (slot.chain_.constructed() && !slot.chain_.object().invariants_hold()) return false;
-    }
-    return true;
+    if (!surfaces_.invariants_hold() || swapchains_.count() != chains_made_.live()) return false;
+    bool whole = true;
+    swapchains_.for_each([&whole](uint64_t handle, Swapchain *const &chain) {
+        whole = whole && HandleBits(chain).value() == handle && chain->invariants_hold();
+    });
+    return whole && swapchains_.invariants_hold();
 }
 
 /* A swapchain this table made, of `device` unless no device is named. */
 Swapchain *Presentation::find(VkDevice device, VkSwapchainKHR swapchain)
 {
     AV_SCOPE("Presentation::find");
-    for (SwapchainSlot &slot : slots_) {
-        if (HandleBits(&slot).as<VkSwapchainKHR>() != swapchain || !slot.chain_.constructed()) continue;
-        Swapchain &chain = slot.chain_.object();
-        return device == VK_NULL_HANDLE || chain.device() == device ? &chain : nullptr;
-    }
-    return nullptr;
+    Swapchain *const *const chain = swapchains_.find(HandleBits(swapchain).value());
+    if (chain == nullptr) return nullptr;
+    return device == VK_NULL_HANDLE || (*chain)->device() == device ? *chain : nullptr;
 }
 
-void Presentation::destroy(SwapchainSlot &slot)
+void Presentation::destroy(Swapchain *chain)
 {
     AV_SCOPE("Presentation::destroy");
-    slot.chain_.destroy();
+    static_cast<void>(swapchains_.erase(HandleBits(chain).value()));
+    static_cast<void>(chains_made_.destroy(chain));
 }
 
 /* An error outranks everything, and the first error is the one kept; a present
