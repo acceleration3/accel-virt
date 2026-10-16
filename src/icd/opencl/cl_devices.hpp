@@ -34,7 +34,7 @@ public:
     ClDevices &operator=(const ClDevices &) = delete;
 
     /* A device for each adapter `adapters` lists, in its order; once. An
-     * adapter Windows gave no LUID, or one past max_devices, is left out. */
+     * adapter Windows gave no LUID is left out. */
     void      learn(const AvgpuAdapters &adapters);
     bool      learnt() const;
     uint32_t  count() const;

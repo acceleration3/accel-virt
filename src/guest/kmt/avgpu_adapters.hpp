@@ -49,6 +49,10 @@ public:
     /* Its LUID, packed as Kmt::adapter_luid packs it; 0 where Windows gave
      * none. */
     uint64_t             luid(uint32_t index) const;
+    /* The LUID of each adapter Windows gave one, in this order, into `into`;
+     * how many. An adapter with none is left out: nothing opens an adapter
+     * but by its LUID. */
+    uint32_t             luids(uint64_t (&into)[max_adapters]) const;
     const PciIdentity   &identity(uint32_t index) const;
     /* Whether the primary display is on it: only ever the first. */
     bool                 primary(uint32_t index) const;

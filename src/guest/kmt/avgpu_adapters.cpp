@@ -90,6 +90,15 @@ uint64_t AvgpuAdapters::luid(uint32_t index) const
     return index < count_ ? luids_[index] : 0u;
 }
 
+uint32_t AvgpuAdapters::luids(uint64_t (&into)[max_adapters]) const
+{
+    AV_SCOPE("AvgpuAdapters::luids");
+    uint32_t count = 0u;
+    for (uint32_t index = 0u; index < count_; ++index)
+        if (luids_[index] != 0u) into[count++] = luids_[index];
+    return count;
+}
+
 const PciIdentity &AvgpuAdapters::identity(uint32_t index) const
 {
     AV_SCOPE("AvgpuAdapters::identity");

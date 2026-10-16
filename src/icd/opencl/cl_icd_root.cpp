@@ -165,7 +165,7 @@ void ClIcdRoot::learn_devices()
     if (!devices_.learnt()) {
         devices_.learn(adapters);
         if (devices_.left_out() != 0u)
-            log_.write("avcl: an avgpu adapter is left out: no LUID, or past the devices shown");
+            log_.write("avcl: an avgpu adapter is left out: Windows gave it no LUID");
     }
     for (uint32_t index = 0u; index < devices_.count(); ++index) {
         ClDevice &device = devices_.at(index);

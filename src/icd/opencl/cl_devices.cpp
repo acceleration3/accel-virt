@@ -22,18 +22,13 @@ void ClDevices::learn(const AvgpuAdapters &adapters)
     AV_SCOPE("ClDevices::learn");
     if (learnt_) return;
     learnt_ = true;
-    for (uint32_t index = 0u; index < adapters.count(); ++index) {
-        const uint64_t luid = adapters.luid(index);
-        /* A device is opened by its adapter's LUID; without one there is no
-         * saying which adapter it would open. */
-        if (luid == 0u || count_ == max_devices) {
-            ++left_out_;
-            continue;
-        }
-        /* Storage past count_ is empty, so the construct cannot be refused. */
-        static_cast<void>(devices_[count_].construct(memory_, kmt_, luid));
-        ++count_;
-    }
+    uint64_t luids[AvgpuAdapters::max_adapters] = {};
+    const uint32_t named = adapters.luids(luids);
+    /* A device is opened by its adapter's LUID; without one there is no
+     * saying which adapter it would open. */
+    left_out_ = adapters.count() - named;
+    /* Storage past count_ is empty, so no construct can be refused. */
+    for (; count_ < named; ++count_) static_cast<void>(devices_[count_].construct(memory_, kmt_, luids[count_]));
 }
 
 bool ClDevices::learnt() const

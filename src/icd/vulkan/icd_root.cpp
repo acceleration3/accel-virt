@@ -472,10 +472,10 @@ void IcdRoot::span_adapters(const VkInstanceCreateInfo &forwarded, const VkAlloc
     {
         AvgpuAdapters adapters(kmt_);
         if (adapters.learn() != Status::ok) return;
-        for (uint32_t index = 0u; index < adapters.count(); ++index) luids[count++] = adapters.luid(index);
+        count = adapters.luids(luids);
     }
     for (uint32_t index = 0u; index < count; ++index) {
-        if (luids[index] == 0u || (primary != nullptr && luids[index] == primary->luid())) continue;
+        if (primary != nullptr && luids[index] == primary->luid()) continue;
         Connection  *opened = nullptr;
         const Status status = open_connection(opened, luids[index]);
         if (status != Status::ok) {
