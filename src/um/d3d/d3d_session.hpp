@@ -25,7 +25,7 @@
 #include "icd/common/id_mint.hpp"
 #include "icd/d3d/buffer_slices.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
-#include "icd/d3d/stream_timeline.hpp"
+#include "icd/d3d/session_timeline.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "core/support/object_pool.hpp"
 #include "um/common/srw_lock.hpp"
@@ -135,7 +135,7 @@ private:
     icd::HostChannel                     channel_;
     ObjectStorage<d3d::D3dCommandStream> stream_;
     SrwLock                              slices_lock_;
-    ObjectStorage<StreamTimeline>        timeline_;
+    ObjectStorage<SessionTimeline>        timeline_;
     ObjectStorage<BufferSlices>          slices_;
     uint64_t                             slice_store_bytes_;
     HostAllocation                      *slice_store_;

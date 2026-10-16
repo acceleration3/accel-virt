@@ -120,7 +120,7 @@ void D3dSession::open_slices()
         return;
     }
     slice_store_ = store;
-    static_cast<void>(timeline_.construct(stream_.object(), channel_.transport(), lock_));
+    static_cast<void>(timeline_.construct(channel_, lock_));
     static_cast<void>(slices_.construct(memory_, timeline_.object(), slices_lock_));
     slices_.object().take(store->bytes());
     DriverLog lines(log_, "avumd: ");

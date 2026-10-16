@@ -3,7 +3,7 @@
  *
  * Fences number the session's batches. A command recorded now goes out in the
  * batch recording() names; memory it reads is free once completed() reaches
- * that fence. Virtual because the session's stream and transport are the
+ * that fence. Virtual because the session's transport (SessionTimeline) is the
  * driver's answer and a test plays another. */
 #ifndef AV_D3D_GPU_TIMELINE_HPP
 #define AV_D3D_GPU_TIMELINE_HPP

@@ -39,7 +39,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
     : memory_(memory), log_(log), lines_(log, "avgl: "), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_reported_(false),
-      channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), extensions_(memory), framebuffers_(memory, log), shadows_(memory), staging_(), mappings_(memory, shadows_, log), externals_(handles, memory, log), pinned_(memory, channel_),
+      channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), timeline_(channel_), extensions_(memory), framebuffers_(memory, log), shadows_(memory), staging_(), mappings_(memory, shadows_, log), externals_(handles, memory, log), pinned_(memory, channel_),
       strings_{},
       debug_callback_(0u), debug_user_(0u), luid_(0u)
 {
@@ -216,11 +216,10 @@ void GuestGlContext::end_frame()
     AV_SCOPE("GuestGlContext::end_frame");
     if (state_ != State::made) return;
     flush();
-    KmtTransport  &transport = channel_.transport();
     uint64_t       frequency = 0u;
     const uint64_t now = link_.device().kmt().performance_counter(frequency);
-    const uint64_t behind = frames_.end(transport.published_fence(), now, frequency, transport.gpu_completed());
-    if (behind != 0u && transport.await_gpu(behind) != Status::ok)
+    const uint64_t behind = frames_.end(timeline_.recording() - 1u, now, frequency, timeline_.completed());
+    if (behind != 0u && !timeline_.wait(behind))
         log_.write("avgl: the host never finished an earlier frame; the context is lost");
 }
 
@@ -514,6 +513,7 @@ void GuestGlContext::teardown()
     channel_.close(state_ == State::lost);
     pacing_.unbind();
     frames_.forget();
+    timeline_.forget();
     link_.release();
     loss_reported_ = false;
     state_ = State::created;
