@@ -1,9 +1,11 @@
+#include "core/support/four_cc.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/d3d/d3d9_format_layout.hpp"
 
 #include <cstdint>
 
 using av::D3d9FormatLayout;
+using av::FourCc;
 
 namespace {
 
@@ -13,14 +15,6 @@ struct Expected {
     std::uint32_t width;
     std::uint32_t height;
 };
-
-constexpr std::uint32_t fourcc(char a, char b, char c, char d)
-{
-    return static_cast<std::uint32_t>(static_cast<unsigned char>(a)) |
-           static_cast<std::uint32_t>(static_cast<unsigned char>(b)) << 8u |
-           static_cast<std::uint32_t>(static_cast<unsigned char>(c)) << 16u |
-           static_cast<std::uint32_t>(static_cast<unsigned char>(d)) << 24u;
-}
 
 }  // namespace
 
@@ -78,23 +72,23 @@ TEST(d3d9_format_layout, gives_each_format_its_element)
         {118u, 0u, 1u, 1u},                         /* A1: no whole byte per texel */
         {119u, 4u, 1u, 1u},                         /* A2B10G10R10_XR_BIAS */
         {120u, 0u, 1u, 1u},                         /* past the last */
-        {fourcc('D', 'X', 'T', '1'), 8u, 4u, 4u},
-        {fourcc('D', 'X', 'T', '2'), 16u, 4u, 4u},
-        {fourcc('D', 'X', 'T', '3'), 16u, 4u, 4u},
-        {fourcc('D', 'X', 'T', '4'), 16u, 4u, 4u},
-        {fourcc('D', 'X', 'T', '5'), 16u, 4u, 4u},
-        {fourcc('A', 'T', 'I', '1'), 8u, 4u, 4u},
-        {fourcc('A', 'T', 'I', '2'), 16u, 4u, 4u},
-        {fourcc('U', 'Y', 'V', 'Y'), 4u, 2u, 1u},
-        {fourcc('Y', 'U', 'Y', '2'), 4u, 2u, 1u},
-        {fourcc('R', 'G', 'B', 'G'), 4u, 2u, 1u},    /* R8G8_B8G8 */
-        {fourcc('G', 'R', 'G', 'B'), 4u, 2u, 1u},    /* G8R8_G8B8 */
-        {fourcc('I', 'N', 'T', 'Z'), 4u, 1u, 1u},
-        {fourcc('D', 'F', '2', '4'), 4u, 1u, 1u},
-        {fourcc('D', 'F', '1', '6'), 2u, 1u, 1u},
-        {fourcc('R', 'A', 'W', 'Z'), 4u, 1u, 1u},
-        {fourcc('N', 'U', 'L', 'L'), 0u, 1u, 1u},    /* a render target with no memory */
-        {fourcc('D', 'X', 'T', '6'), 0u, 1u, 1u},    /* no such format */
+        {FourCc('D', 'X', 'T', '1').value(), 8u, 4u, 4u},
+        {FourCc('D', 'X', 'T', '2').value(), 16u, 4u, 4u},
+        {FourCc('D', 'X', 'T', '3').value(), 16u, 4u, 4u},
+        {FourCc('D', 'X', 'T', '4').value(), 16u, 4u, 4u},
+        {FourCc('D', 'X', 'T', '5').value(), 16u, 4u, 4u},
+        {FourCc('A', 'T', 'I', '1').value(), 8u, 4u, 4u},
+        {FourCc('A', 'T', 'I', '2').value(), 16u, 4u, 4u},
+        {FourCc('U', 'Y', 'V', 'Y').value(), 4u, 2u, 1u},
+        {FourCc('Y', 'U', 'Y', '2').value(), 4u, 2u, 1u},
+        {FourCc('R', 'G', 'B', 'G').value(), 4u, 2u, 1u},    /* R8G8_B8G8 */
+        {FourCc('G', 'R', 'G', 'B').value(), 4u, 2u, 1u},    /* G8R8_G8B8 */
+        {FourCc('I', 'N', 'T', 'Z').value(), 4u, 1u, 1u},
+        {FourCc('D', 'F', '2', '4').value(), 4u, 1u, 1u},
+        {FourCc('D', 'F', '1', '6').value(), 2u, 1u, 1u},
+        {FourCc('R', 'A', 'W', 'Z').value(), 4u, 1u, 1u},
+        {FourCc('N', 'U', 'L', 'L').value(), 0u, 1u, 1u},    /* a render target with no memory */
+        {FourCc('D', 'X', 'T', '6').value(), 0u, 1u, 1u},    /* no such format */
     };
     for (const Expected &expected : formats) {
         const D3d9FormatLayout layout(expected.format);
@@ -108,14 +102,14 @@ TEST(d3d9_format_layout, gives_each_format_its_element)
  * DXT1 texture is one block of 8 bytes, not an eighth of one. */
 TEST(d3d9_format_layout, counts_rows_and_bytes_in_whole_elements)
 {
-    const D3d9FormatLayout dxt1(fourcc('D', 'X', 'T', '1'));
+    const D3d9FormatLayout dxt1(FourCc('D', 'X', 'T', '1').value());
     CHECK_EQ(dxt1.row_bytes(1u), 8u);
     CHECK_EQ(dxt1.row_bytes(4u), 8u);
     CHECK_EQ(dxt1.row_bytes(5u), 16u);
     CHECK_EQ(dxt1.rows(1u), 1u);
     CHECK_EQ(dxt1.rows(4u), 1u);
     CHECK_EQ(dxt1.rows(5u), 2u);
-    const D3d9FormatLayout yuy2(fourcc('Y', 'U', 'Y', '2'));
+    const D3d9FormatLayout yuy2(FourCc('Y', 'U', 'Y', '2').value());
     CHECK_EQ(yuy2.row_bytes(3u), 8u);
     CHECK_EQ(yuy2.rows(3u), 3u);
     const D3d9FormatLayout argb(21u);

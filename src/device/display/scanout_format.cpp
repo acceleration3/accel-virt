@@ -1,25 +1,20 @@
 #include "device/display/scanout_format.hpp"
 
+#include "core/support/four_cc.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {
 
 namespace {
 
-constexpr uint32_t fourcc_of(char a, char b, char c, char d)
-{
-    return static_cast<uint32_t>(a) | (static_cast<uint32_t>(b) << 8) | (static_cast<uint32_t>(c) << 16) |
-           (static_cast<uint32_t>(d) << 24);
-}
-
-constexpr uint32_t drm_argb8888 = fourcc_of('A', 'R', '2', '4');
-constexpr uint32_t drm_xrgb8888 = fourcc_of('X', 'R', '2', '4');
-constexpr uint32_t drm_bgra8888 = fourcc_of('B', 'A', '2', '4');
-constexpr uint32_t drm_bgrx8888 = fourcc_of('B', 'X', '2', '4');
-constexpr uint32_t drm_abgr8888 = fourcc_of('A', 'B', '2', '4');
-constexpr uint32_t drm_rgbx8888 = fourcc_of('R', 'X', '2', '4');
-constexpr uint32_t drm_rgba8888 = fourcc_of('R', 'A', '2', '4');
-constexpr uint32_t drm_xbgr8888 = fourcc_of('X', 'B', '2', '4');
+constexpr uint32_t drm_argb8888 = FourCc('A', 'R', '2', '4').value();
+constexpr uint32_t drm_xrgb8888 = FourCc('X', 'R', '2', '4').value();
+constexpr uint32_t drm_bgra8888 = FourCc('B', 'A', '2', '4').value();
+constexpr uint32_t drm_bgrx8888 = FourCc('B', 'X', '2', '4').value();
+constexpr uint32_t drm_abgr8888 = FourCc('A', 'B', '2', '4').value();
+constexpr uint32_t drm_rgbx8888 = FourCc('R', 'X', '2', '4').value();
+constexpr uint32_t drm_rgba8888 = FourCc('R', 'A', '2', '4').value();
+constexpr uint32_t drm_xbgr8888 = FourCc('X', 'B', '2', '4').value();
 
 constexpr uint32_t pixel_width = 4u;
 

@@ -1,18 +1,11 @@
 #include "icd/d3d/d3d9_format_ops.hpp"
 
+#include "core/support/four_cc.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av::d3d {
 
 namespace {
-
-constexpr uint32_t fourcc(char a, char b, char c, char d)
-{
-    return static_cast<uint32_t>(static_cast<unsigned char>(a)) |
-           static_cast<uint32_t>(static_cast<unsigned char>(b)) << 8u |
-           static_cast<uint32_t>(static_cast<unsigned char>(c)) << 16u |
-           static_cast<uint32_t>(static_cast<unsigned char>(d)) << 24u;
-}
 
 /* D3DFORMAT values (d3d9types.h). */
 constexpr uint32_t a8r8g8b8 = 21u;
@@ -27,10 +20,10 @@ constexpr uint32_t asked_formats[] = {
     20u, a8r8g8b8, x8r8g8b8, r5g6b5, x1r5g5b5, a1r5g5b5, a4r4g4b4, 27u, 28u, 29u, 30u, 31u, 32u, 33u, 34u,
     a2r10g10b10, 36u, 40u, 41u, 50u, 51u, 52u, 60u, 61u, 62u, 63u, 64u, 67u, 70u, 71u, 73u, 75u, 77u, 79u, 80u,
     81u, 82u, 83u, 110u, 111u, 112u, 113u, 114u, 115u, 116u, 117u,
-    fourcc('D', 'X', 'T', '1'), fourcc('D', 'X', 'T', '2'), fourcc('D', 'X', 'T', '3'), fourcc('D', 'X', 'T', '4'),
-    fourcc('D', 'X', 'T', '5'), fourcc('A', 'T', 'I', '1'), fourcc('A', 'T', 'I', '2'), fourcc('I', 'N', 'T', 'Z'),
-    fourcc('D', 'F', '1', '6'), fourcc('D', 'F', '2', '4'), fourcc('N', 'U', 'L', 'L'), fourcc('R', 'E', 'S', 'Z'),
-    fourcc('U', 'Y', 'V', 'Y'), fourcc('Y', 'U', 'Y', '2'), fourcc('R', 'G', 'B', 'G'), fourcc('G', 'R', 'G', 'B')};
+    FourCc('D', 'X', 'T', '1').value(), FourCc('D', 'X', 'T', '2').value(), FourCc('D', 'X', 'T', '3').value(), FourCc('D', 'X', 'T', '4').value(),
+    FourCc('D', 'X', 'T', '5').value(), FourCc('A', 'T', 'I', '1').value(), FourCc('A', 'T', 'I', '2').value(), FourCc('I', 'N', 'T', 'Z').value(),
+    FourCc('D', 'F', '1', '6').value(), FourCc('D', 'F', '2', '4').value(), FourCc('N', 'U', 'L', 'L').value(), FourCc('R', 'E', 'S', 'Z').value(),
+    FourCc('U', 'Y', 'V', 'Y').value(), FourCc('Y', 'U', 'Y', '2').value(), FourCc('R', 'G', 'B', 'G').value(), FourCc('G', 'R', 'G', 'B').value()};
 constexpr uint32_t asked_count = sizeof(asked_formats) / sizeof(asked_formats[0]);
 static_assert(asked_count <= D3d9FormatOps::max_formats, "every format asked fits the table");
 
