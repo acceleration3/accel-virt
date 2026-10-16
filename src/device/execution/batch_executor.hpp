@@ -6,7 +6,10 @@
  * before the batch completes. Every command run moves the context's progress,
  * so a long batch reads as busy rather than hung. A command that crossed in
  * pieces, in this batch or across several, is gathered back and run whole
- * when its last piece - the command itself - arrives. */
+ * when its last piece - the command itself - arrives. A batch running when
+ * its context is abandoned stops at the next command: its guest is gone, and
+ * a backlog of slow commands - pipelines compiled one after another - would
+ * otherwise hold the main loop that joins the worker for as long. */
 #ifndef AV_BATCH_EXECUTOR_HPP
 #define AV_BATCH_EXECUTOR_HPP
 
@@ -48,11 +51,16 @@ public:
     [[nodiscard]] Status start();
     /* Worker. */
     void                 stop();
+    /* Any thread, while the worker is being stopped: the batch running
+     * runs no further command. Undone by the next start. */
+    void                 abandon();
+    bool                 abandoned() const;
     bool                 started() const;
     /* Worker: the batch whose header is at `head` of `ring`. ok when every
      * command ran or was skipped; malformed for commands no producer could
      * frame, an answer asked for with no reply slot, or a payload the
-     * executor cannot decode; invalid_state for a lost device or no executor. */
+     * executor cannot decode; invalid_state for a lost device, no executor,
+     * or a batch abandoned part way. */
     /* It has a host executor to run batches on: a context whose executor never
      * opened holds batches that will not run, and nothing waits on them. */
     bool                 ready() const;
@@ -100,6 +108,7 @@ private:
     uint64_t         commands_;
     uint64_t         skipped_;
     GatheredCommand  gathered_;
+    bool             abandoned_;
 
     friend struct BatchExecutorProbe;
 };

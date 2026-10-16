@@ -61,6 +61,12 @@ void RingConsumer::attach()
     fences_.signal();
 }
 
+void RingConsumer::abandon()
+{
+    AV_SCOPE("RingConsumer::abandon");
+    executor_.abandon();
+}
+
 void RingConsumer::detach()
 {
     AV_SCOPE("RingConsumer::detach");
@@ -90,7 +96,7 @@ void RingConsumer::serve()
         return fault(FaultCode::ring_header, "ring order changed to", snapshot.order());
     if (progress_.observe(RingHeader(snapshot.order(), snapshot.tail(), head_)) != Status::ok)
         return fault(FaultCode::ring_tail, "ring tail inconsistent with what was consumed:", snapshot.tail());
-    while (consume_next() == Status::ok) {}
+    while (!executor_.abandoned() && consume_next() == Status::ok) {}
 }
 
 Status RingConsumer::consume_next()
@@ -125,7 +131,7 @@ Status RingConsumer::consume_next()
     const Status ran = executor_.run(ring_, head_, batch);
     __atomic_store_n(&running_end_, 0u, __ATOMIC_RELEASE);
     if (ran != Status::ok) {
-        fault(executor_.fault(), "the batch could not run, fence", batch.fence_id());
+        if (!executor_.abandoned()) fault(executor_.fault(), "the batch could not run, fence", batch.fence_id());
         return ran;
     }
     __atomic_store_n(&head_, head_ + batch.span(), __ATOMIC_RELEASE);

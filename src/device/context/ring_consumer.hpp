@@ -49,6 +49,11 @@ public:
     /* Worker: every complete batch the guest has published is executed and
      * completed, and the guest interrupted once if any was. */
     void                 service();
+    /* Any thread, as the worker is stopped: no batch begins after the one
+     * running, which stops at its next command, and nothing faults for it -
+     * the context is going, and nobody waits on what it held. The next
+     * attach serves again. */
+    void                 abandon();
 
     bool     attached() const;
     bool     faulted() const;

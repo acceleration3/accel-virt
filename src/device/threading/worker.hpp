@@ -4,8 +4,10 @@
  * wakes - for posted work or a store to its doorbell - it drains the queue,
  * then serves its context's ring, so a doorbell that raced the ring's
  * attachment is served by it. Stopping disconnects the doorbell, drops work
- * not yet started, finishes the item running, detaches the ring on the
- * worker's own thread, and joins. */
+ * not yet started, finishes the item running, abandons the ring - no batch
+ * begins, the one running stops at its next command - detaches the ring on
+ * the worker's own thread, and joins. The join is on the main loop, which
+ * the whole VM waits on: it lasts one command, not the guest's backlog. */
 #ifndef AV_WORKER_HPP
 #define AV_WORKER_HPP
 

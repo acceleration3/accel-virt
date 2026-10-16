@@ -21,7 +21,7 @@ BatchExecutor::BatchExecutor(Host &host, ContextExecutor &executor, BlobImports 
                              FenceReporter &fences, WireRecorder &recorder, uint32_t context)
     : host_(host), executor_(executor), imports_(imports), staging_(staging), fences_(fences),
       recorder_(recorder), context_(context), fault_(FaultCode::none), reply_(),
-      batches_(0u), commands_(0u), skipped_(0u), gathered_(host)
+      batches_(0u), commands_(0u), skipped_(0u), gathered_(host), abandoned_(false)
       {
           AV_SCOPE("BatchExecutor::BatchExecutor");
       }
@@ -44,6 +44,7 @@ Status BatchExecutor::start()
 {
     AV_SCOPE("BatchExecutor::start");
     host_.require_worker("BatchExecutor::start");
+    __atomic_store_n(&abandoned_, false, __ATOMIC_RELEASE);
     return executor_.create();
 }
 
@@ -53,6 +54,18 @@ void BatchExecutor::stop()
     host_.require_worker("BatchExecutor::stop");
     executor_.destroy();
     gathered_.clear();
+}
+
+void BatchExecutor::abandon()
+{
+    AV_SCOPE("BatchExecutor::abandon");
+    __atomic_store_n(&abandoned_, true, __ATOMIC_RELEASE);
+}
+
+bool BatchExecutor::abandoned() const
+{
+    AV_SCOPE("BatchExecutor::abandoned");
+    return __atomic_load_n(&abandoned_, __ATOMIC_ACQUIRE);
 }
 
 bool BatchExecutor::started() const
@@ -110,6 +123,7 @@ Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHead
         host_.fence_stores();
     });
     while ((status = stream.next(header, payload)) == Status::ok) {
+        if (abandoned()) return Status::invalid_state;
         status = run_command(header, payload, answered, answer);
         if (status != Status::ok) return failed(batch.fence_id(), status);
     }

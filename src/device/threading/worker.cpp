@@ -90,6 +90,7 @@ void Worker::stop()
     host_.lock_mutex(lock_);
     stopping_ = true;
     host_.unlock_mutex(lock_);
+    ring_.abandon();
     host_.signal_event(wake_);
     host_.join_thread(thread_);
     release();
