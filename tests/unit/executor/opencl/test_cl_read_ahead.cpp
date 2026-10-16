@@ -18,11 +18,11 @@ namespace {
 
 constexpr std::size_t buffer_bytes = 3u * 65536u;
 
-/* A context, a queue and a buffer filled with each byte's index modulo 251 on
- * the first OpenCL GPU, or nothing. */
+/* A context, a queue and a buffer of `bytes`, at most buffer_bytes, filled
+ * with each byte's index modulo 251 on the first OpenCL GPU, or nothing. */
 class HostBuffer {
 public:
-    HostBuffer() : context_(nullptr), queue_(nullptr), buffer_(nullptr)
+    explicit HostBuffer(std::size_t bytes = buffer_bytes) : context_(nullptr), queue_(nullptr), buffer_(nullptr)
     {
         cl_platform_id platforms[8] = {};
         cl_uint        count = 0u;
@@ -36,7 +36,7 @@ public:
             queue_ = clCreateCommandQueueWithProperties(context_, device, nullptr, &made);
             static std::uint8_t pattern[buffer_bytes];
             for (std::size_t i = 0u; i < buffer_bytes; i++) pattern[i] = static_cast<std::uint8_t>(i % 251u);
-            buffer_ = clCreateBuffer(context_, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, buffer_bytes, pattern, &made);
+            buffer_ = clCreateBuffer(context_, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, bytes, pattern, &made);
         }
     }
     ~HostBuffer()
@@ -133,3 +133,22 @@ TEST(cl_read_ahead_forget, a_forgotten_copy_is_never_served)
   CHECK(ahead.read(host.queue(), host.buffer(), 0u, sizeof piece, piece, result));
   CHECK_EQ(piece[0], 0x11u);
   CHECK(holds_pattern(piece + 1u, 1u, sizeof piece - 1u)); }
+
+/* The copy is as large as the largest read ahead and no larger: a small
+ * buffer's read ahead first, then a buffer thirty times its size, whose last
+ * piece still comes out of the grown copy. */
+TEST(cl_read_ahead_read, the_copy_grows_to_a_larger_buffer_s_read_ahead)
+{ HostBuffer small(8192u);
+  HostBuffer large;
+  if (!small.made() || !large.made()) return;
+  ClReadAhead ahead;
+  std::uint8_t piece[4096] = {};
+  cl_int result = 1;
+  CHECK(ahead.read(small.queue(), small.buffer(), 0u, 16u, piece, result));
+  CHECK(holds_pattern(piece, 0u, 16u));
+  CHECK(ahead.read(large.queue(), large.buffer(), 0u, sizeof piece, piece, result));
+  CHECK(holds_pattern(piece, 0u, sizeof piece));
+  result = 1;
+  CHECK(ahead.read(large.queue(), large.buffer(), buffer_bytes - sizeof piece, sizeof piece, piece, result));
+  CHECK_EQ(result, CL_SUCCESS);
+  CHECK(holds_pattern(piece, buffer_bytes - sizeof piece, sizeof piece)); }

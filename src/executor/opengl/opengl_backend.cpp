@@ -79,7 +79,7 @@ void unpack_blob(void *user)
 }  // namespace
 
 OpenGlBackend::OpenGlBackend()
-    : context_(), gl_(), import_(), pack_(), fences_(), region_(), errors_(), resolved_(0u), ran_(0u),
+    : context_(), gl_(), import_(), buffers_(), pack_(gl_, buffers_), fences_(), region_(), errors_(), resolved_(0u), ran_(0u),
       lost_(false), current_(false), sink_(stderr), lines_(sink_, "virtio-gpu-av: opengl: ")
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
@@ -101,6 +101,7 @@ bool OpenGlBackend::initialize(const GlDisplay *display, const AvContextOptions 
     install_hooks();
     gl_.av_fixed_function = granted_fixed_function();
     import_.configure(context_);
+    buffers_.configure(context_, import_);
     /* Opened is served. A driver that resolves fewer entry points than the
      * table has is not refused here: the decoder refuses each command whose
      * entry point is null, one command at a time, which is the degradation a
@@ -141,8 +142,9 @@ void OpenGlBackend::shut_down()
      * the context is still open: after the close there is nothing left to
      * delete it with, and a sync of a context sharing objects with another
      * would outlive this one. */
-    pack_.release(gl_, import_);
+    pack_.release();
     pack_.abandon();
+    buffers_.give_back();
     import_.give_back();
     void *fence = nullptr;
     while (fences_.take_any(fence))
@@ -263,13 +265,13 @@ bool OpenGlBackend::adopt(ImportedBlob &blob)
 bool OpenGlBackend::pack(uint64_t offset, uint64_t bytes, void *&packed)
 {
     AV_SCOPE("OpenGlBackend::pack");
-    return pack_.bind(gl_, import_, offset, bytes, packed);
+    return pack_.bind(offset, bytes, packed);
 }
 
 void OpenGlBackend::unpack()
 {
     AV_SCOPE("OpenGlBackend::unpack");
-    pack_.unbind(gl_);
+    pack_.unbind();
 }
 
 void OpenGlBackend::abandon(ImportedBlob &blob)

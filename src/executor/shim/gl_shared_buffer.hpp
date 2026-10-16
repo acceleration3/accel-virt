@@ -1,18 +1,19 @@
-/* A GL buffer over an imported memory object, so OpenCL can name it
- * (feature 053, T019).
+/* A shared descriptor as a GL buffer: the descriptor imported as a memory
+ * object of the context (GlHostImport), and a buffer whose storage is that
+ * memory. One allocation throughout, whoever names the buffer:
  *
- * This host's OpenCL has no `cl_khr_external_memory`, so a shared object
- * cannot be handed to it as a descriptor. It does have `cl_khr_gl_sharing`,
- * and OpenGL takes the descriptor - which this project already proves on every
- * GPU it runs on. So the descriptor becomes a GL memory object
- * (`GlHostImport`), this puts a buffer over that memory, and
- * `clCreateFromGLBuffer` names the buffer. One allocation throughout: what
- * Vulkan wrote, an OpenCL kernel reads.
+ * - OpenCL, whose host has no `cl_khr_external_memory`, so a shared object
+ *   cannot be handed to it as a descriptor; it has `cl_khr_gl_sharing`, and
+ *   `clCreateFromGLBuffer` names the buffer made in its vehicle (feature 053,
+ *   T019). Nothing ever draws with it, which is what lets OpenCL hold it
+ *   acquired for its whole life.
+ * - An OpenGL context's pixel transfers, packed by the GPU into the guest's
+ *   region the buffer is made over (GlPackBuffer).
  *
- * The buffer is storage and nothing else. Nothing ever draws with it, which is
- * what lets OpenCL hold it acquired for its whole life rather than bracketing
- * every enqueue - the acquire is a rule about GL and CL taking turns, and GL
- * never takes one.
+ * Made with direct state access, so no binding of the context changes: in an
+ * OpenGL backend's context every binding is the guest's. A storage the driver
+ * refused is judged by the buffer's size, not by glGetError, whose flags in
+ * that context are the guest's errors too.
  *
  * Every call makes the context current itself, as GlHostImport's do, so
  * nothing above has to ask whether a closing context still has one. */
@@ -26,6 +27,7 @@
 namespace av {
 
 class GlContext;
+class GlHostImport;
 
 class GlSharedBuffer {
 public:
@@ -33,29 +35,34 @@ public:
     GlSharedBuffer(const GlSharedBuffer &) = delete;
     GlSharedBuffer &operator=(const GlSharedBuffer &) = delete;
 
-    /* Keeps `context`, which must outlive this, and resolves the four entry
-     * points a buffer over imported memory needs. A host missing any of them
-     * leaves this making nothing, which the caller answers as a refusal. */
-    void configure(GlContext &context);
+    /* Keeps `context` and `import`, configured on that context, which must
+     * outlive this, and resolves the entry points a buffer over imported
+     * memory needs. A host missing any of them leaves this making nothing,
+     * which the caller answers as a refusal. */
+    void configure(GlContext &context, GlHostImport &import);
     void give_back();
-    /* Whether everything a buffer needs resolved. */
+    /* Whether the context imports memory and everything a buffer over it
+     * needs resolved. */
     bool makes_buffers() const;
 
-    /* `size` bytes of the memory object `memory` as a buffer, named in
-     * `buffer`. False, with nothing made, for a host that cannot or a driver
-     * that refuses - which is what a memory object of the wrong size is. */
-    [[nodiscard]] bool make(uint32_t memory, uint64_t size, uint32_t &buffer);
-    void               destroy(uint32_t buffer);
+    /* `size` bytes of the dma-buf `fd` as a memory object and a buffer over
+     * it, named in `memory` and `buffer`; `fd` stays the caller's. False, with
+     * nothing made, for a host that cannot or a driver that refuses - which is
+     * what a descriptor smaller than `size` is. */
+    [[nodiscard]] bool make(int fd, uint64_t size, uint32_t &memory, uint32_t &buffer);
+    /* What make made: the buffer, then the memory under it. */
+    void               destroy(uint32_t memory, uint32_t buffer);
 
 private:
     GlContext *current();
 
-    void (APIENTRY *gen_buffers_)(GLsizei, GLuint *);
-    void (APIENTRY *bind_buffer_)(GLenum, GLuint);
-    void (APIENTRY *buffer_storage_mem_)(GLenum, GLsizeiptr, GLuint, GLuint64);
+    void (APIENTRY *create_buffers_)(GLsizei, GLuint *);
+    void (APIENTRY *storage_mem_)(GLuint, GLsizeiptr, GLuint, GLuint64);
+    void (APIENTRY *buffer_parameter_)(GLuint, GLenum, GLint64 *);
     void (APIENTRY *delete_buffers_)(GLsizei, const GLuint *);
     GLenum (APIENTRY *get_error_)();
-    GlContext *context_;
+    GlContext    *context_;
+    GlHostImport *import_;
 };
 
 }  // namespace av

@@ -18,6 +18,7 @@
 #include "executor/shim/gl_context.hpp"
 #include "executor/opengl/gl_pack_buffer.hpp"
 #include "executor/shim/gl_host_import.hpp"
+#include "executor/shim/gl_shared_buffer.hpp"
 #include "proto/generated/opengl/gl_real_dispatch.h"
 
 #include <stdint.h>
@@ -115,6 +116,7 @@ private:
     GlContext   context_;
     glproto::RealGl gl_;
     GlHostImport    import_;
+    GlSharedBuffer  buffers_;
     GlPackBuffer    pack_;
     SyncTokens  fences_;
     GuestRegion region_;

@@ -2,9 +2,9 @@
  * (RealGl::av_pack_blob, docs/compositor.md): a read-back of a frame into the
  * guest's memory is written there by the GPU, rather than read back by the
  * driver and copied into a pointer by the CPU. Made over the dma-buf the
- * region was imported as, the first time a transfer asks; a region with none,
- * or a driver that imports no memory object, packs nothing and the pointer is
- * used as before. */
+ * region was imported as (GlSharedBuffer), the first time a transfer asks; a
+ * region with none, or a driver that imports no memory object, packs nothing
+ * and the pointer is used as before. */
 #ifndef AV_GL_PACK_BUFFER_HPP
 #define AV_GL_PACK_BUFFER_HPP
 
@@ -16,11 +16,13 @@ struct RealGl;
 
 namespace av {
 
-class GlHostImport;
+class GlSharedBuffer;
 
 class GlPackBuffer {
 public:
-    GlPackBuffer();
+    /* `gl` is the context's table and `buffers` makes buffers in that
+     * context; both must outlive this. */
+    GlPackBuffer(const glproto::RealGl &gl, GlSharedBuffer &buffers);
     ~GlPackBuffer();
     GlPackBuffer(const GlPackBuffer &) = delete;
     GlPackBuffer &operator=(const GlPackBuffer &) = delete;
@@ -34,17 +36,19 @@ public:
     /* On the context's thread: the buffer bound as the pack buffer and
      * `offset` what a transfer of `bytes` at `at` names instead of a pointer;
      * false where there is no buffer, or the range is not the region's. */
-    [[nodiscard]] bool bind(const glproto::RealGl &gl, GlHostImport &import, uint64_t at, uint64_t bytes, void *&offset);
+    [[nodiscard]] bool bind(uint64_t at, uint64_t bytes, void *&offset);
     /* After the transfer: unbound, and its write finished. */
-    void               unbind(const glproto::RealGl &gl);
+    void               unbind();
     /* Whether a buffer is made over the region. */
     bool               packing() const;
     /* On the context's thread, as it closes: the GL objects deleted. */
-    void               release(const glproto::RealGl &gl, GlHostImport &import);
+    void               release();
 
 private:
-    [[nodiscard]] bool make(const glproto::RealGl &gl, GlHostImport &import);
+    [[nodiscard]] bool make();
 
+    const glproto::RealGl &gl_;
+    GlSharedBuffer        &buffers_;
     int      fd_;
     uint64_t size_;
     uint32_t memory_;

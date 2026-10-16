@@ -88,13 +88,13 @@ bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *disp
         !vehicle_.open(*display, plain, share != nullptr ? &share->context() : nullptr))
         return share == nullptr;
     import_.configure(vehicle_);
-    buffers_.configure(vehicle_);
+    buffers_.configure(vehicle_, import_);
     renderbuffer_textures_.configure(vehicle_, *display);
     object_bytes_.configure(vehicle_);
     direct_.configure(*display);
     if (shares_with_gl(*display)) {
         gl_ = &direct_;
-        imports_ = import_.imports_memory() && buffers_.makes_buffers();
+        imports_ = buffers_.makes_buffers();
         reaches_gl_ = true;
     } else {
         reaches_gl_ = copy_gl_objects();
@@ -933,19 +933,13 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
         return false;
     if (!imports_ || context_ == nullptr) return false;
     if (acquire_queue() == nullptr) { AV_UNTESTABLE("no host beside a test here refuses a command queue"); return false; }
-    uint32_t memory = 0u;
-    if (!import_.import_memory(fd, size, memory)) return false; // AV_UNTESTABLE("a descriptor this host's GL refuses; an ordinary fd is taken and then faults in the driver")
-    uint32_t buffer = 0u;
-    if (!buffers_.make(memory, size, buffer)) { AV_UNTESTABLE("no host beside a test here refuses storage over memory it imported");
-        import_.delete_memory(memory);
-        return false;
-    }
+    uint32_t memory = 0u, buffer = 0u;
+    if (!buffers_.make(fd, size, memory, buffer)) return false; // AV_UNTESTABLE("a descriptor this host's GL refuses; an ordinary fd is taken and then faults in the driver")
     cl_int   made = CL_SUCCESS;
     cl_mem const shared =
         ::clCreateFromGLBuffer(static_cast<cl_context>(context_), CL_MEM_READ_WRITE, buffer, &made);
     if (shared == nullptr) { AV_UNTESTABLE("no host beside a test here refuses a buffer it imported itself");
-        buffers_.destroy(buffer);
-        import_.delete_memory(memory);
+        buffers_.destroy(memory, buffer);
         return false;
     }
     /* Acquired once and held: the acquire is the rule about OpenGL and OpenCL
@@ -967,8 +961,7 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
         cl_mem const held = named != nullptr ? named : shared;
         handles_.release(clproto::HandleKind::mem, held);
         static_cast<void>(::clReleaseMemObject(held));
-        buffers_.destroy(buffer);
-        import_.delete_memory(memory);
+        buffers_.destroy(memory, buffer);
         return false;
     }
     wire_handle = reinterpret_cast<uint64_t>(named);
@@ -1034,8 +1027,7 @@ void OpenClBackend::release_object(uint32_t, uint64_t wire_handle, uint64_t deta
                                                   nullptr, nullptr));
     static_cast<void>(::clFinish(static_cast<cl_command_queue>(queue_)));
     static_cast<void>(::clReleaseMemObject(shared));
-    buffers_.destroy(buffer);
-    import_.delete_memory(memory);
+    buffers_.destroy(memory, buffer);
 }
 
 }  // namespace av
