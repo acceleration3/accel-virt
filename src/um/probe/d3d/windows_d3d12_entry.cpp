@@ -256,6 +256,9 @@ int32_t WindowsD3d12Entry::place_buffer(ID3D12Heap *heap, uint64_t offset, uint3
     described.Format = DXGI_FORMAT_UNKNOWN;
     described.SampleDesc.Count = 1u;
     described.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    /* An existing heap is D3D12_HEAP_FLAG_SHARED_CROSS_ADAPTER, and D3D12Core
+     * refuses a resource placed in one without this flag (E_INVALIDARG). */
+    described.Flags = D3D12_RESOURCE_FLAG_ALLOW_CROSS_ADAPTER;
     return device_->CreatePlacedResource(heap, offset, &described, D3D12_RESOURCE_STATE_COMMON, nullptr,
                                          __uuidof(ID3D12Resource), reinterpret_cast<void **>(&buffer));
 }

@@ -31,7 +31,7 @@ Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) con
     /* NativeGpuFence only where the OS allowed the feature: claiming it while
      * the OS has it disabled fails the adapter start (research.md §17). */
     caps.SchedulingCaps = scheduling_multi_engine_aware | (native_fences_ ? scheduling_native_gpu_fence : 0u);
-    caps.MemoryManagementCaps = memory_virtual_addressing | memory_gpu_mmu;
+    caps.MemoryManagementCaps = memory_cross_adapter_resource | memory_virtual_addressing | memory_gpu_mmu;
     caps.GpuEngineTopologyNbAsymetricProcessingNodes = node_count;
     caps.FlipCaps = flip_on_vsync_mmio;
     caps.SupportPerEngineTDR = 1u;

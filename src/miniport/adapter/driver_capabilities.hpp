@@ -72,6 +72,12 @@ private:
          * before it allows user-mode submission (feature 049, research.md
          * §14), and this driver implements the four DDIs behind it. */
         scheduling_native_gpu_fence = 0x800u,
+        /* DXGK_VIDMMCAPS.CrossAdapterResource: dxgkrnl's CreateAllocation
+         * refuses an allocation flagged CrossAdapter without it, and D3D12Core
+         * makes every existing heap (OpenExistingHeapFromAddress,
+         * OpenExistingHeapFromFileMapping) as one - an EXISTINGHEAP standard
+         * allocation, CreateShared | CrossAdapter | ExistingSysMem. */
+        memory_cross_adapter_resource = 0x10u,
         memory_virtual_addressing = 0x20u,         /* DXGK_VIDMMCAPS: VidMm keys on it */
         memory_gpu_mmu = 0x40u,                    /* dxgkrnl keys on it */
         flip_on_vsync_mmio = 0x2u,                 /* DXGK_FLIPCAPS: SetVidPnSourceAddress at device IRQL */

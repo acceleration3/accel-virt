@@ -193,6 +193,18 @@ GPU to read and write those very pages:
 - Vulkan's `VK_EXT_external_memory_host`;
 - OpenGL's `GL_AMD_pinned_memory`.
 
+A Direct3D 12 existing heap reaches the driver as an allocation D3D12Core
+makes itself: a `D3DKMT_STANDARDALLOCATIONTYPE_EXISTINGHEAP` over the
+application's pages, flagged `CreateShared | CrossAdapter | ExistingSysMem`,
+which the kernel describes as a cross-adapter GDI texture one row high
+(`StandardAllocation`). dxgkrnl refuses any `CrossAdapter` allocation of an
+adapter without `DXGK_VIDMMCAPS.CrossAdapterResource`, so the miniport reports
+it (`DriverCapabilities`). The heap is `D3D12_HEAP_FLAG_SHARED_CROSS_ADAPTER`,
+so D3D12Core refuses a resource placed in it without
+`D3D12_RESOURCE_FLAG_ALLOW_CROSS_ADAPTER`. The user-mode driver opens it
+(`pfnOpenHeapAndResource`), finds the pages through `pfnLockCb` (the
+application's own address) and lends them as below.
+
 Guest RAM is still never handed to a host GPU. Instead the pages become host
 GPU memory where they are: the device lays a source allocation under them.
 

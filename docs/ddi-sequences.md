@@ -289,7 +289,11 @@ level count outside 2..6 fails start with `STATUS_DEVICE_CONFIGURATION_ERROR`
 (0xC0000182); a level's page table size must be a power of two. Every node's
 `DXGK_NODEMETADATA` must then set `GpuMmuSupported` and no reserved flag (0xFFE0).
 VidMm keys on `MemoryManagementCaps.VirtualAddressingSupported` (0x20) and
-dxgkrnl on `GpuMmuSupported` (0x40); both are set.
+dxgkrnl on `GpuMmuSupported` (0x40); both are set. `CrossAdapterResource`
+(0x10) is set too: `DXGDEVICE::CreateAllocation @ 1403516c8` refuses an
+allocation flagged `CrossAdapter` without it (`STATUS_INVALID_PARAMETER`), and
+D3D12Core's existing heaps are such allocations
+(`NDXGI::CDevice::CreateExistingSysMemStandardAllocation @ 180043ea4`).
 
 VidMm's `InitializeGpuVaState @ 1400972cc` (dxgmms2) runs once segments exist
 and adds an implicit system memory segment, id `NbSegment + 1`. It checks the

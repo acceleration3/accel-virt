@@ -32,7 +32,7 @@ public:
     void    release() override;
 
 private:
-    /* A buffer of `bytes` at `offset` of `heap`, in the common state. */
+    /* A buffer of `bytes` at `offset` of existing heap `heap`, in the common state. */
     int32_t place_buffer(ID3D12Heap *heap, uint64_t offset, uint32_t bytes, ID3D12Resource *&buffer);
     /* `from` copied into `into` on the queue, and the fence waited for. */
     int32_t copy_and_wait(ID3D12Resource *from, ID3D12Resource *into, uint32_t bytes);
