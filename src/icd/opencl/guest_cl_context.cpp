@@ -4,7 +4,6 @@
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "proto/resources/host_memory_request.hpp"
-#include "icd/common/thread_lock_hold.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/common/icd_connection.hpp"
 #include "guest/transport/guest_connection.hpp"
@@ -148,14 +147,12 @@ Status GuestClContext::lend(void *address, uint64_t bytes, HostAllocation *&made
     AV_SCOPE("GuestClContext::lend");
     made = nullptr;
     if (state_ != State::made || channel_.arena_view() == nullptr) return Status::invalid_state;
-    const icd::ThreadLockHold held(send_lock_);
     return channel_.adopt_memory(address, bytes, HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u), made);
 }
 
 void GuestClContext::give_back_lent(HostAllocation &lent)
 {
     AV_SCOPE("GuestClContext::give_back_lent");
-    const icd::ThreadLockHold held(send_lock_);
     static_cast<void>(channel_.close_memory(lent));
 }
 
