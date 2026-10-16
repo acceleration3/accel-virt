@@ -22,7 +22,7 @@ bool DeviceMemory::learn(VkPhysicalDevice physical)
     if (learnt_) return true;
     VkPhysicalDeviceMemoryProperties host = {};
     vkproto::av_vkGetPhysicalDeviceMemoryProperties(connection_.transport(), physical, &host);
-    if (connection_.faulted()) {
+    if (connection_.lost()) {
         log_.write("avvk: vkAllocateMemory: the device's memory types cannot be learnt on a lost device");
         return false;
     }
@@ -82,7 +82,7 @@ VkResult DeviceMemory::lend(const VkMemoryAllocateInfo &info, const VkImportMemo
     if (lent == Status::no_memory) return VK_ERROR_OUT_OF_HOST_MEMORY;
     if (lent != Status::ok) {
         lines_.note("vkAllocateMemory: the device took no host pointer's pages, status", static_cast<uint64_t>(lent));
-        return connection_.faulted() ? VK_ERROR_DEVICE_LOST : VK_ERROR_INVALID_EXTERNAL_HANDLE;
+        return connection_.lost() ? VK_ERROR_DEVICE_LOST : VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
     memory = HandleBits(made->handle()).as<VkDeviceMemory>();
     return VK_SUCCESS;
@@ -104,7 +104,7 @@ VkResult DeviceMemory::host_pointer_types(VkPhysicalDevice physical, VkExternalM
 VkResult DeviceMemory::refusal() const
 {
     AV_SCOPE("DeviceMemory::refusal");
-    return connection_.faulted() ? VK_ERROR_DEVICE_LOST : VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    return connection_.lost() ? VK_ERROR_DEVICE_LOST : VK_ERROR_OUT_OF_DEVICE_MEMORY;
 }
 
 VkResult DeviceMemory::refusal(Status refused) const

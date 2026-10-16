@@ -9,11 +9,11 @@
 
 namespace av::icd {
 
-Connection::Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink &log)
+Connection::Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink &log, KeyedLog &lines)
     : kmt_(kmt), search_(kmt), connection_(kmt),
       channel_(memory, log, "avvk: ", ChannelShape(SubApi::vulkan, ring_order, reply_bytes, command_bytes, 0u, 0u),
                lock),
-      opened_(false), adapter_(), host_dma_buf_(false)
+      loss_(lines), opened_(false), adapter_(), host_dma_buf_(false)
 {
     AV_SCOPE("Connection::Connection");
 }
@@ -58,7 +58,7 @@ void Connection::report(StateWriter &writer) const
 {
     AV_SCOPE("Connection::report");
     writer.flag("opened", opened());
-    writer.flag("faulted", faulted());
+    loss_.report(writer);
     writer.number("adapter", adapter());
     writer.hex("luid", adapter_.luid());
     writer.number("device", opened() ? connection_.device() : 0u);
@@ -70,10 +70,17 @@ bool             Connection::opened() const
     AV_SCOPE("Connection::opened");
     return opened_;
 }
-bool             Connection::faulted() const
+bool             Connection::lost() const
 {
-    AV_SCOPE("Connection::faulted");
-    return opened() && channel_.faulted();
+    AV_SCOPE("Connection::lost");
+    return opened() && channel_.lost();
+}
+
+bool Connection::refuses(const char *entry)
+{
+    AV_SCOPE("Connection::refuses");
+    if (lost()) loss_.lose(channel_.fault_code());
+    return loss_.refuses(entry);
 }
 uint32_t         Connection::adapter() const
 {
@@ -132,7 +139,8 @@ bool Connection::invariants_hold() const
 {
     AV_SCOPE("Connection::invariants_hold");
     if (!connection_.invariants_hold()) return false;
-    if (!channel_.invariants_hold()) return false;
+    if (!channel_.invariants_hold() || !loss_.invariants_hold()) return false;
+    if (loss_.lost() && opened() && !channel_.lost()) return false;
     if (!opened()) return !channel_.opened() && !connection_.opened() && !search_.found();
     return channel_.opened() && connection_.opened() && search_.found() && connection_.adapter() == search_.adapter();
 }

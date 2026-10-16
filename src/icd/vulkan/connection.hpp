@@ -21,6 +21,7 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/adapter_facts.hpp"
 #include "icd/common/host_channel.hpp"
+#include "icd/common/loss_latch.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -32,6 +33,7 @@ class LogSink;
 namespace av {
 class BlockSource;
 class ClientTransport;
+class KeyedLog;
 class Kmt;
 class StateWriter;
 class ThreadLock;
@@ -47,8 +49,9 @@ public:
     static constexpr uint32_t reply_bytes = 64u * 1024u;
     static constexpr size_t   command_bytes = 256u * 1024u;
 
-    /* `log` takes the lines the channel writes, and `lock` is its send lock. */
-    Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink &log);
+    /* `log` takes the lines the channel writes, and `lock` is its send lock;
+     * `lines` is the root's, where a loss is said once per entry point. */
+    Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink &log, KeyedLog &lines);
     ~Connection();
     Connection(const Connection &) = delete;
     Connection &operator=(const Connection &) = delete;
@@ -61,7 +64,12 @@ public:
     /* Closes the context, the device and the adapter; nothing when not open. */
     void                 close();
     bool                 opened() const;
-    bool                 faulted() const;
+    /* Whether the instance's context is lost (HostChannel::lost); false
+     * while not open. */
+    bool                 lost() const;
+    /* Whether lost, the cause kept (LossLatch) and logged the first time
+     * `entry` finds it: what every entry point asks before it sends. */
+    [[nodiscard]] bool   refuses(const char *entry);
     /* The avgpu adapter's handle, 0 until open. */
     uint32_t             adapter() const;
     /* The D3DKMT device the connection made; 0 unless open. */
@@ -97,8 +105,8 @@ public:
      * for each device of its instance (HostChannel::open_memory). */
     HostChannel         &channel();
 
-    /* Its fields on the line `writer` has open: whether open and faulted, and
-     * the adapter, LUID, device and context it sends through. */
+    /* Its fields on the line `writer` has open: whether open and lost, and
+     * why, and the adapter, LUID, device and context it sends through. */
     void report(StateWriter &writer) const;
 
     bool invariants_hold() const;
@@ -108,6 +116,8 @@ private:
     AdapterSearch                  search_;
     GuestConnection                connection_;
     HostChannel                    channel_;
+    /* Why the instance's context was lost. */
+    LossLatch                      loss_;
     /* Open from a whole open to the close: the channel opened alone is a
      * connection that was not. */
     bool                           opened_;

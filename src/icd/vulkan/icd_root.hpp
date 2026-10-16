@@ -286,8 +286,6 @@ private:
     /* One instance and what is still made under it, as vkDestroyInstance takes
      * an instance spanning no other. */
     void                 destroy_one_instance(VkInstance instance, const VkAllocationCallbacks *allocator);
-    /* Whether the host has faulted `connection`, logged as `entry`'s. */
-    bool                 lost(const Connection &connection, const char *entry);
     /* The host's memory types into `types`, unless the connection is lost
      * before or while they are asked for. */
     void                 learn_types(Connection &connection, VkPhysicalDevice physical_device,

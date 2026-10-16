@@ -326,15 +326,6 @@ IcdRoot::~IcdRoot()
     binding_.unbind();
 }
 
-bool IcdRoot::lost(const Connection &connection, const char *entry)
-{
-    AV_SCOPE("IcdRoot::lost");
-    if (!connection.faulted()) return false;
-    /* Once per entry point: an application keeps calling a lost device. */
-    if (lines_.first(entry, 0)) lines_.name(entry, "on a lost device");
-    return true;
-}
-
 VkResult IcdRoot::negotiate(uint32_t *version)
 {
     AV_SCOPE("IcdRoot::negotiate");
@@ -403,7 +394,7 @@ Status IcdRoot::open_connection(Connection *&opened, uint64_t luid)
 {
     AV_SCOPE("IcdRoot::open_connection");
     const ThreadLockHold release(lock_);
-    const Status made = connections_.create(opened, kmt_, memory_, send_lock_, log_);
+    const Status made = connections_.create(opened, kmt_, memory_, send_lock_, log_, lines_);
     if (made != Status::ok) return made;
     const Status status = opened->open(luid);
     if (status == Status::ok) return Status::ok;
@@ -586,15 +577,15 @@ VkResult IcdRoot::enumerate_adapter_physical_devices(VkInstance instance, uint64
                                                      VkPhysicalDevice *physical_devices)
 {
     AV_SCOPE("IcdRoot::enumerate_adapter_physical_devices");
-    const Connection *const connection = connection_of(instance, LoaderHandle::Kind::instance);
+    Connection *const connection = connection_of(instance, LoaderHandle::Kind::instance);
     if (connection == nullptr) {
         log_.write("avvk: vk_icdEnumerateAdapterPhysicalDevices on an instance this driver did not make");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
-    if (lost(*connection, "vk_icdEnumerateAdapterPhysicalDevices")) return VK_ERROR_DEVICE_LOST;
+    if (connection->refuses("vk_icdEnumerateAdapterPhysicalDevices")) return VK_ERROR_DEVICE_LOST;
     /* The instance on that adapter: the application's own, or one it spans. */
     VkInstance        on = luid == connection->luid() ? instance : VK_NULL_HANDLE;
-    const Connection *on_connection = connection;
+    Connection       *on_connection = connection;
     VkInstance        spanned[InstanceSpan::max_instances] = {};
     uint32_t          spans = 0u;
     {
@@ -603,7 +594,7 @@ VkResult IcdRoot::enumerate_adapter_physical_devices(VkInstance instance, uint64
         for (uint32_t index = 1u; span != nullptr && index < span->count(); ++index) spanned[spans++] = span->at(index);
     }
     for (uint32_t index = 0u; on == VK_NULL_HANDLE && index < spans; ++index) {
-        const Connection *const spanning = connection_of(spanned[index], LoaderHandle::Kind::instance);
+        Connection *const spanning = connection_of(spanned[index], LoaderHandle::Kind::instance);
         if (spanning == nullptr || spanning->luid() != luid) continue;
         on = spanned[index];
         on_connection = spanning;
@@ -612,7 +603,7 @@ VkResult IcdRoot::enumerate_adapter_physical_devices(VkInstance instance, uint64
         *count = 0u;
         return VK_SUCCESS;
     }
-    if (on_connection != connection && lost(*on_connection, "vk_icdEnumerateAdapterPhysicalDevices"))
+    if (on_connection != connection && on_connection->refuses("vk_icdEnumerateAdapterPhysicalDevices"))
         return VK_ERROR_DEVICE_LOST;
     const VkResult result = vkicd::generated::Wrap_vkEnumeratePhysicalDevices(on, count, physical_devices);
     if (physical_devices == nullptr || (result != VK_SUCCESS && result != VK_INCOMPLETE)) return result;
@@ -631,7 +622,7 @@ VkResult IcdRoot::enumerate_device_extensions(VkPhysicalDevice physical_device, 
         log_.write("avvk: vkEnumerateDeviceExtensionProperties on a physical device this driver did not make");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
-    if (lost(*made->connection(), "vkEnumerateDeviceExtensionProperties")) return VK_ERROR_DEVICE_LOST;
+    if (made->connection()->refuses("vkEnumerateDeviceExtensionProperties")) return VK_ERROR_DEVICE_LOST;
     if (layer != nullptr) {
         log_.write("avvk: device extensions of a layer asked for; this driver is no layer");
         return VK_ERROR_LAYER_NOT_PRESENT;
@@ -694,7 +685,7 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
         log_.write("avvk: vkCreateDevice on a physical device this driver did not make");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
-    if (lost(*made->connection(), "vkCreateDevice")) return VK_ERROR_DEVICE_LOST;
+    if (made->connection()->refuses("vkCreateDevice")) return VK_ERROR_DEVICE_LOST;
     const uint32_t refused = extensions_.first_refused(create->ppEnabledExtensionNames, create->enabledExtensionCount);
     if (refused != create->enabledExtensionCount) {
         const char *const name = create->ppEnabledExtensionNames[refused];
@@ -962,7 +953,7 @@ VkResult IcdRoot::export_semaphore_handle(VkDevice device, const SemaphoreGetWin
     uint64_t named = externals_.handle_of_semaphore(request->semaphore_);
     if (named == 0u) {
         if (request->semaphore_ == VK_NULL_HANDLE) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-        if (lost(*made->connection(), "vkGetSemaphoreWin32HandleKHR")) return VK_ERROR_DEVICE_LOST;
+        if (made->connection()->refuses("vkGetSemaphoreWin32HandleKHR")) return VK_ERROR_DEVICE_LOST;
         const VkResult published =
             publish(*made, device, SharedObjectKind::monitored_fence, 0u, VK_NULL_HANDLE,
                     request->semaphore_);
@@ -1029,7 +1020,7 @@ VkResult IcdRoot::import_semaphore_handle(VkDevice device, const ImportSemaphore
     AV_SCOPE("IcdRoot::import_semaphore_handle");
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-    if (lost(*made->connection(), "vkImportSemaphoreWin32HandleKHR")) return VK_ERROR_DEVICE_LOST;
+    if (made->connection()->refuses("vkImportSemaphoreWin32HandleKHR")) return VK_ERROR_DEVICE_LOST;
     if (request == nullptr || request->name_ != nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     if (foreign_enum(request->type_) != static_cast<int32_t>(import_semaphore_win32_handle_info) ||
         request->handle_type_ != opaque_win32_semaphore)
@@ -1318,10 +1309,10 @@ void IcdRoot::learn_types(Connection &connection, VkPhysicalDevice physical_devi
                           const char *entry)
 {
     AV_SCOPE("IcdRoot::learn_types");
-    if (lost(connection, entry)) return;
+    if (connection.refuses(entry)) return;
     VkPhysicalDeviceMemoryProperties host = {};
     vkproto::av_vkGetPhysicalDeviceMemoryProperties(connection.transport(), physical_device, &host);
-    if (lost(connection, entry)) return;
+    if (connection.refuses(entry)) return;
     const Status built = types.build(host);
     if (built != Status::ok) lines_.note("the host's memory types were not taken, status", static_cast<uint64_t>(built));
 }
@@ -1381,7 +1372,7 @@ VkResult IcdRoot::allocate_memory(VkDevice device, const VkMemoryAllocateInfo *i
     AV_SCOPE("IcdRoot::allocate_memory");
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return VK_ERROR_DEVICE_LOST;
-    if (lost(*made->connection(), "vkAllocateMemory")) return VK_ERROR_DEVICE_LOST;
+    if (made->connection()->refuses("vkAllocateMemory")) return VK_ERROR_DEVICE_LOST;
     const ThreadLockHold release(memory_lock_);
     /* An allocation that shares memory is the host's whole and never a chunk
      * of this process's RAM: its chain is rebuilt over the host's own fd
@@ -1432,7 +1423,7 @@ VkResult IcdRoot::map_memory(VkDevice device, VkDeviceMemory memory, VkDeviceSiz
     AV_SCOPE("IcdRoot::map_memory");
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return VK_ERROR_MEMORY_MAP_FAILED;
-    if (lost(*made->connection(), "vkMapMemory")) return VK_ERROR_DEVICE_LOST;
+    if (made->connection()->refuses("vkMapMemory")) return VK_ERROR_DEVICE_LOST;
     const ThreadLockHold release(memory_lock_);
     const DeviceMemory *const owned = made->device_memory();
     if (owned == nullptr) return VK_ERROR_MEMORY_MAP_FAILED;
@@ -1456,12 +1447,12 @@ VkResult IcdRoot::map_memory2(VkDevice device, const VkMemoryMapInfoKHR *info, v
 VkResult IcdRoot::mapped_ranges(VkDevice device, const char *entry)
 {
     AV_SCOPE("IcdRoot::mapped_ranges");
-    const Connection *const connection = connection_of(device, LoaderHandle::Kind::device);
+    Connection *const connection = connection_of(device, LoaderHandle::Kind::device);
     if (connection == nullptr) {
         log_.write("avvk: mapped ranges of a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
-    return lost(*connection, entry) ? VK_ERROR_DEVICE_LOST : VK_SUCCESS;
+    return connection->refuses(entry) ? VK_ERROR_DEVICE_LOST : VK_SUCCESS;
 }
 
 void IcdRoot::physical_device_properties(VkPhysicalDevice physical_device, VkPhysicalDeviceProperties *properties)
@@ -1613,7 +1604,7 @@ VkResult IcdRoot::allocate_command_buffers(VkDevice device, const VkCommandBuffe
         log_.write("avvk: vkAllocateCommandBuffers on a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
-    if (lost(*made->connection(), "vkAllocateCommandBuffers")) return VK_ERROR_DEVICE_LOST;
+    if (made->connection()->refuses("vkAllocateCommandBuffers")) return VK_ERROR_DEVICE_LOST;
     const uint32_t count = info->commandBufferCount;
     if (count > max_allocated_at_once) {
         lines_.note("vkAllocateCommandBuffers: more command buffers at once than", max_allocated_at_once);
@@ -1651,7 +1642,7 @@ void IcdRoot::free_command_buffers(VkDevice device, VkCommandPool pool, uint32_t
 VkResult IcdRoot::begin_command_buffer(VkCommandBuffer command_buffer, const VkCommandBufferBeginInfo *info)
 {
     AV_SCOPE("IcdRoot::begin_command_buffer");
-    if (lost(*connection_of(command_buffer, LoaderHandle::Kind::command_buffer), "vkBeginCommandBuffer"))
+    if (connection_of(command_buffer, LoaderHandle::Kind::command_buffer)->refuses("vkBeginCommandBuffer"))
         return VK_ERROR_DEVICE_LOST;
     CommandBatch &batch = record_target(command_buffer);
     batch.discard();
@@ -1666,7 +1657,7 @@ VkResult IcdRoot::end_command_buffer(VkCommandBuffer command_buffer)
 {
     AV_SCOPE("IcdRoot::end_command_buffer");
     CommandBatch &batch = record_target(command_buffer);
-    if (lost(*connection_of(command_buffer, LoaderHandle::Kind::command_buffer), "vkEndCommandBuffer")) {
+    if (connection_of(command_buffer, LoaderHandle::Kind::command_buffer)->refuses("vkEndCommandBuffer")) {
         batch.discard();
         return VK_ERROR_DEVICE_LOST;
     }
@@ -1694,7 +1685,7 @@ VkResult IcdRoot::wait_for_fences(VkDevice device, uint32_t count, const VkFence
         log_.write("avvk: vkWaitForFences on a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
-    if (lost(*made->connection(), "vkWaitForFences")) return VK_ERROR_DEVICE_LOST;
+    if (made->connection()->refuses("vkWaitForFences")) return VK_ERROR_DEVICE_LOST;
     FenceWaitProbe     probe(made->connection()->transport(), device, count, fences, wait_all);
     HostCompletionWait wait(kmt_, timeout);
     static_cast<void>(wait.run(probe));
@@ -1709,7 +1700,7 @@ VkResult IcdRoot::wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *in
         log_.write("avvk: vkWaitSemaphores on a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
-    if (lost(*made->connection(), "vkWaitSemaphores")) return VK_ERROR_DEVICE_LOST;
+    if (made->connection()->refuses("vkWaitSemaphores")) return VK_ERROR_DEVICE_LOST;
     SemaphoreWaitProbe probe(made->connection()->transport(), device, info);
     HostCompletionWait wait(kmt_, timeout);
     static_cast<void>(wait.run(probe));
@@ -1727,7 +1718,7 @@ VkResult IcdRoot::query_pool_results(VkDevice device, VkQueryPool pool, uint32_t
         log_.write("avvk: vkGetQueryPoolResults on a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
-    if (lost(*made->connection(), "vkGetQueryPoolResults")) return VK_ERROR_DEVICE_LOST;
+    if (made->connection()->refuses("vkGetQueryPoolResults")) return VK_ERROR_DEVICE_LOST;
     ClientTransport &transport = made->connection()->transport();
     if ((flags & VK_QUERY_RESULT_WAIT_BIT) == 0u)
         return vkproto::av_vkGetQueryPoolResults(transport, device, pool, first, count, size, data, stride, flags);
@@ -1750,7 +1741,7 @@ VkResult IcdRoot::queue_wait_idle(VkQueue queue)
         log_.write("avvk: vkQueueWaitIdle on a queue this driver did not make through a device");
         return VK_ERROR_DEVICE_LOST;
     }
-    if (lost(*made->connection(), "vkQueueWaitIdle")) return VK_ERROR_DEVICE_LOST;
+    if (made->connection()->refuses("vkQueueWaitIdle")) return VK_ERROR_DEVICE_LOST;
     /* Nothing sent on the connection since the queue was last found idle -
      * no submit, no present, nothing - leaves it idle: a device-wide wait
      * right after a queue's own was a whole submission and wait for nothing. */
@@ -1786,7 +1777,7 @@ VkResult IcdRoot::signal_acquire(VkDevice device, VkSemaphore semaphore, VkFence
     if (semaphore == VK_NULL_HANDLE && fence == VK_NULL_HANDLE) return VK_SUCCESS;
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) return VK_ERROR_DEVICE_LOST;
-    if (lost(*made->connection(), "vkAcquireNextImageKHR")) return VK_ERROR_DEVICE_LOST;
+    if (made->connection()->refuses("vkAcquireNextImageKHR")) return VK_ERROR_DEVICE_LOST;
     LoaderHandle *const queue = child_of(*made, LoaderHandle::Kind::queue, 0u);
     if (queue == nullptr) {
         log_.write("avvk: vkAcquireNextImageKHR has nothing to signal on: the device handed out no queue");
@@ -1810,7 +1801,7 @@ VkResult IcdRoot::device_wait_idle(VkDevice device)
         log_.write("avvk: vkDeviceWaitIdle on a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
-    if (lost(*made->connection(), "vkDeviceWaitIdle")) return VK_ERROR_DEVICE_LOST;
+    if (made->connection()->refuses("vkDeviceWaitIdle")) return VK_ERROR_DEVICE_LOST;
     for (uint32_t index = 0u;; index++) {
         LoaderHandle *const queue = child_of(*made, LoaderHandle::Kind::queue, index);
         if (queue == nullptr) return VK_SUCCESS;
@@ -1828,7 +1819,7 @@ VkResult IcdRoot::force_context_fault(VkDevice device)
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     Connection &connection = *made->connection();
-    if (lost(connection, "vkAvForceContextFault")) return VK_ERROR_DEVICE_LOST;
+    if (connection.refuses("vkAvForceContextFault")) return VK_ERROR_DEVICE_LOST;
     if (ContextFault(connection.transport()).send() != Status::ok) {
         log_.write("avvk: the host answered a truncated vkCreateInstance");
         return VK_ERROR_INITIALIZATION_FAILED;
