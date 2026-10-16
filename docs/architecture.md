@@ -60,7 +60,7 @@ src/km/         src/device/qemu, src/*/shim/      src/um/
 
 | Directory | Holds |
 |---|---|
-| `support/` | `Status`, `NtStatus`, `ObjectPool`/`ObjectStorage`, `GrowableArray`, `KeyedSlots` and `ClaimedRows` (storage for counts an application controls, see "Counts with no fixed bound"), `ScopeExit`, `Alignment`, `ByteRange`, `TextBuffer`, `RuntimeCall`, `SettingText` (how every knob's text is judged), `AV_UNTESTABLE` |
+| `support/` | `Status`, `NtStatus`, `ObjectPool`/`ObjectStorage`, `GrowableArray`, `KeyedSlots` and `ClaimedRows` (storage for counts an application controls, see "Counts with no fixed bound"), `ScopeExit`, `Alignment`, `ByteRange`, `TextBuffer`, `RuntimeCall`, `SettingText` (how every knob's text is judged), `Fnv1aDigest`, `AV_UNTESTABLE` |
 | `trace/` | `AV_SCOPE`, trace tables, event rings, crash and state dumps |
 | `log/` | `DriverLog`, `KeyedLog`, `LogLine`, `LogSink`, `LogQueue`: the logging the host, the guest drivers and the kernel's debug port share |
 | `platform/` | the `Platform` contract the miniport runs on (implemented by `src/km` and `MockPlatform`), locks and their guards, lock ranks, `LogBudget`, `InvariantScope`; also `BlockSource` and `LockMarks`, which every binary uses |

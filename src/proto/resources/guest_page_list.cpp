@@ -1,5 +1,6 @@
 #include "proto/resources/guest_page_list.hpp"
 
+#include "core/support/fnv1a_digest.hpp"
 #include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -68,11 +69,9 @@ void GuestPageList::write_runs(WireWriter &writer) const
 uint64_t GuestPageList::fingerprint() const
 {
     AV_SCOPE("GuestPageList::fingerprint");
-    constexpr uint64_t fnv_offset = 0xcbf29ce484222325u;
-    constexpr uint64_t fnv_prime = 0x100000001b3u;
-    uint64_t folded = fnv_offset ^ count_;
-    for (uint32_t index = 0u; index < count_; index++) folded = (folded ^ frames_[index]) * fnv_prime;
-    return folded;
+    Fnv1aDigest digest(count_);
+    for (uint32_t index = 0u; index < count_; index++) digest.add_word(frames_[index]);
+    return digest.value();
 }
 
 }  // namespace av

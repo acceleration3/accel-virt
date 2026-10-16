@@ -1,7 +1,7 @@
 #include "executor/opencl/cl_binary_envelope.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "executor/opencl/cl_binary_digest.hpp"
+#include "core/support/fnv1a_digest.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -27,7 +27,7 @@ bool ClBinaryEnvelope::identify(cl_platform_id platform, cl_device_id device)
      * change of its compiler. */
     static constexpr cl_platform_info platform_texts[] = {CL_PLATFORM_NAME, CL_PLATFORM_VERSION};
     static constexpr cl_device_info   device_texts[] = {CL_DEVICE_NAME, CL_DEVICE_VERSION, CL_DRIVER_VERSION};
-    ClBinaryDigest digest;
+    Fnv1aDigest digest;
     char           text[text_bytes] = {};
     for (const cl_platform_info name : platform_texts) {
         if (clGetPlatformInfo(platform, name, sizeof text - 1u, text, nullptr) != CL_SUCCESS) return false;
@@ -60,7 +60,7 @@ void ClBinaryEnvelope::seal(const uint8_t *host, size_t host_bytes, uint8_t *int
 {
     AV_SCOPE("ClBinaryEnvelope::seal");
     if (host == nullptr || host_bytes == 0u || into == nullptr) return;
-    ClBinaryDigest payload;
+    Fnv1aDigest payload;
     payload.add(host, host_bytes);
     WireWriter header(into, header_bytes);
     header.write(magic, sizeof magic - 1u);
@@ -102,7 +102,7 @@ bool ClBinaryEnvelope::open(const uint8_t *sealed, size_t sealed_size, const uin
     /* Every byte the header promised, and nothing after it: a binary cut
      * short or run on is not the one that was sealed. */
     if (!same || payload_bytes != sealed_size - header_bytes) return false;
-    ClBinaryDigest payload;
+    Fnv1aDigest payload;
     payload.add(sealed + header_bytes, static_cast<size_t>(payload_bytes));
     if (payload.value() != payload_digest) return false;
     host = sealed + header_bytes;
