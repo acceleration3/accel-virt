@@ -16,6 +16,7 @@
 namespace av::vkproto {
 
 AV_HOOK_DEFAULT void handles_made_through(uint64_t) noexcept {}
+AV_HOOK_DEFAULT bool handles_room(uint64_t) noexcept { return true; }
 AV_HOOK_DEFAULT void handle_ended(uint64_t) noexcept {}
 AV_HOOK_DEFAULT void handle_children_ended(uint64_t) noexcept {}
 

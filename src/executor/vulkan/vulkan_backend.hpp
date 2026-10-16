@@ -17,6 +17,7 @@
 #include "executor/vulkan/host_template_table.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
 #include "executor/session_backend.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "executor/vulkan/vulkan_submit_timing.hpp"
 #include "executor/shim/physical_device_list.hpp"
 #include "executor/shim/vulkan_memory_import.hpp"
@@ -34,7 +35,10 @@ class ImportedBlob;
 
 class VulkanBackend final : public vkproto::RealVulkanDispatch, public SessionBackend {
 public:
+    /* Its tables grow from a heap of its own; a test hands it the source to
+     * grow from instead. */
     VulkanBackend();
+    explicit VulkanBackend(BlockSource &blocks);
 
     /* Binds this context to the GPU the device is bound to, which must outlive
      * it: the one physical device an enumeration answers, and the memory
@@ -217,10 +221,13 @@ public:
     /* Commands run since this backend was made, which is what a conformance
      * run counts. */
     uint64_t ran() const;
+    /* Whether `handles` more can be remembered: asked by the decoder before
+     * a command makes any, which refuses the command as out of host memory
+     * when there is no room. */
+    bool     room_for(uint64_t handles);
     /* Records a handle this backend is about to hand the guest, made through
-     * whatever the command being decoded named with made_through. A registry
-     * with no room left loses the device rather than hand out one it would
-     * refuse when the guest sent it back. */
+     * whatever the command being decoded named with made_through, into the
+     * room room_for made for it. */
     void     made(uint64_t raw, HandleKind kind = HandleKind::other);
     /* The object the command being decoded makes its handles through - its
      * device, its pool - so that they end when it does. Nothing between
@@ -258,7 +265,7 @@ private:
      * VkPhysicalDeviceIDProperties, so no physical device would be the bound
      * GPU. Enabling a promoted extension is valid at any version, and the
      * guest's own instance - in the guest - never sees it. */
-    void enable_identity(VkInstanceCreateInfo &create);
+    [[nodiscard]] Status enable_identity(VkInstanceCreateInfo &create);
     /* Raises the Vulkan version an instance is made for to the host loader's.
      * The server calls a promoted alias - vkCmdPipelineBarrier2KHR - through
      * its core symbol, the only one the loader exports, and Mesa fills a core
@@ -268,10 +275,14 @@ private:
      * supports, and an alias does exactly what its core command does. */
     void adopt_host_version(VkInstanceCreateInfo &create);
     /* Adds the dma-buf import extensions, then the modifier extension, to the
-     * ones a device is made with, unless the guest named them or its list has
-     * no room; the count before the modifier extension. */
-    uint32_t enable_memory_import(VkDeviceCreateInfo &create);
+     * ones a device is made with, unless the guest named them; `importing` is
+     * the count before the modifier extension. no_memory when the list cannot
+     * be made; a list the loader refuses is left as the guest sent it. */
+    [[nodiscard]] Status enable_memory_import(VkDeviceCreateInfo &create, uint32_t &importing);
 
+    /* Where the tables below grow from: first, as they are destroyed after it. */
+    HostHeap          heap_;
+    BlockSource      &blocks_;
     HostTemplateTable templates_;
     HostExportedFds   fds_;
     /* Whether every fd the chain of an allocation names is one this context
@@ -342,7 +353,6 @@ private:
     VulkanSubmitTiming timing_;
     uint64_t parent_;
     uint64_t ran_;
-    bool     lost_;
 };
 
 }  // namespace av

@@ -24,6 +24,7 @@
 #include "executor/opencl/kernel_pacer.hpp"
 #include "executor/opencl/staging_bytes.hpp"
 #include "executor/session_backend.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "executor/opengl/gl_context_attributes.hpp"
 #include "executor/shim/gl_context.hpp"
 #include "executor/shim/gl_host_import.hpp"
@@ -48,7 +49,10 @@ struct OpenClBackendProbe;
 
 class OpenClBackend final : public clproto::RealDispatch, public SessionBackend {
 public:
+    /* Its tables grow from a heap of its own; a test hands it the source to
+     * grow from instead. */
     OpenClBackend();
+    explicit OpenClBackend(BlockSource &blocks);
 
     /* Binds this context to the platform and device the host found for its
      * GPU, which must outlive it. False for a null device: a GPU the host
@@ -116,6 +120,7 @@ public:
      * guest wrote, so this is a bounds check and never a dereference. */
     void *lent_for(uint64_t offset, uint64_t bytes) const override;
     void  made(clproto::HandleKind kind, void *object) override;
+    bool  room_for(uint64_t objects) override;
     void  retained(clproto::HandleKind kind, void *object) override;
     void  released(clproto::HandleKind kind, void *object) override;
 
@@ -347,9 +352,10 @@ private:
     /* A program here is the bound device's, but a binary's sizes are an
      * array per device, so they are bounded rather than assumed one. */
     static constexpr cl_uint max_program_devices = 16u;
-    /* Longer than any kernel's name a compiler takes. */
-    static constexpr size_t  max_kernel_name = 1024u;
 
+    /* Where the tables below grow from: first, as they are destroyed after it. */
+    HostHeap            heap_;
+    BlockSource        &blocks_;
     const OpenClDevice *bound_;
     ClBinaryEnvelope    envelope_;
     ClArgumentRetention arguments_;

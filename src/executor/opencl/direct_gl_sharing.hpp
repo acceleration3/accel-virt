@@ -27,7 +27,7 @@ struct DirectGlSharingProbe;
 class DirectGlSharing final : public GlSharing {
 public:
     /* `vehicle` and `textures` must outlive this. */
-    DirectGlSharing(const GlContext &vehicle, GlRenderbufferTexture &textures);
+    DirectGlSharing(BlockSource &blocks, const GlContext &vehicle, GlRenderbufferTexture &textures);
 
     /* The display the vehicle is open on, which must outlive this. */
     void configure(const GlDisplay &display);

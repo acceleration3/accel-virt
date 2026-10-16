@@ -14,58 +14,60 @@ uint64_t number_of(const void *object)
 
 }  // namespace
 
-ClHandleRegistry::ClHandleRegistry() : objects_{}, references_{}, kinds_{}, count_(0u)
+ClHandleRegistry::ClHandleRegistry(BlockSource &blocks) : handles_(blocks, Pool::paged)
 {
     AV_SCOPE("ClHandleRegistry::ClHandleRegistry");
 }
 
-bool ClHandleRegistry::remember(clproto::HandleKind kind, void *object)
+Status ClHandleRegistry::make_room(uint64_t objects)
+{
+    AV_SCOPE("ClHandleRegistry::make_room");
+    const uint64_t wanted = uint64_t{handles_.count()} + objects;
+    if (wanted > KeyedSlots<uint64_t, ClHandle>::most_entries) return Status::no_memory;
+    return handles_.reserve(static_cast<uint32_t>(wanted));
+}
+
+Status ClHandleRegistry::remember(clproto::HandleKind kind, void *object)
 {
     AV_SCOPE("ClHandleRegistry::remember");
-    if (object == nullptr) return true;
-    const uint64_t number = number_of(object);
-    const uint32_t slot = slot_of(number);
-    if (slot != count_) return kinds_[slot] == kind;
-    if (count_ >= max_handles) return false;
-    objects_[count_] = number;
-    references_[count_] = 1u;
-    kinds_[count_] = kind;
-    count_++;
-    return true;
+    if (object == nullptr) return Status::ok;
+    const ClHandle *const known = handles_.find(number_of(object));
+    if (known != nullptr) return known->kind_ == kind ? Status::ok : Status::conflict;
+    uint32_t slot = 0u;
+    return handles_.insert(number_of(object), ClHandle{1u, kind}, slot);
+}
+
+ClHandle *ClHandleRegistry::held(clproto::HandleKind kind, uint64_t object)
+{
+    AV_SCOPE("ClHandleRegistry::held");
+    ClHandle *const found = object != 0u ? handles_.find(object) : nullptr;
+    return found != nullptr && found->kind_ == kind ? found : nullptr;
 }
 
 void *ClHandleRegistry::resolve(clproto::HandleKind kind, uint64_t wire) const
 {
     AV_SCOPE("ClHandleRegistry::resolve");
-    if (wire == 0u) return nullptr;
-    const uint32_t slot = slot_of(wire);
-    if (slot == count_ || kinds_[slot] != kind) return nullptr;
-    return reinterpret_cast<void *>(static_cast<uintptr_t>(wire));
+    const ClHandle *const found = wire != 0u ? handles_.find(wire) : nullptr;
+    return found != nullptr && found->kind_ == kind ? reinterpret_cast<void *>(static_cast<uintptr_t>(wire)) : nullptr;
 }
 
 void ClHandleRegistry::retain(clproto::HandleKind kind, void *object)
 {
     AV_SCOPE("ClHandleRegistry::retain");
-    const uint32_t slot = slot_of(number_of(object));
-    if (slot == count_ || kinds_[slot] != kind) return;
+    ClHandle *const found = held(kind, number_of(object));
     /* Saturated rather than wrapped: a count that wrapped to zero would be an
      * entry no release could take out. */
-    if (references_[slot] != ~uint32_t{0}) references_[slot]++;
+    if (found != nullptr && found->references_ != ~uint32_t{0}) found->references_++;
 }
 
 void ClHandleRegistry::release(clproto::HandleKind kind, void *object)
 {
     AV_SCOPE("ClHandleRegistry::release");
-    const uint32_t slot = slot_of(number_of(object));
-    if (slot == count_ || kinds_[slot] != kind) return;
+    ClHandle *const found = held(kind, number_of(object));
     /* A saturated count no longer says how many the guest holds, so it is
      * never counted down to a forget the ICD may not have done. */
-    if (references_[slot] == ~uint32_t{0}) return;
-    if (--references_[slot] != 0u) return;
-    count_--;
-    objects_[slot] = objects_[count_];
-    references_[slot] = references_[count_];
-    kinds_[slot] = kinds_[count_];
+    if (found == nullptr || found->references_ == ~uint32_t{0}) return;
+    if (--found->references_ == 0u) handles_.erase(number_of(object));
 }
 
 void ClHandleRegistry::release_all(clproto::ServerDispatch &icd)
@@ -97,14 +99,14 @@ void ClHandleRegistry::release_all(clproto::ServerDispatch &icd)
              return icd.on_clReleaseDevice(static_cast<cl_device_id>(object)); }},
     };
     for (const Release &release : order) {
-        for (uint32_t slot = 0u; slot < count_; slot++) {
-            if (kinds_[slot] != release.kind) continue;
-            const uint32_t times = references_[slot] == ~uint32_t{0} ? 1u : references_[slot];
-            void *const object = reinterpret_cast<void *>(static_cast<uintptr_t>(objects_[slot]));
+        handles_.for_each([&release, &icd](uint64_t number, const ClHandle &handle) {
+            if (handle.kind_ != release.kind) return;
+            const uint32_t times = handle.references_ == ~uint32_t{0} ? 1u : handle.references_;
+            void *const    object = reinterpret_cast<void *>(static_cast<uintptr_t>(number));
             /* What the ICD answers changes nothing: the context is gone either
              * way, and there is nobody left to tell. */
             for (uint32_t n = 0u; n < times; n++) (void)release.call(icd, object);
-        }
+        });
     }
     forget_all();
 }
@@ -112,32 +114,23 @@ void ClHandleRegistry::release_all(clproto::ServerDispatch &icd)
 void ClHandleRegistry::forget_all()
 {
     AV_SCOPE("ClHandleRegistry::forget_all");
-    count_ = 0u;
+    handles_.clear();
 }
 
 uint32_t ClHandleRegistry::count() const
 {
     AV_SCOPE("ClHandleRegistry::count");
-    return count_;
-}
-
-uint32_t ClHandleRegistry::slot_of(uint64_t object) const
-{
-    AV_SCOPE("ClHandleRegistry::slot_of");
-    for (uint32_t i = 0u; i < count_; i++) {
-        if (objects_[i] == object) return i;
-    }
-    return count_;
+    return handles_.count();
 }
 
 bool ClHandleRegistry::invariants_hold() const
 {
     AV_SCOPE("ClHandleRegistry::invariants_hold");
-    if (count_ > max_handles) return false;
-    for (uint32_t i = 0u; i < count_; i++) {
-        if (objects_[i] == 0u || references_[i] == 0u) return false;
-    }
-    return true;
+    bool holds = true;
+    handles_.for_each([&holds](uint64_t number, const ClHandle &handle) {
+        holds = holds && number != 0u && handle.references_ != 0u;
+    });
+    return holds;
 }
 
 }  // namespace av

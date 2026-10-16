@@ -20,7 +20,7 @@ class ImportedBlob;
 class AdoptedBlobs {
 public:
     /* One session's worth: a backend serves one session at a time. */
-    static constexpr uint32_t capacity = ImportTable::max_imports;
+    static constexpr uint32_t capacity = 4096u;
 
     AdoptedBlobs();
     AdoptedBlobs(const AdoptedBlobs &) = delete;

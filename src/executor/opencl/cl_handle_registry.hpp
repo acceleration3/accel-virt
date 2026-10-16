@@ -15,30 +15,37 @@
 #ifndef AV_CL_HANDLE_REGISTRY_HPP
 #define AV_CL_HANDLE_REGISTRY_HPP
 
+#include "core/support/keyed_slots.hpp"
+#include "core/support/status.hpp"
 #include "proto/generated/opencl/cl_dispatch_server.h"
 
 #include <stdint.h>
 
 namespace av {
 
+/* One object the guest holds: the references it holds on it and its kind. */
+struct ClHandle {
+    uint32_t            references_;
+    clproto::HandleKind kind_;
+};
+
 class ClHandleRegistry {
 public:
-    /* Objects the guest holds, not commands it sent, and a guest that wants
-     * more is refused. Half of a Vulkan context's HandleRegistry, because a
-     * slot here is wider and ExecutorRoot holds one per session by value: the
-     * root has to go on fitting the stack a test gives it. */
-    static constexpr uint32_t max_handles = 2048u;
-
-    ClHandleRegistry();
+    explicit ClHandleRegistry(BlockSource &blocks);
     ClHandleRegistry(const ClHandleRegistry &) = delete;
     ClHandleRegistry &operator=(const ClHandleRegistry &) = delete;
 
+    /* Room for `objects` more, asked before the ICD makes any, so remembering
+     * that many cannot fail for want of memory: no_memory when there is none,
+     * which the guest is told as CL_OUT_OF_HOST_MEMORY. */
+    [[nodiscard]] Status make_room(uint64_t objects);
     /* Holds `object`, which a call just answered, with one reference. One
      * already held as this kind is unchanged: enumeration answers the same
-     * platform every time without a reference. False when full, or when the
-     * address is held as another kind - the host could no longer say which
-     * object a guest's number means. Null holds nothing. */
-    [[nodiscard]] bool remember(clproto::HandleKind kind, void *object);
+     * platform every time without a reference. conflict when the address is
+     * held as another kind - the host could no longer say which object a
+     * guest's number means - and no_memory when no room was made for it and
+     * none can be. Null holds nothing. */
+    [[nodiscard]] Status remember(clproto::HandleKind kind, void *object);
     /* The object of `kind` held under `wire`, or null: for zero, for a number
      * never held, and for one held as another kind. */
     void *resolve(clproto::HandleKind kind, uint64_t wire) const;
@@ -55,19 +62,16 @@ public:
 
     uint32_t count() const;
 
+    /* Every object held is one, with a reference. */
     bool invariants_hold() const;
 
 private:
     friend struct ClHandleRegistryProbe;
 
-    /* The slot holding `object` as any kind, or `count_` for none. */
-    uint32_t slot_of(uint64_t object) const;
+    /* The entry `object` is held in as `kind`, or null. */
+    ClHandle *held(clproto::HandleKind kind, uint64_t object);
 
-    /* One slot is the same index in all three. */
-    uint64_t            objects_[max_handles];
-    uint32_t            references_[max_handles];
-    clproto::HandleKind kinds_[max_handles];
-    uint32_t            count_;
+    KeyedSlots<uint64_t, ClHandle> handles_;
 };
 
 }  // namespace av

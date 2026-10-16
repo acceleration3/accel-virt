@@ -12,6 +12,7 @@
 #include "executor/shim/opencl_device.hpp"
 #include "harness/executor/host_gl_rig.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 
 #include <CL/cl_gl.h>
 #include <cstdint>
@@ -60,7 +61,8 @@ constexpr std::uint32_t gl_rgba8 = 0x8058u;
  * and a queue on that context. */
 class Shared {
 public:
-    explicit Shared(HostGlRig &rig) : vehicle_(), textures_(), sharing_(vehicle_, textures_), context_(nullptr), queue_(nullptr)
+    explicit Shared(HostGlRig &rig)
+        : platform_(), vehicle_(), textures_(), sharing_(platform_, vehicle_, textures_), context_(nullptr), queue_(nullptr)
     {
         const av::GlContextAttributes plain(nullptr);
         if (!rig.ready() || !vehicle_.open(rig.display(), plain, &rig.gl())) return;
@@ -86,11 +88,13 @@ public:
 
     bool             ready() const { return queue_ != nullptr; }
     DirectGlSharing &sharing() { return sharing_; }
+    av::MockPlatform &platform() { return platform_; }
     cl_context       context() const { return context_; }
     cl_command_queue queue() const { return queue_; }
     const void      *vehicle() const { return vehicle_.handle(); }
 
 private:
+    av::MockPlatform          platform_;
     av::GlContext             vehicle_;
     av::GlRenderbufferTexture textures_;
     DirectGlSharing           sharing_;
@@ -224,17 +228,24 @@ TEST(direct_gl_sharing_device, a_renderbuffer_the_host_will_not_name_is_read_thr
   CHECK_EQ(error, CL_INVALID_GL_OBJECT);
   CHECK(probe.over_texture(nullptr, CL_MEM_READ_ONLY, renderbuffer, nullptr) == nullptr);
   CHECK_EQ(shared.sharing().renderbuffer_images(), 0u);
-  /* As many as the table holds, and one more out of room. */
-  static cl_mem held[av::ClRenderbufferImages::max_images];
-  for (cl_mem &each : held) each = probe.over_texture(shared.context(), CL_MEM_READ_ONLY, renderbuffer, nullptr);
-  CHECK_EQ(shared.sharing().renderbuffer_images(), av::ClRenderbufferImages::max_images);
+  /* Past the 64 a context once shared at once, and one more out of room. */
+  constexpr std::uint32_t many = 100u;
+  static cl_mem held[many + 64u];
+  for (std::uint32_t index = 0u; index < many; index++)
+      held[index] = probe.over_texture(shared.context(), CL_MEM_READ_ONLY, renderbuffer, nullptr);
+  CHECK_EQ(shared.sharing().renderbuffer_images(), many);
+  shared.platform().fail_allocation_at(1u);
+  std::uint32_t made = many;
   error = CL_SUCCESS;
-  CHECK(probe.over_texture(shared.context(), CL_MEM_READ_ONLY, renderbuffer, &error) == nullptr);
-  CHECK_EQ(error, CL_OUT_OF_RESOURCES);
-  CHECK(probe.over_texture(shared.context(), CL_MEM_READ_ONLY, renderbuffer, nullptr) == nullptr);
+  while (made < many + 64u &&
+         (held[made] = probe.over_texture(shared.context(), CL_MEM_READ_ONLY, renderbuffer, &error)) != nullptr)
+      made++;
+  CHECK(made < many + 64u);
+  CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
+  CHECK_EQ(shared.sharing().renderbuffer_images(), made);
   shared.sharing().forget_all();
   CHECK_EQ(shared.sharing().renderbuffer_images(), 0u);
-  for (cl_mem each : held) ::clReleaseMemObject(each);
+  for (std::uint32_t index = 0u; index < made; index++) ::clReleaseMemObject(held[index]);
 
   /* Through the create: the host's own answer, or the texture where it
    * refuses the renderbuffer; a refusal of another kind stands. */

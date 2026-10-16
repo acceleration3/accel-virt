@@ -6,37 +6,30 @@
 #include "core/support/status.hpp"
 #include "executor/vulkan/host_template_table.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 
 #include <cstdint>
 
 namespace av {
 
-/* The state no recorded template can leave the table in. */
+/* The states no recorded template can leave the table in. */
 struct HostTemplateTableProbe {
-    static void a_slot_of_no_device(HostTemplateTable &table) { table.slots_[0].device_ = VK_NULL_HANDLE; }
-    static void the_same_template_twice(HostTemplateTable &table) { table.slots_[1] = table.slots_[0]; }
-    static void a_named_slot_still_reserved(HostTemplateTable &table) { table.slots_[0].reserved_ = true; }
-    static void a_device_in_an_empty_slot(HostTemplateTable &table)
+    static void a_template_of_no_device(HostTemplateTable &table, std::uint64_t made)
     {
-        for (HostTemplateSlot &slot : table.slots_)
-            if (slot.template_ == VK_NULL_HANDLE) {
-                slot.device_ = reinterpret_cast<VkDevice>(0x7010u);
-                return;
-            }
+        table.templates_.find(made)->device_ = VK_NULL_HANDLE;
     }
-    static void bytes_in_an_empty_slot(HostTemplateTable &table)
+    static void bytes_reserved_for_no_device(HostTemplateTable &table) { table.reserved_.bytes_ = 8u; }
+    static void a_null_handle_held(HostTemplateTable &table)
     {
-        for (HostTemplateSlot &slot : table.slots_)
-            if (slot.template_ == VK_NULL_HANDLE) {
-                slot.bytes_ = 8u;
-                return;
-            }
+        std::uint32_t slot = 0u;
+        static_cast<void>(table.templates_.insert(0u, HostTemplate{reinterpret_cast<VkDevice>(0x7010u), 8u}, slot));
     }
 };
 
 }  // namespace av
 
 using av::HostTemplateTable;
+using av::MockPlatform;
 using av::HostTemplateTableProbe;
 using av::Status;
 
@@ -70,7 +63,8 @@ VkDescriptorUpdateTemplateCreateInfo of(VkDescriptorUpdateTemplateEntry &entry, 
 }  // namespace
 
 TEST(host_template_table, a_recorded_template_accounts_for_its_own_blob)
-{ HostTemplateTable table;
+{ MockPlatform      platform;
+  HostTemplateTable table(platform);
   CHECK(table.invariants_hold());
   CHECK_EQ(table.live(), 0u);
   VkDescriptorUpdateTemplateEntry            entry = {};
@@ -97,7 +91,8 @@ TEST(host_template_table, a_recorded_template_accounts_for_its_own_blob)
  * the guest is not trusted to have checked them (constitution V), and a
  * template the device cannot size is one it never lets exist. */
 TEST(host_template_table, entries_the_guest_sent_are_checked_again)
-{ HostTemplateTable               table;
+{ MockPlatform                    platform;
+  HostTemplateTable               table(platform);
   VkDescriptorUpdateTemplateEntry entry = {};
   VkDescriptorUpdateTemplateCreateInfo info = of(entry, 2u, 0u);
   entry.offset = ~static_cast<std::size_t>(0);
@@ -118,7 +113,8 @@ TEST(host_template_table, entries_the_guest_sent_are_checked_again)
 /* A handle the driver hands out again is the template it is now, a device takes
  * its own templates with it, and a table with no room refuses. */
 TEST(host_template_table, a_handle_reused_is_the_template_it_is_now)
-{ HostTemplateTable               table;
+{ MockPlatform                    platform;
+  HostTemplateTable               table(platform);
   VkDescriptorUpdateTemplateEntry entry = {};
   VkDescriptorUpdateTemplateCreateInfo info = of(entry, 1u, 0u);
   CHECK_STATUS(table.reserve(device, &info), Status::ok);
@@ -147,7 +143,8 @@ TEST(host_template_table, a_handle_reused_is_the_template_it_is_now)
 /* A closing context forgets every template, its devices' and a reservation
  * the driver never answered alike, and the table is whole again. */
 TEST(host_template_table, forgetting_all_empties_every_slot)
-{ HostTemplateTable               table;
+{ MockPlatform                    platform;
+  HostTemplateTable               table(platform);
   VkDescriptorUpdateTemplateEntry entry = {};
   VkDescriptorUpdateTemplateCreateInfo info = of(entry, 1u, 0u);
   CHECK_STATUS(table.reserve(device, &info), Status::ok);
@@ -164,25 +161,38 @@ TEST(host_template_table, forgetting_all_empties_every_slot)
   table.name(handle(0x41u));
   CHECK_EQ(table.bytes_of(handle(0x41u)), image_bytes); }
 
-TEST(host_template_table, a_table_with_no_room_refuses_rather_than_forgetting_one)
-{ HostTemplateTable               table;
+/* Well past the 512 a context once held, every template accounts for its own
+ * blob; a table that cannot grow refuses the next before the driver is asked,
+ * and forgets none it had. */
+TEST(host_template_table, holds_thousands_and_refuses_only_when_it_cannot_grow)
+{ MockPlatform                    platform;
+  HostTemplateTable               table(platform);
   VkDescriptorUpdateTemplateEntry entry = {};
   const VkDescriptorUpdateTemplateCreateInfo info = of(entry, 1u, 0u);
-  for (std::uint32_t index = 0u; index < HostTemplateTable::max_templates; index++) {
+  constexpr std::uint32_t many = 5000u;
+  for (std::uint32_t index = 0u; index < many; index++) {
       CHECK_STATUS(table.reserve(device, &info), Status::ok);
       table.name(handle(0x1000u + index));
   }
-  CHECK_EQ(table.live(), HostTemplateTable::max_templates);
-  CHECK_STATUS(table.reserve(device, &info), Status::no_space);
-  /* The one it could not take accounts for nothing; the ones it had are intact. */
-  CHECK_EQ(table.bytes_of(handle(0x9999u)), 0u);
+  CHECK_EQ(table.live(), many);
+  for (std::uint32_t index = 0u; index < many; index++) CHECK_EQ(table.bytes_of(handle(0x1000u + index)), image_bytes);
+  CHECK(table.invariants_hold());
+  std::uint32_t index = many;
+  platform.fail_allocation_at(1u);
+  while (table.reserve(device, &info) == Status::ok) table.name(handle(0x1000u + index++));
+  CHECK_EQ(table.bytes_of(handle(0x1000u + index)), 0u);
   CHECK_EQ(table.bytes_of(handle(0x1000u)), image_bytes);
+  CHECK_EQ(table.live(), index);
+  /* Refused, nothing is reserved: a name that follows makes no template. */
+  table.name(handle(0x1000u + index));
+  CHECK_EQ(table.bytes_of(handle(0x1000u + index)), 0u);
   CHECK(table.invariants_hold()); }
 
 /* A create the driver refused: the reservation is released, so the slot is not
  * a template of no handle and the next create reuses it. */
 TEST(host_template_table, a_reservation_the_driver_never_answered_is_released)
-{ HostTemplateTable               table;
+{ MockPlatform                    platform;
+  HostTemplateTable               table(platform);
   VkDescriptorUpdateTemplateEntry entry = {};
   const VkDescriptorUpdateTemplateCreateInfo info = of(entry, 1u, 0u);
   CHECK_STATUS(table.reserve(device, &info), Status::ok);
@@ -216,24 +226,15 @@ TEST(host_template_table, a_reservation_the_driver_never_answered_is_released)
 TEST(host_template_table, an_invariant_refuses_each_state_it_names)
 { VkDescriptorUpdateTemplateEntry entry = {};
   const VkDescriptorUpdateTemplateCreateInfo info = of(entry, 1u, 0u);
-  { HostTemplateTable table;
+  MockPlatform platform;
+  { HostTemplateTable table(platform);
     CHECK_STATUS(table.reserve(device, &info), Status::ok);
     table.name(handle(0x41u));
-    HostTemplateTableProbe::a_slot_of_no_device(table);
+    HostTemplateTableProbe::a_template_of_no_device(table, 0x41u);
     CHECK(!table.invariants_hold()); }
-  { HostTemplateTable table;
-    CHECK_STATUS(table.reserve(device, &info), Status::ok);
-    table.name(handle(0x42u));
-    HostTemplateTableProbe::the_same_template_twice(table);
+  { HostTemplateTable table(platform);
+    HostTemplateTableProbe::bytes_reserved_for_no_device(table);
     CHECK(!table.invariants_hold()); }
-  { HostTemplateTable table;
-    HostTemplateTableProbe::bytes_in_an_empty_slot(table);
-    CHECK(!table.invariants_hold()); }
-  { HostTemplateTable table;
-    HostTemplateTableProbe::a_device_in_an_empty_slot(table);
-    CHECK(!table.invariants_hold()); }
-  { HostTemplateTable table;
-    CHECK_STATUS(table.reserve(device, &info), Status::ok);
-    table.name(handle(0x43u));
-    HostTemplateTableProbe::a_named_slot_still_reserved(table);
+  { HostTemplateTable table(platform);
+    HostTemplateTableProbe::a_null_handle_held(table);
     CHECK(!table.invariants_hold()); } }

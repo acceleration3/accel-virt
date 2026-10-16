@@ -13,6 +13,7 @@
 #include "executor/guest_region.hpp"
 #include "executor/opengl/gl_error_tally.hpp"
 #include "executor/session_backend.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "executor/opengl/sync_tokens.hpp"
 #include "device/host/stdio_log.hpp"
 #include "executor/shim/gl_context.hpp"
@@ -31,7 +32,10 @@ class GlDisplay;
 
 class OpenGlBackend final : public SessionBackend {
 public:
+    /* Its tables grow from a heap of its own; a test hands it the source to
+     * grow from instead. */
     OpenGlBackend();
+    explicit OpenGlBackend(BlockSource &blocks);
 
     /* Opens a context on the display the host keeps for this context's GPU,
      * which must outlive it, made with `options` (null: the defaults) and
@@ -101,8 +105,8 @@ public:
 private:
     /* The table's hooks into this backend: its fences and its region. */
     void install_hooks();
-    /* Room in a full table of fences, made once the GPU passes its oldest. */
-    void retire_oldest_fence();
+    /* The oldest fence retired if the GPU has passed it. */
+    void retire_passed_fence();
     /* The entry point a kind is destroyed through. */
     void destroy_made(uint32_t kind, uint32_t name);
     /* Whether the context the host made has the fixed-function vertex arrays
@@ -113,6 +117,8 @@ private:
      * and published as the error word at the end of the imported region. */
     void publish_errors();
 
+    /* Where the tables below grow from: first, as they are destroyed after it. */
+    HostHeap    heap_;
     GlContext   context_;
     glproto::RealGl gl_;
     GlHostImport    import_;

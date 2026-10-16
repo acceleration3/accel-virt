@@ -4,54 +4,58 @@
 
 namespace av {
 
-HostSvmRanges::HostSvmRanges() : bases_(), sizes_(), owners_(), count_(0u)
+HostSvmRanges::HostSvmRanges(BlockSource &blocks) : ranges_(blocks, Pool::paged), widest_(0u)
 {
     AV_SCOPE("HostSvmRanges::HostSvmRanges");
 }
 
-uint32_t HostSvmRanges::slot_of(uint64_t address) const
+uint32_t HostSvmRanges::above(uint64_t address) const
 {
-    AV_SCOPE("HostSvmRanges::slot_of");
-    for (uint32_t slot = 0u; slot < count_; ++slot) {
-        if (bases_[slot] == address) return slot;
+    AV_SCOPE("HostSvmRanges::above");
+    uint32_t low = 0u;
+    uint32_t high = ranges_.size();
+    while (low < high) {
+        const uint32_t middle = low + (high - low) / 2u;
+        if (ranges_.at(middle).base_ <= address) low = middle + 1u;
+        else high = middle;
     }
-    return count_;
+    return low;
 }
 
-bool HostSvmRanges::remember(void *base, uint64_t bytes, uint64_t owner)
+Status HostSvmRanges::make_room()
+{
+    AV_SCOPE("HostSvmRanges::make_room");
+    return ranges_.reserve(ranges_.size() + 1u);
+}
+
+Status HostSvmRanges::remember(void *base, uint64_t bytes, uint64_t owner)
 {
     AV_SCOPE("HostSvmRanges::remember");
     const uint64_t address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(base));
-    if (address == 0u || bytes == 0u) return false;
+    if (address == 0u || bytes == 0u) return Status::invalid_parameter;
     /* A range that wraps could be resolved through either end of it. */
-    if (bytes > ~uint64_t{0} - address) return false;
-    const uint32_t held = slot_of(address);
-    if (held != count_) {
-        sizes_[held] = bytes;
-        owners_[held] = owner;
-        return true;
+    if (bytes > ~uint64_t{0} - address) return Status::invalid_parameter;
+    const uint32_t after = above(address);
+    if (after != 0u && ranges_.at(after - 1u).base_ == address) {
+        ranges_.at(after - 1u) = Range{address, bytes, owner};
+    } else {
+        const Status inserted = ranges_.insert_at(after, Range{address, bytes, owner});
+        if (inserted != Status::ok) return inserted;
     }
-    if (count_ == max_ranges) return false;
-    bases_[count_] = address;
-    sizes_[count_] = bytes;
-    owners_[count_] = owner;
-    ++count_;
-    return true;
+    if (bytes > widest_) widest_ = bytes;
+    return Status::ok;
 }
 
 uint32_t HostSvmRanges::forget_owned(uint64_t owner)
 {
     AV_SCOPE("HostSvmRanges::forget_owned");
     if (owner == 0u) return 0u;
-    uint32_t forgotten = 0u;
-    for (uint32_t slot = 0u; slot < count_;) {
-        if (owners_[slot] != owner) {
-            ++slot;
-            continue;
-        }
-        static_cast<void>(forget(reinterpret_cast<void *>(static_cast<uintptr_t>(bases_[slot]))));
-        ++forgotten;
-    }
+    uint32_t kept = 0u;
+    for (uint32_t index = 0u; index < ranges_.size(); index++)
+        if (ranges_.at(index).owner_ != owner) ranges_.at(kept++) = ranges_.at(index);
+    const uint32_t forgotten = ranges_.size() - kept;
+    ranges_.truncate(kept);
+    if (kept == 0u) widest_ = 0u;
     return forgotten;
 }
 
@@ -60,27 +64,18 @@ bool HostSvmRanges::forget(void *base)
     AV_SCOPE("HostSvmRanges::forget");
     const uint64_t address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(base));
     if (address == 0u) return false;
-    const uint32_t slot = slot_of(address);
-    if (slot == count_) return false;
-    --count_;
-    bases_[slot] = bases_[count_];
-    sizes_[slot] = sizes_[count_];
-    owners_[slot] = owners_[count_];
-    bases_[count_] = 0u;
-    sizes_[count_] = 0u;
-    owners_[count_] = 0u;
+    const uint32_t after = above(address);
+    if (after == 0u || ranges_.at(after - 1u).base_ != address) return false;
+    ranges_.remove_at(after - 1u);
+    if (ranges_.size() == 0u) widest_ = 0u;
     return true;
 }
 
 void HostSvmRanges::forget_all()
 {
     AV_SCOPE("HostSvmRanges::forget_all");
-    for (uint32_t slot = 0u; slot < count_; ++slot) {
-        bases_[slot] = 0u;
-        sizes_[slot] = 0u;
-        owners_[slot] = 0u;
-    }
-    count_ = 0u;
+    ranges_.clear();
+    widest_ = 0u;
 }
 
 void *HostSvmRanges::resolve(uint64_t address, uint64_t bytes) const
@@ -89,14 +84,14 @@ void *HostSvmRanges::resolve(uint64_t address, uint64_t bytes) const
     if (address == 0u) return nullptr;
     if (bytes > ~uint64_t{0} - address) return nullptr;
     const uint64_t last = address + bytes;
-    for (uint32_t slot = 0u; slot < count_; ++slot) {
-        const uint64_t end = bases_[slot] + sizes_[slot];
+    for (uint32_t index = above(address); index != 0u; index--) {
+        const Range &range = ranges_.at(index - 1u);
+        if (address - range.base_ >= widest_) break;
         /* The address itself has to be a byte of the range, even when nothing
          * is read from it: one past the end is not a place a command may name,
          * and it is also the first byte of whatever comes next. */
-        if (address < bases_[slot] || address >= end) continue;
-        if (last > end) continue;
-        return reinterpret_cast<void *>(static_cast<uintptr_t>(address));
+        if (address - range.base_ < range.size_ && last - range.base_ <= range.size_)
+            return reinterpret_cast<void *>(static_cast<uintptr_t>(address));
     }
     return nullptr;
 }
@@ -104,22 +99,18 @@ void *HostSvmRanges::resolve(uint64_t address, uint64_t bytes) const
 uint32_t HostSvmRanges::count() const
 {
     AV_SCOPE("HostSvmRanges::count");
-    return count_;
+    return ranges_.size();
 }
 
 bool HostSvmRanges::invariants_hold() const
 {
     AV_SCOPE("HostSvmRanges::invariants_hold");
-    if (count_ > max_ranges) return false;
-    for (uint32_t slot = 0u; slot < count_; ++slot) {
-        if (bases_[slot] == 0u || sizes_[slot] == 0u) return false;
-        if (sizes_[slot] > ~uint64_t{0} - bases_[slot]) return false;
-        for (uint32_t other = slot + 1u; other < count_; ++other) {
-            if (bases_[other] == bases_[slot]) return false;
-        }
-    }
-    for (uint32_t slot = count_; slot < max_ranges; ++slot) {
-        if (bases_[slot] != 0u || sizes_[slot] != 0u || owners_[slot] != 0u) return false;
+    if (!ranges_.invariants_hold()) return false;
+    uint64_t below = 0u;
+    for (const Range &range : ranges_) {
+        if (range.base_ <= below || range.size_ == 0u || range.size_ > widest_) return false;
+        if (range.size_ > ~uint64_t{0} - range.base_) return false;
+        below = range.base_;
     }
     return true;
 }

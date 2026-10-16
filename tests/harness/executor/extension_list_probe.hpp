@@ -12,7 +12,7 @@ namespace av {
 struct ExtensionListProbe {
     explicit ExtensionListProbe(ExtensionList &target);
 
-    void set_count(uint32_t count);
+    void set_name(uint32_t index, const char *name);
 
     ExtensionList &list;
 };

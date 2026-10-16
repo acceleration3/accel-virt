@@ -4,12 +4,11 @@ namespace av {
 
 ClHandleRegistryProbe::ClHandleRegistryProbe(ClHandleRegistry &target) : registry(target) {}
 
-void ClHandleRegistryProbe::set_count(uint32_t count) { registry.count_ = count; }
+void ClHandleRegistryProbe::set_references(const void *object, uint32_t references)
+{ registry.handles_.find(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(object)))->references_ = references; }
 
-void ClHandleRegistryProbe::set_object(uint32_t index, uint64_t object)
-{ registry.objects_[index] = object; }
-
-void ClHandleRegistryProbe::set_references(uint32_t index, uint32_t references)
-{ registry.references_[index] = references; }
+void ClHandleRegistryProbe::hold_null()
+{ uint32_t slot = 0u;
+  static_cast<void>(registry.handles_.insert(0u, ClHandle{1u, clproto::HandleKind::mem}, slot)); }
 
 }  // namespace av

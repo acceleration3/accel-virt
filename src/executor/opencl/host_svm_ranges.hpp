@@ -9,43 +9,49 @@
  *
  * Unlike a handle an address need not name the start of one, because a kernel
  * argument may point into the middle of an allocation. Nothing here is ever
- * dereferenced; addresses are compared, and the comparison cannot wrap. */
+ * dereferenced; addresses are compared, and the comparison cannot wrap.
+ *
+ * Kept sorted by base, so a lookup is a binary search and a walk back over
+ * the ranges that could still reach the address: ranges may overlap - two
+ * maps of one buffer - so the walk stops only once a base is further below
+ * the address than the widest range held is long. */
 #ifndef AV_HOST_SVM_RANGES_HPP
 #define AV_HOST_SVM_RANGES_HPP
+
+#include "core/support/growable_array.hpp"
+#include "core/support/status.hpp"
 
 #include <stdint.h>
 
 namespace av {
 
+class BlockSource;
 struct HostSvmRangesProbe;
 
 class HostSvmRanges {
 public:
-    /* A process that holds more shared allocations - or mapped buffers, which
-     * the backend holds in one of these too - than this has had enough; the
-     * guest is refused at the allocation or the map, where it can be told,
-     * rather than later at a kernel argument, where it cannot. Twice what one
-     * guest context may map (GuestClContext::max_mappings). */
-    static constexpr uint32_t max_ranges = 8192u;
-
-    HostSvmRanges();
+    explicit HostSvmRanges(BlockSource &blocks);
     HostSvmRanges(const HostSvmRanges &) = delete;
     HostSvmRanges &operator=(const HostSvmRanges &) = delete;
 
+    /* Room for one more range, so the remember after an allocation or a map
+     * cannot fail for want of memory: what a caller asks before it makes
+     * something it would have to undo. no_memory when there is none. */
+    [[nodiscard]] Status make_room();
     /* Holds what clSVMAlloc or a map just answered, for `owner` (the mapped
-     * buffer, or 0). False for null, for no bytes at
-     * all, for a range that would run past the end of the address space, and
-     * when full. The same base twice is held once, with the newer size: an
-     * allocator may hand back an address it freed. */
-    [[nodiscard]] bool remember(void *base, uint64_t bytes, uint64_t owner);
+     * buffer, or 0). invalid_parameter for null, for no bytes at all and for
+     * a range that would run past the end of the address space; no_memory
+     * when the table cannot grow. The same base twice is held once, with the
+     * newer size: an allocator may hand back an address it freed. */
+    [[nodiscard]] Status remember(void *base, uint64_t bytes, uint64_t owner);
     /* Forgets every range remembered for `owner` - a buffer mapped and then
      * released, whose mapped addresses nothing names again. Answers how many;
      * owner 0 is no owner, and forgets none. */
-    uint32_t           forget_owned(uint64_t owner);
+    uint32_t             forget_owned(uint64_t owner);
     /* What clSVMFree was given. False for an address that is not the base of
      * a live range - an address inside one is not what was allocated. */
-    bool               forget(void *base);
-    void               forget_all();
+    bool                 forget(void *base);
+    void                 forget_all();
 
     /* `address` as a pointer when it and the `bytes` after it lie inside one
      * live range, and null otherwise: for an address in no range, for one
@@ -60,14 +66,19 @@ public:
 private:
     friend struct HostSvmRangesProbe;
 
-    /* The slot whose base is `address`, or `count_` for none. */
-    uint32_t slot_of(uint64_t address) const;
+    struct Range {
+        uint64_t base_;
+        uint64_t size_;
+        uint64_t owner_;
+    };
 
-    /* One slot is the same index in both. */
-    uint64_t bases_[max_ranges];
-    uint64_t sizes_[max_ranges];
-    uint64_t owners_[max_ranges];
-    uint32_t count_;
+    /* The index of the first range whose base is above `address`. */
+    uint32_t above(uint64_t address) const;
+
+    GrowableArray<Range> ranges_;
+    /* No range held is longer: what bounds the walk back from a lookup. It
+     * only shrinks when the table empties. */
+    uint64_t             widest_;
 };
 
 }  // namespace av

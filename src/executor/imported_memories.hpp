@@ -18,7 +18,7 @@ struct ImportedMemoriesProbe;
 
 class ImportedMemories {
 public:
-    static constexpr uint32_t capacity = ImportTable::max_imports;
+    static constexpr uint32_t capacity = 4096u;
 
     ImportedMemories();
     ImportedMemories(const ImportedMemories &) = delete;

@@ -57,6 +57,9 @@ public:
     // An object a successful call is about to give the guest a number
     // for; from here on that number is the object.
     virtual void made(HandleKind kind, void* object) = 0;
+    // Whether `objects` more can be remembered, asked before the ICD
+    // makes any: false refuses the command as out of host memory.
+    virtual bool room_for(uint64_t objects) = 0;
     // A successful retain or release of one. After its last release
     // the number names nothing.
     virtual void retained(HandleKind kind, void* object) = 0;

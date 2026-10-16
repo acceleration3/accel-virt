@@ -4,6 +4,7 @@
 #include "executor/device_tenants.hpp"
 #include "executor/wake_signal.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 
 #include <cstdint>
 #include <pthread.h>
@@ -12,12 +13,13 @@
 namespace av {
 
 struct DeviceTenantsProbe {
-    static void list_at(DeviceTenants &tenants, std::uint32_t index, WakeSignal *wake) { tenants.tenants_[index] = wake; }
+    static void list_at(DeviceTenants &tenants, std::uint32_t index, WakeSignal *wake) { tenants.tenants_.at(index) = wake; }
 };
 
 }  // namespace av
 
 using av::DeviceTenants;
+using av::MockPlatform;
 using av::Status;
 using av::WakeSignal;
 
@@ -46,7 +48,8 @@ void *leave_later(void *argument)
 }  // namespace
 
 TEST(device_tenants, a_loss_wakes_every_tenant_once)
-{ DeviceTenants tenants;
+{ MockPlatform  platform;
+  DeviceTenants tenants(platform);
   WakeSignal    first, second;
   Pad           first_pad, second_pad;
   first.bind(&raise_pad, &first_pad);
@@ -68,7 +71,8 @@ TEST(device_tenants, a_loss_wakes_every_tenant_once)
 
 /* A tenant that left is not woken: its slot may be the next context's. */
 TEST(device_tenants, a_tenant_that_left_is_not_woken)
-{ DeviceTenants tenants;
+{ MockPlatform  platform;
+  DeviceTenants tenants(platform);
   WakeSignal    stays, leaves;
   Pad           stays_pad, leaves_pad;
   stays.bind(&raise_pad, &stays_pad);
@@ -86,7 +90,8 @@ TEST(device_tenants, a_tenant_that_left_is_not_woken)
   CHECK_EQ(leaves_pad.raised, 0u); }
 
 TEST(device_tenants, nobody_joins_a_lost_device_until_it_is_made_again)
-{ DeviceTenants tenants;
+{ MockPlatform  platform;
+  DeviceTenants tenants(platform);
   WakeSignal    old_session, new_session;
   CHECK_EQ(tenants.join(old_session), Status::ok);
   CHECK(tenants.lose());
@@ -102,18 +107,28 @@ TEST(device_tenants, nobody_joins_a_lost_device_until_it_is_made_again)
   CHECK_EQ(tenants.renew(), Status::invalid_state);
   CHECK(tenants.invariants_hold()); }
 
-TEST(device_tenants, a_session_joins_once_and_no_more_than_capacity)
-{ DeviceTenants tenants;
-  WakeSignal    wakes[DeviceTenants::capacity + 1u];
+/* Past the 64 sessions a device once held, every session joins once; a list
+ * that cannot grow refuses the next, and a loss still wakes everyone on it. */
+TEST(device_tenants, a_session_joins_once_and_the_list_grows_until_memory_runs_out)
+{ MockPlatform  platform;
+  DeviceTenants tenants(platform);
+  static WakeSignal wakes[257];
   CHECK_EQ(tenants.join(wakes[0]), Status::ok);
   CHECK_EQ(tenants.join(wakes[0]), Status::conflict);
-  for (std::uint32_t index = 1u; index < DeviceTenants::capacity; index++) CHECK_EQ(tenants.join(wakes[index]), Status::ok);
-  CHECK_EQ(tenants.count(), DeviceTenants::capacity);
-  CHECK_EQ(tenants.join(wakes[DeviceTenants::capacity]), Status::no_space);
-  CHECK(tenants.invariants_hold()); }
+  for (std::uint32_t index = 1u; index < 256u; index++) CHECK_EQ(tenants.join(wakes[index]), Status::ok);
+  CHECK_EQ(tenants.count(), 256u);
+  CHECK(tenants.invariants_hold());
+  platform.fail_allocation_at(1u);
+  CHECK_EQ(tenants.join(wakes[256]), Status::no_memory);
+  CHECK_EQ(tenants.count(), 256u);
+  CHECK(tenants.lose());
+  CHECK(tenants.invariants_hold());
+  for (std::uint32_t index = 0u; index < 256u; index++) tenants.leave(wakes[index]);
+  CHECK_EQ(tenants.count(), 0u); }
 
 TEST(device_tenants, vacate_waits_for_the_last_tenant_and_gives_up_at_its_deadline)
-{ DeviceTenants tenants;
+{ MockPlatform  platform;
+  DeviceTenants tenants(platform);
   WakeSignal    wake;
   CHECK(tenants.vacate(0u));
   CHECK_EQ(tenants.join(wake), Status::ok);
@@ -125,9 +140,10 @@ TEST(device_tenants, vacate_waits_for_the_last_tenant_and_gives_up_at_its_deadli
   pthread_join(thread, nullptr);
   CHECK_EQ(tenants.count(), 0u); }
 
-/* A table that lists a session twice, or a signal past its count, is not one. */
-TEST(device_tenants, invariants_catch_a_tenant_listed_twice_or_past_the_count)
-{ DeviceTenants tenants;
+/* A list naming a session twice, or no session, is not one. */
+TEST(device_tenants, invariants_catch_a_tenant_listed_twice_or_none)
+{ MockPlatform  platform;
+  DeviceTenants tenants(platform);
   WakeSignal    wake, other;
   CHECK_EQ(tenants.join(wake), Status::ok);
   CHECK_EQ(tenants.join(other), Status::ok);
@@ -136,5 +152,6 @@ TEST(device_tenants, invariants_catch_a_tenant_listed_twice_or_past_the_count)
   CHECK(!tenants.invariants_hold());
   av::DeviceTenantsProbe::list_at(tenants, 1u, &other);
   CHECK(tenants.invariants_hold());
-  av::DeviceTenantsProbe::list_at(tenants, 2u, &other);
-  CHECK(!tenants.invariants_hold()); }
+  av::DeviceTenantsProbe::list_at(tenants, 1u, nullptr);
+  CHECK(!tenants.invariants_hold());
+  av::DeviceTenantsProbe::list_at(tenants, 1u, &other); }

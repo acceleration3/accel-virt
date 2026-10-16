@@ -4,100 +4,87 @@
 
 namespace av {
 
-RetiredSyncTokens::RetiredSyncTokens() : firsts_{}, lasts_{}, count_(0u)
+RetiredSyncTokens::RetiredSyncTokens(BlockSource &blocks) : runs_(blocks, Pool::paged)
 {
     AV_SCOPE("RetiredSyncTokens::RetiredSyncTokens");
 }
 
-void RetiredSyncTokens::add(uint64_t token)
+Status RetiredSyncTokens::add(uint64_t token)
 {
     AV_SCOPE("RetiredSyncTokens::add");
-    if (token <= newest()) return;
-    if (count_ != 0u && token - 1u == lasts_[count_ - 1u]) {
-        lasts_[count_ - 1u] = token;
-        return;
+    if (token <= newest()) return Status::ok;
+    const uint32_t count = runs_.size();
+    if (count != 0u && token - 1u == runs_.at(count - 1u).last_) {
+        runs_.at(count - 1u).last_ = token;
+        return Status::ok;
     }
-    if (count_ == max_runs) join_oldest();
-    firsts_[count_] = token;
-    lasts_[count_] = token;
-    count_++;
+    if (runs_.append(Run{token, token}) == Status::ok) return Status::ok;
+    if (count < 2u) return Status::no_memory;
+    join_oldest();
+    return runs_.append(Run{token, token});
 }
 
 bool RetiredSyncTokens::contains(uint64_t token) const
 {
     AV_SCOPE("RetiredSyncTokens::contains");
-    return run_of(token) != count_;
+    return run_of(token) != runs_.size();
 }
 
 void RetiredSyncTokens::remove(uint64_t token)
 {
     AV_SCOPE("RetiredSyncTokens::remove");
     const uint32_t index = run_of(token);
-    if (index == count_) return;
-    if (firsts_[index] == lasts_[index]) {
-        close_run(index);
+    if (index == runs_.size()) return;
+    Run &run = runs_.at(index);
+    if (run.first_ == run.last_) {
+        runs_.remove_at(index);
         return;
     }
-    if (token == firsts_[index]) {
-        firsts_[index]++;
+    if (token == run.first_) {
+        run.first_++;
         return;
     }
-    if (token == lasts_[index]) {
-        lasts_[index]--;
+    if (token == run.last_) {
+        run.last_--;
         return;
     }
-    if (count_ < max_runs) split_run(index, token);
+    /* `token` is strictly inside the run, so both halves keep at least one. */
+    const Run after{token + 1u, run.last_};
+    if (runs_.insert_at(index + 1u, after) == Status::ok) runs_.at(index).last_ = token - 1u;
 }
 
 uint64_t RetiredSyncTokens::newest() const
 {
     AV_SCOPE("RetiredSyncTokens::newest");
-    return count_ == 0u ? 0u : lasts_[count_ - 1u];
+    return runs_.size() == 0u ? 0u : runs_.at(runs_.size() - 1u).last_;
 }
 
 void RetiredSyncTokens::clear()
 {
     AV_SCOPE("RetiredSyncTokens::clear");
-    count_ = 0u;
+    runs_.clear();
 }
 
 uint32_t RetiredSyncTokens::runs() const
 {
     AV_SCOPE("RetiredSyncTokens::runs");
-    return count_;
+    return runs_.size();
 }
 
+/* Runs ascend and never touch, so the last run starting at or below `token`
+ * is the only one that can hold it. */
 uint32_t RetiredSyncTokens::run_of(uint64_t token) const
 {
     AV_SCOPE("RetiredSyncTokens::run_of");
-    for (uint32_t i = 0u; i < count_; i++) {
-        if (token >= firsts_[i] && token <= lasts_[i]) return i;
+    uint32_t low = 0u;
+    uint32_t high = runs_.size();
+    while (low < high) {
+        const uint32_t middle = low + (high - low) / 2u;
+        if (runs_.at(middle).first_ <= token) low = middle + 1u;
+        else high = middle;
     }
-    return count_;
-}
-
-void RetiredSyncTokens::close_run(uint32_t index)
-{
-    AV_SCOPE("RetiredSyncTokens::close_run");
-    for (uint32_t i = index + 1u; i < count_; i++) {
-        firsts_[i - 1u] = firsts_[i];
-        lasts_[i - 1u] = lasts_[i];
-    }
-    count_--;
-}
-
-/* `token` is strictly inside the run, so both halves keep at least one. */
-void RetiredSyncTokens::split_run(uint32_t index, uint64_t token)
-{
-    AV_SCOPE("RetiredSyncTokens::split_run");
-    for (uint32_t i = count_; i > index + 1u; i--) {
-        firsts_[i] = firsts_[i - 1u];
-        lasts_[i] = lasts_[i - 1u];
-    }
-    firsts_[index + 1u] = token + 1u;
-    lasts_[index + 1u] = lasts_[index];
-    lasts_[index] = token - 1u;
-    count_++;
+    if (low == 0u || token > runs_.at(low - 1u).last_) return runs_.size();
+    return low - 1u;
 }
 
 /* The oldest tokens are the likeliest to be signaled wherever they were
@@ -105,21 +92,21 @@ void RetiredSyncTokens::split_run(uint32_t index, uint64_t token)
 void RetiredSyncTokens::join_oldest()
 {
     AV_SCOPE("RetiredSyncTokens::join_oldest");
-    lasts_[0] = lasts_[1];
-    close_run(1u);
+    runs_.at(0u).last_ = runs_.at(1u).last_;
+    runs_.remove_at(1u);
 }
 
 bool RetiredSyncTokens::invariants_hold() const
 {
     AV_SCOPE("RetiredSyncTokens::invariants_hold");
-    if (count_ > max_runs) return false;
     /* Ascending, never zero, and a token apart: runs that touched would have
      * been one. */
     uint64_t after = 0u;
-    for (uint32_t i = 0u; i < count_; i++) {
-        if (firsts_[i] <= after || lasts_[i] < firsts_[i]) return false;
-        if (lasts_[i] == ~uint64_t{0}) return i + 1u == count_;
-        after = lasts_[i] + 1u;
+    for (uint32_t i = 0u; i < runs_.size(); i++) {
+        const Run &run = runs_.at(i);
+        if (run.first_ <= after || run.last_ < run.first_) return false;
+        if (run.last_ == ~uint64_t{0}) return i + 1u == runs_.size();
+        after = run.last_ + 1u;
     }
     return true;
 }

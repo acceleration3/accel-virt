@@ -1,15 +1,18 @@
 /* The tokens of syncs the host saw signaled and let the driver's object go
- * for. What is asserted is that membership stays exact while the runs fit -
+ * for. What is asserted is that membership stays exact while there is room -
  * a token this context never retired, or deleted, answers nothing - and that
- * the state held never grows with the fences a guest leaves behind. */
+ * a context fencing alone holds one run however many fences it leaves. */
 #include "executor/opengl/retired_sync_tokens.hpp"
 #include "harness/executor/retired_sync_tokens_probe.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 
 #include <cstdint>
 
 using av::RetiredSyncTokens;
 using av::RetiredSyncTokensProbe;
+using av::MockPlatform;
+using av::Status;
 
 namespace {
 
@@ -20,7 +23,7 @@ constexpr std::uint64_t last_token = ~std::uint64_t{0};
 void add_interleaved(RetiredSyncTokens &retired, std::uint64_t first, std::uint32_t count)
 {
     for (std::uint32_t i = 0u; i < count; i++) {
-        retired.add(first + 2u * i);
+        CHECK(retired.add(first + 2u * i) == Status::ok);
         CHECK(retired.invariants_hold());
     }
 }
@@ -28,7 +31,8 @@ void add_interleaved(RetiredSyncTokens &retired, std::uint64_t first, std::uint3
 }  // namespace
 
 TEST(retired_sync_tokens, starts_holding_nothing)
-{ RetiredSyncTokens retired;
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
   CHECK_EQ(retired.runs(), 0u);
   CHECK_EQ(retired.newest(), 0u);
   CHECK(!retired.contains(0u));
@@ -38,10 +42,11 @@ TEST(retired_sync_tokens, starts_holding_nothing)
 /* The leak this exists for: a context fencing alone and deleting nothing
  * holds one run, however many fences it makes. */
 TEST(retired_sync_tokens, a_context_fencing_alone_holds_one_run_for_every_token)
-{ RetiredSyncTokens retired;
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
   constexpr std::uint64_t fences = 10000u;
   for (std::uint64_t token = 1u; token <= fences; token++) {
-      retired.add(token);
+      CHECK(retired.add(token) == Status::ok);
       CHECK(retired.invariants_hold());
       CHECK_EQ(retired.runs(), 1u);
   }
@@ -55,13 +60,14 @@ TEST(retired_sync_tokens, a_context_fencing_alone_holds_one_run_for_every_token)
 /* Retirements come in the order tokens were minted; anything else - a
  * repeat, an older one, zero - is not one, and changes nothing. */
 TEST(retired_sync_tokens, a_token_not_newer_than_every_one_held_is_not_added)
-{ RetiredSyncTokens retired;
-  retired.add(0u);
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
+  CHECK(retired.add(0u) == Status::ok);
   CHECK_EQ(retired.runs(), 0u);
-  retired.add(5u);
-  retired.add(5u);
-  retired.add(3u);
-  retired.add(0u);
+  CHECK(retired.add(5u) == Status::ok);
+  CHECK(retired.add(5u) == Status::ok);
+  CHECK(retired.add(3u) == Status::ok);
+  CHECK(retired.add(0u) == Status::ok);
   CHECK_EQ(retired.runs(), 1u);
   CHECK(!retired.contains(3u));
   CHECK(!retired.contains(4u));
@@ -71,7 +77,8 @@ TEST(retired_sync_tokens, a_token_not_newer_than_every_one_held_is_not_added)
 
 /* Another context's tokens between this one's are not this one's. */
 TEST(retired_sync_tokens, a_token_between_two_runs_is_not_held)
-{ RetiredSyncTokens retired;
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
   add_interleaved(retired, 1u, 3u);
   CHECK_EQ(retired.runs(), 3u);
   CHECK(retired.contains(1u));
@@ -81,30 +88,51 @@ TEST(retired_sync_tokens, a_token_between_two_runs_is_not_held)
   CHECK(retired.contains(5u));
   CHECK(!retired.contains(6u)); }
 
-/* The bound: past max_runs the two oldest join, and the token between them -
- * the oldest gap - is the only one that comes to be held unbound. Every newer
- * gap stays exact. */
-TEST(retired_sync_tokens, past_its_runs_the_oldest_two_join)
-{ RetiredSyncTokens retired;
-  add_interleaved(retired, 1u, RetiredSyncTokens::max_runs);
-  CHECK_EQ(retired.runs(), RetiredSyncTokens::max_runs);
+/* Well past the 64 runs a context once held before joining its oldest:
+ * another context's tokens between every pair of this one's, and every gap
+ * stays exact. */
+TEST(retired_sync_tokens, interleaved_tokens_keep_every_gap_exact)
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
+  add_interleaved(retired, 1u, 10000u);
+  CHECK_EQ(retired.runs(), 10000u);
+  bool exact = true;
+  for (std::uint64_t token = 1u; token <= 20000u; token++) exact = exact && retired.contains(token) == (token % 2u == 1u);
+  CHECK(exact); }
+
+/* With no room for another run the two oldest join, and the token between
+ * them - the oldest gap - is the only one that comes to be held unbound. With
+ * no room even for a first run, the token is not held at all. */
+TEST(retired_sync_tokens, with_no_room_for_a_run_the_oldest_two_join)
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
+  add_interleaved(retired, 1u, 8u);
   CHECK(!retired.contains(2u));
-  const std::uint64_t next = 1u + 2u * RetiredSyncTokens::max_runs;
-  retired.add(next);
+  platform.fail_allocation_at(1u);
+  CHECK(retired.add(17u) == Status::ok);
   CHECK(retired.invariants_hold());
-  CHECK_EQ(retired.runs(), RetiredSyncTokens::max_runs);
+  CHECK_EQ(retired.runs(), 8u);
   CHECK(retired.contains(2u));
   CHECK(!retired.contains(4u));
-  CHECK(!retired.contains(next - 1u));
-  CHECK(retired.contains(next));
-  CHECK_EQ(retired.newest(), next);
-  /* However many more, the runs never grow past the bound. */
-  add_interleaved(retired, next + 2u, 1000u);
-  CHECK_EQ(retired.runs(), RetiredSyncTokens::max_runs);
-  CHECK(!retired.contains(next + 2u * 1000u - 1u)); }
+  CHECK(!retired.contains(16u));
+  CHECK(retired.contains(17u));
+  CHECK_EQ(retired.newest(), 17u);
+  RetiredSyncTokens empty(platform);
+  platform.fail_allocation_at(1u);
+  CHECK(empty.add(5u) == Status::no_memory);
+  CHECK(!empty.contains(5u));
+  CHECK_EQ(empty.runs(), 0u);
+  RetiredSyncTokens lone(platform);
+  CHECK(lone.add(5u) == Status::ok);
+  for (std::uint64_t token = 7u; token < 21u; token += 2u) CHECK(lone.add(token) == Status::ok);
+  platform.fail_allocation_at(1u);
+  CHECK(lone.add(30u) == Status::ok);
+  CHECK(lone.contains(6u));
+  CHECK(lone.invariants_hold()); }
 
 TEST(retired_sync_tokens, removing_a_lone_token_closes_its_run)
-{ RetiredSyncTokens retired;
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
   add_interleaved(retired, 1u, 3u);
   retired.remove(3u);
   CHECK(retired.invariants_hold());
@@ -114,8 +142,9 @@ TEST(retired_sync_tokens, removing_a_lone_token_closes_its_run)
   CHECK(retired.contains(5u)); }
 
 TEST(retired_sync_tokens, removing_either_end_of_a_run_shortens_it)
-{ RetiredSyncTokens retired;
-  for (std::uint64_t token = 1u; token <= 4u; token++) retired.add(token);
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
+  for (std::uint64_t token = 1u; token <= 4u; token++) CHECK(retired.add(token) == Status::ok);
   retired.remove(1u);
   CHECK(retired.invariants_hold());
   CHECK(!retired.contains(1u));
@@ -129,9 +158,10 @@ TEST(retired_sync_tokens, removing_either_end_of_a_run_shortens_it)
 
 /* A deleted sync names nothing after, even inside a run. */
 TEST(retired_sync_tokens, removing_from_inside_a_run_splits_it)
-{ RetiredSyncTokens retired;
-  for (std::uint64_t token = 1u; token <= 5u; token++) retired.add(token);
-  retired.add(9u);
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
+  for (std::uint64_t token = 1u; token <= 5u; token++) CHECK(retired.add(token) == Status::ok);
+  CHECK(retired.add(9u) == Status::ok);
   retired.remove(3u);
   CHECK(retired.invariants_hold());
   CHECK_EQ(retired.runs(), 3u);
@@ -141,30 +171,33 @@ TEST(retired_sync_tokens, removing_from_inside_a_run_splits_it)
   CHECK(retired.contains(5u));
   CHECK(retired.contains(9u));
   /* The split keeps the runs in order: a later add still extends the newest. */
-  retired.add(10u);
+  CHECK(retired.add(10u) == Status::ok);
   CHECK_EQ(retired.runs(), 3u);
   CHECK(retired.invariants_hold()); }
 
-/* With every run in use there is no room to split, and the deleted token
- * stays held rather than another being let go. */
-TEST(retired_sync_tokens, a_full_set_keeps_a_token_it_cannot_split_out)
-{ RetiredSyncTokens retired;
-  add_interleaved(retired, 1u, RetiredSyncTokens::max_runs - 1u);
-  const std::uint64_t run = 1u + 2u * (RetiredSyncTokens::max_runs - 1u);
-  for (std::uint64_t token = run; token <= run + 2u; token++) retired.add(token);
-  CHECK_EQ(retired.runs(), RetiredSyncTokens::max_runs);
+/* With no room to split, the deleted token stays held rather than another
+ * being let go. */
+TEST(retired_sync_tokens, a_set_that_cannot_grow_keeps_a_token_it_cannot_split_out)
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
+  add_interleaved(retired, 1u, 7u);
+  const std::uint64_t run = 15u;
+  for (std::uint64_t token = run; token <= run + 2u; token++) CHECK(retired.add(token) == Status::ok);
+  CHECK_EQ(retired.runs(), 8u);
+  platform.fail_allocation_at(1u);
   retired.remove(run + 1u);
   CHECK(retired.invariants_hold());
-  CHECK_EQ(retired.runs(), RetiredSyncTokens::max_runs);
+  CHECK_EQ(retired.runs(), 8u);
   CHECK(retired.contains(run + 1u));
   /* Its ends can still go. */
   retired.remove(run + 2u);
   CHECK(!retired.contains(run + 2u)); }
 
 TEST(retired_sync_tokens, removing_a_token_not_held_changes_nothing)
-{ RetiredSyncTokens retired;
-  retired.add(4u);
-  retired.add(5u);
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
+  CHECK(retired.add(4u) == Status::ok);
+  CHECK(retired.add(5u) == Status::ok);
   retired.remove(0u);
   retired.remove(3u);
   retired.remove(6u);
@@ -175,59 +208,59 @@ TEST(retired_sync_tokens, removing_a_token_not_held_changes_nothing)
   CHECK(retired.invariants_hold()); }
 
 TEST(retired_sync_tokens, clearing_holds_nothing_and_starts_over)
-{ RetiredSyncTokens retired;
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
   add_interleaved(retired, 10u, 4u);
   retired.clear();
   CHECK(retired.invariants_hold());
   CHECK_EQ(retired.runs(), 0u);
   CHECK_EQ(retired.newest(), 0u);
   CHECK(!retired.contains(10u));
-  retired.add(1u);
+  CHECK(retired.add(1u) == Status::ok);
   CHECK(retired.contains(1u)); }
 
 /* A guest's token can be any 64-bit value; the largest still holds, ends
  * a run, and nothing can follow it. */
 TEST(retired_sync_tokens, the_largest_token_is_held_and_ends_everything)
-{ RetiredSyncTokens retired;
-  retired.add(last_token - 1u);
-  retired.add(last_token);
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
+  CHECK(retired.add(last_token - 1u) == Status::ok);
+  CHECK(retired.add(last_token) == Status::ok);
   CHECK_EQ(retired.runs(), 1u);
   CHECK(retired.contains(last_token));
   CHECK_EQ(retired.newest(), last_token);
-  retired.add(1u);
+  CHECK(retired.add(1u) == Status::ok);
   CHECK(!retired.contains(1u));
   CHECK(retired.invariants_hold());
   retired.remove(last_token);
   CHECK(!retired.contains(last_token));
   CHECK(retired.contains(last_token - 1u)); }
 
-TEST(retired_sync_tokens_invariants, a_count_past_the_runs_breaks_them)
-{ RetiredSyncTokens retired;
-  add_interleaved(retired, 1u, RetiredSyncTokens::max_runs);
-  RetiredSyncTokensProbe(retired).set_count(RetiredSyncTokens::max_runs + 1u);
-  CHECK(!retired.invariants_hold()); }
-
 /* Zero is no token, so a run starting there holds one nobody minted. */
 TEST(retired_sync_tokens_invariants, a_run_from_zero_breaks_them)
-{ RetiredSyncTokens retired;
-  retired.add(1u);
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
+  CHECK(retired.add(1u) == Status::ok);
   RetiredSyncTokensProbe(retired).set_run(0u, 0u, 1u);
   CHECK(!retired.invariants_hold()); }
 
 TEST(retired_sync_tokens_invariants, a_run_ending_before_it_starts_breaks_them)
-{ RetiredSyncTokens retired;
-  retired.add(5u);
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
+  CHECK(retired.add(5u) == Status::ok);
   RetiredSyncTokensProbe(retired).set_run(0u, 5u, 4u);
   CHECK(!retired.invariants_hold()); }
 
 /* Runs a token apart: touching, they were one; out of order, add would
  * extend the wrong one and contains answer for tokens never added. */
 TEST(retired_sync_tokens_invariants, runs_touching_or_out_of_order_break_them)
-{ { RetiredSyncTokens retired;
+{ { MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
     add_interleaved(retired, 1u, 2u);
     RetiredSyncTokensProbe(retired).set_run(1u, 2u, 3u);
     CHECK(!retired.invariants_hold()); }
-  { RetiredSyncTokens retired;
+  { MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
     add_interleaved(retired, 1u, 2u);
     RetiredSyncTokensProbe(retired).set_run(0u, 7u, 7u);
     CHECK(!retired.invariants_hold()); } }
@@ -235,7 +268,8 @@ TEST(retired_sync_tokens_invariants, runs_touching_or_out_of_order_break_them)
 /* Nothing follows the largest token, so a run after one ending there is one
  * the arithmetic of "a token apart" would wrap around to accept. */
 TEST(retired_sync_tokens_invariants, a_run_after_the_largest_token_breaks_them)
-{ RetiredSyncTokens retired;
+{ MockPlatform      platform;
+  RetiredSyncTokens retired(platform);
   add_interleaved(retired, 1u, 2u);
   RetiredSyncTokensProbe probe(retired);
   probe.set_run(0u, last_token - 1u, last_token);

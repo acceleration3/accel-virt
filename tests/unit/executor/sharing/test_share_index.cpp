@@ -62,7 +62,7 @@ TEST(share_index, a_pair_already_named_is_a_conflict)
   CHECK(index.find(1u, 7u) == &first);
   CHECK_EQ(index.count(), 1u); }
 
-/* The miniport never mints 0, which marks an empty entry here. */
+/* The miniport never mints 0, and a share is something. */
 TEST(share_index, id_0_and_no_share_are_refused)
 { MockPlatform platform;
   ShareIndex index(platform);
@@ -82,7 +82,9 @@ TEST(share_index, grows_past_any_fixed_count)
   CHECK_EQ(index.count(), static_cast<std::uint32_t>(many));
   for (std::uint64_t id = 1u; id <= many; id++) CHECK(index.find(1u, id) == &first);
   CHECK(index.find(1u, many + 1u) == nullptr);
-  CHECK_EQ(platform.live_allocations(), 1u); }   /* the old table given back at each growth */
+  for (std::uint64_t id = 1u; id <= many; id++) index.remove(1u, id);
+  CHECK_EQ(index.count(), 0u);
+  CHECK_EQ(ShareIndexProbe(index).domains(), 0u); }
 
 TEST(share_index, a_removed_pair_names_nothing_and_its_neighbours_still_open)
 { MockPlatform platform;
@@ -120,33 +122,44 @@ TEST(share_index, churn_does_not_fill_the_table)
       if (id > 3u) index.remove(1u, id - 3u);
   }
   CHECK_EQ(index.count(), 3u);
-  CHECK_EQ(ShareIndexProbe(index).capacity(), ShareIndex::first_capacity);
+  CHECK_EQ(ShareIndexProbe(index).buckets(1u), (av::KeyedSlots<std::uint64_t, Share *>::first_buckets));
   CHECK(index.find(1u, 100000u) == &first);
   CHECK(index.find(1u, 99997u) == nullptr); }
 
-TEST(share_index, doubles_only_when_a_quarter_is_live)
+/* A domain's table is made with its first id and given back with its last:
+ * a guest device that shares nothing holds nothing. */
+TEST(share_index, a_domain_s_table_lives_from_its_first_id_to_its_last)
 { MockPlatform platform;
   ShareIndex index(platform);
-  for (std::uint64_t id = 1u; id <= 32u; id++) CHECK_STATUS(index.insert(1u, id, &first), Status::ok);
-  CHECK_EQ(ShareIndexProbe(index).capacity(), 64u);
-  CHECK_STATUS(index.insert(1u, 33u, &first), Status::ok);
-  CHECK_EQ(ShareIndexProbe(index).capacity(), 128u);
-  for (std::uint64_t id = 1u; id <= 33u; id++) index.remove(1u, id);
-  /* 33 tombstones and nothing live: the next growth is a rebuild in place */
-  for (std::uint64_t id = 100u; id < 132u; id++) CHECK_STATUS(index.insert(1u, id, &first), Status::ok);
-  CHECK_EQ(ShareIndexProbe(index).capacity(), 128u);
-  CHECK_EQ(index.count(), 32u); }
+  CHECK_EQ(ShareIndexProbe(index).domains(), 0u);
+  CHECK_STATUS(index.insert(3u, 7u, &first), Status::ok);
+  CHECK_STATUS(index.insert(3u, 8u, &second), Status::ok);
+  CHECK_EQ(ShareIndexProbe(index).domains(), 1u);
+  CHECK(ShareIndexProbe(index).buckets(3u) != 0u);
+  index.remove(3u, 7u);
+  CHECK_EQ(ShareIndexProbe(index).domains(), 1u);
+  index.remove(3u, 8u);
+  CHECK_EQ(ShareIndexProbe(index).domains(), 0u);
+  CHECK_EQ(ShareIndexProbe(index).buckets(3u), 0u);
+  CHECK(index.find(3u, 8u) == nullptr); }
 
+/* Each place memory is asked for refusing in turn - the domain list, the
+ * domain's table, its ids - adds nothing and leaves no table behind. */
 TEST(share_index, a_table_that_cannot_grow_adds_nothing)
-{ MockPlatform platform;
+{ for (std::uint32_t failing = 1u; failing <= 5u; failing++) {
+      MockPlatform platform;
+      ShareIndex index(platform);
+      platform.fail_allocation_at(failing);
+      CHECK_STATUS(index.insert(1u, 7u, &first), Status::no_memory);
+      CHECK(index.find(1u, 7u) == nullptr);
+      CHECK_EQ(index.count(), 0u);
+      CHECK_EQ(ShareIndexProbe(index).domains(), 0u);
+  }
+  MockPlatform platform;
   ShareIndex index(platform);
-  platform.fail_allocation_at(1u);
-  CHECK_STATUS(index.insert(1u, 7u, &first), Status::no_memory);
-  CHECK(index.find(1u, 7u) == nullptr);
-  CHECK_EQ(index.count(), 0u);
-  for (std::uint64_t id = 1u; id <= 32u; id++) CHECK_STATUS(index.insert(1u, id, &first), Status::ok);
-  platform.fail_allocation_at(1u);        /* the 33rd needs a bigger table */
-  CHECK_STATUS(index.insert(1u, 33u, &second), Status::no_memory);
-  CHECK(index.find(1u, 33u) == nullptr);
-  for (std::uint64_t id = 1u; id <= 32u; id++) CHECK(index.find(1u, id) == &first);
-  CHECK_EQ(index.count(), 32u); }
+  for (std::uint64_t id = 1u; id <= 8u; id++) CHECK_STATUS(index.insert(1u, id, &first), Status::ok);
+  platform.fail_allocation_at(1u);        /* the 9th needs a bigger table */
+  CHECK_STATUS(index.insert(1u, 9u, &second), Status::no_memory);
+  CHECK(index.find(1u, 9u) == nullptr);
+  for (std::uint64_t id = 1u; id <= 8u; id++) CHECK(index.find(1u, id) == &first);
+  CHECK_EQ(index.count(), 8u); }

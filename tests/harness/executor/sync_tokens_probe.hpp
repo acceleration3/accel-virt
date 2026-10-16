@@ -12,7 +12,6 @@ namespace av {
 struct SyncTokensProbe {
     explicit SyncTokensProbe(SyncTokens &target);
 
-    void set_count(uint32_t count);
     void set_token(uint32_t index, uint64_t token);
     void set_fence(uint32_t index, void *fence);
     void set_newest(uint64_t newest);

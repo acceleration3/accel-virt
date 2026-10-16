@@ -1,5 +1,7 @@
 #include "executor/opencl/opencl_backend.hpp"
 
+#include "core/support/growable_array.hpp"
+
 #include "executor/opencl/cl_extension_list.hpp"
 #include "executor/opencl/dxgi_cl_format.hpp"
 #include "device/host/stdio_log.hpp"
@@ -58,12 +60,20 @@ extern "C" void CL_CALLBACK av_cl_event_completed(cl_event, cl_int, void *user_d
     static_cast<ClEventRegistration *>(user_data)->completed();
 }
 
-OpenClBackend::OpenClBackend()
-    : bound_(nullptr), envelope_(), arguments_(), binaries_(), il_(), argument_kinds_(),
+OpenClBackend::OpenClBackend() : OpenClBackend(heap_)
+{
+    AV_SCOPE("OpenClBackend::OpenClBackend");
+}
+
+/* heap_ is constructed before blocks_ is bound to it, whichever constructor
+ * runs: it is declared first. */
+OpenClBackend::OpenClBackend(BlockSource &blocks)
+    : heap_(), blocks_(blocks), bound_(nullptr), envelope_(), arguments_(), binaries_(), il_(), argument_kinds_(),
       vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
-      direct_(vehicle_, renderbuffer_textures_), copied_(object_bytes_, renderbuffer_textures_), gl_(nullptr),
-      reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(), svm_(), events_(), pacer_(),
-      paced_queue_(nullptr), marker_(nullptr), ran_(0u), lost_(false)
+      direct_(blocks, vehicle_, renderbuffer_textures_), copied_(blocks, object_bytes_, renderbuffer_textures_),
+      gl_(nullptr), reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(blocks),
+      svm_(blocks), mapped_(blocks), events_(blocks), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
+      lost_(false)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
 }
@@ -264,13 +274,19 @@ bool OpenClBackend::declared_argument(cl_kernel kernel, cl_uint index, clproto::
 {
     AV_SCOPE("OpenClBackend::declared_argument");
     cl_program program = nullptr;
-    char       name[max_kernel_name] = {};
+    size_t     length = 0u;
     if (::clGetKernelInfo(kernel, CL_KERNEL_PROGRAM, sizeof program, &program, nullptr) != CL_SUCCESS ||
-        ::clGetKernelInfo(kernel, CL_KERNEL_FUNCTION_NAME, sizeof name, name, nullptr) != CL_SUCCESS)
+        ::clGetKernelInfo(kernel, CL_KERNEL_FUNCTION_NAME, 0u, nullptr, &length) != CL_SUCCESS || length == 0u ||
+        length > GrowableArray<char>::most_values)
+        return false;
+    /* As long as the kernel's name is, whatever the application called it. */
+    GrowableArray<char> name(blocks_, Pool::paged);
+    if (name.resize(static_cast<uint32_t>(length), '\0') != Status::ok ||
+        ::clGetKernelInfo(kernel, CL_KERNEL_FUNCTION_NAME, length, name.begin(), nullptr) != CL_SUCCESS)
         return false;
     size_t                count = 0u;
     const uint32_t *const module = il_.words(program, count);
-    return module != nullptr && argument_kinds_.kind(module, count, name, index, argument);
+    return module != nullptr && argument_kinds_.kind(module, count, name.begin(), index, argument);
 }
 
 bool OpenClBackend::shares_with_gl(const GlDisplay &display) const
@@ -421,12 +437,21 @@ void *OpenClBackend::handle_for(clproto::HandleKind kind, uint64_t wire) const
     return handles_.resolve(kind, wire);
 }
 
+bool OpenClBackend::room_for(uint64_t objects)
+{
+    AV_SCOPE("OpenClBackend::room_for");
+    return handles_.make_room(objects) == Status::ok;
+}
+
 void OpenClBackend::made(clproto::HandleKind kind, void *object)
 {
     AV_SCOPE("OpenClBackend::made");
-    /* A registry with no room loses the device rather than hand the guest a
-     * number this host would refuse when it came back. */
-    if (!handles_.remember(kind, object)) lost_ = true;
+    /* The decoder made room_for every object a reply carries before the ICD
+     * made any, so only an ICD answering an address this context still holds
+     * as another kind is refused here: the host could no longer say which
+     * object the guest's number means, and the device is lost rather than
+     * guess. An object remembered nowhere is refused when the guest names it. */
+    if (handles_.remember(kind, object) == Status::conflict) lost_ = true;
     /* The first context is the one a shared object is opened into: it is the
      * one created naming this backend's GL context, so it is the only one
      * clCreateFromGLBuffer would take (feature 053, T019). */
@@ -646,12 +671,12 @@ void *OpenClBackend::on_clSVMAlloc(cl_context context, cl_svm_mem_flags flags, s
                                    cl_uint alignment)
 {
     AV_SCOPE("OpenClBackend::on_clSVMAlloc");
+    /* Room first: an allocation this could not remember is one whose address
+     * could never be judged. clSVMAlloc answers a lack of memory with null. */
+    if (svm_.make_room() != Status::ok) return nullptr;
     void *const allocated = ::clSVMAlloc(context, flags, size, alignment);
     if (allocated == nullptr) return nullptr;
-    /* An allocation this cannot remember is one whose address could never be
-     * judged, so it is given back rather than handed to a guest that would
-     * find every use of it refused. */
-    if (!svm_.remember(allocated, static_cast<uint64_t>(size), 0u)) {
+    if (svm_.remember(allocated, static_cast<uint64_t>(size), 0u) != Status::ok) { AV_UNTESTABLE("room was made above, and no host allocates no bytes or past the end of the address space");
         ::clSVMFree(context, allocated);
         return nullptr;
     }
@@ -683,17 +708,23 @@ void *OpenClBackend::on_clEnqueueMapBuffer(cl_command_queue command_queue, cl_me
                                            cl_int *errcode_ret)
 {
     AV_SCOPE("OpenClBackend::on_clEnqueueMapBuffer");
+    if (mapped_.make_room() != Status::ok) {
+        if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
+        return nullptr;
+    }
     void *const mapped =
         ::clEnqueueMapBuffer(command_queue, buffer, blocking_map, map_flags, offset, size,
                              num_events_in_wait_list, event_wait_list, event, errcode_ret);
     if (mapped == nullptr) return nullptr;
-    /* A mapping this cannot remember is one whose unmap could never be
-     * judged, and a buffer that can never be unmapped is worse than a map
-     * that failed: the guest would hold it for the life of the context. */
-    if (!mapped_.remember(mapped, static_cast<uint64_t>(size), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(buffer)))) {
+    /* A mapping this cannot remember - no bytes, or past the end of the
+     * address space - is one whose unmap could never be judged, and a buffer
+     * that can never be unmapped is worse than a map that failed: the guest
+     * would hold it for the life of the context. */
+    if (mapped_.remember(mapped, static_cast<uint64_t>(size),
+                         static_cast<uint64_t>(reinterpret_cast<uintptr_t>(buffer))) != Status::ok) { AV_UNTESTABLE("room was made above, and no host maps no bytes or past the end of the address space");
         static_cast<void>(::clEnqueueUnmapMemObject(command_queue, buffer, mapped, 0u, nullptr,
                                                     nullptr));
-        if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_RESOURCES;
+        if (errcode_ret != nullptr) *errcode_ret = CL_INVALID_VALUE;
         return nullptr;
     }
     return mapped;
@@ -897,7 +928,7 @@ cl_int OpenClBackend::on_clSetEventCallback(cl_event event, cl_int command_exec_
      * would wait on it forever. */
     if (!events_.bound()) return CL_INVALID_OPERATION;
     ClEventRegistration *const slot = events_.take();
-    if (slot == nullptr) return CL_OUT_OF_RESOURCES;
+    if (slot == nullptr) return CL_OUT_OF_HOST_MEMORY;
     const cl_int registered =
         ::clSetEventCallback(event, command_exec_callback_type, &av_cl_event_completed, slot);
     if (registered != CL_SUCCESS) events_.give_back(slot);
@@ -955,7 +986,7 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
     /* Named in the guest's commands from now on, as any cl_mem the host made
      * is: one the registry did not hold would resolve to nothing in every
      * enqueue that names it. */
-    if (!taken || !handles_.remember(clproto::HandleKind::mem, named)) { AV_UNTESTABLE("the acquire above, and tables no guest fills without thousands of live objects");
+    if (!taken || handles_.remember(clproto::HandleKind::mem, named) != Status::ok) { AV_UNTESTABLE("the acquire above, and a table that cannot grow");
         /* An image holds the buffer's one reference: letting it go lets both
          * go. */
         cl_mem const held = named != nullptr ? named : shared;

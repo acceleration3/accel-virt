@@ -23,11 +23,7 @@ constexpr uint32_t error_flags = 8u;
 constexpr uint32_t gl_context_lost = 0x0507u;
 constexpr uint32_t gl_sync_flush_commands_bit = 0x1u;
 constexpr uint32_t gl_already_signaled = 0x911Au, gl_condition_satisfied = 0x911Cu;
-/* How long a full table waits for its oldest sync: Windows' own TDR delay,
- * past which a guest takes its GPU for hung. A GPU that has not reached a
- * fence made SyncTokens::max_live fences ago by then is, and the newest fence
- * is refused rather than the worker held longer. */
-constexpr uint64_t oldest_sync_wait_ns = 2'000'000'000u;
+constexpr uint32_t gl_out_of_memory = 0x0505u;
 
 /* The generated table's loader signature: a name and whatever the caller wants
  * to reach, which here is the context the entry points come from. */
@@ -78,8 +74,16 @@ void unpack_blob(void *user)
 
 }  // namespace
 
-OpenGlBackend::OpenGlBackend()
-    : context_(), gl_(), import_(), buffers_(), pack_(gl_, buffers_), fences_(), region_(), errors_(), resolved_(0u), ran_(0u),
+OpenGlBackend::OpenGlBackend() : OpenGlBackend(heap_)
+{
+    AV_SCOPE("OpenGlBackend::OpenGlBackend");
+}
+
+/* heap_ is constructed before blocks are bound to it, whichever constructor
+ * runs: it is declared first. */
+OpenGlBackend::OpenGlBackend(BlockSource &blocks)
+    : heap_(), context_(), gl_(), import_(), buffers_(), pack_(gl_, buffers_), fences_(blocks), region_(), errors_(),
+      resolved_(0u), ran_(0u),
       lost_(false), current_(false), sink_(stderr), lines_(sink_, "virtio-gpu-av: opengl: ")
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
@@ -284,36 +288,35 @@ void OpenGlBackend::abandon(ImportedBlob &blob)
 bool OpenGlBackend::bind_fence(uint64_t token, void *fence)
 {
     AV_SCOPE("OpenGlBackend::bind_fence");
-    if (fences_.full()) retire_oldest_fence();
-    if (fences_.bind(token, fence)) return true;
+    if (fences_.crowded()) retire_passed_fence();
+    const Status bound = fences_.bind(token, fence);
+    if (bound == Status::ok) return true;
     if (fence == nullptr) {
         LogLine(lines_).text("glFenceSync made no GLsync for token ").number(token).write();
         return false;
     }
     /* A sync no token names is one nothing would ever delete: a token reused
-     * or out of order, or a table whose oldest sync never signaled, gets none
-     * rather than the host keeping one for good. */
+     * or out of order, or one with no room to be held, gets none rather than
+     * the host keeping one for good. The guest is told of the last as GL is. */
+    if (bound == Status::no_memory) errors_.record(gl_out_of_memory);
     if (gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(fence));
     LogLine(lines_).text("the GLsync of token ").number(token).text(" was deleted as it was made").write();
     return false;
 }
 
 /* Fences on one context signal in the order they were made, so the oldest is
- * the first the GPU passes, and a wait for it cannot be a wait on anything
- * the guest has yet to send. */
-void OpenGlBackend::retire_oldest_fence()
+ * the first the GPU passes. Asked without waiting: one the GPU has not yet
+ * passed stays, and the table grows instead. */
+void OpenGlBackend::retire_passed_fence()
 {
-    AV_SCOPE("OpenGlBackend::retire_oldest_fence");
+    AV_SCOPE("OpenGlBackend::retire_passed_fence");
     if (gl_.glClientWaitSync == nullptr) return;
     const uint32_t reached =
-        gl_.glClientWaitSync(static_cast<GLsync>(fences_.oldest()), gl_sync_flush_commands_bit, oldest_sync_wait_ns);
-    if (reached != gl_already_signaled && reached != gl_condition_satisfied) {
-        LogLine(lines_).text("the oldest of ").number(SyncTokens::max_live).text(" GLsyncs did not signal: ")
-            .hex(reached, 4u).write();
-        return;
-    }
-    void *const retired = fences_.retire_oldest();
-    if (retired != nullptr && gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(retired));
+        gl_.glClientWaitSync(static_cast<GLsync>(fences_.oldest()), gl_sync_flush_commands_bit, 0u);
+    if (reached != gl_already_signaled && reached != gl_condition_satisfied) return;
+    void *deleted = nullptr;
+    if (fences_.retire_oldest(deleted) != Status::ok) return;
+    if (deleted != nullptr && gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(deleted));
 }
 
 void *OpenGlBackend::fence_for(uint64_t token) const

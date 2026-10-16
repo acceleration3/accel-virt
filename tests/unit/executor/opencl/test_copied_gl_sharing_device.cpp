@@ -16,6 +16,7 @@
 #include "executor/shim/gl_renderbuffer_texture.hpp"
 #include "harness/executor/host_gl_rig.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 
 #include <CL/cl_gl.h>
 #include <cstdint>
@@ -109,7 +110,8 @@ TEST(copied_gl_sharing_device, a_buffer_s_bytes_cross_at_the_acquire_and_come_ba
 { HostGlRig rig;
   Vehicle   vehicle(rig);
   if (!rig.ready() || !vehicle.ready()) { std::fprintf(stderr, "no OpenCL and EGL GPU here\n"); return; }
-  CopiedGlSharing sharing(vehicle.objects(), vehicle.textures());
+  av::MockPlatform platform;
+  CopiedGlSharing sharing(platform, vehicle.objects(), vehicle.textures());
   static std::uint8_t bytes[buffer_bytes];
   fill(bytes, sizeof bytes, 1u);
   const std::uint32_t name = rig.buffer(bytes, sizeof bytes);
@@ -164,7 +166,8 @@ TEST(copied_gl_sharing_device, only_what_opencl_may_have_written_is_copied_back)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
   if (!rig.ready() || !vehicle.ready()) return;
-  CopiedGlSharing     sharing(vehicle.objects(), vehicle.textures());
+  av::MockPlatform platform;
+  CopiedGlSharing     sharing(platform, vehicle.objects(), vehicle.textures());
   static std::uint8_t bytes[buffer_bytes], seen[buffer_bytes];
   fill(bytes, sizeof bytes, 3u);
   const std::uint32_t read_only = rig.buffer(bytes, sizeof bytes);
@@ -213,7 +216,8 @@ TEST(copied_gl_sharing_device, a_buffer_that_cannot_be_mirrored_is_refused_as_th
 { HostGlRig rig;
   Vehicle   vehicle(rig);
   if (!rig.ready() || !vehicle.ready()) return;
-  CopiedGlSharing     sharing(vehicle.objects(), vehicle.textures());
+  av::MockPlatform platform;
+  CopiedGlSharing     sharing(platform, vehicle.objects(), vehicle.textures());
   const std::uint32_t name = rig.buffer(nullptr, 64u);
   const cl_mem_flags  bad_flags[] = {0u, CL_MEM_READ_WRITE | CL_MEM_READ_ONLY, CL_MEM_USE_HOST_PTR,
                                      CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR};
@@ -238,30 +242,36 @@ TEST(copied_gl_sharing_device, a_buffer_that_cannot_be_mirrored_is_refused_as_th
   rig.delete_buffer(empty);
   rig.delete_buffer(name); }
 
-/* As many as the table holds - as many cl_mems as a guest can hold at all -
- * and one more refused with its cl_mem let go. */
-TEST(copied_gl_sharing_device, a_full_table_refuses_the_next_mirror_and_releases_its_cl_mem)
+/* Past the 2048 the table was once sized to every mirror is made; a table
+ * that cannot grow refuses the next as out of host memory, with its cl_mem
+ * let go. */
+TEST(copied_gl_sharing_device, a_table_that_cannot_grow_refuses_the_next_mirror_and_releases_its_cl_mem)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
   if (!rig.ready() || !vehicle.ready()) return;
-  CopiedGlSharing     sharing(vehicle.objects(), vehicle.textures());
+  av::MockPlatform    platform;
+  CopiedGlSharing     sharing(platform, vehicle.objects(), vehicle.textures());
   const std::uint32_t name = rig.buffer(nullptr, 64u);
-  static cl_mem       made[av::ClGlMirrors::max_mirrors];
+  constexpr std::uint32_t many = 2100u;
+  static cl_mem       made[many + 64u];
   bool                all_made = true;
-  for (cl_mem &each : made) {
-      each = sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, name, nullptr);
-      all_made = all_made && each != nullptr;
+  for (std::uint32_t index = 0u; index < many; index++) {
+      made[index] = sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, name, nullptr);
+      all_made = all_made && made[index] != nullptr;
   }
   CHECK(all_made);
-  CHECK_EQ(sharing.mirrors(), av::ClGlMirrors::max_mirrors);
-  cl_int error = CL_SUCCESS;
-  CHECK(sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, name, &error) == nullptr);
-  CHECK_EQ(error, CL_OUT_OF_RESOURCES);
-  CHECK(sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, name, nullptr) == nullptr);
-  CHECK_EQ(sharing.mirrors(), av::ClGlMirrors::max_mirrors);
+  CHECK_EQ(sharing.mirrors(), many);
+  platform.fail_allocation_at(1u);
+  std::uint32_t held = many;
+  cl_int        error = CL_SUCCESS;
+  while (held < many + 64u && (made[held] = sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, name, &error)) != nullptr)
+      held++;
+  CHECK(held < many + 64u);
+  CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
+  CHECK_EQ(sharing.mirrors(), held);
   sharing.forget_all();
   CHECK_EQ(sharing.mirrors(), 0u);
-  for (cl_mem each : made) ::clReleaseMemObject(each);
+  for (std::uint32_t index = 0u; index < held; index++) ::clReleaseMemObject(made[index]);
   rig.delete_buffer(name); }
 
 namespace {
@@ -290,7 +300,8 @@ TEST(copied_gl_sharing_device, a_texture_pool_past_256_is_held_acquired_and_rele
 { HostGlRig rig;
   Vehicle   vehicle(rig);
   if (!rig.ready() || !vehicle.ready()) return;
-  CopiedGlSharing         sharing(vehicle.objects(), vehicle.textures());
+  av::MockPlatform platform;
+  CopiedGlSharing         sharing(platform, vehicle.objects(), vehicle.textures());
   constexpr std::uint32_t pool = 320u;
   static std::uint32_t    names[pool];
   static cl_mem           mems[pool];
@@ -351,7 +362,8 @@ TEST(copied_gl_sharing_device, an_acquire_or_release_of_what_is_no_mirror_copies
 { HostGlRig rig;
   Vehicle   vehicle(rig);
   if (!rig.ready() || !vehicle.ready()) return;
-  CopiedGlSharing     sharing(vehicle.objects(), vehicle.textures());
+  av::MockPlatform platform;
+  CopiedGlSharing     sharing(platform, vehicle.objects(), vehicle.textures());
   const std::uint32_t name = rig.buffer(nullptr, 64u);
   cl_mem const        mem = sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, name, nullptr);
   cl_int              error = CL_SUCCESS;
@@ -381,7 +393,8 @@ TEST(copied_gl_sharing_device, a_gl_object_gone_or_a_copy_the_host_refuses_is_an
 { HostGlRig rig;
   Vehicle   vehicle(rig);
   if (!rig.ready() || !vehicle.ready()) return;
-  CopiedGlSharing     sharing(vehicle.objects(), vehicle.textures());
+  av::MockPlatform platform;
+  CopiedGlSharing     sharing(platform, vehicle.objects(), vehicle.textures());
   const std::uint32_t kept = rig.buffer(nullptr, 64u);
   const std::uint32_t doomed = rig.buffer(nullptr, 64u);
   cl_mem const        mem = sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, kept, nullptr);
@@ -446,7 +459,8 @@ TEST(copied_gl_sharing_device, each_kind_of_texture_level_crosses_both_ways_byte
 { HostGlRig rig;
   Vehicle   vehicle(rig);
   if (!rig.ready() || !vehicle.ready()) return;
-  CopiedGlSharing sharing(vehicle.objects(), vehicle.textures());
+  av::MockPlatform platform;
+  CopiedGlSharing sharing(platform, vehicle.objects(), vehicle.textures());
   const Level     levels[] = {
       {gl_texture_2d, 0, gl_rgba8, gl_rgba, gl_unsigned_byte, 16u, 8u, 1u, 4u, CL_GL_OBJECT_TEXTURE2D},
       {gl_texture_2d, 1, gl_rgba32f, gl_rgba, gl_float, 8u, 4u, 1u, 16u, CL_GL_OBJECT_TEXTURE2D},
@@ -512,7 +526,8 @@ TEST(copied_gl_sharing_device, a_texture_question_is_answered_as_clGetGLTextureI
 { HostGlRig rig;
   Vehicle   vehicle(rig);
   if (!rig.ready() || !vehicle.ready()) return;
-  CopiedGlSharing     sharing(vehicle.objects(), vehicle.textures());
+  av::MockPlatform platform;
+  CopiedGlSharing     sharing(platform, vehicle.objects(), vehicle.textures());
   const std::uint32_t name = rig.texture(gl_texture_2d, 0, gl_rgba8, gl_rgba, gl_unsigned_byte, 4u, 4u, 1u, nullptr);
   cl_mem const        mem = sharing.from_texture(rig.context(), CL_MEM_READ_ONLY, gl_texture_2d, 0, name, nullptr);
   CHECK(mem != nullptr);
@@ -540,7 +555,8 @@ TEST(copied_gl_sharing_device, a_texture_that_cannot_be_mirrored_is_refused_as_t
 { HostGlRig rig;
   Vehicle   vehicle(rig);
   if (!rig.ready() || !vehicle.ready()) return;
-  CopiedGlSharing     sharing(vehicle.objects(), vehicle.textures());
+  av::MockPlatform platform;
+  CopiedGlSharing     sharing(platform, vehicle.objects(), vehicle.textures());
   const std::uint32_t name = rig.texture(gl_texture_2d, 0, gl_rgba8, gl_rgba, gl_unsigned_byte, 4u, 4u, 1u, nullptr);
   const std::uint32_t rgb = rig.texture(gl_texture_2d, 0, gl_rgb8, gl_rgb, gl_unsigned_byte, 4u, 4u, 1u, nullptr);
   struct Case {
@@ -583,7 +599,8 @@ TEST(copied_gl_sharing_device, a_renderbuffer_crosses_through_a_texture_of_its_s
 { HostGlRig rig;
   Vehicle   vehicle(rig);
   if (!rig.ready() || !vehicle.ready()) return;
-  CopiedGlSharing     sharing(vehicle.objects(), vehicle.textures());
+  av::MockPlatform platform;
+  CopiedGlSharing     sharing(platform, vehicle.objects(), vehicle.textures());
   const float         red[4] = {0.8f, 0.1f, 0.3f, 1.0f};
   const std::uint32_t renderbuffer = rig.renderbuffer(gl_rgba8, 16u, 16u, red);
   cl_int              error = CL_INVALID_VALUE;
@@ -636,7 +653,8 @@ TEST(copied_gl_sharing_device, a_renderbuffer_that_cannot_be_mirrored_is_refused
 { HostGlRig rig;
   Vehicle   vehicle(rig);
   if (!rig.ready() || !vehicle.ready()) return;
-  CopiedGlSharing     sharing(vehicle.objects(), vehicle.textures());
+  av::MockPlatform platform;
+  CopiedGlSharing     sharing(platform, vehicle.objects(), vehicle.textures());
   const float         grey[4] = {0.5f, 0.5f, 0.5f, 1.0f};
   const std::uint32_t rgba = rig.renderbuffer(gl_rgba8, 4u, 4u, grey);
   const std::uint32_t rgb = rig.renderbuffer(gl_rgb8, 4u, 4u, grey);
@@ -659,7 +677,8 @@ TEST(copied_gl_sharing_device, the_guest_s_context_is_made_as_it_asked)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
   if (!rig.ready() || !vehicle.ready()) return;
-  CopiedGlSharing             sharing(vehicle.objects(), vehicle.textures());
+  av::MockPlatform platform;
+  CopiedGlSharing             sharing(platform, vehicle.objects(), vehicle.textures());
   cl_device_id const          device = static_cast<cl_device_id>(rig.device().device());
   const cl_context_properties properties[] = {
       CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(rig.device().platform()), 0};

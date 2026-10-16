@@ -4,94 +4,71 @@
 
 namespace av {
 
-ClRenderbufferImages::ClRenderbufferImages() : mems_{}, renderbuffers_{}, textures_{}, images_{}, count_(0u)
+namespace {
+
+uint64_t key_of(const void *mem)
+{
+    AV_SCOPE("key_of");
+    return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(mem));
+}
+
+}  // namespace
+
+ClRenderbufferImages::ClRenderbufferImages(BlockSource &blocks) : images_(blocks, Pool::paged)
 {
     AV_SCOPE("ClRenderbufferImages::ClRenderbufferImages");
 }
 
-bool ClRenderbufferImages::remember(const void *mem, uint32_t renderbuffer, uint32_t texture, void *image)
+Status ClRenderbufferImages::remember(const void *mem, uint32_t renderbuffer, uint32_t texture, void *image)
 {
     AV_SCOPE("ClRenderbufferImages::remember");
-    if (mem == nullptr || renderbuffer == 0u || texture == 0u || count_ == max_images || slot_of(mem) != count_)
-        return false;
-    mems_[count_] = mem;
-    renderbuffers_[count_] = renderbuffer;
-    textures_[count_] = texture;
-    images_[count_] = image;
-    count_++;
-    return true;
+    if (mem == nullptr || renderbuffer == 0u || texture == 0u) return Status::invalid_parameter;
+    uint32_t slot = 0u;
+    return images_.insert(key_of(mem), RenderbufferImage{renderbuffer, texture, image}, slot);
 }
 
 uint32_t ClRenderbufferImages::renderbuffer_of(const void *mem) const
 {
     AV_SCOPE("ClRenderbufferImages::renderbuffer_of");
-    const uint32_t slot = slot_of(mem);
-    return slot != count_ ? renderbuffers_[slot] : 0u;
+    const RenderbufferImage *const held = images_.find(key_of(mem));
+    return held != nullptr ? held->renderbuffer_ : 0u;
 }
 
 bool ClRenderbufferImages::forget(const void *mem, uint32_t &texture, void *&image)
 {
     AV_SCOPE("ClRenderbufferImages::forget");
-    const uint32_t slot = slot_of(mem);
-    if (slot == count_) return false;
-    forget_slot(slot, texture, image);
+    RenderbufferImage gone{};
+    if (!images_.take(key_of(mem), gone)) return false;
+    texture = gone.texture_;
+    image = gone.image_;
     return true;
 }
 
 bool ClRenderbufferImages::forget_any(uint32_t &texture, void *&image)
 {
     AV_SCOPE("ClRenderbufferImages::forget_any");
-    if (count_ == 0u) return false;
-    forget_slot(0u, texture, image);
+    const uint32_t slot = images_.next_live(0u);
+    if (slot == KeyedSlots<uint64_t, RenderbufferImage>::no_slot) return false;
+    texture = images_.at(slot)->texture_;
+    image = images_.at(slot)->image_;
+    images_.erase_slot(slot);
     return true;
 }
 
 uint32_t ClRenderbufferImages::count() const
 {
     AV_SCOPE("ClRenderbufferImages::count");
-    return count_;
+    return images_.count();
 }
 
-uint32_t ClRenderbufferImages::slot_of(const void *mem) const
-{
-    AV_SCOPE("ClRenderbufferImages::slot_of");
-    for (uint32_t slot = 0u; slot < count_; slot++)
-        if (mems_[slot] == mem) return slot;
-    return count_;
-}
-
-/* The last held moves into the hole, so the held stay the first count_. */
-void ClRenderbufferImages::forget_slot(uint32_t slot, uint32_t &texture, void *&image)
-{
-    AV_SCOPE("ClRenderbufferImages::forget_slot");
-    texture = textures_[slot];
-    image = images_[slot];
-    count_--;
-    mems_[slot] = mems_[count_];
-    renderbuffers_[slot] = renderbuffers_[count_];
-    textures_[slot] = textures_[count_];
-    images_[slot] = images_[count_];
-    mems_[count_] = nullptr;
-    renderbuffers_[count_] = 0u;
-    textures_[count_] = 0u;
-    images_[count_] = nullptr;
-}
-
-/* Every held slot names a mem, a renderbuffer and a texture, no mem twice;
- * every slot past them is empty. */
 bool ClRenderbufferImages::invariants_hold() const
 {
     AV_SCOPE("ClRenderbufferImages::invariants_hold");
-    if (count_ > max_images) return false;
-    for (uint32_t slot = 0u; slot < count_; slot++) {
-        if (mems_[slot] == nullptr || renderbuffers_[slot] == 0u || textures_[slot] == 0u) return false;
-        for (uint32_t other = slot + 1u; other < count_; other++)
-            if (mems_[other] == mems_[slot]) return false;
-    }
-    for (uint32_t slot = count_; slot < max_images; slot++)
-        if (mems_[slot] != nullptr || renderbuffers_[slot] != 0u || textures_[slot] != 0u || images_[slot] != nullptr)
-            return false;
-    return true;
+    bool holds = true;
+    images_.for_each([&holds](uint64_t mem, const RenderbufferImage &held) {
+        holds = holds && mem != 0u && held.renderbuffer_ != 0u && held.texture_ != 0u;
+    });
+    return holds;
 }
 
 }  // namespace av

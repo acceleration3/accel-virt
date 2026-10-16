@@ -4,12 +4,10 @@
 
 namespace av {
 
-ClEventSignals::ClEventSignals()
-    : slots_(), generation_(1u), taken_(0u), signalled_(0u), stale_(0u),
-      wake_()
+ClEventSignals::ClEventSignals(BlockSource &blocks)
+    : slots_(blocks, Pool::paged), cursor_(0u), generation_(1u), taken_(0u), signalled_(0u), stale_(0u), wake_()
 {
     AV_SCOPE("ClEventSignals::ClEventSignals");
-    for (uint32_t index = 0u; index < max_registrations; ++index) slots_[index].bind(*this);
 }
 
 void ClEventSignals::bind(void (*signal)(void *context), void *context)
@@ -27,13 +25,19 @@ bool ClEventSignals::bound() const
 ClEventRegistration *ClEventSignals::take()
 {
     AV_SCOPE("ClEventSignals::take");
-    for (uint32_t index = 0u; index < max_registrations; ++index) {
-        if (slots_[index].armed()) continue;
-        slots_[index].arm(generation_);
-        __atomic_fetch_add(&taken_, 1u, __ATOMIC_ACQ_REL);
-        return &slots_[index];
+    const uint32_t made = slots_.slots();
+    uint32_t       slot = KeyedSlots<uint32_t, ClEventRegistration>::no_slot;
+    for (uint32_t looked = 0u; looked < made && slot == KeyedSlots<uint32_t, ClEventRegistration>::no_slot; looked++)
+        if (!slots_.at((cursor_ + looked) % made)->armed()) slot = (cursor_ + looked) % made;
+    if (slot == KeyedSlots<uint32_t, ClEventRegistration>::no_slot) {
+        if (slots_.insert(made, ClEventRegistration(), slot) != Status::ok) return nullptr;
+        slots_.at(slot)->bind(*this);
     }
-    return nullptr;
+    cursor_ = slot + 1u;
+    ClEventRegistration *const taken = slots_.at(slot);
+    taken->arm(generation_);
+    __atomic_fetch_add(&taken_, 1u, __ATOMIC_ACQ_REL);
+    return taken;
 }
 
 void ClEventSignals::give_back(ClEventRegistration *registration)
@@ -56,7 +60,7 @@ void ClEventSignals::shut_down()
     /* Every registration made so far goes stale at once. The slots stay where
      * they are: the host may still hold pointers to them. */
     ++generation_;
-    for (uint32_t index = 0u; index < max_registrations; ++index) slots_[index].disarm();
+    slots_.for_each([](uint32_t, ClEventRegistration &registration) { registration.disarm(); });
     __atomic_store_n(&taken_, 0u, __ATOMIC_RELEASE);
     wake_.clear();
 }
@@ -96,19 +100,18 @@ uint64_t ClEventSignals::stale() const
 bool ClEventSignals::invariants_hold() const
 {
     AV_SCOPE("ClEventSignals::invariants_hold");
-    if (taken_ > max_registrations) return false;
     if (generation_ == 0u) return false;
     uint32_t taken = 0u;
-    for (uint32_t index = 0u; index < max_registrations; ++index) {
-        if (!slots_[index].invariants_hold()) return false;
-        /* A slot that is not armed carries no epoch - its own invariant,
-         * checked just above, is what says so - so there is nothing more to
-         * ask of it here. */
-        if (!slots_[index].armed()) continue;
-        if (slots_[index].generation() != generation_) return false;
+    bool     holds = true;
+    slots_.for_each([this, &taken, &holds](uint32_t, const ClEventRegistration &registration) {
+        holds = holds && registration.invariants_hold();
+        /* One that is not armed carries no epoch - its own invariant is what
+         * says so - so there is nothing more to ask of it here. */
+        if (!registration.armed()) return;
+        holds = holds && registration.generation() == generation_;
         ++taken;
-    }
-    return taken == taken_;
+    });
+    return holds && taken == taken_;
 }
 
 }  // namespace av

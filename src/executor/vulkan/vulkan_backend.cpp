@@ -46,9 +46,18 @@ bool answer_optional(const VulkanBackend *backend, uint64_t raw, H &out)
 
 }  // namespace
 
-VulkanBackend::VulkanBackend()
-    : gpu_(nullptr), source_(nullptr), listed_(), extensions_(), application_(), instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), physical_(VK_NULL_HANDLE), memory_import_(false), handles_(),
-      adopted_(), import_(), types_(), types_learnt_(false), parent_(0u), ran_(0u), lost_(false)
+VulkanBackend::VulkanBackend() : VulkanBackend(heap_)
+{
+    AV_SCOPE("VulkanBackend::VulkanBackend");
+}
+
+/* heap_ is constructed before blocks_ is bound to it, whichever constructor
+ * runs: it is declared first. */
+VulkanBackend::VulkanBackend(BlockSource &blocks)
+    : heap_(), blocks_(blocks), templates_(blocks), gpu_(nullptr), source_(nullptr), listed_(), extensions_(blocks),
+      application_(), instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), physical_(VK_NULL_HANDLE),
+      memory_import_(false), handles_(blocks), adopted_(), import_(), types_(), types_learnt_(false), parent_(0u),
+      ran_(0u)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
 }
@@ -113,10 +122,22 @@ VkResult VulkanBackend::on_vkEnumeratePhysicalDeviceGroupsKHR(VkInstance instanc
     return on_vkEnumeratePhysicalDeviceGroups(instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties);
 }
 
+bool VulkanBackend::room_for(uint64_t handles)
+{
+    AV_SCOPE("VulkanBackend::room_for");
+    return handles_.make_room(handles) == Status::ok;
+}
+
+/* The decoder asked room_for every handle a reply carries before the driver
+ * made any, so remembering one cannot fail from the wire. Were it to, the
+ * handle is one this host refuses when the guest names it - a refused
+ * command, never a pointer the guest chose. */
 void VulkanBackend::made(uint64_t raw, HandleKind kind)
 {
     AV_SCOPE("VulkanBackend::made");
-    if (!handles_.remember(raw, parent_, kind)) lost_ = true;
+    if (handles_.remember(raw, parent_, kind) != Status::ok) {
+        AV_UNTESTABLE("room for every handle a reply carries is made before the driver is called");
+    }
 }
 
 void VulkanBackend::made_through(uint64_t parent)
@@ -155,14 +176,17 @@ VulkanBackend *VulkanBackend::deciding()
     return inside;
 }
 
-void VulkanBackend::enable_identity(VkInstanceCreateInfo &create)
+Status VulkanBackend::enable_identity(VkInstanceCreateInfo &create)
 {
     AV_SCOPE("VulkanBackend::enable_identity");
+    const Status taken = extensions_.take(create.enabledExtensionCount, create.ppEnabledExtensionNames, 1u);
     /* A list the loader will refuse anyway is left for it to refuse. */
-    if (extensions_.take(create.enabledExtensionCount, create.ppEnabledExtensionNames) != Status::ok) return;
+    if (taken == Status::invalid_parameter) return Status::ok;
+    if (taken != Status::ok) return taken;
     extensions_.add(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     create.ppEnabledExtensionNames = extensions_.names();
     create.enabledExtensionCount = extensions_.count();
+    return Status::ok;
 }
 
 void VulkanBackend::adopt_host_version(VkInstanceCreateInfo &create)
@@ -182,19 +206,22 @@ void VulkanBackend::adopt_host_version(VkInstanceCreateInfo &create)
  * is core from 1.1 and still valid to enable there. The modifier extension is
  * what the ICD's swapchain images are laid out by over a window chain's
  * memory (ChainedImage, ExportableImageInfo). */
-uint32_t VulkanBackend::enable_memory_import(VkDeviceCreateInfo &create)
+Status VulkanBackend::enable_memory_import(VkDeviceCreateInfo &create, uint32_t &importing)
 {
     AV_SCOPE("VulkanBackend::enable_memory_import");
-    if (extensions_.take(create.enabledExtensionCount, create.ppEnabledExtensionNames) != Status::ok)
-        return create.enabledExtensionCount;
+    constexpr uint32_t added = 4u;
+    importing = create.enabledExtensionCount;
+    const Status taken = extensions_.take(create.enabledExtensionCount, create.ppEnabledExtensionNames, added);
+    if (taken == Status::invalid_parameter) return Status::ok;
+    if (taken != Status::ok) return taken;
     extensions_.add(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
     extensions_.add(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
     extensions_.add(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
-    const uint32_t importing = extensions_.count();
+    importing = extensions_.count();
     extensions_.add(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME);
     create.ppEnabledExtensionNames = extensions_.names();
     create.enabledExtensionCount = extensions_.count();
-    return importing;
+    return Status::ok;
 }
 
 VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
@@ -210,7 +237,7 @@ VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateI
         pCreateInfo->pApplicationInfo->apiVersion < lowest_api_version)
         return VK_ERROR_INCOMPATIBLE_DRIVER;
     VkInstanceCreateInfo create = *pCreateInfo;
-    enable_identity(create);
+    if (enable_identity(create) != Status::ok) return VK_ERROR_OUT_OF_HOST_MEMORY;
     adopt_host_version(create);
     const VkResult result = RealVulkanDispatch::on_vkCreateInstance(&create, nullptr, pInstance);
     /* Kept so shut_down can destroy what a dying context never did. Which
@@ -243,7 +270,7 @@ VkResult VulkanBackend::on_vkCreateDescriptorUpdateTemplate(VkDevice device,
      * is refused rather than handed a template no update through it could be
      * checked against (constitution V). */
     const Status ready = templates_.reserve(device, pCreateInfo);
-    if (ready == Status::no_space) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    if (ready == Status::no_memory) return VK_ERROR_OUT_OF_HOST_MEMORY;
     if (ready != Status::ok) return VK_ERROR_INITIALIZATION_FAILED;
     const VkResult result = RealVulkanDispatch::on_vkCreateDescriptorUpdateTemplate(device, pCreateInfo, pAllocator,
                                                                                     pDescriptorUpdateTemplate);
@@ -305,7 +332,8 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
 {
     AV_SCOPE("VulkanBackend::on_vkCreateDevice");
     VkDeviceCreateInfo create = *pCreateInfo;
-    const uint32_t     importing = enable_memory_import(create);
+    uint32_t           importing = 0u;
+    if (enable_memory_import(create, importing) != Status::ok) return VK_ERROR_OUT_OF_HOST_MEMORY;
     VkResult result = RealVulkanDispatch::on_vkCreateDevice(physicalDevice, &create, nullptr, pDevice);
     /* Made without what the driver lacks: listing the physical device's
      * extensions first would take a table of hundreds of names, and a refusal
@@ -735,7 +763,8 @@ bool VulkanBackend::adopt(ImportedBlob &blob)
      * does. A registry with no room refuses the import rather than losing the
      * device, as a command's handle would: the guest is copied through
      * instead, and nothing it already has breaks. */
-    if (adopted_.add(blob) != Status::ok || !handles_.remember(memory, reinterpret_cast<uint64_t>(device_))) {
+    if (adopted_.add(blob) != Status::ok ||
+        handles_.remember(memory, reinterpret_cast<uint64_t>(device_)) != Status::ok) {
         abandon(blob);
         return false;
     }
@@ -868,10 +897,12 @@ bool VulkanBackend::lose_device()
     return true;
 }
 
+/* A Vulkan device's loss reaches the guest from the driver itself, as
+ * VK_ERROR_DEVICE_LOST answering its next command. */
 bool VulkanBackend::lost() const
 {
     AV_SCOPE("VulkanBackend::lost");
-    return lost_;
+    return false;
 }
 
 void VulkanBackend::shut_down()
@@ -898,7 +929,6 @@ void VulkanBackend::shut_down()
     types_learnt_ = false;
     gpu_ = nullptr;
     ran_ = 0u;
-    lost_ = false;
 }
 
 uint64_t VulkanBackend::ran() const
@@ -917,9 +947,8 @@ namespace vkproto {
 namespace {
 
 /* Outbound: whatever the host is about to tell the guest about is a handle the
- * host made, so this is where it becomes one the host will accept back. A
- * registry that is full makes the executor lose its device rather than hand out
- * a handle it will refuse later. */
+ * host made, so this is where it becomes one the host will accept back, in
+ * the room handles_room made for it before the driver was called. */
 template <typename H>
 uint64_t remember(VulkanBackend *backend, H value, HandleKind kind = HandleKind::other)
 {
@@ -965,7 +994,14 @@ bool answer(const VulkanBackend *backend, uint64_t raw, H &out, HandleKind kind)
 }  // namespace
 
 /* Nobody deciding is the guest side again, where nothing is remembered and so
- * nothing is forgotten. */
+ * nothing is forgotten, and there is always room. */
+bool handles_room(uint64_t handles) noexcept
+{
+    AV_SCOPE("handles_room");
+    VulkanBackend *const backend = VulkanBackend::deciding();
+    return backend == nullptr || backend->room_for(handles);
+}
+
 void handles_made_through(uint64_t parent) noexcept
 {
     AV_SCOPE("handles_made_through");

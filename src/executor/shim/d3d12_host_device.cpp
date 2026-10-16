@@ -21,7 +21,7 @@ constexpr uint32_t shader_model_6_6 = 0x66u;
 }  // namespace
 
 D3d12HostDevice::D3d12HostDevice()
-    : runtime_(nullptr), uuid_(), tenants_(), renewing_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "),
+    : runtime_(nullptr), uuid_(), tenant_heap_(), tenants_(tenant_heap_), renewing_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "),
       device_(nullptr), caps_{}, frames_()
 {
     AV_SCOPE("D3d12HostDevice::D3d12HostDevice");

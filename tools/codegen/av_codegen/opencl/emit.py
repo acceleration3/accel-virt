@@ -1224,6 +1224,9 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
           "    // An object a successful call is about to give the guest a number",
           "    // for; from here on that number is the object.",
           "    virtual void made(HandleKind kind, void* object) = 0;",
+          "    // Whether `objects` more can be remembered, asked before the ICD",
+          "    // makes any: false refuses the command as out of host memory.",
+          "    virtual bool room_for(uint64_t objects) = 0;",
           "    // A successful retain or release of one. After its last release",
           "    // the number names nothing.",
           "    virtual void retained(HandleKind kind, void* object) = 0;",
@@ -1355,10 +1358,33 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 c.append(f"    {p.name} = {owner.name}_lengths;")
 
         args = ", ".join(p.name for p, _ in _server_params(reg, cmd))
+        # Every object the reply may carry is remembered as it goes out, so
+        # room for them is asked for before the ICD makes any.
+        room_terms = ["1u"] if cmd.returns_handle else []
+        for p in cmd.out_params:
+            if p.role == Role.HANDLE_OUT:
+                room_terms.append(f"({p.name}_wanted ? 1u : 0u)")
+            elif p.role == Role.HANDLE_ARRAY_OUT:
+                room_terms.append(f"({p.name}_wanted ? static_cast<uint64_t>({_capacity_expr(cmd, p)}) : 0u)")
+        room = ("s.room_for(" + " + ".join(f"static_cast<uint64_t>({t})" for t in room_terms) + ")"
+                if room_terms else None)
+        call = f"s.on_{cmd.name}({args})"
         if cmd.returns_void:
-            c.append(f"    s.on_{cmd.name}({args});")
+            c.append(f"    if ({room}) {call};" if room else f"    {call};")
+        elif room is None:
+            c.append(f"    const {cmd.return_type.cpp()} ret = {call};")
+        elif cmd.returns_handle or cmd.returns_address:
+            # Refused before the ICD makes anything the server could not then
+            # remember: the guest is told the host is out of memory.
+            errcode = [p for p in cmd.out_params if p.role == Role.SCALAR_OUT and p.name == "errcode_ret"]
+            c.append(f"    {cmd.return_type.cpp()} ret = nullptr;")
+            c.append(f"    if ({room}) ret = {call};")
+            if errcode:
+                c.append("    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;")
         else:
-            c.append(f"    const {cmd.return_type.cpp()} ret = s.on_{cmd.name}({args});")
+            if cmd.return_type.cpp() != "cl_int":
+                raise ValueError(f"{cmd.name} answers objects and no cl_int to refuse them with")
+            c.append(f"    const cl_int ret = {room} ? {call} : CL_OUT_OF_HOST_MEMORY;")
         succeeded = _succeeded(cmd)
         lifecycle = _lifecycle(cmd)
         if lifecycle is not None:

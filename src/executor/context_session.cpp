@@ -15,7 +15,7 @@ namespace av {
 
 ContextSession::ContextSession()
     : backend_(nullptr), clocks_(nullptr), source_(nullptr), domain_(0u), heap_(), arena_(nullptr, 0u), answer_(heap_),
-      answer_length_(0u), imports_(), starved_(0u), faulted_(false),
+      answer_length_(0u), imports_(heap_), starved_(0u), faulted_(false),
       sink_(stderr), lines_(sink_, "virtio-gpu-av: executor: ")
 {
     AV_SCOPE("ContextSession::ContextSession");
@@ -44,8 +44,7 @@ void ContextSession::release()
      * go back to. */
     for (ImportedBlob *blob = imports_.any(); blob != nullptr; blob = imports_.any()) {
         backend_->abandon(*blob);
-        (void)imports_.drop(blob->id());
-        source_->release(*blob->give_back());
+        source_->release(*imports_.forget(blob->id()));
     }
     /* After the imports: a backend shut down has nothing left to give them
      * back to. */
@@ -191,8 +190,7 @@ uint32_t ContextSession::import_blob(uint64_t blob_id, uint64_t memory_key)
     if (!backend_->adopt(*taken)) {
         /* An API that will not take this memory is not a fault: the device is
          * told no and the guest copies instead. */
-        (void)imports_.drop(blob_id);
-        source_->release(*taken->give_back());
+        source_->release(*imports_.forget(blob_id));
         return AV_UNDECODABLE;
     }
     return AV_EXECUTED;
@@ -207,10 +205,10 @@ bool ContextSession::faulted() const
 void ContextSession::release_blob(uint64_t blob_id)
 {
     AV_SCOPE("ContextSession::release_blob");
-    ImportedBlob *const blob = imports_.drop(blob_id);
+    ImportedBlob *const blob = imports_.find(blob_id);
     if (blob == nullptr) return;
     backend_->abandon(*blob);
-    source_->release(*blob->give_back());
+    source_->release(*imports_.forget(blob_id));
 }
 
 uint64_t ContextSession::imported_handle(uint64_t blob_id)

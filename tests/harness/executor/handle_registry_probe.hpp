@@ -12,10 +12,11 @@ namespace av {
 struct HandleRegistryProbe {
     explicit HandleRegistryProbe(HandleRegistry &target);
 
-    void set_count(uint32_t count);
-    void set_end(uint32_t end);
-    void set_handle(uint32_t index, uint64_t handle);
-    void set_parent(uint32_t index, uint16_t parent);
+    uint32_t slot_of(uint64_t handle) const;
+    void     set_parent(uint64_t handle, uint32_t parent);
+    void     set_children(uint64_t handle, uint32_t children);
+    /* The null handle held, as no remember would hold it. */
+    void     hold_null();
 
     HandleRegistry &registry;
 };

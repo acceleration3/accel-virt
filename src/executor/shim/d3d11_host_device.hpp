@@ -269,6 +269,8 @@ private:
 
     const D3dRuntime       *runtime_;
     DeviceUuid              uuid_;
+    /* Where the tenants' list grows from: before it, as it is destroyed after. */
+    HostHeap                tenant_heap_;
     DeviceTenants           tenants_;
     ID3D11Device5          *device_;
     D3d12HostDevice        *device12_;

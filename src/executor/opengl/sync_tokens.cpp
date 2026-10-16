@@ -4,84 +4,97 @@
 
 namespace av {
 
-SyncTokens::SyncTokens() : tokens_{}, fences_{}, count_(0u), newest_(0u), stand_in_(nullptr), retired_()
+SyncTokens::SyncTokens(BlockSource &blocks)
+    : live_(blocks, Pool::paged), newest_(0u), stand_in_(nullptr), retired_(blocks)
 {
     AV_SCOPE("SyncTokens::SyncTokens");
 }
 
-bool SyncTokens::bind(uint64_t token, void *fence)
+Status SyncTokens::bind(uint64_t token, void *fence)
 {
     AV_SCOPE("SyncTokens::bind");
     /* A null fence is glFenceSync having failed, and a token of zero - at or
      * below every newest - the guest failing to mint one. */
-    if (fence == nullptr || token <= newest_ || full()) return false;
-    tokens_[count_] = token;
-    fences_[count_] = fence;
-    count_++;
+    if (fence == nullptr || token <= newest_) return Status::invalid_parameter;
+    const Status held = live_.append(Live{token, fence});
+    if (held != Status::ok) return held;
     newest_ = token;
-    return true;
+    return Status::ok;
 }
 
-bool SyncTokens::full() const
+bool SyncTokens::crowded() const
 {
-    AV_SCOPE("SyncTokens::full");
-    return count_ == max_live;
+    AV_SCOPE("SyncTokens::crowded");
+    return live_.size() >= retire_after;
 }
 
 void *SyncTokens::oldest() const
 {
     AV_SCOPE("SyncTokens::oldest");
-    return count_ == 0u ? nullptr : fences_[0];
+    return live_.size() == 0u ? nullptr : live_.at(0u).fence_;
 }
 
-void *SyncTokens::retire_oldest()
+Status SyncTokens::retire_oldest(void *&deleted)
 {
     AV_SCOPE("SyncTokens::retire_oldest");
-    if (count_ == 0u) return nullptr;
-    void *const fence = fences_[0];
+    deleted = nullptr;
+    if (live_.size() == 0u) return Status::ok;
     /* Older than every live token and newer than every retired one. */
-    retired_.add(tokens_[0]);
-    drop(0u);
-    if (stand_in_ != nullptr) return fence;
-    stand_in_ = fence;
-    return nullptr;
+    const Status kept = retired_.add(live_.at(0u).token_);
+    if (kept != Status::ok) return kept;
+    void *const fence = live_.at(0u).fence_;
+    live_.remove_at(0u);
+    if (stand_in_ == nullptr) stand_in_ = fence;
+    else deleted = fence;
+    return Status::ok;
+}
+
+uint32_t SyncTokens::index_of(uint64_t token) const
+{
+    AV_SCOPE("SyncTokens::index_of");
+    uint32_t low = 0u;
+    uint32_t high = live_.size();
+    while (low < high) {
+        const uint32_t middle = low + (high - low) / 2u;
+        if (live_.at(middle).token_ < token) low = middle + 1u;
+        else high = middle;
+    }
+    return low < live_.size() && live_.at(low).token_ == token ? low : live_.size();
 }
 
 void *SyncTokens::fence_for(uint64_t token) const
 {
     AV_SCOPE("SyncTokens::fence_for");
-    for (uint32_t i = 0u; i < count_; i++) {
-        if (tokens_[i] == token) return fences_[i];
-    }
+    const uint32_t index = index_of(token);
+    if (index != live_.size()) return live_.at(index).fence_;
     return retired_.contains(token) ? stand_in_ : nullptr;
 }
 
 void *SyncTokens::forget(uint64_t token)
 {
     AV_SCOPE("SyncTokens::forget");
-    for (uint32_t i = 0u; i < count_; i++) {
-        if (tokens_[i] != token) continue;
-        void *const fence = fences_[i];
-        drop(i);
-        return fence;
+    const uint32_t index = index_of(token);
+    if (index == live_.size()) {
+        retired_.remove(token);
+        return nullptr;
     }
-    retired_.remove(token);
-    return nullptr;
+    void *const fence = live_.at(index).fence_;
+    live_.remove_at(index);
+    return fence;
 }
 
 bool SyncTokens::take_any(void *&fence)
 {
     AV_SCOPE("SyncTokens::take_any");
-    if (count_ != 0u) {
-        count_--;
-        fence = fences_[count_];
-        tokens_[count_] = 0u;
-        fences_[count_] = nullptr;
+    if (live_.size() != 0u) {
+        fence = live_.at(live_.size() - 1u).fence_;
+        live_.truncate(live_.size() - 1u);
         return true;
     }
     fence = stand_in_;
     stand_in_ = nullptr;
     retired_.clear();
+    live_.clear();
     if (fence != nullptr) return true;
     newest_ = 0u;
     return false;
@@ -90,34 +103,22 @@ bool SyncTokens::take_any(void *&fence)
 uint32_t SyncTokens::count() const
 {
     AV_SCOPE("SyncTokens::count");
-    return count_;
-}
-
-void SyncTokens::drop(uint32_t index)
-{
-    AV_SCOPE("SyncTokens::drop");
-    for (uint32_t i = index + 1u; i < count_; i++) {
-        tokens_[i - 1u] = tokens_[i];
-        fences_[i - 1u] = fences_[i];
-    }
-    count_--;
-    tokens_[count_] = 0u;
-    fences_[count_] = nullptr;
+    return live_.size();
 }
 
 bool SyncTokens::invariants_hold() const
 {
     AV_SCOPE("SyncTokens::invariants_hold");
-    if (count_ > max_live || !retired_.invariants_hold()) return false;
+    if (!retired_.invariants_hold()) return false;
     /* A retired token answers through the stand-in, so there is one. */
     if (retired_.runs() != 0u && stand_in_ == nullptr) return false;
     /* Live tokens ascend from above every retired one to no further than the
      * newest bound, each with a sync of its own: a slot sharing the stand-in
      * would be deleted twice. */
     uint64_t below = retired_.newest();
-    for (uint32_t i = 0u; i < count_; i++) {
-        if (tokens_[i] <= below || fences_[i] == nullptr || fences_[i] == stand_in_) return false;
-        below = tokens_[i];
+    for (const Live &live : live_) {
+        if (live.token_ <= below || live.fence_ == nullptr || live.fence_ == stand_in_) return false;
+        below = live.token_;
     }
     return below <= newest_;
 }

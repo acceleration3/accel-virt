@@ -17,6 +17,7 @@
 #define AV_RECORDING_CL_DISPATCH_HPP
 
 #include "executor/opencl/cl_handle_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "executor/opencl/host_svm_ranges.hpp"
 #include "proto/generated/opencl/cl_default_dispatch.h"
 
@@ -123,6 +124,7 @@ public:
                                cl_uint num_input_headers, const cl_program *input_headers,
                                const char **header_include_names) override;
     void  made(clproto::HandleKind kind, void *object) override;
+    bool  room_for(std::uint64_t objects) override;
     void  retained(clproto::HandleKind kind, void *object) override;
     void  released(clproto::HandleKind kind, void *object) override;
 
@@ -143,6 +145,8 @@ public:
     std::uint32_t builds_without_argument_info() const;
     Declared      argument_declared(cl_uint index) const;
     const ClHandleRegistry &handles() const;
+    /* What the tables grow from, so a test can make one fail to. */
+    MockPlatform           &platform();
     /* The id of the `index`th call, or 0 past the calls made or the log. */
     std::uint32_t called_at(std::size_t index) const;
 
@@ -167,6 +171,8 @@ private:
     /* Whether all `length` bytes at `bytes` are inside what was lent. */
     bool inside_lent(const void *bytes, std::size_t length) const;
 
+    /* What the tables grow from: first, so it outlives them. */
+    MockPlatform        platform_;
     const std::uint8_t *block_;
     const WireArena    &arena_;
     std::uint8_t       *lent_;

@@ -4,25 +4,30 @@
  * invariant broken each way it can be. */
 #include "executor/opencl/cl_renderbuffer_images.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 
 #include <cstdint>
 
 namespace av {
 
 struct ClRenderbufferImagesProbe {
-    static void count(ClRenderbufferImages &images, std::uint32_t count) { images.count_ = count; }
-    static void mem(ClRenderbufferImages &images, std::uint32_t slot, const void *mem) { images.mems_[slot] = mem; }
-    static void renderbuffer(ClRenderbufferImages &images, std::uint32_t slot, std::uint32_t name)
-    { images.renderbuffers_[slot] = name; }
-    static void texture(ClRenderbufferImages &images, std::uint32_t slot, std::uint32_t name)
-    { images.textures_[slot] = name; }
-    static void image(ClRenderbufferImages &images, std::uint32_t slot, void *image) { images.images_[slot] = image; }
+    static RenderbufferImage &held(ClRenderbufferImages &images, const void *mem)
+    {
+        return *images.images_.find(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(mem)));
+    }
+    static void hold_null(ClRenderbufferImages &images)
+    {
+        std::uint32_t slot = 0u;
+        static_cast<void>(images.images_.insert(0u, RenderbufferImage{7u, 31u, nullptr}, slot));
+    }
 };
 
 }  // namespace av
 
 using av::ClRenderbufferImages;
 using av::ClRenderbufferImagesProbe;
+using av::MockPlatform;
+using av::Status;
 
 namespace {
 
@@ -33,12 +38,13 @@ void       *image_at(std::uintptr_t at) { return reinterpret_cast<void *>(at); }
 }  // namespace
 
 TEST(cl_renderbuffer_images, a_remembered_mem_names_its_renderbuffer_until_it_is_forgotten)
-{ ClRenderbufferImages images;
+{ MockPlatform         platform;
+  ClRenderbufferImages images(platform);
   CHECK(images.invariants_hold());
   CHECK_EQ(images.renderbuffer_of(mem_at(0x1000u)), 0u);
-  CHECK(images.remember(mem_at(0x1000u), 7u, 31u, image_at(0xA000u)));
+  CHECK(images.remember(mem_at(0x1000u), 7u, 31u, image_at(0xA000u)) == Status::ok);
   CHECK(images.invariants_hold());
-  CHECK(images.remember(mem_at(0x2000u), 8u, 32u, image_at(0xB000u)));
+  CHECK(images.remember(mem_at(0x2000u), 8u, 32u, image_at(0xB000u)) == Status::ok);
   CHECK(images.invariants_hold());
   CHECK_EQ(images.count(), 2u);
   CHECK_EQ(images.renderbuffer_of(mem_at(0x1000u)), 7u);
@@ -51,7 +57,7 @@ TEST(cl_renderbuffer_images, a_remembered_mem_names_its_renderbuffer_until_it_is
   CHECK_EQ(texture, 31u);
   CHECK(image == image_at(0xA000u));
   CHECK_EQ(images.renderbuffer_of(mem_at(0x1000u)), 0u);
-  /* The one that moved into the hole still answers its own. */
+  /* The other still answers its own. */
   CHECK_EQ(images.renderbuffer_of(mem_at(0x2000u)), 8u);
   CHECK_EQ(images.count(), 1u);
   /* Forgotten once is forgotten: a second forget leaves the answers alone. */
@@ -61,28 +67,37 @@ TEST(cl_renderbuffer_images, a_remembered_mem_names_its_renderbuffer_until_it_is
   CHECK_EQ(texture, 99u);
   CHECK(image == image_at(0xC000u)); }
 
-TEST(cl_renderbuffer_images, refuses_a_null_mem_no_names_a_mem_held_twice_and_one_past_full)
-{ ClRenderbufferImages images;
-  CHECK(!images.remember(nullptr, 7u, 31u, image_at(0xA000u)));
-  CHECK(!images.remember(mem_at(0x1000u), 0u, 31u, image_at(0xA000u)));
-  CHECK(!images.remember(mem_at(0x1000u), 7u, 0u, image_at(0xA000u)));
+TEST(cl_renderbuffer_images, refuses_a_null_mem_no_names_a_mem_held_twice_and_a_table_that_cannot_grow)
+{ MockPlatform         platform;
+  ClRenderbufferImages images(platform);
+  CHECK(images.remember(nullptr, 7u, 31u, image_at(0xA000u)) == Status::invalid_parameter);
+  CHECK(images.remember(mem_at(0x1000u), 0u, 31u, image_at(0xA000u)) == Status::invalid_parameter);
+  CHECK(images.remember(mem_at(0x1000u), 7u, 0u, image_at(0xA000u)) == Status::invalid_parameter);
   CHECK_EQ(images.count(), 0u);
-  CHECK(images.remember(mem_at(0x1000u), 7u, 31u, image_at(0xA000u)));
-  CHECK(!images.remember(mem_at(0x1000u), 9u, 33u, image_at(0xB000u)));
+  CHECK(images.remember(mem_at(0x1000u), 7u, 31u, image_at(0xA000u)) == Status::ok);
+  CHECK(images.remember(mem_at(0x1000u), 9u, 33u, image_at(0xB000u)) == Status::conflict);
   CHECK_EQ(images.renderbuffer_of(mem_at(0x1000u)), 7u);
-  for (std::uint32_t more = 1u; more < ClRenderbufferImages::max_images; more++)
-      CHECK(images.remember(mem_at(0x1000u + more * 0x100u), more + 7u, more + 31u, nullptr));
-  CHECK_EQ(images.count(), ClRenderbufferImages::max_images);
-  CHECK(!images.remember(mem_at(0x90000u), 5u, 6u, nullptr));
+  /* Well past the 64 a context once shared at once. */
+  for (std::uint32_t more = 1u; more < 1000u; more++)
+      CHECK(images.remember(mem_at(0x1000u + more * 0x100u), more + 7u, more + 31u, nullptr) == Status::ok);
+  CHECK_EQ(images.count(), 1000u);
+  for (std::uint32_t more = 1u; more < 1000u; more++)
+      CHECK_EQ(images.renderbuffer_of(mem_at(0x1000u + more * 0x100u)), more + 7u);
+  std::uint32_t next = 1000u;
+  platform.fail_allocation_at(1u);
+  while (images.remember(mem_at(0x1000u + next * 0x100u), 5u, 6u, nullptr) == Status::ok) next++;
+  CHECK_EQ(images.renderbuffer_of(mem_at(0x1000u + next * 0x100u)), 0u);
+  CHECK_EQ(images.count(), next);
   CHECK(images.invariants_hold()); }
 
 TEST(cl_renderbuffer_images, forget_any_empties_the_table_one_at_a_time)
-{ ClRenderbufferImages images;
+{ MockPlatform         platform;
+  ClRenderbufferImages images(platform);
   std::uint32_t texture = 0u;
   void         *image = nullptr;
   CHECK(!images.forget_any(texture, image));
-  CHECK(images.remember(mem_at(0x1000u), 7u, 31u, image_at(0xA000u)));
-  CHECK(images.remember(mem_at(0x2000u), 8u, 32u, image_at(0xB000u)));
+  CHECK(images.remember(mem_at(0x1000u), 7u, 31u, image_at(0xA000u)) == Status::ok);
+  CHECK(images.remember(mem_at(0x2000u), 8u, 32u, image_at(0xB000u)) == Status::ok);
   std::uint32_t textures = 0u;
   std::uint32_t forgotten = 0u;
   while (images.forget_any(texture, image)) {
@@ -95,36 +110,15 @@ TEST(cl_renderbuffer_images, forget_any_empties_the_table_one_at_a_time)
   CHECK_EQ(images.count(), 0u); }
 
 TEST(cl_renderbuffer_images_invariants, each_way_the_table_can_be_wrong_is_caught)
-{ { ClRenderbufferImages images;
-    ClRenderbufferImagesProbe::count(images, ClRenderbufferImages::max_images + 1u);
+{ MockPlatform platform;
+  { ClRenderbufferImages images(platform);
+    ClRenderbufferImagesProbe::hold_null(images);
     CHECK(!images.invariants_hold()); }
-  { ClRenderbufferImages images;
-    CHECK(images.remember(mem_at(0x1000u), 7u, 31u, nullptr));
-    ClRenderbufferImagesProbe::mem(images, 0u, nullptr);
+  { ClRenderbufferImages images(platform);
+    CHECK(images.remember(mem_at(0x1000u), 7u, 31u, nullptr) == Status::ok);
+    ClRenderbufferImagesProbe::held(images, mem_at(0x1000u)).renderbuffer_ = 0u;
     CHECK(!images.invariants_hold()); }
-  { ClRenderbufferImages images;
-    CHECK(images.remember(mem_at(0x1000u), 7u, 31u, nullptr));
-    ClRenderbufferImagesProbe::renderbuffer(images, 0u, 0u);
-    CHECK(!images.invariants_hold()); }
-  { ClRenderbufferImages images;
-    CHECK(images.remember(mem_at(0x1000u), 7u, 31u, nullptr));
-    ClRenderbufferImagesProbe::texture(images, 0u, 0u);
-    CHECK(!images.invariants_hold()); }
-  { ClRenderbufferImages images;
-    CHECK(images.remember(mem_at(0x1000u), 7u, 31u, nullptr));
-    CHECK(images.remember(mem_at(0x2000u), 8u, 32u, nullptr));
-    ClRenderbufferImagesProbe::mem(images, 1u, mem_at(0x1000u));
-    CHECK(!images.invariants_hold()); }
-  /* Past the held: each of the four left behind is caught. */
-  { ClRenderbufferImages images;
-    ClRenderbufferImagesProbe::mem(images, 3u, mem_at(0x1000u));
-    CHECK(!images.invariants_hold()); }
-  { ClRenderbufferImages images;
-    ClRenderbufferImagesProbe::renderbuffer(images, 3u, 7u);
-    CHECK(!images.invariants_hold()); }
-  { ClRenderbufferImages images;
-    ClRenderbufferImagesProbe::texture(images, 3u, 31u);
-    CHECK(!images.invariants_hold()); }
-  { ClRenderbufferImages images;
-    ClRenderbufferImagesProbe::image(images, 3u, image_at(0xA000u));
+  { ClRenderbufferImages images(platform);
+    CHECK(images.remember(mem_at(0x1000u), 7u, 31u, nullptr) == Status::ok);
+    ClRenderbufferImagesProbe::held(images, mem_at(0x1000u)).texture_ = 0u;
     CHECK(!images.invariants_hold()); } }

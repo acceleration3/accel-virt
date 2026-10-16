@@ -125,6 +125,31 @@ def _made_through(reg: Registry, cmd: Command) -> str | None:
     raise ValueError(f"{cmd.name} makes a handle through {parent} and names none")
 
 
+def _handle_slots(reg: Registry, name: str, counted: frozenset[str] = frozenset()) -> int:
+    """How many handles one of `name` carries out in its own members.
+
+    The host must have room to remember every handle a reply carries before
+    the driver makes them (handles_room). Handles behind a pointer are counted
+    by the caller only where the structure is the command's own output and
+    names the room it gave (`counted`, its caller arrays); anywhere else a
+    count no member gives is refused here rather than left uncounted."""
+    if name not in reg.structs:
+        return 0
+    slots = 0
+    for m in reg.structs[name].members:
+        if m.name == "pNext" or m.name in counted:
+            continue
+        dim = m.type.fixed_dim or 1
+        if m.type.base in reg.handles:
+            if m.type.pointer_depth:
+                raise ValueError(f"{name}::{m.name} answers handles through a pointer; "
+                                 "no room for them could be counted")
+            slots += dim
+        elif m.type.pointer_depth == 0:
+            slots += dim * _handle_slots(reg, m.type.base)
+    return slots
+
+
 def _ending_lines(reg: Registry, cmd: Command) -> list[str]:
     """What a destroy, free or reset tells the host has ended."""
     if cmd.name in _ENDS_CHILDREN:
@@ -159,6 +184,9 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     # host accept it back. So each output is put back to nothing first.
     failed = _failed(cmd)
     cleared_on_failure: list[str] = []
+    # The handles the reply may carry, each of which the host remembers as it
+    # is serialized: room for them is asked for before the driver makes any.
+    room_terms: list[str] = []
 
     i = 0
     while i < len(cmd.params):
@@ -188,6 +216,10 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             decode_lines.append("    }")
             call_args.append(f"&{count.name}_local")
             call_args.append(f"array_present ? {arr.name}_storage : nullptr")
+            if arr.type.base in reg.handles:
+                room_terms.append(f"{arr.name}_storage_count")
+            elif _handle_slots(reg, arr.type.base):
+                room_terms.append(f"{arr.name}_storage_count * {_handle_slots(reg, arr.type.base)}u")
             # What the driver says it listed is sent only for a call that
             # worked, and never past the room the guest gave: a count the
             # driver raised would serialize arena memory beyond the array.
@@ -377,11 +409,19 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             decode_lines.append("    }")
             call_args.append(f"{p.name}_local")
         elif kind == "out_handle":
+            room_terms.append("1u")
             decl_lines.append(f"    {p.type.base} {p.name}_out = VK_NULL_HANDLE;")
             cleared_on_failure.append(f"        {p.name}_out = VK_NULL_HANDLE;")
             call_args.append(f"&{p.name}_out")
             out_after_call.append(f"    serialize_{p.type.base}(reply, {p.name}_out);")
         elif kind == "out_struct":
+            arrays = serialize.caller_arrays(reg, reg.structs[p.type.base])
+            counted = frozenset(arr.name for arr, _ in arrays)
+            if _handle_slots(reg, p.type.base, counted):
+                room_terms.append(f"{_handle_slots(reg, p.type.base, counted)}u")
+            for arr, count in arrays:
+                if arr.type.base in reg.handles:
+                    room_terms.append(f"{p.name}_out.{count.name}")
             decl_lines.append(f"    {p.type.base} {p.name}_out{{}};")
             if reg.structs[p.type.base].has_stype:
                 decode_lines.append(f"    if (!r.read_pod({p.name}_out.sType)) return false;")
@@ -438,6 +478,10 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             out_after_call.append("    }")
         elif kind in ("out_handle_array", "out_struct_array", "out_pod_array"):
             elem = p.type.base
+            if kind == "out_handle_array":
+                room_terms.append(f"{p.name}_storage_count")
+            elif kind == "out_struct_array" and _handle_slots(reg, elem):
+                room_terms.append(f"{p.name}_storage_count * {_handle_slots(reg, elem)}u")
             srv_len = classify.server_len_expr(cmd.params, p.len_expr)
             decl_lines.extend(_storage_decls(f"{p.name}_storage", elem))
             decode_lines.extend(
@@ -472,16 +516,26 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     if parent is not None:
         after_call.append(f"    handles_made_through({parent});")
 
+    room = None
+    if room_terms:
+        room = "handles_room(" + " + ".join(f"static_cast<uint64_t>({t})" for t in room_terms) + ")"
+        if not is_void and failed is None:
+            raise ValueError(f"{cmd.name} answers handles and no VkResult to refuse them with")
+
     if is_void:
-        lines.append(f"    s.on_{cmd.name}({', '.join(call_args)});")
+        call = f"s.on_{cmd.name}({', '.join(call_args)});"
+        lines.append(f"    if ({room}) {call}" if room else f"    {call}")
         lines.extend(after_call)
         if cmd.sync_mode == "sync":
             lines.append("    reply.write_pod<int32_t>(0);")
             lines.extend(out_after_call)
     else:
-        lines.append(
-            f"    {cmd.return_type.cpp()} result = s.on_{cmd.name}({', '.join(call_args)});"
-        )
+        call = f"s.on_{cmd.name}({', '.join(call_args)})"
+        if room:
+            # Refused before the driver makes anything the host could not
+            # then remember: the guest is told the host is out of memory.
+            call = f"{room} ? {call} : VK_ERROR_OUT_OF_HOST_MEMORY"
+        lines.append(f"    {cmd.return_type.cpp()} result = {call};")
         lines.extend(after_call)
         # Encode the return in its own width. Most commands return
         # VkResult and fit in 32 bits, but the device-address and
@@ -565,6 +619,9 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "// The handles the reply is about to carry were made through `parent`,",
         "// and end when it does.",
         "void handles_made_through(uint64_t parent) noexcept;",
+        "// Whether `handles` more can be remembered, asked before the driver",
+        "// makes any: false refuses the command as out of host memory.",
+        "bool handles_room(uint64_t handles) noexcept;",
         "// `handle` was destroyed or freed, and with it what was made through it.",
         "void handle_ended(uint64_t handle) noexcept;",
         "// What was made through `handle` was freed, and `handle` was not.",
@@ -595,6 +652,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "namespace av::vkproto {",
         "",
         "AV_HOOK_DEFAULT void handles_made_through(uint64_t) noexcept {}",
+        "AV_HOOK_DEFAULT bool handles_room(uint64_t) noexcept { return true; }",
         "AV_HOOK_DEFAULT void handle_ended(uint64_t) noexcept {}",
         "AV_HOOK_DEFAULT void handle_children_ended(uint64_t) noexcept {}",
         "",

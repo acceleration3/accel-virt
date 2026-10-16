@@ -4,11 +4,9 @@ namespace av {
 
 SyncTokensProbe::SyncTokensProbe(SyncTokens &target) : tokens(target) {}
 
-void SyncTokensProbe::set_count(uint32_t count) { tokens.count_ = count; }
+void SyncTokensProbe::set_token(uint32_t index, uint64_t token) { tokens.live_.at(index).token_ = token; }
 
-void SyncTokensProbe::set_token(uint32_t index, uint64_t token) { tokens.tokens_[index] = token; }
-
-void SyncTokensProbe::set_fence(uint32_t index, void *fence) { tokens.fences_[index] = fence; }
+void SyncTokensProbe::set_fence(uint32_t index, void *fence) { tokens.live_.at(index).fence_ = fence; }
 
 void SyncTokensProbe::set_newest(uint64_t newest) { tokens.newest_ = newest; }
 

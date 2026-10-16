@@ -304,7 +304,7 @@ static bool decode_clGetPlatformIDs(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_uint num_platforms_storage{};
     cl_uint* num_platforms = (num_platforms_wanted || platforms_wanted) ? &num_platforms_storage : nullptr;
-    const cl_int ret = s.on_clGetPlatformIDs(num_entries, platforms, num_platforms);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((platforms_wanted ? static_cast<uint64_t>(num_entries) : 0u))) ? s.on_clGetPlatformIDs(num_entries, platforms, num_platforms) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (platforms_wanted) {
         const uint64_t wire_produced = (ret == CL_SUCCESS) ? static_cast<uint64_t>(num_platforms_storage) : 0u;
@@ -425,7 +425,7 @@ static bool decode_clGetDeviceIDs(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_uint num_devices_storage{};
     cl_uint* num_devices = (num_devices_wanted || devices_wanted) ? &num_devices_storage : nullptr;
-    const cl_int ret = s.on_clGetDeviceIDs(platform, device_type, num_entries, devices, num_devices);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((devices_wanted ? static_cast<uint64_t>(num_entries) : 0u))) ? s.on_clGetDeviceIDs(platform, device_type, num_entries, devices, num_devices) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (devices_wanted) {
         const uint64_t wire_produced = (ret == CL_SUCCESS) ? static_cast<uint64_t>(num_devices_storage) : 0u;
@@ -572,7 +572,9 @@ static bool decode_clCreateContext(ServerDispatch& s, ::av::WireReader& r,
     if (devices != nullptr && devices_count < static_cast<uint64_t>(num_devices)) return false;
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_context ret = s.on_clCreateContext(properties, num_devices, devices, errcode_ret);
+    cl_context ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateContext(properties, num_devices, devices, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::context, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -630,7 +632,9 @@ static bool decode_clCreateContextFromType(ServerDispatch& s, ::av::WireReader& 
     }
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_context ret = s.on_clCreateContextFromType(properties, device_type, errcode_ret);
+    cl_context ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateContextFromType(properties, device_type, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::context, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -770,7 +774,9 @@ static bool decode_clCreateCommandQueue(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_command_queue ret = s.on_clCreateCommandQueue(context, device, properties, errcode_ret);
+    cl_command_queue ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateCommandQueue(context, device, properties, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::command_queue, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -826,7 +832,9 @@ static bool decode_clCreateCommandQueueWithProperties(ServerDispatch& s, ::av::W
     }
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_command_queue ret = s.on_clCreateCommandQueueWithProperties(context, device, properties, errcode_ret);
+    cl_command_queue ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateCommandQueueWithProperties(context, device, properties, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::command_queue, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -1018,7 +1026,9 @@ static bool decode_clCreateBuffer(ServerDispatch& s, ::av::WireReader& r,
     if ((flags & CL_MEM_USE_HOST_PTR) != 0) return false;
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_mem ret = s.on_clCreateBuffer(context, flags, size, host_ptr, errcode_ret);
+    cl_mem ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateBuffer(context, flags, size, host_ptr, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::mem, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -1071,7 +1081,9 @@ static bool decode_clCreateSubBuffer(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_mem ret = s.on_clCreateSubBuffer(buffer, flags, buffer_create_type, buffer_create_info, errcode_ret);
+    cl_mem ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateSubBuffer(buffer, flags, buffer_create_type, buffer_create_info, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::mem, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -1156,7 +1168,9 @@ static bool decode_clCreateImage(ServerDispatch& s, ::av::WireReader& r,
     if ((flags & CL_MEM_USE_HOST_PTR) != 0) return false;
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_mem ret = s.on_clCreateImage(context, flags, image_format, image_desc, host_ptr, errcode_ret);
+    cl_mem ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateImage(context, flags, image_format, image_desc, host_ptr, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::mem, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -1493,7 +1507,7 @@ static bool decode_clEnqueueReadBuffer(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueReadBuffer(command_queue, buffer, blocking_read, offset, size, ptr, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueReadBuffer(command_queue, buffer, blocking_read, offset, size, ptr, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (ptr_wanted) {
         uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(ptr_capacity) : 0u;
@@ -1607,7 +1621,7 @@ static bool decode_clEnqueueWriteBuffer(ServerDispatch& s, ::av::WireReader& r,
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueWriteBuffer(command_queue, buffer, blocking_write, offset, size, ptr, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueWriteBuffer(command_queue, buffer, blocking_write, offset, size, ptr, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -1697,7 +1711,7 @@ static bool decode_clEnqueueCopyBuffer(ServerDispatch& s, ::av::WireReader& r,
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueCopyBuffer(command_queue, src_buffer, dst_buffer, src_offset, dst_offset, size, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueCopyBuffer(command_queue, src_buffer, dst_buffer, src_offset, dst_offset, size, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -1796,7 +1810,7 @@ static bool decode_clEnqueueFillBuffer(ServerDispatch& s, ::av::WireReader& r,
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueFillBuffer(command_queue, buffer, pattern, pattern_size, offset, size, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueFillBuffer(command_queue, buffer, pattern, pattern_size, offset, size, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -1950,7 +1964,7 @@ static bool decode_clEnqueueReadImage(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueReadImage(command_queue, image, blocking_read, origin, region, row_pitch, slice_pitch, ptr, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueReadImage(command_queue, image, blocking_read, origin, region, row_pitch, slice_pitch, ptr, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (ptr_wanted) {
         uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(ptr_capacity) : 0u;
@@ -2108,7 +2122,7 @@ static bool decode_clEnqueueWriteImage(ServerDispatch& s, ::av::WireReader& r,
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueWriteImage(command_queue, image, blocking_write, origin, region, input_row_pitch, input_slice_pitch, ptr, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueWriteImage(command_queue, image, blocking_write, origin, region, input_row_pitch, input_slice_pitch, ptr, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -2240,7 +2254,7 @@ static bool decode_clEnqueueCopyImage(ServerDispatch& s, ::av::WireReader& r,
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueCopyImage(command_queue, src_image, dst_image, src_origin, dst_origin, region, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueCopyImage(command_queue, src_image, dst_image, src_origin, dst_origin, region, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -2358,7 +2372,7 @@ static bool decode_clEnqueueCopyImageToBuffer(ServerDispatch& s, ::av::WireReade
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueCopyImageToBuffer(command_queue, src_image, dst_buffer, src_origin, region, dst_offset, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueCopyImageToBuffer(command_queue, src_image, dst_buffer, src_origin, region, dst_offset, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -2476,7 +2490,7 @@ static bool decode_clEnqueueCopyBufferToImage(ServerDispatch& s, ::av::WireReade
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueCopyBufferToImage(command_queue, src_buffer, dst_image, src_offset, dst_origin, region, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueCopyBufferToImage(command_queue, src_buffer, dst_image, src_offset, dst_origin, region, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -2544,7 +2558,9 @@ static bool decode_clCreateProgramWithSource(ServerDispatch& s, ::av::WireReader
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
     lengths = strings_lengths;
-    const cl_program ret = s.on_clCreateProgramWithSource(context, count, strings, lengths, errcode_ret);
+    cl_program ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateProgramWithSource(context, count, strings, lengths, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::program, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -2640,7 +2656,9 @@ static bool decode_clCreateProgramWithBinary(ServerDispatch& s, ::av::WireReader
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
     lengths = binaries_lengths;
-    const cl_program ret = s.on_clCreateProgramWithBinary(context, num_devices, device_list, lengths, binaries, binary_status, errcode_ret);
+    cl_program ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateProgramWithBinary(context, num_devices, device_list, lengths, binaries, binary_status, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::program, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (binary_status_wanted) {
@@ -2929,7 +2947,9 @@ static bool decode_clCreateKernel(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_kernel ret = s.on_clCreateKernel(program, kernel_name, errcode_ret);
+    cl_kernel ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateKernel(program, kernel_name, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::kernel, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -2976,7 +2996,7 @@ static bool decode_clCreateKernelsInProgram(ServerDispatch& s, ::av::WireReader&
     }
     cl_uint num_kernels_ret_storage{};
     cl_uint* num_kernels_ret = (num_kernels_ret_wanted || kernels_wanted) ? &num_kernels_ret_storage : nullptr;
-    const cl_int ret = s.on_clCreateKernelsInProgram(program, num_kernels, kernels, num_kernels_ret);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((kernels_wanted ? static_cast<uint64_t>(num_kernels) : 0u))) ? s.on_clCreateKernelsInProgram(program, num_kernels, kernels, num_kernels_ret) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (kernels_wanted) {
         const uint64_t wire_produced = (ret == CL_SUCCESS) ? static_cast<uint64_t>(num_kernels_ret_storage) : 0u;
@@ -3395,7 +3415,7 @@ static bool decode_clEnqueueNDRangeKernel(ServerDispatch& s, ::av::WireReader& r
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueNDRangeKernel(command_queue, kernel, work_dim, global_work_offset, global_work_size, local_work_size, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueNDRangeKernel(command_queue, kernel, work_dim, global_work_offset, global_work_size, local_work_size, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -3453,7 +3473,7 @@ static bool decode_clEnqueueMarkerWithWaitList(ServerDispatch& s, ::av::WireRead
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueMarkerWithWaitList(command_queue, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueMarkerWithWaitList(command_queue, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -3511,7 +3531,7 @@ static bool decode_clEnqueueBarrierWithWaitList(ServerDispatch& s, ::av::WireRea
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueBarrierWithWaitList(command_queue, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueBarrierWithWaitList(command_queue, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -3639,7 +3659,9 @@ static bool decode_clCreateUserEvent(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_event ret = s.on_clCreateUserEvent(context, errcode_ret);
+    cl_event ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateUserEvent(context, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::event, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -3802,7 +3824,9 @@ static bool decode_clCreateFromGLBuffer(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_mem ret = s.on_clCreateFromGLBuffer(context, flags, bufobj, errcode_ret);
+    cl_mem ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateFromGLBuffer(context, flags, bufobj, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::mem, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -3856,7 +3880,9 @@ static bool decode_clCreateFromGLTexture(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_mem ret = s.on_clCreateFromGLTexture(context, flags, target, miplevel, texture, errcode_ret);
+    cl_mem ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateFromGLTexture(context, flags, target, miplevel, texture, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::mem, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -3910,7 +3936,9 @@ static bool decode_clCreateFromGLTexture2D(ServerDispatch& s, ::av::WireReader& 
     }
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_mem ret = s.on_clCreateFromGLTexture2D(context, flags, target, miplevel, texture, errcode_ret);
+    cl_mem ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateFromGLTexture2D(context, flags, target, miplevel, texture, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::mem, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -3964,7 +3992,9 @@ static bool decode_clCreateFromGLTexture3D(ServerDispatch& s, ::av::WireReader& 
     }
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_mem ret = s.on_clCreateFromGLTexture3D(context, flags, target, miplevel, texture, errcode_ret);
+    cl_mem ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateFromGLTexture3D(context, flags, target, miplevel, texture, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::mem, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -4006,7 +4036,9 @@ static bool decode_clCreateFromGLRenderbuffer(ServerDispatch& s, ::av::WireReade
     }
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_mem ret = s.on_clCreateFromGLRenderbuffer(context, flags, renderbuffer, errcode_ret);
+    cl_mem ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateFromGLRenderbuffer(context, flags, renderbuffer, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::mem, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -4189,7 +4221,7 @@ static bool decode_clEnqueueAcquireGLObjects(ServerDispatch& s, ::av::WireReader
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueAcquireGLObjects(command_queue, num_objects, mem_objects, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueAcquireGLObjects(command_queue, num_objects, mem_objects, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -4274,7 +4306,7 @@ static bool decode_clEnqueueReleaseGLObjects(ServerDispatch& s, ::av::WireReader
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueReleaseGLObjects(command_queue, num_objects, mem_objects, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueReleaseGLObjects(command_queue, num_objects, mem_objects, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -4460,7 +4492,7 @@ static bool decode_clCreateSubDevices(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_uint num_devices_ret_storage{};
     cl_uint* num_devices_ret = (num_devices_ret_wanted || out_devices_wanted) ? &num_devices_ret_storage : nullptr;
-    const cl_int ret = s.on_clCreateSubDevices(in_device, properties, num_devices, out_devices, num_devices_ret);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((out_devices_wanted ? static_cast<uint64_t>(num_devices) : 0u))) ? s.on_clCreateSubDevices(in_device, properties, num_devices, out_devices, num_devices_ret) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (out_devices_wanted) {
         const uint64_t wire_produced = (ret == CL_SUCCESS) ? static_cast<uint64_t>(num_devices_ret_storage) : 0u;
@@ -4533,7 +4565,7 @@ static bool decode_clEnqueueTask(ServerDispatch& s, ::av::WireReader& r,
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueTask(command_queue, kernel, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueTask(command_queue, kernel, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -4564,7 +4596,7 @@ static bool decode_clEnqueueMarker(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueMarker(command_queue, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueMarker(command_queue, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -4718,7 +4750,7 @@ static bool decode_clEnqueueMigrateMemObjects(ServerDispatch& s, ::av::WireReade
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueMigrateMemObjects(command_queue, num_mem_objects, mem_objects, flags, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueMigrateMemObjects(command_queue, num_mem_objects, mem_objects, flags, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -4904,7 +4936,7 @@ static bool decode_clEnqueueReadBufferRect(ServerDispatch& s, ::av::WireReader& 
     }
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueReadBufferRect(command_queue, buffer, blocking_read, buffer_origin, host_origin, region, buffer_row_pitch, buffer_slice_pitch, host_row_pitch, host_slice_pitch, ptr, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueReadBufferRect(command_queue, buffer, blocking_read, buffer_origin, host_origin, region, buffer_row_pitch, buffer_slice_pitch, host_row_pitch, host_slice_pitch, ptr, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (ptr_wanted) {
         uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(ptr_capacity) : 0u;
@@ -5094,7 +5126,7 @@ static bool decode_clEnqueueWriteBufferRect(ServerDispatch& s, ::av::WireReader&
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueWriteBufferRect(command_queue, buffer, blocking_write, buffer_origin, host_origin, region, buffer_row_pitch, buffer_slice_pitch, host_row_pitch, host_slice_pitch, ptr, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueWriteBufferRect(command_queue, buffer, blocking_write, buffer_origin, host_origin, region, buffer_row_pitch, buffer_slice_pitch, host_row_pitch, host_slice_pitch, ptr, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -5250,7 +5282,7 @@ static bool decode_clEnqueueCopyBufferRect(ServerDispatch& s, ::av::WireReader& 
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueCopyBufferRect(command_queue, src_buffer, dst_buffer, src_origin, dst_origin, region, src_row_pitch, src_slice_pitch, dst_row_pitch, dst_slice_pitch, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueCopyBufferRect(command_queue, src_buffer, dst_buffer, src_origin, dst_origin, region, src_row_pitch, src_slice_pitch, dst_row_pitch, dst_slice_pitch, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -5371,7 +5403,7 @@ static bool decode_clEnqueueFillImage(ServerDispatch& s, ::av::WireReader& r,
     if (event_wait_list != nullptr && event_wait_list_count < static_cast<uint64_t>(num_events_in_wait_list)) return false;
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueFillImage(command_queue, image, fill_color, origin, region, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueFillImage(command_queue, image, fill_color, origin, region, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -5459,7 +5491,9 @@ static bool decode_clCreateImage2D(ServerDispatch& s, ::av::WireReader& r,
     if ((flags & CL_MEM_USE_HOST_PTR) != 0) return false;
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_mem ret = s.on_clCreateImage2D(context, flags, image_format, image_width, image_height, image_row_pitch, host_ptr, errcode_ret);
+    cl_mem ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateImage2D(context, flags, image_format, image_width, image_height, image_row_pitch, host_ptr, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::mem, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -5558,7 +5592,9 @@ static bool decode_clCreateImage3D(ServerDispatch& s, ::av::WireReader& r,
     if ((flags & CL_MEM_USE_HOST_PTR) != 0) return false;
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_mem ret = s.on_clCreateImage3D(context, flags, image_format, image_width, image_height, image_depth, image_row_pitch, image_slice_pitch, host_ptr, errcode_ret);
+    cl_mem ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateImage3D(context, flags, image_format, image_width, image_height, image_depth, image_row_pitch, image_slice_pitch, host_ptr, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::mem, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -5662,7 +5698,9 @@ static bool decode_clCreateProgramWithIL(ServerDispatch& s, ::av::WireReader& r,
     if (il != nullptr && il_count < static_cast<uint64_t>(length)) return false;
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_program ret = s.on_clCreateProgramWithIL(context, il, length, errcode_ret);
+    cl_program ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateProgramWithIL(context, il, length, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::program, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -5872,7 +5910,9 @@ static bool decode_clLinkProgram(ServerDispatch& s, ::av::WireReader& r,
     if (input_programs != nullptr && input_programs_count < static_cast<uint64_t>(num_input_programs)) return false;
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_program ret = s.on_clLinkProgram(context, num_devices, device_list, options, num_input_programs, input_programs, errcode_ret);
+    cl_program ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clLinkProgram(context, num_devices, device_list, options, num_input_programs, input_programs, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::program, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -5948,7 +5988,9 @@ static bool decode_clCloneKernel(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_kernel ret = s.on_clCloneKernel(source_kernel, errcode_ret);
+    cl_kernel ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCloneKernel(source_kernel, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::kernel, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -6236,7 +6278,9 @@ static bool decode_clCreateBufferWithProperties(ServerDispatch& s, ::av::WireRea
     if ((flags & CL_MEM_USE_HOST_PTR) != 0) return false;
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_mem ret = s.on_clCreateBufferWithProperties(context, properties, flags, size, host_ptr, errcode_ret);
+    cl_mem ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateBufferWithProperties(context, properties, flags, size, host_ptr, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::mem, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -6343,7 +6387,9 @@ static bool decode_clCreateImageWithProperties(ServerDispatch& s, ::av::WireRead
     if ((flags & CL_MEM_USE_HOST_PTR) != 0) return false;
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_mem ret = s.on_clCreateImageWithProperties(context, properties, flags, image_format, image_desc, host_ptr, errcode_ret);
+    cl_mem ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateImageWithProperties(context, properties, flags, image_format, image_desc, host_ptr, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::mem, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -6392,7 +6438,9 @@ static bool decode_clCreateSamplerWithProperties(ServerDispatch& s, ::av::WireRe
     }
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_sampler ret = s.on_clCreateSamplerWithProperties(context, sampler_properties, errcode_ret);
+    cl_sampler ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateSamplerWithProperties(context, sampler_properties, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::sampler, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -6472,7 +6520,9 @@ static bool decode_clCreateSampler(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_sampler ret = s.on_clCreateSampler(context, normalized_coords, addressing_mode, filter_mode, errcode_ret);
+    cl_sampler ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateSampler(context, normalized_coords, addressing_mode, filter_mode, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::sampler, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -6636,7 +6686,9 @@ static bool decode_clCreatePipe(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_mem ret = s.on_clCreatePipe(context, flags, pipe_packet_size, pipe_max_packets, properties, errcode_ret);
+    cl_mem ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreatePipe(context, flags, pipe_packet_size, pipe_max_packets, properties, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::mem, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -6766,7 +6818,9 @@ static bool decode_clCreateProgramWithBuiltInKernels(ServerDispatch& s, ::av::Wi
     if (device_list != nullptr && device_list_count < static_cast<uint64_t>(num_devices)) return false;
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const cl_program ret = s.on_clCreateProgramWithBuiltInKernels(context, num_devices, device_list, kernel_names, errcode_ret);
+    cl_program ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>(1u))) ret = s.on_clCreateProgramWithBuiltInKernels(context, num_devices, device_list, kernel_names, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     if (ret != nullptr) s.made(HandleKind::program, ret);
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (errcode_ret_wanted) {
@@ -6862,7 +6916,9 @@ static bool decode_clEnqueueMapBuffer(ServerDispatch& s, ::av::WireReader& r,
     cl_event* event = event_wanted ? &event_storage : nullptr;
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
-    const void* ret = s.on_clEnqueueMapBuffer(command_queue, buffer, blocking_map, map_flags, offset, size, num_events_in_wait_list, event_wait_list, event, errcode_ret);
+    void* ret = nullptr;
+    if (s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u)))) ret = s.on_clEnqueueMapBuffer(command_queue, buffer, blocking_map, map_flags, offset, size, num_events_in_wait_list, event_wait_list, event, errcode_ret);
+    else if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ret)));
     if (event_wanted) {
         if (!(ret != nullptr)) event_storage = nullptr;
@@ -6937,7 +6993,7 @@ static bool decode_clEnqueueUnmapMemObject(ServerDispatch& s, ::av::WireReader& 
     }
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueUnmapMemObject(command_queue, memobj, mapped_ptr, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueUnmapMemObject(command_queue, memobj, mapped_ptr, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -7080,7 +7136,7 @@ static bool decode_clEnqueueSVMMap(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueSVMMap(command_queue, blocking_map, flags, svm_ptr, size, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueSVMMap(command_queue, blocking_map, flags, svm_ptr, size, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -7145,7 +7201,7 @@ static bool decode_clEnqueueSVMUnmap(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueSVMUnmap(command_queue, svm_ptr, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueSVMUnmap(command_queue, svm_ptr, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -7229,7 +7285,7 @@ static bool decode_clEnqueueSVMMemcpy(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueSVMMemcpy(command_queue, blocking_copy, dst_ptr, src_ptr, size, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueSVMMemcpy(command_queue, blocking_copy, dst_ptr, src_ptr, size, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;
@@ -7322,7 +7378,7 @@ static bool decode_clEnqueueSVMMemFill(ServerDispatch& s, ::av::WireReader& r,
     }
     cl_event event_storage = nullptr;
     cl_event* event = event_wanted ? &event_storage : nullptr;
-    const cl_int ret = s.on_clEnqueueSVMMemFill(command_queue, svm_ptr, pattern, pattern_size, size, num_events_in_wait_list, event_wait_list, event);
+    const cl_int ret = s.room_for(static_cast<uint64_t>((event_wanted ? 1u : 0u))) ? s.on_clEnqueueSVMMemFill(command_queue, svm_ptr, pattern, pattern_size, size, num_events_in_wait_list, event_wait_list, event) : CL_OUT_OF_HOST_MEMORY;
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
         if (!(ret == CL_SUCCESS)) event_storage = nullptr;

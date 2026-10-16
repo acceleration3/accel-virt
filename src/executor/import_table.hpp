@@ -7,11 +7,12 @@
 #ifndef AV_IMPORT_TABLE_HPP
 #define AV_IMPORT_TABLE_HPP
 
+#include "core/support/keyed_slots.hpp"
+#include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "executor/imported_blob.hpp"
 
 #include <stdint.h>
-
 
 namespace av {
 
@@ -19,22 +20,23 @@ class SourceMemory;
 
 class ImportTable {
 public:
-    /* As many as the device lets one context hold (BlobImports). */
-    static constexpr uint32_t max_imports = 4096u;
-
-    ImportTable();
+    /* As many as the device lets one context hold; an import stays where it
+     * was made until it is forgotten, so a backend may keep its address. */
+    explicit ImportTable(BlockSource &blocks);
     ImportTable(const ImportTable &) = delete;
     ImportTable &operator=(const ImportTable &) = delete;
 
     /* Records `memory`, held for the import, under `blob_id`. conflict for an
      * id already imported - a silent teardown is what a hostile guest would
-     * drive at the worst moment - and no_space when the table is full. */
+     * drive at the worst moment - and no_memory when the table cannot grow. */
     [[nodiscard]] Status take(uint64_t blob_id, SourceMemory &memory, ImportedBlob *&taken);
     /* The blob `blob_id` names, or null. */
     ImportedBlob        *find(uint64_t blob_id);
-    /* Gives one back, or nothing if that id was never imported: release is
-     * idempotent, because the device may release an id whose import failed. */
-    ImportedBlob        *drop(uint64_t blob_id);
+    /* The import gone, and the memory it held answered for its holder to let
+     * go of; null for an id never imported: release is idempotent, because
+     * the device may release an id whose import failed. Its backend is told
+     * first. */
+    SourceMemory        *forget(uint64_t blob_id);
     /* Every blob still held, so a session being destroyed releases what the
      * guest never did. Null when there is nothing left. */
     ImportedBlob        *any();
@@ -44,8 +46,8 @@ public:
     bool invariants_hold() const;
 
 private:
-    ImportedBlob blobs_[max_imports];
-    uint32_t     count_;
+    ObjectPool<ImportedBlob>             blobs_;
+    KeyedSlots<uint64_t, ImportedBlob *> ids_;
 };
 
 }  // namespace av

@@ -4,7 +4,7 @@
 
 namespace av {
 
-ImportTable::ImportTable() : blobs_{}, count_(0u)
+ImportTable::ImportTable(BlockSource &blocks) : blobs_(blocks), ids_(blocks, Pool::paged)
 {
     AV_SCOPE("ImportTable::ImportTable");
 }
@@ -13,60 +13,58 @@ Status ImportTable::take(uint64_t blob_id, SourceMemory &memory, ImportedBlob *&
 {
     AV_SCOPE("ImportTable::take");
     taken = nullptr;
-    if (find(blob_id) != nullptr) return Status::conflict;
-    for (uint32_t slot = 0u; slot < max_imports; slot++) {
-        if (blobs_[slot].live()) continue;
-        /* A slot that holds nothing always takes. */
-        static_cast<void>(blobs_[slot].take(blob_id, memory));
-        count_++;
-        taken = &blobs_[slot];
-        return Status::ok;
-    }
-    return Status::no_space;
+    if (ids_.find(blob_id) != nullptr) return Status::conflict;
+    const Status room = ids_.reserve(ids_.count() + 1u);
+    if (room != Status::ok) return room;
+    ImportedBlob *made = nullptr;
+    const Status  created = blobs_.create(made);
+    if (created != Status::ok) return created;
+    /* A blob just made holds nothing, so it takes; the room was made above. */
+    static_cast<void>(made->take(blob_id, memory));
+    uint32_t slot = 0u;
+    static_cast<void>(ids_.insert(blob_id, made, slot));
+    taken = made;
+    return Status::ok;
 }
 
 ImportedBlob *ImportTable::find(uint64_t blob_id)
 {
     AV_SCOPE("ImportTable::find");
-    for (uint32_t slot = 0u; slot < max_imports; slot++) {
-        if (blobs_[slot].holds(blob_id)) return &blobs_[slot];
-    }
-    return nullptr;
+    ImportedBlob *const *const found = ids_.find(blob_id);
+    return found != nullptr ? *found : nullptr;
 }
 
-ImportedBlob *ImportTable::drop(uint64_t blob_id)
+SourceMemory *ImportTable::forget(uint64_t blob_id)
 {
-    AV_SCOPE("ImportTable::drop");
-    ImportedBlob *const blob = find(blob_id);
-    if (blob == nullptr) return nullptr;
-    count_--;
-    return blob;
+    AV_SCOPE("ImportTable::forget");
+    ImportedBlob *blob = nullptr;
+    if (!ids_.take(blob_id, blob)) return nullptr;
+    SourceMemory *const memory = blob->give_back();
+    static_cast<void>(blobs_.destroy(blob));
+    return memory;
 }
 
 ImportedBlob *ImportTable::any()
 {
     AV_SCOPE("ImportTable::any");
-    for (uint32_t slot = 0u; slot < max_imports; slot++) {
-        if (blobs_[slot].live()) return &blobs_[slot];
-    }
-    return nullptr;
+    const uint32_t slot = ids_.next_live(0u);
+    return slot != KeyedSlots<uint64_t, ImportedBlob *>::no_slot ? *ids_.at(slot) : nullptr;
 }
 
 uint32_t ImportTable::count() const
 {
     AV_SCOPE("ImportTable::count");
-    return count_;
+    return ids_.count();
 }
 
 bool ImportTable::invariants_hold() const
 {
     AV_SCOPE("ImportTable::invariants_hold");
-    uint32_t held = 0u;
-    for (uint32_t slot = 0u; slot < max_imports; slot++) {
-        if (!blobs_[slot].invariants_hold()) return false;
-        if (blobs_[slot].live()) held++;
-    }
-    return held == count_;
+    bool holds = blobs_.live() == ids_.count();
+    ids_.for_each([&holds](uint64_t id, ImportedBlob *const &blob) {
+        holds = holds && blob->invariants_hold() && blob->holds(id);
+    });
+    return holds;
 }
 
 }  // namespace av

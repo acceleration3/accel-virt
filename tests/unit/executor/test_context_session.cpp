@@ -335,13 +335,14 @@ TEST(context_session_import, a_backend_that_will_not_take_it_costs_no_slot)
   drawing.source().free(domain, key);
   CHECK_EQ(drawing.exporter().live(), 0u); }
 
-/* A table that is full refuses the next import and gives its reference back. */
-TEST(context_session_import, a_full_table_refuses_and_holds_nothing_more)
+/* Well past the 4096 a context once held, every import is taken and every
+ * reference given back at the end. */
+TEST(context_session_import, imports_past_any_old_bound_are_all_held_and_given_back)
 { Drawing drawing;
-  for (std::uint64_t id = 1u; id <= av::ImportTable::max_imports; id++)
+  constexpr std::uint64_t many = 5000u;
+  for (std::uint64_t id = 1u; id <= many; id++)
       CHECK_EQ(drawing.session().import_blob(id, key), std::uint32_t{AV_EXECUTED});
-  CHECK_EQ(drawing.session().import_blob(av::ImportTable::max_imports + 1u, key), std::uint32_t{AV_UNDECODABLE});
-  CHECK_EQ(drawing.session().imports(), av::ImportTable::max_imports);
+  CHECK_EQ(drawing.session().imports(), many);
   drawing.session().release();
   drawing.source().free(domain, key);
   CHECK_EQ(drawing.exporter().live(), 0u); }

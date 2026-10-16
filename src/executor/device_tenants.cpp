@@ -7,7 +7,8 @@
 
 namespace av {
 
-DeviceTenants::DeviceTenants() : mutex_(), left_(), tenants_{}, count_(0u), lost_(false)
+DeviceTenants::DeviceTenants(BlockSource &blocks)
+    : mutex_(), left_(), tenants_(blocks, Pool::paged), lost_(false)
 {
     AV_SCOPE("DeviceTenants::DeviceTenants");
     pthread_mutex_init(&mutex_, nullptr);
@@ -29,10 +30,10 @@ Status DeviceTenants::join(WakeSignal &wake)
 {
     AV_SCOPE("DeviceTenants::join");
     pthread_mutex_lock(&mutex_);
-    Status joined = lost_ ? Status::invalid_state : count_ == capacity ? Status::no_space : Status::ok;
-    for (uint32_t index = 0u; joined == Status::ok && index < count_; index++)
-        if (tenants_[index] == &wake) joined = Status::conflict;
-    if (joined == Status::ok) tenants_[count_++] = &wake;
+    Status joined = lost_ ? Status::invalid_state : Status::ok;
+    for (uint32_t index = 0u; joined == Status::ok && index < tenants_.size(); index++)
+        if (tenants_.at(index) == &wake) joined = Status::conflict;
+    if (joined == Status::ok) joined = tenants_.append(&wake);
     pthread_mutex_unlock(&mutex_);
     return joined;
 }
@@ -41,13 +42,12 @@ void DeviceTenants::leave(WakeSignal &wake)
 {
     AV_SCOPE("DeviceTenants::leave");
     pthread_mutex_lock(&mutex_);
-    for (uint32_t index = 0u; index < count_; index++) {
-        if (tenants_[index] != &wake) continue;
-        tenants_[index] = tenants_[--count_];
-        tenants_[count_] = nullptr;
+    for (uint32_t index = 0u; index < tenants_.size(); index++) {
+        if (tenants_.at(index) != &wake) continue;
+        tenants_.remove_swap(index);
         break;
     }
-    if (count_ == 0u) pthread_cond_broadcast(&left_);
+    if (tenants_.size() == 0u) pthread_cond_broadcast(&left_);
     pthread_mutex_unlock(&mutex_);
 }
 
@@ -58,7 +58,7 @@ bool DeviceTenants::lose()
     const bool first = !lost_;
     __atomic_store_n(&lost_, true, __ATOMIC_RELEASE);
     if (first)
-        for (uint32_t index = 0u; index < count_; index++) static_cast<void>(tenants_[index]->raise());
+        for (WakeSignal *tenant : tenants_) static_cast<void>(tenant->raise());
     pthread_mutex_unlock(&mutex_);
     return first;
 }
@@ -73,7 +73,7 @@ uint32_t DeviceTenants::count() const
 {
     AV_SCOPE("DeviceTenants::count");
     pthread_mutex_lock(&mutex_);
-    const uint32_t tenants = count_;
+    const uint32_t tenants = tenants_.size();
     pthread_mutex_unlock(&mutex_);
     return tenants;
 }
@@ -92,8 +92,8 @@ bool DeviceTenants::vacate(uint32_t wait_ms)
     }
     pthread_mutex_lock(&mutex_);
     int waited = 0;
-    while (count_ != 0u && waited == 0) waited = pthread_cond_timedwait(&left_, &mutex_, &deadline);
-    const bool empty = count_ == 0u;
+    while (tenants_.size() != 0u && waited == 0) waited = pthread_cond_timedwait(&left_, &mutex_, &deadline);
+    const bool empty = tenants_.size() == 0u;
     pthread_mutex_unlock(&mutex_);
     return empty;
 }
@@ -102,21 +102,22 @@ Status DeviceTenants::renew()
 {
     AV_SCOPE("DeviceTenants::renew");
     pthread_mutex_lock(&mutex_);
-    const Status renewed = !lost_ || count_ != 0u ? Status::invalid_state : Status::ok;
+    const Status renewed = !lost_ || tenants_.size() != 0u ? Status::invalid_state : Status::ok;
     if (renewed == Status::ok) __atomic_store_n(&lost_, false, __ATOMIC_RELEASE);
     pthread_mutex_unlock(&mutex_);
     return renewed;
 }
 
-/* Every listed tenant is a signal, listed once, and nothing past the count. */
+/* Every listed tenant is a signal, listed once. */
 bool DeviceTenants::invariants_hold() const
 {
     AV_SCOPE("DeviceTenants::invariants_hold");
     pthread_mutex_lock(&mutex_);
-    bool holds = count_ <= capacity;
-    for (uint32_t index = 0u; holds && index < capacity; index++) {
-        holds = (index < count_) == (tenants_[index] != nullptr);
-        for (uint32_t other = index + 1u; holds && other < count_; other++) holds = tenants_[index] != tenants_[other];
+    bool holds = true;
+    for (uint32_t index = 0u; holds && index < tenants_.size(); index++) {
+        holds = tenants_.at(index) != nullptr;
+        for (uint32_t other = index + 1u; holds && other < tenants_.size(); other++)
+            holds = tenants_.at(index) != tenants_.at(other);
     }
     pthread_mutex_unlock(&mutex_);
     return holds;

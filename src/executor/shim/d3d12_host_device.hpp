@@ -22,6 +22,7 @@
 #include "device/host/stdio_log.hpp"
 #include "executor/device_tenants.hpp"
 #include "executor/shim/d3d12_frame_pool.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "proto/context/device_uuid.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
 
@@ -103,6 +104,8 @@ private:
 
     const D3dRuntime  *runtime_;
     DeviceUuid         uuid_;
+    /* Where the tenants' list grows from: before it, as it is destroyed after. */
+    HostHeap           tenant_heap_;
     DeviceTenants      tenants_;
     /* Held by renew alone: two sessions may both find the device lost. */
     pthread_mutex_t    renewing_;

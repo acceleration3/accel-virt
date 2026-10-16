@@ -19,8 +19,8 @@ constexpr uint32_t renderbuffer_dimensions = 2u;
 
 }  // namespace
 
-CopiedGlSharing::CopiedGlSharing(GlObjectBytes &objects, GlRenderbufferTexture &textures)
-    : objects_(objects), textures_(textures), mirrors_(), staging_()
+CopiedGlSharing::CopiedGlSharing(BlockSource &blocks, GlObjectBytes &objects, GlRenderbufferTexture &textures)
+    : objects_(objects), textures_(textures), mirrors_(blocks), staging_()
 {
     AV_SCOPE("CopiedGlSharing::CopiedGlSharing");
 }
@@ -118,8 +118,8 @@ cl_mem CopiedGlSharing::image_of(cl_context context, cl_mem_flags flags, const G
 cl_mem CopiedGlSharing::held(cl_mem made, const GlMirror &mirror, cl_int *errcode_ret)
 {
     AV_SCOPE("CopiedGlSharing::held");
-    const bool remembered = mirrors_.remember(mirror);
-    if (errcode_ret != nullptr) *errcode_ret = remembered ? CL_SUCCESS : CL_OUT_OF_RESOURCES;
+    const bool remembered = mirrors_.remember(mirror) == Status::ok;
+    if (errcode_ret != nullptr) *errcode_ret = remembered ? CL_SUCCESS : CL_OUT_OF_HOST_MEMORY;
     if (remembered) return made;
     static_cast<void>(::clReleaseMemObject(made));
     return nullptr;

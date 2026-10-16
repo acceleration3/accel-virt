@@ -191,7 +191,7 @@ TEST(opencl_backend, memory_with_no_mapping_is_not_memory_a_buffer_can_be_made_o
 
 namespace {
 
-unsigned char host_objects[av::ClHandleRegistry::max_handles + 1u];
+unsigned char host_objects[3001u];
 
 std::uint64_t wire_of(const void *object)
 {
@@ -216,19 +216,48 @@ TEST(opencl_backend, answers_the_decoder_only_for_objects_its_calls_made)
   CHECK(backend.handle_for(av::clproto::HandleKind::command_queue, wire_of(queue)) == nullptr);
   CHECK(!backend.lost()); }
 
-/* A registry with no room left would hand the guest a number the host then
- * refuses; the backend loses its device instead, which ends the context. */
-TEST(opencl_backend, an_object_it_has_no_room_to_hold_loses_the_device)
-{ OpenClBackend backend;
-  for (std::size_t i = 0u; i < av::ClHandleRegistry::max_handles; i++)
-      backend.made(av::clproto::HandleKind::event, &host_objects[i]);
+/* Past the 2048 objects a context once held - and the guest's 2048 cl_mems -
+ * room is made and every object answers as what it was made. */
+TEST(opencl_backend, holds_thousands_of_objects_with_room_made_first)
+{ av::MockPlatform platform;
+  OpenClBackend    backend(platform);
+  constexpr std::size_t many = 3000u;
+  CHECK(backend.room_for(many));
+  for (std::size_t i = 0u; i < many; i++) backend.made(av::clproto::HandleKind::mem, &host_objects[i]);
+  bool answered = true;
+  for (std::size_t i = 0u; i < many; i++)
+      answered = answered && backend.handle_for(av::clproto::HandleKind::mem, wire_of(&host_objects[i])) == &host_objects[i];
+  CHECK(answered);
   CHECK(!backend.lost());
-  backend.made(av::clproto::HandleKind::event, &host_objects[av::ClHandleRegistry::max_handles]);
+  for (std::size_t i = 0u; i < many; i++) backend.released(av::clproto::HandleKind::mem, &host_objects[i]);
+  backend.shut_down(); }
+
+/* With no room to be had the decoder is told so before the ICD makes anything,
+ * and the guest is answered CL_OUT_OF_HOST_MEMORY; nothing is lost. An object
+ * made with no room asked is one the host refuses when it is named. */
+TEST(opencl_backend, no_room_refuses_before_the_icd_and_loses_nothing)
+{ av::MockPlatform platform;
+  OpenClBackend    backend(platform);
+  CHECK(!backend.room_for(~std::uint64_t{0}));
+  platform.fail_allocation_at(1u);
+  CHECK(!backend.room_for(1u));
+  platform.fail_allocation_at(1u);
+  backend.made(av::clproto::HandleKind::event, &host_objects[0]);
+  CHECK(backend.handle_for(av::clproto::HandleKind::event, wire_of(&host_objects[0])) == nullptr);
+  CHECK(!backend.lost());
+  backend.shut_down(); }
+
+/* An ICD answering an address this context still holds as another kind is the
+ * one thing that loses the device: the host could no longer say which object
+ * the guest's number means. */
+TEST(opencl_backend, an_address_held_as_another_kind_loses_the_device)
+{ av::MockPlatform platform;
+  OpenClBackend    backend(platform);
+  backend.made(av::clproto::HandleKind::event, &host_objects[0]);
+  CHECK(!backend.lost());
+  backend.made(av::clproto::HandleKind::mem, &host_objects[0]);
   CHECK(backend.lost());
-  /* Given back first, because shutting down releases what is still held and
-   * these are not objects any ICD made. */
-  for (std::size_t i = 0u; i < av::ClHandleRegistry::max_handles; i++)
-      backend.released(av::clproto::HandleKind::event, &host_objects[i]);
+  backend.released(av::clproto::HandleKind::event, &host_objects[0]);
   backend.shut_down();
   CHECK(!backend.lost()); }
 
@@ -1238,8 +1267,8 @@ public:
     /* Room for one mapping per table slot, each at its own offset so each
      * answers its own address. */
     static constexpr std::size_t mapping_bytes = 64u;
-    static constexpr std::size_t buffer_bytes =
-        (av::HostSvmRanges::max_ranges + 1u) * mapping_bytes;
+    static constexpr std::uint32_t mappings = 300u;
+    static constexpr std::size_t   buffer_bytes = mappings * mapping_bytes;
 
     cl_context       context() const { return context_; }
     cl_command_queue queue() const { return queue_; }
@@ -1253,79 +1282,89 @@ private:
 
 }  // namespace
 
-TEST(opencl_backend, more_shared_allocations_than_the_table_holds_are_given_straight_back)
+/* Shared allocations past the 8192 a session once held all resolve; with no
+ * room to be had the host is not asked at all, and clSVMAlloc answers null. */
+TEST(opencl_backend, shared_allocations_grow_and_are_refused_before_the_host_when_no_room_can_be_had)
 { HostOpenCl  host;
   HostSession session(host);
   if (session.context() == nullptr) return;
-  OpenClBackend backend;
-  void         *held[av::HostSvmRanges::max_ranges] = {};
-  for (std::uint32_t index = 0u; index < av::HostSvmRanges::max_ranges; ++index) {
-      held[index] = backend.on_clSVMAlloc(session.context(), CL_MEM_READ_WRITE, 64u, 0u);
-      if (held[index] == nullptr) return;   /* a device without shared memory */
+  av::MockPlatform platform;
+  OpenClBackend    backend(platform);
+  static void     *held[HostSession::mappings] = {};
+  std::uint32_t    made = 0u;
+  for (; made < 200u; ++made) {
+      held[made] = backend.on_clSVMAlloc(session.context(), CL_MEM_READ_WRITE, 64u, 0u);
+      if (held[made] == nullptr) return;   /* a device without shared memory */
+      CHECK(backend.svm_for(reinterpret_cast<std::uintptr_t>(held[made]), 64u) == held[made]);
   }
-  /* One more than the table holds: the host allocates it and it is freed
-   * again, because an address this session could never resolve is worse than
-   * a refusal the guest can see at the allocation. */
-  CHECK(backend.on_clSVMAlloc(session.context(), CL_MEM_READ_WRITE, 64u, 0u) == nullptr);
-  for (void *const address : held) backend.on_clSVMFree(session.context(), address);
-  /* And with the table drained, the next one is answered again. */
+  platform.fail_allocation_at(1u);
+  while (made < HostSession::mappings &&
+         (held[made] = backend.on_clSVMAlloc(session.context(), CL_MEM_READ_WRITE, 64u, 0u)) != nullptr)
+      made++;
+  CHECK(made < HostSession::mappings);
+  for (std::uint32_t index = 0u; index < made; ++index) backend.on_clSVMFree(session.context(), held[index]);
   void *const after = backend.on_clSVMAlloc(session.context(), CL_MEM_READ_WRITE, 64u, 0u);
   CHECK(after != nullptr);
   backend.on_clSVMFree(session.context(), after);
   CHECK(!backend.lost());
   backend.shut_down(); }
 
-TEST(opencl_backend, more_mappings_than_the_table_holds_are_unmapped_again)
+/* Mappings past any old bound all resolve; with no room to be had the host is
+ * not asked, and the guest is told it is out of host memory. */
+TEST(opencl_backend, mappings_grow_and_are_refused_before_the_host_when_no_room_can_be_had)
 { HostOpenCl  host;
   HostSession session(host);
   if (session.queue() == nullptr || session.buffer() == nullptr) return;
-  OpenClBackend backend;
-  void         *held[av::HostSvmRanges::max_ranges] = {};
-  for (std::uint32_t index = 0u; index < av::HostSvmRanges::max_ranges; ++index) {
+  av::MockPlatform platform;
+  OpenClBackend    backend(platform);
+  static void     *held[HostSession::mappings] = {};
+  std::uint32_t    made = 0u;
+  for (; made < 200u; ++made) {
       cl_int error = CL_SUCCESS;
-      held[index] = backend.on_clEnqueueMapBuffer(session.queue(), session.buffer(), CL_TRUE,
-                                                  CL_MAP_WRITE, index * HostSession::mapping_bytes,
-                                                  HostSession::mapping_bytes, 0u, nullptr, nullptr,
-                                                  &error);
-      if (held[index] == nullptr) return;   /* a device that maps no buffer */
+      held[made] = backend.on_clEnqueueMapBuffer(session.queue(), session.buffer(), CL_TRUE, CL_MAP_WRITE,
+                                                 made * HostSession::mapping_bytes, HostSession::mapping_bytes, 0u,
+                                                 nullptr, nullptr, &error);
+      if (held[made] == nullptr) return;   /* a device that maps no buffer */
       CHECK_EQ(error, CL_SUCCESS);
   }
-  /* The one past the end, both ways the guest can ask: with somewhere to
-   * report the refusal and with nowhere. Either way the mapping the host made
-   * is given back, because a buffer the guest could never unmap would be held
-   * for the life of the context. */
+  platform.fail_allocation_at(1u);
   cl_int refused = CL_SUCCESS;
-  CHECK(backend.on_clEnqueueMapBuffer(session.queue(), session.buffer(), CL_TRUE, CL_MAP_WRITE,
-                                      av::HostSvmRanges::max_ranges * HostSession::mapping_bytes,
-                                      HostSession::mapping_bytes, 0u, nullptr, nullptr,
-                                      &refused) == nullptr);
-  CHECK_EQ(refused, CL_OUT_OF_RESOURCES);
-  CHECK(backend.on_clEnqueueMapBuffer(session.queue(), session.buffer(), CL_TRUE, CL_MAP_WRITE,
-                                      av::HostSvmRanges::max_ranges * HostSession::mapping_bytes,
-                                      HostSession::mapping_bytes, 0u, nullptr, nullptr,
-                                      nullptr) == nullptr);
-  for (void *const address : held)
-      CHECK_EQ(backend.on_clEnqueueUnmapMemObject(session.queue(), session.buffer(), address, 0u,
-                                                  nullptr, nullptr),
+  while (made < HostSession::mappings &&
+         (held[made] = backend.on_clEnqueueMapBuffer(session.queue(), session.buffer(), CL_TRUE, CL_MAP_WRITE,
+                                                     made * HostSession::mapping_bytes, HostSession::mapping_bytes,
+                                                     0u, nullptr, nullptr, &refused)) != nullptr)
+      made++;
+  CHECK(made < HostSession::mappings);
+  CHECK_EQ(refused, CL_OUT_OF_HOST_MEMORY);
+  platform.fail_allocation_at(1u);
+  CHECK(backend.on_clEnqueueMapBuffer(session.queue(), session.buffer(), CL_TRUE, CL_MAP_WRITE, 0u,
+                                      HostSession::mapping_bytes, 0u, nullptr, nullptr, nullptr) == nullptr);
+  platform.fail_allocation_at(0u);
+  for (std::uint32_t index = 0u; index < made; ++index)
+      CHECK_EQ(backend.on_clEnqueueUnmapMemObject(session.queue(), session.buffer(), held[index], 0u, nullptr,
+                                                  nullptr),
                CL_SUCCESS);
   CHECK_EQ(::clFinish(session.queue()), CL_SUCCESS);
   CHECK(!backend.lost());
   backend.shut_down(); }
 
-TEST(opencl_backend, more_callback_registrations_than_the_table_holds_are_refused)
+TEST(opencl_backend, callback_registrations_grow_and_are_refused_only_with_no_room)
 { HostOpenCl  host;
   HostSession session(host);
   if (session.context() == nullptr) return;
-  OpenClBackend backend;
-  int           device = 0;
+  av::MockPlatform platform;
+  OpenClBackend    backend(platform);
+  int              device = 0;
   backend.bind_signal(&nothing_to_wake, &device);
-  cl_event events[av::ClEventSignals::max_registrations + 1u] = {};
+  constexpr std::uint32_t many = 200u;
+  static cl_event events[many + 64u] = {};
   for (cl_event &event : events) {
       cl_int error = CL_SUCCESS;
       event = ::clCreateUserEvent(session.context(), &error);
       if (event == nullptr) return;   /* a device with no user events */
   }
-  for (std::uint32_t index = 0u; index < av::ClEventSignals::max_registrations; ++index) {
+  /* Past the 128 a context could once have waiting. */
+  for (std::uint32_t index = 0u; index < many; ++index) {
       const cl_int registered = backend.on_clSetEventCallback(events[index], CL_COMPLETE);
       if (registered != CL_SUCCESS) {
           for (cl_event event : events) CHECK_EQ(::clReleaseEvent(event), CL_SUCCESS);
@@ -1333,12 +1372,16 @@ TEST(opencl_backend, more_callback_registrations_than_the_table_holds_are_refuse
           return;   /* a host that registers no callback at all */
       }
   }
-  /* Every slot taken: the guest is refused rather than handed a registration
+  /* No room to be had: the guest is refused rather than handed a registration
    * whose completion nothing could deliver. */
-  CHECK_EQ(backend.on_clSetEventCallback(events[av::ClEventSignals::max_registrations], CL_COMPLETE),
-           CL_OUT_OF_RESOURCES);
-  /* Completed so the host's own callbacks run while the slots are still this
-   * session's, rather than after it is torn down. */
+  platform.fail_allocation_at(1u);
+  cl_int        registered = CL_SUCCESS;
+  std::uint32_t index = many;
+  while (index < many + 64u && (registered = backend.on_clSetEventCallback(events[index], CL_COMPLETE)) == CL_SUCCESS)
+      index++;
+  CHECK_EQ(registered, CL_OUT_OF_HOST_MEMORY);
+  /* Completed so the host's own callbacks run while the registrations are
+   * still this session's, rather than after it is torn down. */
   for (cl_event event : events) CHECK_EQ(::clSetUserEventStatus(event, CL_COMPLETE), CL_SUCCESS);
   for (cl_event event : events) CHECK_EQ(::clReleaseEvent(event), CL_SUCCESS);
   backend.shut_down(); }

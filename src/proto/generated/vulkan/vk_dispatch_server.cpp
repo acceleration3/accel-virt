@@ -38,7 +38,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!r.read_pod(queueFamilyIndex)) return false;
         if (!r.read_pod(queueIndex)) return false;
-        s.on_vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &pQueue_out);
+        if (handles_room(static_cast<uint64_t>(1u))) s.on_vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &pQueue_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(0);
         serialize_VkQueue(reply, pQueue_out);
@@ -62,7 +62,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
                 for (size_t av_z = 0; av_z < pPhysicalDevices_storage_count; ++av_z) { pPhysicalDevices_storage[av_z] = {}; }
             }
         }
-        VkResult result = s.on_vkEnumeratePhysicalDevices(instance, &pPhysicalDeviceCount_local, array_present ? pPhysicalDevices_storage : nullptr);
+        VkResult result = handles_room(static_cast<uint64_t>(pPhysicalDevices_storage_count)) ? s.on_vkEnumeratePhysicalDevices(instance, &pPhysicalDeviceCount_local, array_present ? pPhysicalDevices_storage : nullptr) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(instance));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         uint32_t pPhysicalDeviceCount_sent = static_cast<int32_t>(result) < 0 ? 0u : pPhysicalDeviceCount_local;
@@ -94,7 +94,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkInstanceCreateInfo pCreateInfo_local{};
         VkInstance pInstance_out = VK_NULL_HANDLE;
         if (!deserialize_VkInstanceCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateInstance(&pCreateInfo_local, nullptr, &pInstance_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateInstance(&pCreateInfo_local, nullptr, &pInstance_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
             pInstance_out = VK_NULL_HANDLE;
@@ -109,7 +109,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDevice pDevice_out = VK_NULL_HANDLE;
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!deserialize_VkDeviceCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateDevice(physicalDevice, &pCreateInfo_local, nullptr, &pDevice_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateDevice(physicalDevice, &pCreateInfo_local, nullptr, &pDevice_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(physicalDevice));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -481,7 +481,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDeviceMemory pMemory_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkMemoryAllocateInfo(r, &pAllocateInfo_local, arena)) return false;
-        VkResult result = s.on_vkAllocateMemory(device, &pAllocateInfo_local, nullptr, &pMemory_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkAllocateMemory(device, &pAllocateInfo_local, nullptr, &pMemory_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -565,7 +565,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkBuffer pBuffer_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkBufferCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateBuffer(device, &pCreateInfo_local, nullptr, &pBuffer_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateBuffer(device, &pCreateInfo_local, nullptr, &pBuffer_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -591,7 +591,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkImage pImage_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImageCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateImage(device, &pCreateInfo_local, nullptr, &pImage_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateImage(device, &pCreateInfo_local, nullptr, &pImage_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -617,7 +617,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkImageView pView_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImageViewCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateImageView(device, &pCreateInfo_local, nullptr, &pView_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateImageView(device, &pCreateInfo_local, nullptr, &pView_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -643,7 +643,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkSampler pSampler_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSamplerCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateSampler(device, &pCreateInfo_local, nullptr, &pSampler_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateSampler(device, &pCreateInfo_local, nullptr, &pSampler_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -669,7 +669,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkSemaphore pSemaphore_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSemaphoreCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateSemaphore(device, &pCreateInfo_local, nullptr, &pSemaphore_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateSemaphore(device, &pCreateInfo_local, nullptr, &pSemaphore_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -695,7 +695,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkFence pFence_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkFenceCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateFence(device, &pCreateInfo_local, nullptr, &pFence_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateFence(device, &pCreateInfo_local, nullptr, &pFence_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -778,7 +778,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkCommandPool pCommandPool_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkCommandPoolCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateCommandPool(device, &pCreateInfo_local, nullptr, &pCommandPool_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateCommandPool(device, &pCreateInfo_local, nullptr, &pCommandPool_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -855,7 +855,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkShaderModule pShaderModule_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkShaderModuleCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateShaderModule(device, &pCreateInfo_local, nullptr, &pShaderModule_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateShaderModule(device, &pCreateInfo_local, nullptr, &pShaderModule_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -871,7 +871,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkPipelineLayout pPipelineLayout_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipelineLayoutCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreatePipelineLayout(device, &pCreateInfo_local, nullptr, &pPipelineLayout_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreatePipelineLayout(device, &pCreateInfo_local, nullptr, &pPipelineLayout_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -907,7 +907,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkPipelineCache pPipelineCache_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipelineCacheCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreatePipelineCache(device, &pCreateInfo_local, nullptr, &pPipelineCache_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreatePipelineCache(device, &pCreateInfo_local, nullptr, &pPipelineCache_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -933,7 +933,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkRenderPass pRenderPass_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkRenderPassCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateRenderPass(device, &pCreateInfo_local, nullptr, &pRenderPass_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateRenderPass(device, &pCreateInfo_local, nullptr, &pRenderPass_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -959,7 +959,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkFramebuffer pFramebuffer_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkFramebufferCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateFramebuffer(device, &pCreateInfo_local, nullptr, &pFramebuffer_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateFramebuffer(device, &pCreateInfo_local, nullptr, &pFramebuffer_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -985,7 +985,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDescriptorSetLayout pSetLayout_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorSetLayoutCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateDescriptorSetLayout(device, &pCreateInfo_local, nullptr, &pSetLayout_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateDescriptorSetLayout(device, &pCreateInfo_local, nullptr, &pSetLayout_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -1011,7 +1011,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDescriptorPool pDescriptorPool_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorPoolCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateDescriptorPool(device, &pCreateInfo_local, nullptr, &pDescriptorPool_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateDescriptorPool(device, &pCreateInfo_local, nullptr, &pDescriptorPool_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -1409,7 +1409,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             if (pPipelines_storage == nullptr) return false;
             for (size_t av_z = 0; av_z < pPipelines_storage_count; ++av_z) { pPipelines_storage[av_z] = {}; }
         }
-        VkResult result = s.on_vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage);
+        VkResult result = handles_room(static_cast<uint64_t>(pPipelines_storage_count)) ? s.on_vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -1467,7 +1467,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             if (pCommandBuffers_storage == nullptr) return false;
             for (size_t av_z = 0; av_z < pCommandBuffers_storage_count; ++av_z) { pCommandBuffers_storage[av_z] = {}; }
         }
-        VkResult result = s.on_vkAllocateCommandBuffers(device, &pAllocateInfo_local, pCommandBuffers_storage);
+        VkResult result = handles_room(static_cast<uint64_t>(pCommandBuffers_storage_count)) ? s.on_vkAllocateCommandBuffers(device, &pAllocateInfo_local, pCommandBuffers_storage) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(pAllocateInfo_local.commandPool));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -1492,7 +1492,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             if (pDescriptorSets_storage == nullptr) return false;
             for (size_t av_z = 0; av_z < pDescriptorSets_storage_count; ++av_z) { pDescriptorSets_storage[av_z] = {}; }
         }
-        VkResult result = s.on_vkAllocateDescriptorSets(device, &pAllocateInfo_local, pDescriptorSets_storage);
+        VkResult result = handles_room(static_cast<uint64_t>(pDescriptorSets_storage_count)) ? s.on_vkAllocateDescriptorSets(device, &pAllocateInfo_local, pDescriptorSets_storage) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(pAllocateInfo_local.descriptorPool));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -1557,7 +1557,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             if (pPipelines_storage == nullptr) return false;
             for (size_t av_z = 0; av_z < pPipelines_storage_count; ++av_z) { pPipelines_storage[av_z] = {}; }
         }
-        VkResult result = s.on_vkCreateComputePipelines(device, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage);
+        VkResult result = handles_room(static_cast<uint64_t>(pPipelines_storage_count)) ? s.on_vkCreateComputePipelines(device, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -1589,7 +1589,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkEvent pEvent_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkEventCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateEvent(device, &pCreateInfo_local, nullptr, &pEvent_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateEvent(device, &pCreateInfo_local, nullptr, &pEvent_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -2764,7 +2764,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkBufferView pView_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkBufferViewCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateBufferView(device, &pCreateInfo_local, nullptr, &pView_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateBufferView(device, &pCreateInfo_local, nullptr, &pView_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -2780,7 +2780,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDescriptorUpdateTemplate pDescriptorUpdateTemplate_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorUpdateTemplateCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateDescriptorUpdateTemplate(device, &pCreateInfo_local, nullptr, &pDescriptorUpdateTemplate_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateDescriptorUpdateTemplate(device, &pCreateInfo_local, nullptr, &pDescriptorUpdateTemplate_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -2796,7 +2796,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkPrivateDataSlot pPrivateDataSlot_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPrivateDataSlotCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreatePrivateDataSlot(device, &pCreateInfo_local, nullptr, &pPrivateDataSlot_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreatePrivateDataSlot(device, &pCreateInfo_local, nullptr, &pPrivateDataSlot_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -2812,7 +2812,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkQueryPool pQueryPool_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkQueryPoolCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateQueryPool(device, &pCreateInfo_local, nullptr, &pQueryPool_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateQueryPool(device, &pCreateInfo_local, nullptr, &pQueryPool_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -2828,7 +2828,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkRenderPass pRenderPass_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkRenderPassCreateInfo2(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateRenderPass2(device, &pCreateInfo_local, nullptr, &pRenderPass_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateRenderPass2(device, &pCreateInfo_local, nullptr, &pRenderPass_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -2844,7 +2844,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkSamplerYcbcrConversion pYcbcrConversion_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSamplerYcbcrConversionCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateSamplerYcbcrConversion(device, &pCreateInfo_local, nullptr, &pYcbcrConversion_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateSamplerYcbcrConversion(device, &pCreateInfo_local, nullptr, &pYcbcrConversion_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -2922,7 +2922,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             }
             for (size_t av_e = 0; av_e < pPhysicalDeviceGroupProperties_storage_count; ++av_e) { pPhysicalDeviceGroupProperties_storage[av_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES; pPhysicalDeviceGroupProperties_storage[av_e].pNext = nullptr; }
         }
-        VkResult result = s.on_vkEnumeratePhysicalDeviceGroups(instance, &pPhysicalDeviceGroupCount_local, array_present ? pPhysicalDeviceGroupProperties_storage : nullptr);
+        VkResult result = handles_room(static_cast<uint64_t>(pPhysicalDeviceGroupProperties_storage_count * 32u)) ? s.on_vkEnumeratePhysicalDeviceGroups(instance, &pPhysicalDeviceGroupCount_local, array_present ? pPhysicalDeviceGroupProperties_storage : nullptr) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(instance));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         uint32_t pPhysicalDeviceGroupCount_sent = static_cast<int32_t>(result) < 0 ? 0u : pPhysicalDeviceGroupCount_local;
@@ -3148,7 +3148,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkQueue pQueue_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeviceQueueInfo2(r, &pQueueInfo_local, arena)) return false;
-        s.on_vkGetDeviceQueue2(device, &pQueueInfo_local, &pQueue_out);
+        if (handles_room(static_cast<uint64_t>(1u))) s.on_vkGetDeviceQueue2(device, &pQueueInfo_local, &pQueue_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(0);
         serialize_VkQueue(reply, pQueue_out);
@@ -4152,7 +4152,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDescriptorUpdateTemplate pDescriptorUpdateTemplate_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorUpdateTemplateCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateDescriptorUpdateTemplateKHR(device, &pCreateInfo_local, nullptr, &pDescriptorUpdateTemplate_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateDescriptorUpdateTemplateKHR(device, &pCreateInfo_local, nullptr, &pDescriptorUpdateTemplate_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -4168,7 +4168,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkRenderPass pRenderPass_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkRenderPassCreateInfo2(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateRenderPass2KHR(device, &pCreateInfo_local, nullptr, &pRenderPass_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateRenderPass2KHR(device, &pCreateInfo_local, nullptr, &pRenderPass_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -4184,7 +4184,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkSamplerYcbcrConversion pYcbcrConversion_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSamplerYcbcrConversionCreateInfo(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateSamplerYcbcrConversionKHR(device, &pCreateInfo_local, nullptr, &pYcbcrConversion_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateSamplerYcbcrConversionKHR(device, &pCreateInfo_local, nullptr, &pYcbcrConversion_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -4232,7 +4232,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             }
             for (size_t av_e = 0; av_e < pPhysicalDeviceGroupProperties_storage_count; ++av_e) { pPhysicalDeviceGroupProperties_storage[av_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES; pPhysicalDeviceGroupProperties_storage[av_e].pNext = nullptr; }
         }
-        VkResult result = s.on_vkEnumeratePhysicalDeviceGroupsKHR(instance, &pPhysicalDeviceGroupCount_local, array_present ? pPhysicalDeviceGroupProperties_storage : nullptr);
+        VkResult result = handles_room(static_cast<uint64_t>(pPhysicalDeviceGroupProperties_storage_count * 32u)) ? s.on_vkEnumeratePhysicalDeviceGroupsKHR(instance, &pPhysicalDeviceGroupCount_local, array_present ? pPhysicalDeviceGroupProperties_storage : nullptr) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(instance));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         uint32_t pPhysicalDeviceGroupCount_sent = static_cast<int32_t>(result) < 0 ? 0u : pPhysicalDeviceGroupCount_local;
@@ -5635,7 +5635,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkAccelerationStructureKHR pAccelerationStructure_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkAccelerationStructureCreateInfoKHR(r, &pCreateInfo_local, arena)) return false;
-        VkResult result = s.on_vkCreateAccelerationStructureKHR(device, &pCreateInfo_local, nullptr, &pAccelerationStructure_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateAccelerationStructureKHR(device, &pCreateInfo_local, nullptr, &pAccelerationStructure_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -5649,7 +5649,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDevice device = VK_NULL_HANDLE;
         VkDeferredOperationKHR pDeferredOperation_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
-        VkResult result = s.on_vkCreateDeferredOperationKHR(device, nullptr, &pDeferredOperation_out);
+        VkResult result = handles_room(static_cast<uint64_t>(1u)) ? s.on_vkCreateDeferredOperationKHR(device, nullptr, &pDeferredOperation_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -5687,7 +5687,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             if (pPipelines_storage == nullptr) return false;
             for (size_t av_z = 0; av_z < pPipelines_storage_count; ++av_z) { pPipelines_storage[av_z] = {}; }
         }
-        VkResult result = s.on_vkCreateRayTracingPipelinesKHR(device, deferredOperation, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage);
+        VkResult result = handles_room(static_cast<uint64_t>(pPipelines_storage_count)) ? s.on_vkCreateRayTracingPipelinesKHR(device, deferredOperation, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -5723,7 +5723,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             if (pShaders_storage == nullptr) return false;
             for (size_t av_z = 0; av_z < pShaders_storage_count; ++av_z) { pShaders_storage[av_z] = {}; }
         }
-        VkResult result = s.on_vkCreateShadersEXT(device, createInfoCount, pCreateInfos_storage, nullptr, pShaders_storage);
+        VkResult result = handles_room(static_cast<uint64_t>(pShaders_storage_count)) ? s.on_vkCreateShadersEXT(device, createInfoCount, pCreateInfos_storage, nullptr, pShaders_storage) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {
@@ -6175,7 +6175,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             if (pBinaries_pPipelineBinaries_storage == nullptr) return false;
             pBinaries_out.pPipelineBinaries = pBinaries_pPipelineBinaries_storage;
         }
-        VkResult result = s.on_vkCreatePipelineBinariesKHR(device, &pCreateInfo_local, nullptr, &pBinaries_out);
+        VkResult result = handles_room(static_cast<uint64_t>(pBinaries_out.pipelineBinaryCount)) ? s.on_vkCreatePipelineBinariesKHR(device, &pCreateInfo_local, nullptr, &pBinaries_out) : VK_ERROR_OUT_OF_HOST_MEMORY;
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (static_cast<int32_t>(result) < 0) {

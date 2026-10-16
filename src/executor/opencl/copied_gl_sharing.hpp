@@ -38,7 +38,7 @@ class CopiedGlSharing final : public GlSharing {
 public:
     /* `objects` and `textures` work through the vehicle and must outlive
      * this. */
-    CopiedGlSharing(GlObjectBytes &objects, GlRenderbufferTexture &textures);
+    CopiedGlSharing(BlockSource &blocks, GlObjectBytes &objects, GlRenderbufferTexture &textures);
 
     /* The guest's own: no context of this host's names the vehicle. */
     cl_context make_context(const cl_context_properties *properties, cl_uint num_devices,

@@ -11,7 +11,10 @@ namespace av {
 
 struct ShareIndexProbe {
     explicit ShareIndexProbe(const ShareIndex &target);
-    uint32_t capacity() const;
+    /* The buckets of `domain`'s table; 0 for a domain with none. */
+    uint32_t buckets(uint32_t domain) const;
+    /* The domains a table is held for. */
+    uint32_t domains() const;
 
     const ShareIndex &index;
 };

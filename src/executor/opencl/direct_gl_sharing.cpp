@@ -7,8 +7,8 @@
 
 namespace av {
 
-DirectGlSharing::DirectGlSharing(const GlContext &vehicle, GlRenderbufferTexture &textures)
-    : vehicle_(vehicle), textures_(textures), display_(nullptr), renderbuffers_()
+DirectGlSharing::DirectGlSharing(BlockSource &blocks, const GlContext &vehicle, GlRenderbufferTexture &textures)
+    : vehicle_(vehicle), textures_(textures), display_(nullptr), renderbuffers_(blocks)
 {
     AV_SCOPE("DirectGlSharing::DirectGlSharing");
 }
@@ -85,13 +85,15 @@ cl_mem DirectGlSharing::over_texture(cl_context context, cl_mem_flags flags, cl_
     cl_int       made = CL_SUCCESS;
     cl_mem const over =
         ::clCreateFromGLTexture(context, flags, GlRenderbufferTexture::texture_2d, 0, texture, &made);
-    if (over != nullptr && renderbuffers_.remember(over, renderbuffer, texture, image)) {
+    const Status held = over != nullptr ? renderbuffers_.remember(over, renderbuffer, texture, image)
+                                        : Status::invalid_parameter;
+    if (held == Status::ok) {
         if (errcode_ret != nullptr) *errcode_ret = CL_SUCCESS;
         return over;
     }
     if (over != nullptr) static_cast<void>(::clReleaseMemObject(over));
     textures_.destroy(texture, image);
-    if (errcode_ret != nullptr && over != nullptr) *errcode_ret = CL_OUT_OF_RESOURCES;
+    if (errcode_ret != nullptr && over != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
     return nullptr;
 }
 

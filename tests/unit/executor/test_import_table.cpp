@@ -4,12 +4,14 @@
 #include "executor/source_memory.hpp"
 #include "harness/executor/imported_blob_probe.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 
 #include <cstdint>
 
 using av::ExportedMemory;
 using av::ImportedBlob;
 using av::ImportTable;
+using av::MockPlatform;
 using av::SourceMemory;
 using av::Status;
 
@@ -28,7 +30,8 @@ public:
 
 TEST(import_table, holds_memory_under_the_id_the_device_chose)
 { Memory      held;
-  ImportTable table;
+  MockPlatform platform;
+  ImportTable  table(platform);
   ImportedBlob *taken = nullptr;
   CHECK_STATUS(table.take(9u, held.memory, taken), Status::ok);
   CHECK(taken != nullptr);
@@ -43,7 +46,8 @@ TEST(import_table, holds_memory_under_the_id_the_device_chose)
 TEST(import_table, an_id_already_imported_is_a_conflict)
 { Memory      first;
   Memory      second;
-  ImportTable table;
+  MockPlatform platform;
+  ImportTable  table(platform);
   ImportedBlob *taken = nullptr;
   CHECK_STATUS(table.take(9u, first.memory, taken), Status::ok);
   ImportedBlob *again = taken;
@@ -55,78 +59,95 @@ TEST(import_table, an_id_already_imported_is_a_conflict)
   CHECK(table.invariants_hold()); }
 
 /* Release is idempotent: the device may release an id whose import failed. */
-TEST(import_table, dropping_one_it_never_had_is_nothing)
-{ ImportTable table;
-  CHECK(table.drop(9u) == nullptr);
+TEST(import_table, forgetting_one_it_never_had_is_nothing)
+{ MockPlatform platform;
+  ImportTable  table(platform);
+  CHECK(table.forget(9u) == nullptr);
   CHECK_EQ(table.count(), 0u);
   CHECK(table.invariants_hold()); }
 
-TEST(import_table, a_dropped_slot_comes_back)
-{ Memory      held;
-  ImportTable table;
+TEST(import_table, a_forgotten_import_gives_its_memory_back_and_its_id_comes_back)
+{ Memory       held;
+  MockPlatform platform;
+  ImportTable  table(platform);
   ImportedBlob *taken = nullptr;
   CHECK_STATUS(table.take(9u, held.memory, taken), Status::ok);
-  ImportedBlob *const dropped = table.drop(9u);
-  CHECK(dropped == taken);
-  /* The caller gives it back to the host API and then to the table. */
-  CHECK(dropped->give_back() == &held.memory);
+  CHECK(table.forget(9u) == &held.memory);
   CHECK_EQ(table.count(), 0u);
   CHECK(table.find(9u) == nullptr);
+  CHECK(table.forget(9u) == nullptr);
   CHECK(table.invariants_hold());
   CHECK_STATUS(table.take(9u, held.memory, taken), Status::ok);
-  CHECK(taken == dropped);
+  CHECK(table.find(9u) == taken);
   CHECK(table.invariants_hold()); }
 
-/* Between drop and give_back the slot is still the import's: a table whose
- * count and slots disagree is one mid-release, which its invariant says. */
-TEST(import_table_invariants, a_slot_dropped_and_not_given_back_breaks_them)
-{ Memory      held;
-  ImportTable table;
+/* An import the table holds under one id that names another is one whose
+ * release would give back the wrong memory, which its invariant says. */
+TEST(import_table_invariants, a_blob_held_under_an_id_it_does_not_hold_breaks_them)
+{ Memory       held;
+  MockPlatform platform;
+  ImportTable  table(platform);
   ImportedBlob *taken = nullptr;
   CHECK_STATUS(table.take(9u, held.memory, taken), Status::ok);
-  CHECK(table.drop(9u) == taken);
+  av::ImportedBlobProbe(*taken).set_id(10u);
   CHECK(!table.invariants_hold());
-  static_cast<void>(taken->give_back());
+  av::ImportedBlobProbe(*taken).set_id(9u);
   CHECK(table.invariants_hold()); }
 
-/* The table answers from its slots, so one slot that breaks its own breaks
- * the table: a free slot still naming an import. */
-TEST(import_table_invariants, a_slot_that_breaks_its_own_breaks_them)
-{ Memory      held;
-  ImportTable table;
+/* Well past the 4096 a context once held, every import is found as itself
+ * where it was made; a table that cannot grow refuses the next and changes
+ * nothing. */
+TEST(import_table, holds_imports_past_any_old_bound_and_refuses_only_when_it_cannot_grow)
+{ Memory       held;
+  MockPlatform platform;
+  ImportTable  table(platform);
   ImportedBlob *taken = nullptr;
-  CHECK_STATUS(table.take(9u, held.memory, taken), Status::ok);
-  CHECK(table.drop(9u) == taken);
-  static_cast<void>(taken->give_back());
-  CHECK(table.invariants_hold());
-  av::ImportedBlobProbe(*taken).set_id(9u);
-  CHECK(!table.invariants_hold()); }
-
-/* A guest that imports more than a context may hold is refused, not served. */
-TEST(import_table, a_table_that_is_full_refuses_the_next)
-{ Memory      held;
-  ImportTable table;
-  ImportedBlob *taken = nullptr;
-  for (std::uint32_t i = 0u; i < ImportTable::max_imports; i++)
+  ImportedBlob *first = nullptr;
+  constexpr std::uint32_t many = 6000u;
+  for (std::uint32_t i = 0u; i < many; i++) {
       CHECK_STATUS(table.take(i + 1u, held.memory, taken), Status::ok);
-  CHECK_EQ(table.count(), ImportTable::max_imports);
-  CHECK_STATUS(table.take(0xFFFFu, held.memory, taken), Status::no_space);
+      if (i == 0u) first = taken;
+  }
+  CHECK_EQ(table.count(), many);
+  CHECK(table.find(1u) == first);
+  for (std::uint32_t i = 0u; i < many; i++) CHECK(table.find(i + 1u)->holds(i + 1u));
+  CHECK(table.invariants_hold());
+  platform.fail_allocation_at(1u);
+  std::uint64_t next = many + 1u;
+  Status        refused = Status::ok;
+  while ((refused = table.take(next, held.memory, taken)) == Status::ok) next++;
+  CHECK_STATUS(refused, Status::no_memory);
   CHECK(taken == nullptr);
-  CHECK(table.find(0xFFFFu) == nullptr);
+  CHECK(table.find(next) == nullptr);
+  CHECK(table.invariants_hold());
+  for (ImportedBlob *blob = table.any(); blob != nullptr; blob = table.any()) CHECK(table.forget(blob->id()) != nullptr);
+  CHECK_EQ(table.count(), 0u); }
+
+/* An object pool that cannot make the blob refuses too, with no id left
+ * behind. */
+TEST(import_table, a_blob_that_cannot_be_made_leaves_no_id)
+{ Memory       held;
+  MockPlatform platform;
+  ImportTable  table(platform);
+  ImportedBlob *taken = nullptr;
+  platform.fail_allocation_at(3u);
+  CHECK_STATUS(table.take(9u, held.memory, taken), Status::no_memory);
+  CHECK(taken == nullptr);
+  CHECK(table.find(9u) == nullptr);
+  CHECK_EQ(table.count(), 0u);
   CHECK(table.invariants_hold()); }
 
 /* A session being destroyed releases what the guest never did. */
 TEST(import_table, offers_every_import_still_held_so_none_is_left_behind)
-{ Memory      held;
-  ImportTable table;
+{ Memory       held;
+  MockPlatform platform;
+  ImportTable  table(platform);
   ImportedBlob *taken = nullptr;
   CHECK(table.any() == nullptr);
   for (std::uint32_t i = 0u; i < 4u; i++) CHECK_STATUS(table.take(i + 1u, held.memory, taken), Status::ok);
-
   std::uint32_t released = 0u;
   for (ImportedBlob *blob = table.any(); blob != nullptr; blob = table.any()) {
-      CHECK(table.drop(blob->id()) == blob);
-      static_cast<void>(blob->give_back());
+      CHECK(table.forget(blob->id()) == &held.memory);
       released++;
   }
   CHECK_EQ(released, 4u);

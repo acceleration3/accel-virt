@@ -442,6 +442,9 @@ public:
 // The handles the reply is about to carry were made through `parent`,
 // and end when it does.
 void handles_made_through(uint64_t parent) noexcept;
+// Whether `handles` more can be remembered, asked before the driver
+// makes any: false refuses the command as out of host memory.
+bool handles_room(uint64_t handles) noexcept;
 // `handle` was destroyed or freed, and with it what was made through it.
 void handle_ended(uint64_t handle) noexcept;
 // What was made through `handle` was freed, and `handle` was not.

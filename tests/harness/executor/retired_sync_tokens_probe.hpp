@@ -12,7 +12,6 @@ namespace av {
 struct RetiredSyncTokensProbe {
     explicit RetiredSyncTokensProbe(RetiredSyncTokens &target);
 
-    void set_count(uint32_t count);
     void set_run(uint32_t index, uint64_t first, uint64_t last);
 
     RetiredSyncTokens &retired;

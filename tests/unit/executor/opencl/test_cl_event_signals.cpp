@@ -16,6 +16,7 @@
 #include "executor/opencl/cl_event_registration.hpp"
 #include "executor/opencl/cl_event_signals.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 
 #include <cstdint>
 
@@ -43,10 +44,9 @@ struct ClEventRegistrationProbe {
 
 struct ClEventSignalsProbe {
     static ClEventRegistration &slot(ClEventSignals &signals, std::uint32_t index)
-    { return signals.slots_[index]; }
+    { return *signals.slots_.at(index); }
+    static std::uint32_t made(const ClEventSignals &signals) { return signals.slots_.slots(); }
     static void miscount(ClEventSignals &signals) { signals.taken_ += 1u; }
-    static void count_past_the_table(ClEventSignals &signals)
-    { signals.taken_ = ClEventSignals::max_registrations + 1u; }
     static void an_epoch_of_nothing(ClEventSignals &signals) { signals.generation_ = 0u; }
     static std::uint64_t epoch_of(const ClEventSignals &signals) { return signals.generation_; }
 };
@@ -89,10 +89,14 @@ void forget_wakes()
 int device = 0;
 int another_device = 0;
 
+/* Well past the 128 registrations a context could once have waiting. */
+constexpr std::uint32_t many = 500u;
+
 }  // namespace
 
 TEST(cl_event_signals, a_new_collection_signals_nothing_and_is_bound_to_nothing)
-{ ClEventSignals signals;
+{ av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   CHECK(!signals.bound());
   CHECK_EQ(signals.outstanding(), 0u);
   CHECK_EQ(signals.signalled(), 0u);
@@ -101,7 +105,8 @@ TEST(cl_event_signals, a_new_collection_signals_nothing_and_is_bound_to_nothing)
 
 TEST(cl_event_signals, a_registration_that_completes_wakes_the_device_once)
 { forget_wakes();
-  ClEventSignals signals;
+  av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   signals.bind(&wake, &device);
   CHECK(signals.bound());
   ClEventRegistration *const registration = signals.take();
@@ -115,35 +120,38 @@ TEST(cl_event_signals, a_registration_that_completes_wakes_the_device_once)
   CHECK_EQ(signals.stale(), 0u);
   CHECK(signals.invariants_hold()); }
 
-/* A registration's host callback comes once, so its slot is free again
- * after it: a session that held every slot it ever answered refused every
- * registration past its 128th, for the rest of its life. */
+/* A registration's host callback comes once, so it is free again after it:
+ * a session takes as many as it has waiting at once, and reuses them. */
 TEST(cl_event_signals, a_completed_registration_gives_its_slot_back)
 { forget_wakes();
-  ClEventSignals signals;
+  av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   signals.bind(&wake, &device);
-  ClEventRegistration *held[ClEventSignals::max_registrations] = {};
+  ClEventRegistration *held[many] = {};
   for (ClEventRegistration *&registration : held) registration = signals.take();
-  CHECK(held[ClEventSignals::max_registrations - 1u] != nullptr);
-  CHECK(signals.take() == nullptr);
+  CHECK(held[many - 1u] != nullptr);
+  CHECK_EQ(signals.outstanding(), many);
+  CHECK(signals.invariants_hold());
   for (ClEventRegistration *registration : held) registration->completed();
   CHECK_EQ(signals.outstanding(), 0u);
-  CHECK_EQ(signals.signalled(), ClEventSignals::max_registrations);
+  CHECK_EQ(signals.signalled(), many);
   CHECK(!held[0]->armed());
   CHECK(signals.invariants_hold());
   /* A second callback for the same one is stale, and frees nothing twice. */
   held[0]->completed();
   CHECK_EQ(signals.stale(), 1u);
   CHECK_EQ(signals.outstanding(), 0u);
-  /* And every slot can be taken again. */
+  /* And every one can be taken again, none made anew. */
   for (ClEventRegistration *&registration : held) registration = signals.take();
-  CHECK(held[ClEventSignals::max_registrations - 1u] != nullptr);
-  CHECK_EQ(signals.outstanding(), ClEventSignals::max_registrations);
+  CHECK(held[many - 1u] != nullptr);
+  CHECK_EQ(signals.outstanding(), many);
+  CHECK_EQ(ClEventSignalsProbe::made(signals), many);
   CHECK(signals.invariants_hold()); }
 
 TEST(cl_event_signals, the_device_bound_last_is_the_one_woken)
 { forget_wakes();
-  ClEventSignals signals;
+  av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   signals.bind(&wake, &device);
   ClEventRegistration *const registration = signals.take();
   signals.bind(&wake_other, &another_device);
@@ -155,7 +163,8 @@ TEST(cl_event_signals, the_device_bound_last_is_the_one_woken)
 
 TEST(cl_event_signals, a_callback_after_shutting_down_does_nothing_at_all)
 { forget_wakes();
-  ClEventSignals signals;
+  av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   signals.bind(&wake, &device);
   ClEventRegistration *const registration = signals.take();
   /* The session ends while the host still holds this. */
@@ -170,7 +179,8 @@ TEST(cl_event_signals, a_callback_after_shutting_down_does_nothing_at_all)
 
 TEST(cl_event_signals, a_callback_from_a_session_before_this_one_does_nothing)
 { forget_wakes();
-  ClEventSignals signals;
+  av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   signals.bind(&wake, &device);
   ClEventRegistration *const older = signals.take();
   signals.shut_down();
@@ -193,7 +203,8 @@ TEST(cl_event_signals, a_callback_from_a_session_before_this_one_does_nothing)
 
 TEST(cl_event_signals, a_registration_given_back_no_longer_signals)
 { forget_wakes();
-  ClEventSignals signals;
+  av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   signals.bind(&wake, &device);
   ClEventRegistration *const registration = signals.take();
   /* The host refused the registration, so the slot goes back. */
@@ -205,7 +216,8 @@ TEST(cl_event_signals, a_registration_given_back_no_longer_signals)
   CHECK(signals.invariants_hold()); }
 
 TEST(cl_event_signals, giving_back_what_was_never_taken_changes_nothing)
-{ ClEventSignals signals;
+{ av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   signals.bind(&wake, &device);
   ClEventRegistration *const registration = signals.take();
   signals.give_back(registration);
@@ -216,7 +228,8 @@ TEST(cl_event_signals, giving_back_what_was_never_taken_changes_nothing)
 
 TEST(cl_event_signals, a_completion_with_no_device_bound_wakes_nobody)
 { forget_wakes();
-  ClEventSignals signals;
+  av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   /* Version 4 devices bind nothing. A registration is still refused before it
    * is made - the backend asks `bound` first - but a collection that is asked
    * anyway must not call through a null. */
@@ -227,45 +240,45 @@ TEST(cl_event_signals, a_completion_with_no_device_bound_wakes_nobody)
   CHECK_EQ(signals.signalled(), 0u);
   CHECK(signals.invariants_hold()); }
 
-TEST(cl_event_signals, a_collection_that_is_full_refuses_and_stays_usable)
+TEST(cl_event_signals, a_collection_that_cannot_grow_refuses_and_stays_usable)
 { forget_wakes();
-  ClEventSignals signals;
+  av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   signals.bind(&wake, &device);
-  ClEventRegistration *first = nullptr;
-  for (uint32_t index = 0u; index < ClEventSignals::max_registrations; ++index) {
-      ClEventRegistration *const taken = signals.take();
-      CHECK(taken != nullptr);
-      if (index == 0u) first = taken;
-  }
-  CHECK_EQ(signals.outstanding(), ClEventSignals::max_registrations);
-  CHECK(signals.take() == nullptr);
+  ClEventRegistration *first = signals.take();
+  CHECK(first != nullptr);
+  platform.fail_allocation_at(1u);
+  std::uint32_t taken = 1u;
+  while (signals.take() != nullptr) taken++;
+  CHECK_EQ(signals.outstanding(), taken);
   CHECK(signals.invariants_hold());
-  /* One completing frees nothing - the host may call a callback once and the
-   * registration stays until the session ends - but one given back does. */
+  /* One given back is taken again, and what was taken stays where it was. */
   signals.give_back(first);
-  CHECK(signals.take() != nullptr);
+  CHECK(signals.take() == first);
+  CHECK(first->armed());
   CHECK(signals.invariants_hold()); }
 
 TEST(cl_event_signals, every_registration_of_a_full_collection_signals)
 { forget_wakes();
-  ClEventSignals signals;
+  av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   signals.bind(&wake, &device);
-  ClEventRegistration *taken[ClEventSignals::max_registrations] = {};
-  for (uint32_t index = 0u; index < ClEventSignals::max_registrations; ++index) {
+  ClEventRegistration *taken[many] = {};
+  for (uint32_t index = 0u; index < many; ++index) {
       taken[index] = signals.take();
   }
-  for (uint32_t index = 0u; index < ClEventSignals::max_registrations; ++index) {
+  for (uint32_t index = 0u; index < many; ++index) {
       taken[index]->completed();
   }
-  CHECK_EQ(woken.count, ClEventSignals::max_registrations);
-  CHECK_EQ(signals.signalled(), ClEventSignals::max_registrations);
+  CHECK_EQ(woken.count, many);
+  CHECK_EQ(signals.signalled(), many);
   /* And every one of them goes stale together. */
   signals.shut_down();
-  for (uint32_t index = 0u; index < ClEventSignals::max_registrations; ++index) {
+  for (uint32_t index = 0u; index < many; ++index) {
       taken[index]->completed();
   }
-  CHECK_EQ(woken.count, ClEventSignals::max_registrations);
-  CHECK_EQ(signals.stale(), ClEventSignals::max_registrations);
+  CHECK_EQ(woken.count, many);
+  CHECK_EQ(signals.stale(), many);
   CHECK(signals.invariants_hold()); }
 
 TEST(cl_event_registration, one_that_belongs_to_nothing_signals_nothing)
@@ -278,7 +291,8 @@ TEST(cl_event_registration, one_that_belongs_to_nothing_signals_nothing)
   CHECK(registration.invariants_hold()); }
 
 TEST(cl_event_registration, arming_carries_the_generation_it_was_armed_at)
-{ ClEventSignals signals;
+{ av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   ClEventRegistration registration;
   registration.bind(signals);
   registration.arm(7u);
@@ -295,7 +309,8 @@ TEST(cl_event_registration, arming_carries_the_generation_it_was_armed_at)
  * would be believing a callback from no session at all. */
 TEST(cl_event_signals, a_callback_naming_no_epoch_at_all_does_nothing)
 { forget_wakes();
-  ClEventSignals signals;
+  av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   signals.bind(&wake, &device);
   signals.signal_from_host(0u);
   CHECK_EQ(signals.stale(), 1u);
@@ -305,7 +320,8 @@ TEST(cl_event_signals, a_callback_naming_no_epoch_at_all_does_nothing)
 
 /* The invariant catches the states the collection is never in. */
 TEST(cl_event_signals, the_invariant_catches_a_count_that_disagrees_with_what_is_armed)
-{ ClEventSignals signals;
+{ av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   signals.bind(&wake, &device);
   ClEventRegistration *const taken = signals.take();
   CHECK(taken != nullptr);
@@ -313,12 +329,11 @@ TEST(cl_event_signals, the_invariant_catches_a_count_that_disagrees_with_what_is
   /* One more counted than armed: a slot that can never be handed out. */
   ClEventSignalsProbe::miscount(signals);
   CHECK(!signals.invariants_hold());
-  ClEventSignalsProbe::count_past_the_table(signals);
-  CHECK(!signals.invariants_hold());
   signals.shut_down(); }
 
 TEST(cl_event_signals, the_invariant_catches_a_registration_armed_for_another_session)
-{ ClEventSignals signals;
+{ av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   signals.bind(&wake, &device);
   ClEventRegistration *const taken = signals.take();
   CHECK(taken != nullptr);
@@ -330,7 +345,8 @@ TEST(cl_event_signals, the_invariant_catches_a_registration_armed_for_another_se
   signals.shut_down(); }
 
 TEST(cl_event_signals, the_invariant_catches_a_slot_disarmed_with_its_epoch_left_behind)
-{ ClEventSignals signals;
+{ av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   signals.bind(&wake, &device);
   ClEventRegistration *const taken = signals.take();
   CHECK(taken != nullptr);
@@ -341,7 +357,8 @@ TEST(cl_event_signals, the_invariant_catches_a_slot_disarmed_with_its_epoch_left
 /* A collection whose epoch is nothing has been shut down, so nothing it holds
  * can be armed for it and no callback may be believed. */
 TEST(cl_event_signals, the_invariant_catches_an_epoch_of_nothing)
-{ ClEventSignals signals;
+{ av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   CHECK(signals.invariants_hold());
   ClEventSignalsProbe::an_epoch_of_nothing(signals);
   CHECK(!signals.invariants_hold()); }
@@ -359,7 +376,8 @@ TEST(cl_event_signals, a_registrations_invariant_catches_an_owner_and_an_epoch_d
   ClEventRegistrationProbe::armed_with_no_owner(armed);
   CHECK(!armed.invariants_hold());
 
-  ClEventSignals             signals;
+  av::MockPlatform           platform;
+  ClEventSignals             signals(platform);
   ClEventRegistration *const taken = signals.take();
   CHECK(taken != nullptr);
   ClEventRegistrationProbe::an_epoch_it_is_not_armed_for(*taken);
@@ -374,7 +392,8 @@ TEST(cl_event_signals, a_registrations_invariant_catches_an_owner_and_an_epoch_d
  * a device on behalf of a session that no longer exists. */
 TEST(cl_event_signals, a_callback_naming_another_sessions_epoch_wakes_nobody)
 { forget_wakes();
-  ClEventSignals signals;
+  av::MockPlatform platform;
+  ClEventSignals   signals(platform);
   signals.bind(&wake, &device);
   ClEventRegistration *const taken = signals.take();
   CHECK(taken != nullptr);

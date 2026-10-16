@@ -13,13 +13,16 @@
  * unregister one, so a registration outlives `shut_down`, the executor's
  * destroy, and the context itself. That is what the generation is for: every
  * registration carries the value the session had when it was made, and a
- * callback whose generation is stale does nothing at all. The storage it
- * writes to is a member of the backend, which lives in ExecutorRoot's array
- * for as long as the library is loaded, so the pointer the host holds stays
- * valid even when what it named is finished with. */
+ * callback whose generation is stale does nothing at all. The registrations
+ * live in chunks that never move and are given back only when the backend
+ * is, which lives in ExecutorRoot's array for as long as the library is
+ * loaded, so the pointer the host holds stays valid even when what it named
+ * is finished with. A registration is reused once its callback came; there
+ * are as many as a context ever had waiting at once. */
 #ifndef AV_CL_EVENT_SIGNALS_HPP
 #define AV_CL_EVENT_SIGNALS_HPP
 
+#include "core/support/keyed_slots.hpp"
 #include "executor/opencl/cl_event_registration.hpp"
 #include "executor/wake_signal.hpp"
 
@@ -31,11 +34,7 @@ struct ClEventSignalsProbe;
 
 class ClEventSignals {
 public:
-    /* Events one context may be waiting on at once. A guest that wants more
-     * is told so at the registration, which is a call it can see fail. */
-    static constexpr uint32_t max_registrations = 128u;
-
-    ClEventSignals();
+    explicit ClEventSignals(BlockSource &blocks);
     ClEventSignals(const ClEventSignals &) = delete;
     ClEventSignals &operator=(const ClEventSignals &) = delete;
 
@@ -45,9 +44,10 @@ public:
     void bind(void (*signal)(void *context), void *context);
     bool bound() const;
 
-    /* Takes a registration, or null when full. It is what the host callback
-     * is given, and it carries the generation this session is at. Worker
-     * only. */
+    /* Takes a registration, or null when none is free and no more can be
+     * made: the guest is told it is out of host memory. It is what the host
+     * callback is given, and it carries the generation this session is at.
+     * Worker only. */
     ClEventRegistration *take();
     /* Gives one back: the registration could not be made after all. Worker
      * only, and only for what `take` just answered. */
@@ -80,7 +80,9 @@ public:
 private:
     friend struct ClEventSignalsProbe;
 
-    ClEventRegistration slots_[max_registrations];
+    KeyedSlots<uint32_t, ClEventRegistration> slots_;
+    /* Where the next take looks first: past the one it took last. */
+    uint32_t cursor_;
     uint64_t generation_;
     uint32_t taken_;
     /* Written by the worker, read by both; the counters are for reporting and

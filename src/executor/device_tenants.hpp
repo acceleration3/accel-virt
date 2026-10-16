@@ -16,6 +16,7 @@
 #ifndef AV_DEVICE_TENANTS_HPP
 #define AV_DEVICE_TENANTS_HPP
 
+#include "core/support/growable_array.hpp"
 #include "core/support/status.hpp"
 
 #include <pthread.h>
@@ -28,17 +29,14 @@ struct DeviceTenantsProbe;
 
 class DeviceTenants {
 public:
-    /* ExecutorRoot::sessions: no device has more sessions than there are. */
-    static constexpr uint32_t capacity = 64u;
-
-    DeviceTenants();
+    explicit DeviceTenants(BlockSource &blocks);
     ~DeviceTenants();
     DeviceTenants(const DeviceTenants &) = delete;
     DeviceTenants &operator=(const DeviceTenants &) = delete;
 
     /* One more session on the device, woken through `wake` if it is lost:
      * invalid_state once it is, conflict for a session already on it,
-     * no_space past capacity. */
+     * no_memory when the list cannot grow. */
     [[nodiscard]] Status join(WakeSignal &wake);
     /* The session is gone from the device; nothing for one not on it. */
     void                 leave(WakeSignal &wake);
@@ -58,9 +56,8 @@ public:
 private:
     mutable pthread_mutex_t mutex_;
     pthread_cond_t          left_;
-    WakeSignal             *tenants_[capacity];
-    uint32_t                count_;
-    bool                    lost_;
+    GrowableArray<WakeSignal *> tenants_;
+    bool                        lost_;
 
     friend struct DeviceTenantsProbe;
 };

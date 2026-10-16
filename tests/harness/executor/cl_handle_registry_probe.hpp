@@ -12,9 +12,9 @@ namespace av {
 struct ClHandleRegistryProbe {
     explicit ClHandleRegistryProbe(ClHandleRegistry &target);
 
-    void set_count(uint32_t count);
-    void set_object(uint32_t index, uint64_t object);
-    void set_references(uint32_t index, uint32_t references);
+    void set_references(const void *object, uint32_t references);
+    /* The null object held, as no remember would hold it. */
+    void hold_null();
 
     ClHandleRegistry &registry;
 };
