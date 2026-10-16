@@ -254,6 +254,20 @@ core class under test.
 - **Deterministic time.** A test controls the clock, so TDR timeouts are exact
   and not flaky.
 
+### Storage that grows
+
+The containers behind every count an application controls
+(docs/architecture.md, "Counts with no fixed bound") run over `MockPlatform`
+like any core class: `test_growable_array`, `test_keyed_slots` and
+`test_claimed_rows` fail each allocation site in turn and check nothing
+changed, take keys of every value (0, all-ones, strided and colliding ones a
+hostile guest would pick), erase in the middle of a probe and find every key
+after it, churn a hundred thousand keys through one slot without the index
+growing, and check an entry never moves while it lives. `test_claimed_rows`
+also appends from four threads while a fifth reads and finds every row once,
+and loses the race for a chunk on purpose. `fuzz_keyed_slots` replays inserts,
+takes and erases - by key and by a hostile slot - against a plain model.
+
 ### The mock host
 
 The device core's counterpart is `Host` (`src/device/host/host.hpp`), with
@@ -466,7 +480,8 @@ with a committed seed corpus in `tests/corpus/<target>/`.
 Targets, at minimum: the av command decoder, the submission descriptor, the
 capset payload, virtqueue descriptor chains, the virtio PCI capability walk,
 device configuration space, EDID input, VidPn structures arriving from
-`dxgkrnl`, and every DDI argument struct the driver dereferences.
+`dxgkrnl`, every DDI argument struct the driver dereferences, and the keyed
+storage every table looks a guest's ids up in (`fuzz_keyed_slots`).
 
 Two directions matter, and both are real:
 

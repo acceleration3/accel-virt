@@ -89,7 +89,7 @@ Portable and freestanding; `src/km` is its Windows kernel shim.
 |---|---|---|
 | `wire/` | - | `WireReader`, `WireWriter`, `WireArena`: the codecs everything below uses |
 | `client/` | guest driver -> device | the contract generated guest code is written against: `ClientTransport`, `ClientBlobArena`, `SyncCallScope`, the ICD hooks |
-| `context/` | guest <-> device | context setup, capset info, GPU identity, device UUID, protocol version, sub-API |
+| `context/` | guest <-> device | context setup, capset info, GPU identity, device UUID, protocol version, sub-API, and the most av devices a VM has (`most_av_devices`, which bounds the guest's adapters) |
 | `submission/` | guest <-> device | rings, batches, command and reply headers, fence pages, blob imports, shared-object requests |
 | `resources/` | guest <-> device | allocation descriptors, shared-object records, surface and texel layouts, guest page lists, host memory requests (`HostMemoryRequest`) and host blob ids (`HostBlobId`) |
 | `dma/` | miniport -> device | the commands in DMA buffers: present and paging |
@@ -106,7 +106,7 @@ Portable and freestanding; `src/km` is its Windows kernel shim.
 | Directory | Holds |
 |---|---|
 | `abi/` | `av_device.h` and `av_executor.h`, the C ABIs, and their C entry points |
-| `host/` | the `Host` contract, `TableHost` (QEMU's implementation), `EnvSetting`, `StdioLog` |
+| `host/` | the `Host` contract - also the `BlockSource` the device core's tables grow in - `TableHost` (QEMU's implementation), `EnvSetting`, `StdioLog` |
 | `module/` | the composition root: `VirtioGpuAv`, `DeviceModule`, `DeviceInstance` |
 | `gpu/` | binding to a host GPU, its identity, the capset the guest is offered |
 | `context/` | `DeviceContext`, the context table, its ring consumer, the local and remote context planes |
@@ -135,7 +135,7 @@ One `ContextSession` per guest context runs its API's commands on the host GPU.
 | (root) | `ExecutorRoot`, `ContextSession`, `SessionBackend`, `ExecutorDomains`, host GPUs and APIs; `DeviceTenants`, the sessions on one shared host device, woken when it is lost; host memory (docs/host-memory.md): each GPU's `HostMemorySource`, its allocations (`SourceMemory`), the `MemoryExporter` contract it allocates through and what that answers (`ExportedMemory`); blob imports (`ImportedBlob`, `ImportTable`), guest regions, the imports a session names besides its region (`ImportedMemories`); the GPU clock hold, `PollBudget`, `WakeSignal` |
 | `sharing/` | `HostShares`, every shared object of one GPU of every API by (domain, id), its `Share`s, their holders and index, and `SessionShares`, what one session reaches it through (docs/shared-surfaces.md §0) |
 | `vulkan/`, `opengl/`, `opencl/` | each API's backend and its tables |
-| `d3d/` | Direct3D 9, 11 and 12 sessions, DXBC, the present surfaces and frame pools |
+| `d3d/` | Direct3D 9, 11 and 12 sessions, DXBC, the present surfaces and frame pools; `WatchedBlocks`, the source a session's tables grow in, which tells a refusal for want of memory apart so the device is removed with `E_OUTOFMEMORY` |
 | `shim/` | the host runtimes the executor loads: each GPU's compositing context (`CompositorDevice`, docs/compositor.md) and the memory it allocates for the memory source (`CompositorMemory`), Vulkan memory imports, EGL/GL, OpenCL, DXVK and vkd3d-proton (`ExportableImages`, the Vulkan memory under shared Direct3D 11 textures), the heap (`HostHeap`); and `executor_ops.cpp`, the library's entry point |
 
 ## src/guest, src/icd, src/um - the guest's user mode
@@ -209,12 +209,20 @@ What stays fixed is a bound set by a specification, the hardware or the wire
 BAR 0 and so the 64 contexts a device runs, a field's width), and what the
 kernel driver must have in hand before DISPATCH, where it cannot allocate.
 
+A guest's Vulkan and OpenCL commands that hand back new handles ask their
+backend for room for all of them before the host driver is called
+(`handles_room`, `ServerDispatch::room_for`, written by `tools/codegen`), so a
+table that cannot grow answers the API's out-of-memory error with nothing made
+on the host.
+
 Host safety against a hostile guest is a byte budget, not a count per table.
 No accounting exists yet. Where it goes: every container a session grows
-allocates through that session's `HostHeap` (`ContextSession::heap_`), so a
-budget charged there - bytes handed out against a per-session or per-VM
-ceiling, a refusal past it answered as the API's out-of-memory error - bounds
-everything a guest can make the host hold for it, whatever the counts.
+allocates through a heap that session owns - `ContextSession`'s `HostHeap`,
+each Vulkan, OpenCL and OpenGL backend's own, and a Direct3D session's
+`WatchedBlocks` - and the device core's through its `Host`. A budget charged
+there - bytes handed out against a per-session or per-VM ceiling, a refusal
+past it answered as the API's out-of-memory error - bounds everything a guest
+can make the host hold for it, whatever the counts.
 
 ## Where new code goes
 
