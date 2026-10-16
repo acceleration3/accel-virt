@@ -1,4 +1,4 @@
-// computeparticles, computeshader, particlefire, raytracing, bloom, radialblur, offscreen
+// computeparticles, computeshader, particlefire, raytracing, bloom, radialblur, offscreen, shaderstream
 #include "framework.h"
 
 namespace samples {
@@ -1702,6 +1702,95 @@ private:
 
 }  // namespace
 
+// ---------------------------------------------------------------- shaderstream
+
+// Eight programs whose fragment shaders carry 300 KB of source each - past the
+// room one command is lent, so each crosses in pieces over several batches -
+// made one after another with a 16 KB uniform buffer uploaded between each
+// two, its data crossing in a blob lease. Each program paints one band of the
+// picture in its own buffer's colour, scaled by its own band's pattern. The
+// guest driver holds what it sends, and a lease used to be lent again once
+// the batch carrying a command's first piece had run, before the host read
+// it with the last; the host then drew a band from another band's buffer -
+// another's colour here - or built a program from another's source.
+class ShaderStream final : public Sample {
+public:
+    const char *name() const override { return "shaderstream"; }
+    bool init(Gpu &gpu) override
+    {
+        padding_ = static_cast<char *>(allocate(padding_bytes + 1));
+        for (uint32_t at = 0; at < padding_bytes; at++)
+            padding_[at] = at % 64 == 63 ? '\n' : (at % 64 < 3 ? (at % 64 == 2 ? ' ' : '/') : static_cast<char>('a' + at % 26));
+        for (uint32_t band = 0; band < bands; band++) {
+            char fragment[1024] = {};
+            band_source(band, fragment, sizeof fragment);
+            char label[32] = {};
+            copy_text(label, sizeof label, "shaderstream");
+            append_number(label, sizeof label, band, 0);
+            programs_[band] = gpu.program(label, {.common = padding_, .vertex = quad_vertex, .fragment = fragment});
+            float colour[colour_floats] = {};
+            colour[0] = 0.15f + 0.1f * band;
+            colour[1] = 0.9f - 0.1f * band;
+            colour[2] = 0.3f + 0.05f * (band % 3);
+            colour[3] = 1.0f;
+            for (uint32_t at = 4; at < colour_floats; at++) colour[at] = static_cast<float>(band * 1000 + at);
+            colours_[band] = gpu.buffer(colour, sizeof colour);
+        }
+        return !gpu.failed;
+    }
+    void render(Gpu &gpu, float) override
+    {
+        gpu.begin_frame(0.03f, 0.03f, 0.03f);
+        const float w = static_cast<float>(gpu.width), h = static_cast<float>(gpu.height);
+        for (uint32_t band = 0; band < bands; band++) {
+            gpu.viewport(0.0f, h * band / bands, w, h / bands);
+            glUseProgram(programs_[band]);
+            glBindBufferBase(GL_UNIFORM_BUFFER, 0, colours_[band]);
+            gpu.draw_fullscreen();
+        }
+    }
+    void release() override
+    {
+        for (GLuint &program : programs_) {
+            glDeleteProgram(program);
+            program = 0;
+        }
+        glDeleteBuffers(bands, colours_);
+        for (GLuint &colour : colours_) colour = 0;
+        release_memory(padding_);
+        padding_ = nullptr;
+    }
+
+private:
+    static constexpr uint32_t bands = 8;
+    static constexpr uint32_t padding_bytes = 300u * 1024u;
+    static constexpr uint32_t colour_floats = 4096;
+
+    // A band's shader: its buffer's colour, and a wave of its own band's
+    // frequencies; the buffer's last word, which only that band's upload
+    // wrote, picks the wave's phase.
+    static void band_source(uint32_t band, char *source, size_t capacity)
+    {
+        copy_text(source, capacity, "#define BAND ");
+        append_number(source, capacity, band, 0);
+        append_text(source, capacity, R"(
+layout(std140, binding = 0) uniform Colour { vec4 colour; vec4 rest[1023]; };
+in vec2 v_uv;
+layout(location = 0) out vec4 target;
+void main() {
+    float phase = rest[1022].w - float(BAND * 1000 + 4095);
+    float wave = 0.0;
+    for (int i = 1; i <= 12; i++) wave += sin(v_uv.x * float(i * (BAND + 2)) + phase) / float(i);
+    target = vec4(clamp(colour.rgb * (0.75 + 0.5 * wave), 0.0, 1.0), 1);
+}
+)");
+    }
+
+    GLuint programs_[bands] = {};
+    GLuint colours_[bands] = {};
+    char  *padding_ = nullptr;
+};
+
 void register_compute(Sample **all, uint32_t &made)
 {
     all[made++] = new ComputeParticles();
@@ -1711,6 +1800,7 @@ void register_compute(Sample **all, uint32_t &made)
     all[made++] = new Bloom();
     all[made++] = new RadialBlur();
     all[made++] = new Offscreen();
+    all[made++] = new ShaderStream();
 }
 
 }  // namespace samples

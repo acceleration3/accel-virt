@@ -1,4 +1,4 @@
-// buffertransfer, imagetransfer, mapbuffer, kernellaunch: what it costs to move
+// buffertransfer, imagetransfer, mapbuffer, kernellaunch, programstream: what it costs to move
 // bytes and commands between the application and the device - the part of a
 // paravirtual driver a kernel's own speed says nothing about.
 #include "framework.h"
@@ -462,6 +462,100 @@ private:
 
 }  // namespace
 
+// ---------------------------------------------------------------- programstream
+
+// Six programs of 300 KB of source each - past the room one command is lent,
+// so each crosses in pieces over several batches - built one after another
+// with a buffer made from the application's data between each two, as an
+// application loading kernels while it streams data in. Each program's kernel
+// writes its own mark into its own buffer. The guest driver holds what it
+// sends, and the transport once took a command's arrays to be read by the
+// batch carrying its first piece; a command of its own sent between pieces,
+// or an array lent again too early, would build one program from another's
+// source, and its marks would come back in the wrong buffer.
+class ProgramStream final : public Sample {
+public:
+    const char *name() const override { return "programstream"; }
+    Work        work() const override { return {static_cast<double>(programs), "programs"}; }
+    bool        init(Gpu &gpu) override
+    {
+        source_ = static_cast<char *>(allocate(padding_bytes + 512));
+        for (uint32_t program = 0; program < programs; program++) {
+            program_source(program);
+            programs_[program] = gpu.program(source_);
+            kernels_[program] = gpu.kernel(programs_[program], "mark");
+            uint32_t *data = static_cast<uint32_t *>(allocate(elements * sizeof(uint32_t)));
+            for (uint32_t i = 0; i < elements; i++) data[i] = pattern(i, program);
+            data_[program] = gpu.buffer(elements * sizeof(uint32_t), data);
+            marks_[program] = gpu.buffer(elements * sizeof(uint32_t));
+            release_memory(data);
+        }
+        return !gpu.failed;
+    }
+    void step(Gpu &gpu) override
+    {
+        for (uint32_t program = 0; program < programs; program++) {
+            gpu.arg(kernels_[program], 0, marks_[program]);
+            gpu.arg(kernels_[program], 1, data_[program]);
+            gpu.run(kernels_[program], elements);
+        }
+    }
+    const char *capture(Gpu &gpu, Capture &capture) override
+    {
+        step(gpu);
+        uint32_t *digest = static_cast<uint32_t *>(allocate(programs * elements * sizeof(uint32_t)));
+        bool      right = !gpu.failed;
+        for (uint32_t program = 0; program < programs; program++) {
+            uint32_t *read = digest + program * elements;
+            gpu.read(marks_[program], read, elements * sizeof(uint32_t));
+            for (uint32_t i = 0; i < elements && right; i++)
+                right = read[i] == (mark_of(program) ^ pattern(i, program));
+        }
+        right = right && !gpu.failed;
+        capture.buffer(Capture::u32, digest, programs * elements);
+        release_memory(digest);
+        return right ? "ok" : "mismatch";
+    }
+    void release() override
+    {
+        for (uint32_t program = 0; program < programs; program++) {
+            samples::release(kernels_[program]);
+            samples::release(programs_[program]);
+            samples::release(data_[program]);
+            samples::release(marks_[program]);
+        }
+        release_memory(source_);
+        source_ = nullptr;
+    }
+
+private:
+    static constexpr uint32_t programs = 6;
+    static constexpr uint32_t elements = 4096;
+    static constexpr uint32_t padding_bytes = 300u * 1024u;
+
+    static uint32_t mark_of(uint32_t program) { return 0x51000000u + program * 0x10101u; }
+
+    // The program's mark, its kernel, and 300 KB of comment after them.
+    void program_source(uint32_t program)
+    {
+        copy_text(source_, 512, "#define MARK ");
+        append_number(source_, 512, mark_of(program), 0);
+        append_text(source_, 512, "u\n__kernel void mark(__global uint *out, __global const uint *in) {\n"
+                                   "    out[get_global_id(0)] = MARK ^ in[get_global_id(0)];\n}\n");
+        uint32_t at = 0;
+        while (source_[at] != 0) at++;
+        for (uint32_t i = 0; i < padding_bytes; i++)
+            source_[at + i] = i % 64 == 63 ? '\n' : (i % 64 < 2 ? '/' : static_cast<char>('a' + (i + program) % 26));
+        source_[at + padding_bytes] = 0;
+    }
+
+    char     *source_ = nullptr;
+    cl_program programs_[programs] = {};
+    cl_kernel  kernels_[programs] = {};
+    cl_mem     data_[programs] = {};
+    cl_mem     marks_[programs] = {};
+};
+
 void register_transfer(Sample **all, uint32_t &made)
 {
     all[made++] = new BufferTransfer();
@@ -471,6 +565,7 @@ void register_transfer(Sample **all, uint32_t &made)
     all[made++] = new HeldMaps();
     all[made++] = new BufferRects();
     all[made++] = new EventCallback();
+    all[made++] = new ProgramStream();
 }
 
 }  // namespace samples
