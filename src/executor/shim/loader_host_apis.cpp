@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "device/abi/av_executor.h"
+#include "executor/shim/physical_device_identity.hpp"
 
 #include <stdio.h>
 #include <string.h>
@@ -65,18 +66,9 @@ void LoaderHostApis::enumerate()
     if (found > HostGpuSet::max_gpus) found = HostGpuSet::max_gpus;
 
     for (uint32_t i = 0u; i < found; i++) {
-        VkPhysicalDeviceDrmPropertiesEXT node = {};
-        node.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT;
-        VkPhysicalDeviceIDProperties identity = {};
-        identity.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
-        identity.pNext = &node;
-        VkPhysicalDeviceProperties2 device = {};
-        device.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-        device.pNext = &identity;
-        vkGetPhysicalDeviceProperties2(devices[i], &device);
-
-        uuids_[i] = DeviceUuid(identity.deviceUUID);
-        render_minors_[i] = node.hasRender ? static_cast<int32_t>(node.renderMinor) : -1;
+        const PhysicalDeviceIdentity identity(handle, devices[i]);
+        uuids_[i] = identity.uuid();
+        render_minors_[i] = identity.render_minor();
         sub_apis_[i] = AV_EXECUTOR_SUB_API_VULKAN;
         if (opencl_devices_[i].find(uuids_[i].raw())) sub_apis_[i] |= AV_EXECUTOR_SUB_API_OPENCL;
         /* Every GPU's one source of the memory a guest maps

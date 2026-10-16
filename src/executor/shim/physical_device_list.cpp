@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "executor/host_gpu.hpp"
+#include "executor/shim/physical_device_identity.hpp"
 
 namespace av {
 
@@ -18,15 +19,8 @@ VkPhysicalDevice PhysicalDeviceList::find(VkInstance instance, const HostGpu &gp
      * this host does not have. */
     if (vkEnumeratePhysicalDevices(instance, &found, listed_) < 0) return VK_NULL_HANDLE;
     if (found > max_devices) found = max_devices;
-    for (uint32_t i = 0u; i < found; i++) {
-        VkPhysicalDeviceIDProperties identity = {};
-        identity.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
-        VkPhysicalDeviceProperties2 properties = {};
-        properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-        properties.pNext = &identity;
-        vkGetPhysicalDeviceProperties2(listed_[i], &properties);
-        if (gpu.matches(identity.deviceUUID)) return listed_[i];
-    }
+    for (uint32_t i = 0u; i < found; i++)
+        if (gpu.matches(PhysicalDeviceIdentity(instance, listed_[i]).uuid().raw())) return listed_[i];
     return VK_NULL_HANDLE;
 }
 
