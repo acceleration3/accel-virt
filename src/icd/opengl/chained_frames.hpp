@@ -29,7 +29,7 @@ class ChainedFrames {
 public:
     static constexpr uint32_t slot_count = icd::WindowChains::max_slots;
     enum : uint32_t {
-        gl_texture_2d = 0x0DE1u, gl_rgba8 = 0x8058u, gl_srgb8_alpha8 = 0x8C43u,
+        gl_texture_2d = 0x0DE1u,
         /* GL_EXT_memory_object's GL_TEXTURE_TILING_EXT and GL_LINEAR_TILING_EXT. */
         gl_texture_tiling = 0x9580u, gl_linear_tiling = 0x9585u,
     };

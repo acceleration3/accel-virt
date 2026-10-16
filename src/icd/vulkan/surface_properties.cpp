@@ -1,6 +1,7 @@
 #include "icd/vulkan/surface_properties.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/common/slot_format.hpp"
 #include "icd/common/window_extent.hpp"
 #include "icd/common/window_surface.hpp"
 
@@ -8,8 +9,6 @@ namespace av::icd {
 
 namespace {
 
-constexpr VkFormat offered_formats[SurfaceProperties::format_count] = {
-    VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SRGB};
 constexpr VkPresentModeKHR offered_modes[SurfaceProperties::mode_count] = {VK_PRESENT_MODE_FIFO_KHR,
                                                                            VK_PRESENT_MODE_IMMEDIATE_KHR};
 /* The largest image a window is presented from: the host's usual limit. */
@@ -17,9 +16,16 @@ constexpr uint32_t max_extent = 16384u;
 
 }  // namespace
 
-SurfaceProperties::SurfaceProperties(WindowSurface &windows, void *window) : windows_(windows), window_(window)
+SurfaceProperties::SurfaceProperties(WindowSurface &windows, void *window)
+    : windows_(windows), window_(window), formats_{}
 {
     AV_SCOPE("SurfaceProperties::SurfaceProperties");
+    const SlotFormat slots[] = {SlotFormat(SlotLayout::bgra_top_down), SlotFormat(SlotLayout::rgba_top_down)};
+    static_assert(sizeof slots / sizeof slots[0] * 2u == format_count, "a linear and an sRGB format a slot");
+    for (uint32_t slot = 0u; slot < format_count / 2u; slot++) {
+        formats_[slot * 2u] = static_cast<VkFormat>(slots[slot].vk_format());
+        formats_[slot * 2u + 1u] = static_cast<VkFormat>(slots[slot].vk_srgb());
+    }
 }
 
 VkResult SurfaceProperties::capabilities(VkSurfaceCapabilitiesKHR &answer)
@@ -55,7 +61,7 @@ VkResult SurfaceProperties::formats(uint32_t &count, VkSurfaceFormatKHR *formats
     }
     const uint32_t written = fits(count, format_count);
     for (uint32_t index = 0u; index < written; index++)
-        formats[index] = {offered_formats[index], VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+        formats[index] = {formats_[index], VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
     return written < format_count ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
@@ -68,7 +74,7 @@ VkResult SurfaceProperties::formats2(uint32_t &count, VkSurfaceFormat2KHR *forma
     }
     const uint32_t written = fits(count, format_count);
     for (uint32_t index = 0u; index < written; index++)
-        formats[index].surfaceFormat = {offered_formats[index], VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+        formats[index].surfaceFormat = {formats_[index], VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
     return written < format_count ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
@@ -88,7 +94,7 @@ bool SurfaceProperties::offers_format(int32_t format, int32_t space) const
 {
     AV_SCOPE("SurfaceProperties::offers_format");
     if (space != static_cast<int32_t>(VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)) return false;
-    for (const VkFormat offered : offered_formats)
+    for (const VkFormat offered : formats_)
         if (static_cast<int32_t>(offered) == format) return true;
     return false;
 }

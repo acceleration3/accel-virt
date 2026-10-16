@@ -4,6 +4,7 @@
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/log_sink.hpp"
+#include "icd/common/slot_format.hpp"
 #include "icd/common/window_extent.hpp"
 #include "icd/common/window_surface.hpp"
 #include "icd/vulkan/connection.hpp"
@@ -246,8 +247,8 @@ void Swapchain::to_bgra(const uint8_t *rows) const
 bool Swapchain::shows_bgra() const
 {
     AV_SCOPE("Swapchain::shows_bgra");
-    return format_ == static_cast<int32_t>(VK_FORMAT_B8G8R8A8_UNORM) ||
-           format_ == static_cast<int32_t>(VK_FORMAT_B8G8R8A8_SRGB);
+    SlotFormat slot(SlotLayout::rgba_top_down);
+    return slot.take_vk(static_cast<uint32_t>(format_)) && slot.bgra();
 }
 
 void Swapchain::retire()

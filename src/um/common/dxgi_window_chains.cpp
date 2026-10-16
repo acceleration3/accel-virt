@@ -6,6 +6,7 @@
 #include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "core/log/log_sink.hpp"
+#include "icd/common/slot_format.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "proto/resources/shared_allocation_data.hpp"
 #include "um/common/shared_rows_scope.hpp"
@@ -83,8 +84,7 @@ bool DxgiWindowChains::open(void *window, uint64_t luid, uint32_t width, uint32_
         chain->window = window;
         chain->device = device;
         chain->layout = layout;
-        chain->format = layout == icd::SlotLayout::bgra_top_down ? DXGI_FORMAT_B8G8R8A8_UNORM
-                                                                 : DXGI_FORMAT_R8G8B8A8_UNORM;
+        chain->format = icd::SlotFormat(layout).dxgi();
         made = make_chain(*chain, devices_[device], width, height) && make_slots(*chain, devices_[device], slots);
         if (!made) forget_chain(window);
     }
@@ -358,7 +358,7 @@ bool DxgiWindowChains::make_slots(Chain &chain, Device &device, uint32_t count)
     described.Format = static_cast<DXGI_FORMAT>(chain.format);
     described.SampleDesc = {1u, 0u};
     described.Usage = D3D11_USAGE_DEFAULT;
-    described.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+    described.BindFlags = icd::SlotFormat(chain.layout).bind_flags();
     described.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
     /* The ICD opens each slot's memory as an image of rows (ChainedImage,
      * OpenGL's memory object), so the host lays it out so. */

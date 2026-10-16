@@ -49,6 +49,9 @@ private:
 
     WindowSurface &windows_;
     void          *window_;
+    /* What a window's slots take (SlotFormat): BGRA's linear and sRGB
+     * formats, then RGBA's. */
+    VkFormat       formats_[format_count];
 };
 
 }  // namespace av::icd

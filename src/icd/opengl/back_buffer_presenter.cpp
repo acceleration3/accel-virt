@@ -6,6 +6,7 @@
 #include "core/trace/state_writer.hpp"
 #include "core/log/log_sink.hpp"
 #include "icd/common/row_pieces.hpp"
+#include "icd/common/slot_format.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/common/window_extent.hpp"
 #include "icd/common/window_surface.hpp"
@@ -238,7 +239,7 @@ Status BackBufferPresenter::create(ClientTransport &wire)
     const auto     edge_width = static_cast<GLsizei>(width_ != 0u ? width_ : 1u);
     const auto     edge_height = static_cast<GLsizei>(height_ != 0u ? height_ : 1u);
     const auto     samples = static_cast<GLsizei>(format_.samples());
-    const uint32_t colour_format = format_.srgb() ? gl_srgb8_alpha8 : gl_rgba8;
+    const uint32_t colour_format = icd::SlotFormat(icd::SlotLayout::rgba_bottom_up).gl_storage(format_.srgb());
     glproto::av_glTextureStorage2D(wire, texture_, 1, colour_format, edge_width, edge_height);
     const uint32_t sampled = multisampled ? framebuffers_[resolve] : framebuffers_[draw];
     glproto::av_glNamedFramebufferTexture(wire, sampled, gl_color_attachment0, texture_, 0);

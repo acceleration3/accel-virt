@@ -25,6 +25,7 @@ class ClientTransport;
 namespace av::icd {
 
 class EntryLookup;
+class SlotFormat;
 struct ChainedImageProbe;
 
 class ChainedImage {
@@ -55,7 +56,7 @@ public:
     bool invariants_hold() const;
 
 private:
-    [[nodiscard]] bool make_image(uint32_t dxgi_format, VkExtent2D extent);
+    [[nodiscard]] bool make_image(const SlotFormat &slot, VkExtent2D extent);
 
     EntryLookup     &entries_;
     VkDevice         device_;

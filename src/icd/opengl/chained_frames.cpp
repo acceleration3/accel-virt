@@ -1,6 +1,7 @@
 #include "icd/opengl/chained_frames.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/common/slot_format.hpp"
 #include "proto/client/client_transport.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -40,7 +41,7 @@ bool ChainedFrames::open(ClientTransport &wire, icd::WindowChains &chains, void 
          * left at its optimal default, it draws tiled into memory Direct3D
          * reads row by row, and the window shows streaks. */
         glproto::av_glTextureParameteri(wire, textures_[slot], gl_texture_tiling, static_cast<GLint>(gl_linear_tiling));
-        glproto::av_glTextureStorageMem2DEXT(wire, textures_[slot], 1, srgb ? gl_srgb8_alpha8 : gl_rgba8,
+        glproto::av_glTextureStorageMem2DEXT(wire, textures_[slot], 1, icd::SlotFormat(icd::SlotLayout::rgba_bottom_up).gl_storage(srgb),
                                               static_cast<GLsizei>(width), static_cast<GLsizei>(height),
                                               static_cast<GLuint>(slots_.memory(slot)), 0u);
     }

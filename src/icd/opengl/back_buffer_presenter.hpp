@@ -61,7 +61,7 @@ public:
      * next is drawn, as a native driver queues. */
     static constexpr uint32_t slot_count = 2u;
     enum : uint32_t {
-        gl_texture_2d = 0x0DE1u, gl_renderbuffer = 0x8D41u, gl_rgba8 = 0x8058u, gl_srgb8_alpha8 = 0x8C43u,
+        gl_texture_2d = 0x0DE1u, gl_renderbuffer = 0x8D41u,
         gl_depth24_stencil8 = 0x88F0u, gl_depth_component32f = 0x8CACu, gl_color_attachment0 = 0x8CE0u,
         gl_depth_attachment = 0x8D00u, gl_depth_stencil_attachment = 0x821Au, gl_color_buffer_bit = 0x4000u,
         gl_nearest = 0x2600u, gl_bgra = 0x80E1u, gl_unsigned_byte = 0x1401u, gl_pixel_pack_buffer = 0x88EBu,
