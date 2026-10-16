@@ -117,9 +117,7 @@ private:
     Hresult adopt_device(UmdAdapter &adapter, D3d10ddiargCreateDeviceRecord &create, UmdDevice *&made);
     void    forget_device(void *block); 
 
-    Kmt             &kmt_;
     icd::ThreadLock &lock_;
-    LogSink    &log_;
     DriverLog       lines_;
     UmdBinding      &binding_;
     UmdHostDriver *builder_;

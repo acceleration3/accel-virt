@@ -36,8 +36,8 @@ using Call = av::ScriptedD3d11Shared::Call;
 
 namespace {
 
-const PciIdentity av_gpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                         AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity av_gpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                         PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 
 /* The host losing the device: the first time the probe reads the clock after
  * the host answered, the old device is gone, as its process finds it. */

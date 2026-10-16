@@ -57,8 +57,8 @@ using av::WireWriter;
 
 namespace {
 
-const PciIdentity av(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity av(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 constexpr std::uint8_t  untouched = 0xC3u;
 constexpr std::uint32_t never_reported = 77u;
 /* A Vulkan reply's result and count, before its elements. */

@@ -38,7 +38,7 @@ void AvgpuAdapters::keep_or_close(uint32_t adapter)
 {
     AV_SCOPE("AvgpuAdapters::keep_or_close");
     if (adapter == 0u) return;
-    const PciIdentity avgpu(virtio_vendor, virtio_gpu_device, virtio_vendor, av_subsystem);
+    const PciIdentity avgpu(PciIdentity::virtio_vendor, virtio_gpu_device, PciIdentity::virtio_vendor, av_subsystem);
     PciIdentity       identity;
     if (kmt_.query_identity(adapter, identity) == Status::ok && identity.same_subsystem_as(avgpu)) {
         uint64_t luid = 0u;

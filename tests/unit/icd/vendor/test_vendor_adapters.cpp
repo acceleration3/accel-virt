@@ -52,22 +52,22 @@ TEST(vendor_adapters, learns_every_avgpu_adapter_and_only_those_with_each_fact_w
   CHECK_EQ(adapters.count_of(0x1414u), 0u);
   const VendorAdapter *const amd = adapters.nth_of(0x1002u, 0u);
   CHECK(amd != nullptr);
-  CHECK_EQ(amd->luid(), 0x51u);
-  CHECK_EQ(amd->identity().device(), 0x13C0u);
-  CHECK_EQ(amd->identity().revision(), 0xC9u);
-  CHECK_EQ(amd->location().device(), 17u);
-  CHECK(std::strcmp(amd->name(), "AMD Radeon(TM) Graphics") == 0);
-  CHECK_EQ(amd->driver_version(), version);
-  CHECK_EQ(amd->dedicated_video_bytes(), 512ull << 20u);
-  CHECK_EQ(amd->shared_system_bytes(), 4ull << 30u);
-  CHECK(amd->integrated());
+  CHECK_EQ(amd->facts().luid(), 0x51u);
+  CHECK_EQ(amd->facts().identity().device(), 0x13C0u);
+  CHECK_EQ(amd->facts().identity().revision(), 0xC9u);
+  CHECK_EQ(amd->facts().location().device(), 17u);
+  CHECK(std::strcmp(amd->facts().name(), "AMD Radeon(TM) Graphics") == 0);
+  CHECK_EQ(amd->facts().driver_version(), version);
+  CHECK_EQ(amd->facts().dedicated_video_bytes(), 512ull << 20u);
+  CHECK_EQ(amd->facts().shared_system_bytes(), 4ull << 30u);
+  CHECK(amd->facts().integrated());
   CHECK(amd->primary());
   const VendorAdapter *const nvidia = adapters.nth_of(0x10DEu, 0u);
   CHECK(nvidia != nullptr);
-  CHECK(!nvidia->integrated());
+  CHECK(!nvidia->facts().integrated());
   CHECK(!nvidia->primary());
-  CHECK_EQ(nvidia->location().bus(), 3u);
-  CHECK_EQ(nvidia->location().function(), 1u);
+  CHECK_EQ(nvidia->facts().location().bus(), 3u);
+  CHECK_EQ(nvidia->facts().location().function(), 1u);
   CHECK(adapters.nth_of(0x1002u, 1u) == nullptr);
   CHECK(adapters.nth_of(0x8086u, 0u) == nullptr); }
 
@@ -80,7 +80,9 @@ TEST(vendor_adapters, an_adapter_a_fact_of_which_windows_will_not_give_is_left_o
       MockKmt kmt;
       kmt.add_adapter(on_raphael, 3200u);
       kmt.add_adapter(on_raphael, 3200u);
-      kmt.fail_at(refused, 1u, MockKmt::invalid_parameter);
+      /* Listing the adapters asks each one's LUID first: the refusal is of
+       * the first adapter's own ask. */
+      kmt.fail_at(refused, refused == MockKmt::Call::adapter_luid ? 3u : 1u, MockKmt::invalid_parameter);
       VendorAdapters adapters(kmt);
       CHECK_STATUS(adapters.learn(), Status::ok);
       CHECK_EQ(adapters.count_of(0x1002u), 1u);
@@ -110,7 +112,7 @@ TEST(vendor_adapters, no_integrated_bit_reads_discrete_and_no_primary_display_is
   CHECK_STATUS(adapters.learn(), Status::ok);
   const VendorAdapter *const amd = adapters.nth_of(0x1002u, 0u);
   CHECK(amd != nullptr);
-  CHECK(!amd->integrated());
+  CHECK(!amd->facts().integrated());
   CHECK(!amd->primary()); }
 
 /* More adapters than it holds are read as far as it holds - the kernel
@@ -149,6 +151,6 @@ TEST(vendor_adapters, a_refused_features_query_reads_discrete)
   CHECK_STATUS(adapters.learn(), Status::ok);
   const VendorAdapter *const amd = adapters.nth_of(0x1002u, 0u);
   CHECK(amd != nullptr);
-  CHECK(!amd->integrated());
+  CHECK(!amd->facts().integrated());
   CHECK_STATUS(adapters.learn(), Status::ok);
-  CHECK(adapters.nth_of(0x1002u, 0u)->integrated()); }
+  CHECK(adapters.nth_of(0x1002u, 0u)->facts().integrated()); }

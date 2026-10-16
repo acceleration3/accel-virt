@@ -31,7 +31,7 @@ using EnumerateAdapter = VkResult (*)(VkInstance, std::uint64_t, std::uint32_t *
 
 /* The integrated GPU's adapter beside the rig's. */
 constexpr std::uint64_t integrated_luid = 0x0000000300005678ull;
-const PciIdentity on_raphael(0x1002u, 0x13C0u, AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity on_raphael(0x1002u, 0x13C0u, PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 
 VkInstance fake(std::uintptr_t value)
 {

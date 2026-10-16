@@ -28,9 +28,9 @@ class AvgpuAdapters {
 public:
     /* One per av device the VM has. */
     static constexpr uint32_t max_adapters = most_av_devices;
-    /* avgpu's PCI identity: virtio-gpu's vendor and device, and the
-     * subsystem only this device presents. */
-    static constexpr uint32_t virtio_vendor = 0x1AF4u;
+    /* avgpu's PCI identity: virtio-gpu's device under
+     * PciIdentity::virtio_vendor, and the subsystem only this device
+     * presents. */
     static constexpr uint32_t virtio_gpu_device = 0x1050u;
     static constexpr uint32_t av_subsystem = 0x5256u;
 

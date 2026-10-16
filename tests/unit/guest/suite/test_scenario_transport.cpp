@@ -37,8 +37,8 @@ namespace {
 constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::uint32_t reply_bytes = 4096u;
 
-const PciIdentity av_gpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity av_gpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 
 }  // namespace
 

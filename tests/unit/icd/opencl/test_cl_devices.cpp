@@ -37,8 +37,8 @@ constexpr std::uint64_t host_queue = 0x6500u;
  * is on in the tests that put it first. */
 constexpr std::uint64_t integrated_luid = 0x0000000300005678ull;
 
-const PciIdentity on_radeon(0x1002u, 0x7550u, AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem, 0xC0u);
-const PciIdentity on_raphael(0x1002u, 0x13C0u, AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem, 0xC9u);
+const PciIdentity on_radeon(0x1002u, 0x7550u, PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem, 0xC0u);
+const PciIdentity on_raphael(0x1002u, 0x13C0u, PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem, 0xC9u);
 
 /* The rig's adapter as the discrete GPU, and a second as the integrated one,
  * each named and placed as Windows would. */

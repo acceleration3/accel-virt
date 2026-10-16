@@ -37,8 +37,8 @@ public:
     {
         /* The avgpu the probe's own steps find, and the adapter a paced swap
          * waits on, as the ICD's does (feature 051). */
-        const av::PciIdentity av(av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
-                                  av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::av_subsystem);
+        const av::PciIdentity av(av::PciIdentity::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
+                                  av::PciIdentity::virtio_vendor, av::AvgpuAdapters::av_subsystem);
         kmt_.add_adapter(av, av::AdapterScenario::wddm_3_2);
         std::uint32_t adapters[2] = {};
         std::uint32_t found = 0u;

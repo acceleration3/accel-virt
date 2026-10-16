@@ -50,7 +50,7 @@
 #include <CL/cl.h>
 
 #include "guest/kmt/pci_location.hpp"
-#include "icd/common/adapter_string.hpp"
+#include "icd/common/adapter_facts.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -65,13 +65,6 @@ struct ClDeviceReportProbe;
 
 class ClDeviceReport {
 public:
-    /* Red Hat's PCI vendor, which is the virtio function avgpu drives
-     * (1af4:1050): the vendor answered before an adapter is described. Once
-     * one is, its own - the host GPU's vendor, which avgpu presents. */
-    static constexpr uint32_t vendor_id = 0x1AF4u;
-    static constexpr uint32_t amd_vendor = 0x1002u;
-    static constexpr uint32_t nvidia_vendor = 0x10DEu;
-
     /* `adapter_luid` is the avgpu adapter's, as Kmt::adapter_luid answers it;
      * zero is what it leaves when there was no adapter, and is reported as a
      * LUID that is not valid. */
@@ -82,11 +75,13 @@ public:
     /* Whether `adapter_luid` is the adapter this device is on; a report with
      * no adapter names none. */
     bool     names_adapter(uint64_t adapter_luid) const;
-    /* Whether the adapter presents `vendor`'s GPU. */
-    bool     on_vendor(uint32_t vendor) const;
-    /* What Windows says of that adapter: its PCI identity, where it sits,
-     * and its name in UTF-16 (null for none). */
-    void     observe_adapter(const PciIdentity &identity, const PciLocation &location, const uint16_t *name);
+    /* Whether the adapter presents `wanted`'s GPU (a PCI vendor). */
+    bool     on_vendor(uint32_t wanted) const;
+    /* What Windows says of that adapter: its PCI identity, where it sits
+     * and its name, each as far as Windows gave it. */
+    void     observe_adapter(const icd::AdapterFacts &adapter);
+    /* That adapter's name, empty until one is observed with a name. */
+    const char *adapter_name() const;
     ClDeviceReport(const ClDeviceReport &) = delete;
     ClDeviceReport &operator=(const ClDeviceReport &) = delete;
 
@@ -134,12 +129,13 @@ private:
      * CL_INVALID_VALUE for any other query. */
     cl_int answer_not_carried(cl_device_info name_asked, size_t value_bytes, void *value,
                               size_t *size_ret) const;
+    /* The PCI vendor answered: Red Hat's, the virtio function avgpu drives
+     * (1af4:1050), before an adapter is described; once one is, its own -
+     * the host GPU's vendor, which avgpu presents. */
+    uint32_t vendor() const;
 
     uint64_t                   luid_;
-    uint32_t                   vendor_;
-    PciLocation                location_;
-    bool                       located_;
-    icd::AdapterString         name_;
+    icd::AdapterFacts          adapter_;
     char                       version_[version_bytes];
     char                       c_version_[version_bytes];
     uint32_t                   major_;

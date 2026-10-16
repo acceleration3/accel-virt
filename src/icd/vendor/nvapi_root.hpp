@@ -50,7 +50,6 @@ public:
     /* NV_SYSTEM_TYPE_IGPU and NV_SYSTEM_TYPE_DGPU. */
     static constexpr int gpu_integrated = 1;
     static constexpr int gpu_discrete = 2;
-    static constexpr uint32_t nvidia_vendor = 0x10DEu;
 
     NvapiRoot(Kmt &kmt, icd::ThreadLock &lock);
     NvapiRoot(const NvapiRoot &) = delete;

@@ -210,8 +210,8 @@ TEST(gl_contexts, the_last_context_deleted_closes_the_device)
 TEST(gl_contexts, a_vulkan_connection_and_an_opengl_context_each_keep_their_own_av_context)
 { Scenario scenario;
   GlIcdRig &rig = scenario.rig;
-  const av::PciIdentity avgpu(av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
-                               av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::av_subsystem);
+  const av::PciIdentity avgpu(av::PciIdentity::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
+                               av::PciIdentity::virtio_vendor, av::AvgpuAdapters::av_subsystem);
   av::AdapterSearch     search(rig.kmt());
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
   av::GuestConnection vulkan_device(rig.kmt());

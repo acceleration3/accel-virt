@@ -21,8 +21,8 @@ namespace {
 const char *const unpaced = "avvk: FIFO present unpaced";
 
 av::PciIdentity av_identity()
-{ return av::PciIdentity(av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
-                         av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::av_subsystem); }
+{ return av::PciIdentity(av::PciIdentity::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
+                         av::PciIdentity::virtio_vendor, av::AvgpuAdapters::av_subsystem); }
 
 /* An adapter and a D3DKMT device on it, as the ICD's connection holds. */
 class PacerRig {

@@ -40,13 +40,6 @@ Status AdapterTable::close(void *handle)
     return adapters_.destroy(adapter);
 }
 
-void AdapterTable::discard(UmdAdapter &adapter)
-{
-    AV_SCOPE("AdapterTable::discard");
-    const UmdAdapter *const one = &adapter;
-    adapters_.destroy_if([one](const UmdAdapter &held) { return &held == one; });
-}
-
 uint32_t AdapterTable::open_adapters() const
 {
     AV_SCOPE("AdapterTable::open_adapters");

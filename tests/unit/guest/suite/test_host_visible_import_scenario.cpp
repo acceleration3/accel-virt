@@ -45,8 +45,8 @@ using namespace av::vkproto;
 
 namespace {
 
-const PciIdentity av(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity av(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 constexpr std::int32_t  vk_timeout = 2;
 constexpr std::int32_t  vk_error_out_of_device_memory = -2;
 constexpr std::int32_t  vk_error_device_lost = -4;

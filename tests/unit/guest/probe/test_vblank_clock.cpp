@@ -21,8 +21,8 @@ using av::VblankClock;
 
 namespace {
 
-const PciIdentity avgpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                        AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity avgpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                        PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 constexpr std::uint32_t wddm_3_2 = 3200u;
 constexpr std::uint64_t blank = 166667u;
 

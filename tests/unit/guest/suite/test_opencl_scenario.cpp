@@ -39,8 +39,8 @@ using namespace av::clproto;
 
 namespace {
 
-const PciIdentity av(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity av(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 constexpr std::uint32_t device_removed = 0xC00E0102u;
 constexpr std::uint32_t elements = OpenClScenario::elements;
 /* The commands a whole run sends before its first release. */

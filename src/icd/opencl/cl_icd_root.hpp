@@ -63,7 +63,6 @@ class StateWriter;
 }  // namespace av
 
 namespace av::icd {
-class AdapterString;
 class ServiceThread;
 class ThreadLock;
 }  // namespace av::icd
@@ -678,7 +677,7 @@ private:
     uint32_t             without_unset_user_events(ClientTransport &wire, const ClWaitList &waits, uint64_t *listed);
     /* The adapter's vendor, name and PCI location, to the device's report and
      * extension policy; its name into `name`. */
-    void             describe_adapter(uint32_t adapter, ClDevice &device, icd::AdapterString &name);
+    void             describe_adapter(uint32_t adapter, ClDevice &device);
     /* Learns the devices, once: which avgpu adapters there are and what
      * Windows calls each, and the platform's name from them - asked again
      * while one device has no name. No device is opened. Under lock_. */

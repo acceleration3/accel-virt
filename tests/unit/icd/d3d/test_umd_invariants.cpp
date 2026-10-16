@@ -66,7 +66,6 @@ struct UmdAdapterProbe {
     static void forget_a_device(UmdAdapter &adapter) { adapter.devices_ = 0u; }
     static void forget_the_callbacks(UmdAdapter &adapter) { adapter.callbacks_ = nullptr; }
     static void break_its_versions(UmdAdapter &adapter) { DdiVersionListProbe::empty(adapter.versions_); }
-    static void break_its_identity(UmdAdapter &adapter);
 };
 
 struct UmdDeviceProbe {
@@ -129,8 +128,8 @@ namespace {
 
 constexpr std::uint32_t d3d11_interface = (11u << 16) | 45u;
 
-const PciIdentity avgpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                         AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity avgpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                         PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 
 D3dddiAdapterCallbacksRecord callbacks;
 int                          runtime_handle;
@@ -458,18 +457,6 @@ TEST(umd_root_open, a_kernel_that_refuses_the_adapter_close_is_logged_not_lost)
   CHECK_EQ(rig.log().holding("connection release, status"), 1u);
   CHECK(rig.root().invariants_hold()); }
 
-/* The same refusal on the give-back path of a failed open: the adapter was
- * found, the identity was not, and what was made is handed back. */
-TEST(umd_root_open, a_refused_identity_gives_the_adapter_back_and_logs_a_refused_close)
-{ UmdRig rig;
-  /* The identity's ask, after the one listing the adapters. */
-  rig.kmt().fail_at(MockKmt::Call::adapter_luid, 2u, MockKmt::invalid_parameter);
-  rig.kmt().fail_at(MockKmt::Call::close_adapter, 1u, MockKmt::invalid_parameter);
-  FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d10_11);
-  CHECK_EQ(runtime.open(), hr_fail);
-  CHECK_EQ(rig.log().holding("connection release, status"), 1u);
-  CHECK(rig.root().invariants_hold()); }
-
 TEST(umd_root_open, the_d3d12_open_refuses_a_null_table_and_a_missing_adapter)
 { UmdRig rig;
   FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d12);
@@ -505,40 +492,6 @@ namespace av::d3d {
 /* The rest of the corruptions the composite invariants above are built from:
  * each one breaks a class its owner only asks, so a rule dropped from the
  * owner's invariant stops being noticed. */
-struct AdapterIdentityProbe {
-    static void ids_without_a_luid(AdapterIdentity &identity)
-    {
-        identity.luid_ = 0ull;
-        identity.vendor_id_ = 1u;
-    }
-    static void a_luid_without_a_description(AdapterIdentity &identity)
-    {
-        identity.luid_ = 1ull;
-        identity.description_[0] = '\0';
-    }
-    static void a_device_id_without_a_luid(AdapterIdentity &identity)
-    {
-        identity.luid_ = 0ull;
-        identity.device_id_ = 1u;
-    }
-    static void a_description_without_a_luid(AdapterIdentity &identity)
-    {
-        identity.luid_ = 0ull;
-        identity.vendor_id_ = 0u;
-        identity.device_id_ = 0u;
-    }
-    static void a_description_that_never_ends(AdapterIdentity &identity)
-    {
-        identity.luid_ = 1ull;
-        for (char &byte : identity.description_) byte = 'x';
-    }
-};
-
-inline void UmdAdapterProbe::break_its_identity(UmdAdapter &adapter)
-{
-    AdapterIdentityProbe::ids_without_a_luid(adapter.identity_);
-}
-
 inline void UmdDeviceProbe::break_its_removal(UmdDevice &device)
 {
     DeviceRemovalProbe::report_then_forget(device.removal_);
@@ -556,45 +509,12 @@ TEST(device_removal_invariants, fail_for_a_removal_reported_and_then_forgotten)
   DeviceRemovalProbe::report_then_forget(removal);
   CHECK(!removal.invariants_hold()); }
 
-TEST(adapter_identity_invariants, fail_for_ids_with_no_luid_a_luid_with_no_name_and_a_name_with_no_end)
-{ AdapterIdentity without_luid;
-  AdapterIdentityProbe::ids_without_a_luid(without_luid);
-  CHECK(!without_luid.invariants_hold());
-
-  AdapterIdentity without_name;
-  AdapterIdentityProbe::a_luid_without_a_description(without_name);
-  CHECK(!without_name.invariants_hold());
-
-  AdapterIdentity endless;
-  AdapterIdentityProbe::a_description_that_never_ends(endless);
-  CHECK(!endless.invariants_hold());
-
-  /* Each half of the "nothing before the LUID" rule on its own, so dropping
-   * one of them from the invariant is noticed. */
-  AdapterIdentity device_only;
-  AdapterIdentityProbe::a_device_id_without_a_luid(device_only);
-  CHECK(!device_only.invariants_hold()); }
-
-TEST(adapter_identity_invariants, fail_for_a_description_written_before_the_luid)
-{ UmdRig rig;
-  FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d10_11);
-  CHECK_EQ(runtime.open(), hr_ok);
-  UmdAdapter *const adapter = UmdRootProbe::adapter_of(rig.root(), runtime.adapter());
-  if (adapter == nullptr) return;
-  AdapterIdentityProbe::a_description_without_a_luid(adapter->identity());
-  CHECK(!adapter->identity().invariants_hold());
-  CHECK(!rig.root().invariants_hold()); }
-
-/* The adapter's invariant is its parts': a version list or an identity broken
- * under it must be noticed, or the table above would report it as sound. */
+/* The adapter's invariant is its parts': a version list broken under it must
+ * be noticed, or the table above would report it as sound. */
 TEST(umd_adapter_invariants, fail_when_a_part_of_the_adapter_is_broken)
 { UmdAdapter versions(RuntimeKind::d3d10_11, &runtime_handle, &callbacks, unopened, d3d11_interface, 0u);
   UmdAdapterProbe::break_its_versions(versions);
-  CHECK(!versions.invariants_hold());
-
-  UmdAdapter identity(RuntimeKind::d3d10_11, &runtime_handle, &callbacks, unopened, d3d11_interface, 0u);
-  UmdAdapterProbe::break_its_identity(identity);
-  CHECK(!identity.invariants_hold()); }
+  CHECK(!versions.invariants_hold()); }
 
 TEST(adapter_table_invariants, fail_when_an_adapter_it_holds_is_broken)
 { MockPlatform platform;

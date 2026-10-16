@@ -8,8 +8,7 @@
 #include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/kmt/memory_segment_group.hpp"
 #include "guest/kmt/pci_identity.hpp"
-#include "guest/kmt/pci_location.hpp"
-#include "icd/common/adapter_string.hpp"
+#include "icd/common/adapter_facts.hpp"
 
 #include "icd/opencl/cl_info_request.hpp"
 
@@ -165,32 +164,28 @@ void ClIcdRoot::learn_devices()
         if (devices_.left_out() != 0u)
             log_.write("avcl: an avgpu adapter is left out: no LUID, or past the devices shown");
     }
-    icd::AdapterString name;
     for (uint32_t index = 0u; index < devices_.count(); ++index) {
         ClDevice &device = devices_.at(index);
-        describe_adapter(adapters.adapter(adapters.index_of(device.luid())), device, name);
+        describe_adapter(adapters.adapter(adapters.index_of(device.luid())), device);
     }
     /* The platform is named after its GPU when it has one; with several, no
      * one GPU's name says what it is. */
-    if (devices_.count() == 1u) platform_.observe_adapter(name.text());
+    if (devices_.count() == 1u) platform_.observe_adapter(devices_.at(0u).decided().adapter_name());
 }
 
 /* What Windows says of the adapter the device is on, which is what the
  * device's vendor, name and PCI location are (docs/vendor-libraries.md): an
- * adapter it will not describe leaves those as they were. */
-void ClIcdRoot::describe_adapter(uint32_t adapter, ClDevice &device, icd::AdapterString &name)
+ * adapter it will not describe in full leaves those as they were. */
+void ClIcdRoot::describe_adapter(uint32_t adapter, ClDevice &device)
 {
     AV_SCOPE("ClIcdRoot::describe_adapter");
-    PciIdentity identity;
-    PciLocation location;
-    uint16_t    wide[icd::AdapterString::bytes] = {};
-    if (kmt_.query_identity(adapter, identity) != Status::ok ||
-        kmt_.query_adapter_location(adapter, location) != Status::ok ||
-        kmt_.query_adapter_name(adapter, wide, icd::AdapterString::bytes) != Status::ok)
-        return;
-    device.decided().observe_adapter(identity, location, wide);
-    device.extensions().observe_vendor(identity.vendor());
-    name.take(wide);
+    constexpr uint32_t described =
+        icd::AdapterFacts::identity_fact | icd::AdapterFacts::location_fact | icd::AdapterFacts::name_fact;
+    icd::AdapterFacts facts;
+    facts.learn(kmt_, adapter);
+    if (!facts.knows(described)) return;
+    device.decided().observe_adapter(facts);
+    device.extensions().observe_vendor(facts.identity().vendor());
 }
 
 bool ClIcdRoot::spells(const char *name, const char *wanted) const
@@ -365,7 +360,7 @@ cl_int ClIcdRoot::device_info(cl_device_id device, cl_device_info name, size_t v
      * extension that defines the query. */
     if (name == CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR)
         return import_handle_types(*shown, value_bytes, value, size_ret);
-    if (name == free_memory_amd && shown->decided().on_vendor(ClDeviceReport::amd_vendor))
+    if (name == free_memory_amd && shown->decided().on_vendor(PciIdentity::amd_vendor))
         return free_memory(*shown, value_bytes, value, size_ret);
     ClientTransport *const wire = wire_of(*object);
     if (wire == nullptr) return CL_INVALID_DEVICE;

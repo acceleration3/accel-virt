@@ -28,14 +28,10 @@
 #include "icd/d3d/umd_entry_points.hpp"
 
 namespace av::d3d {
-namespace {
-
-
-}  // namespace
 
 UmdRoot::UmdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, LogSink &log, UmdBinding &binding,
                  UmdHostDriver *builder)
-    : kmt_(kmt), lock_(lock), log_(log), lines_(log, "avumd: "), binding_(binding), builder_(builder), connections_(kmt),
+    : lock_(lock), lines_(log, "avumd: "), binding_(binding), builder_(builder), connections_(kmt),
       adapters_(memory), devices_(memory, log)
 {
     AV_SCOPE("UmdRoot::UmdRoot");
@@ -99,15 +95,6 @@ Hresult UmdRoot::open(UmdAdapter *&opened, RuntimeKind runtime, void *runtime_ad
     if (made != Status::ok) {
         lines_.note("no memory for the adapter, status", static_cast<uint64_t>(made));
         return hr_out_of_memory;
-    }
-    const Status learned = adapter->identity().learn(kmt_, connection->adapter(), log_);
-    if (learned != Status::ok) {
-        /* Discarded rather than closed: the adapter is the one this function
-         * made a line ago, so there is no handle to be wrong and no device to
-         * have been made on it - nothing for a close to refuse, and so no
-         * refusal to judge. */
-        adapters_.discard(*adapter);
-        return hr_fail;
     }
     keep = true;
     opened = adapter;

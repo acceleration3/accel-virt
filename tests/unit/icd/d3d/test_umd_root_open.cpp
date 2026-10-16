@@ -120,18 +120,6 @@ TEST(umd_root_open, no_avgpu_adapter_is_a_failure_and_a_log_line)
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
-/* An adapter whose LUID the kernel refuses is an adapter this driver cannot
- * report, so the open fails and gives the kernel adapter back. */
-TEST(umd_root_open, an_adapter_whose_identity_is_refused_is_given_back)
-{ UmdRig rig;
-  /* The identity's ask, after the one listing the adapters. */
-  rig.kmt().fail_at(MockKmt::Call::adapter_luid, 2u, MockKmt::invalid_parameter);
-  FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d10_11);
-  CHECK_EQ(runtime.open(), hr_fail);
-  CHECK(runtime.adapter() == nullptr);
-  CHECK_EQ(rig.kmt().open_objects(), 0u);
-  CHECK(rig.root().invariants_hold()); }
-
 /* Every allocation the open makes, failed in turn: the documented code, no
  * kernel object left open, no memory leaked, and one line saying why. */
 TEST(umd_root_open, an_open_with_no_memory_answers_out_of_memory_and_leaks_nothing)
@@ -222,7 +210,6 @@ TEST(umd_root_open, a_state_dump_names_the_adapters_and_the_connection)
   rig.root().report(writer);
   CHECK(std::strstr(writer.dump(), "umd/0 busy=false adapters=1 devices=0") != nullptr);
   CHECK(std::strstr(writer.dump(), "opens=1") != nullptr);
-  CHECK(std::strstr(writer.dump(), "luid=0x0000000200001234") != nullptr);
   CHECK_EQ(runtime.close_adapter(), hr_ok); }
 
 /* A state dump must never wait on the thread that is inside the driver. */

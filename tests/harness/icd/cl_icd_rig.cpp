@@ -14,8 +14,8 @@ ClIcdRig::ClIcdRig()
             clicd::cl_icd_binding),
       loader_(root_)
 {
-    const PciIdentity avgpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                             AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+    const PciIdentity avgpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                             PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
     kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
     kmt_.open_host_window(MockKmt::rig_window_bytes);
     kmt_.set_adapter_luid(0u, adapter_luid);

@@ -46,8 +46,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     {
         av::MockKmt  kmt;
         FuzzedDriver driver(data + 1u, size - 1u);
-        kmt.add_adapter(av::PciIdentity(av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
-                                        av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::av_subsystem),
+        kmt.add_adapter(av::PciIdentity(av::PciIdentity::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
+                                        av::PciIdentity::virtio_vendor, av::AvgpuAdapters::av_subsystem),
                         1u);
         kmt.answer_adapter_escapes(&driver);
         av::EscapeReader reader(kmt, platform);

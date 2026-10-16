@@ -48,8 +48,6 @@ public:
     /* ADL_ASIC_DISCRETE and ADL_ASIC_INTEGRATED. */
     static constexpr int asic_discrete = 1;
     static constexpr int asic_integrated = 2;
-    /* The PCI vendors ADL describes. */
-    static constexpr uint32_t amd_vendor = 0x1002u;
 
     /* `lock` is what keeps two threads' calls apart. */
     AdlRoot(Kmt &kmt, icd::ThreadLock &lock);

@@ -12,8 +12,8 @@ namespace av {
 OpenConnection::OpenConnection()
     : kmt_(), platform_(), host_(kmt_), trace_(), lock_(trace_, 'S'), log_(), connection_(kmt_, platform_, lock_, log_)
 {
-    kmt_.add_adapter(PciIdentity(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                                 AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem),
+    kmt_.add_adapter(PciIdentity(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                                 PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem),
                      AdapterScenario::wddm_3_2);
     kmt_.open_host_window(MockKmt::rig_window_bytes);
     CHECK_STATUS(connection_.open(0u), Status::ok);

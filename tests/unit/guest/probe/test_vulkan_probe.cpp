@@ -39,8 +39,8 @@ using Call = av::ScriptedVulkan::Call;
 
 namespace {
 
-const PciIdentity av(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity av(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 /* LowPart 0x1234, HighPart 2: a HighPart the report must not print. */
 constexpr std::uint64_t adapter_luid = 0x0000000200001234ull;
 

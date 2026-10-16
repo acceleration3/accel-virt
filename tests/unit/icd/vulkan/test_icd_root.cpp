@@ -499,8 +499,8 @@ TEST(icd_root, create_instance_with_no_way_to_the_host_answers_incompatible_driv
       av::ScriptedWindowChains chains;
       IcdRoot root(platform, kmt, lock, send_lock, memory_lock, log, av::icd::icd_binding, windows, chains);
       if (!refusal.no_adapter) {
-          kmt.add_adapter(av::PciIdentity(av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
-                                          av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::av_subsystem),
+          kmt.add_adapter(av::PciIdentity(av::PciIdentity::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
+                                          av::PciIdentity::virtio_vendor, av::AvgpuAdapters::av_subsystem),
                           av::AdapterScenario::wddm_3_2);
       }
       /* The connection's own ask, after the one listing the adapters. */

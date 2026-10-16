@@ -2179,7 +2179,7 @@ TEST(cl_icd_root, a_queue_says_its_context_and_device_and_asks_the_host_the_rest
  * KiB; on another vendor's it is the host's question. */
 TEST(cl_icd_root, an_amd_adapter_answers_its_free_memory_from_windows)
 { ClIcdRig rig;
-  rig.kmt().set_identity(0u, av::PciIdentity(0x1002u, 0x13C0u, av::AvgpuAdapters::virtio_vendor,
+  rig.kmt().set_identity(0u, av::PciIdentity(0x1002u, 0x13C0u, av::PciIdentity::virtio_vendor,
                                              av::AvgpuAdapters::av_subsystem, 0xC9u));
   rig.kmt().describe_adapter(0u, av::PciLocation(0u, 17u, 0u), "AMD Radeon(TM) Graphics", 0u);
   rig.kmt().set_video_memory(av::MemorySegmentGroup::local, 512ull << 20u, 128ull << 20u);

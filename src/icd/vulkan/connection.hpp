@@ -20,7 +20,7 @@
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/host_allocation.hpp"
 #include "guest/transport/kmt_transport.hpp"
-#include "icd/common/adapter_string.hpp"
+#include "icd/common/adapter_facts.hpp"
 #include "icd/common/host_channel.hpp"
 
 #include <stddef.h>
@@ -119,8 +119,8 @@ private:
     /* Open from a whole open to the close: the channel opened alone is a
      * connection that was not. */
     bool                           opened_;
-    uint64_t                       luid_;
-    AdapterString                  name_;
+    /* What Windows says of the adapter: its LUID, and the name Vulkan shows. */
+    AdapterFacts                   adapter_;
     bool                           host_dma_buf_;
 
     friend struct ConnectionProbe;

@@ -25,8 +25,8 @@ using av::d3d::UmdConnections;
 
 namespace {
 
-const PciIdentity avgpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                         AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity avgpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                         PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 
 constexpr std::uint64_t first_luid = 0x0000000200001234ull;
 constexpr std::uint64_t second_luid = 0x0000000300005678ull;

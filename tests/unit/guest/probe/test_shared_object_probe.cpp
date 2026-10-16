@@ -35,8 +35,8 @@ using av::Status;
 
 namespace {
 
-const PciIdentity av(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity av(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 constexpr std::uint64_t adapter_luid = 0x0000000200001234ull;
 /* What the probe fills the exportable allocation with before it exports it,
  * which is what its OpenCL read is judged against. */

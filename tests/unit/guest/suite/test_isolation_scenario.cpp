@@ -36,8 +36,8 @@ using namespace av::vkproto;
 
 namespace {
 
-const PciIdentity av(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity av(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 /* What D3DKMT answers a wait on a device that was removed. */
 constexpr std::uint32_t device_removed = 0xC00E0102u;
 /* The healthy context's three waits, then the faulted command's. */

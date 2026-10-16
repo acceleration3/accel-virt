@@ -33,8 +33,8 @@ using av::SubmitBenchmark;
 
 namespace {
 
-const PciIdentity av(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity av(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 /* Ticks per second in MockKmt's clock, and the cost of one kernel submission:
  * 20 ticks is two microseconds there. */
 constexpr std::uint64_t submit_ticks = 20u;

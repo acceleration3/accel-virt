@@ -90,8 +90,8 @@ using av::icd::HostChannelProbe;
 
 namespace {
 
-const PciIdentity avgpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                         AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity avgpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                         PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 const PciIdentity basic_render(0x1414u, 0x008Cu, 0u, 0u);
 /* The avgpu adapter is the second one added. */
 constexpr std::uint32_t avgpu_index = 1u;

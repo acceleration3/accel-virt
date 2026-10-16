@@ -66,8 +66,8 @@ struct Rig {
     Rig()
     {
         host.set_clock(777u);
-        kmt.add_adapter(av::PciIdentity(av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
-                                        av::AvgpuAdapters::virtio_vendor, av::AvgpuAdapters::av_subsystem),
+        kmt.add_adapter(av::PciIdentity(av::PciIdentity::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
+                                        av::PciIdentity::virtio_vendor, av::AvgpuAdapters::av_subsystem),
                         1u);
         kmt.answer_adapter_escapes(&driver);
         driver.set_clock(555u);

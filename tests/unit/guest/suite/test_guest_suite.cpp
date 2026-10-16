@@ -46,8 +46,8 @@ namespace {
 /* What D3DKMT answers a wait on a context dxgkrnl reset under it. */
 constexpr std::uint32_t device_removed = 0xC00E0102u;
 
-const PciIdentity av_gpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity av_gpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 
 bool has_line(const GuestReport &report, const char *line)
 {

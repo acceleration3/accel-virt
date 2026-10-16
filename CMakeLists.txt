@@ -463,7 +463,7 @@ endif()
 # docs/vendor-libraries.md): portable, over the Kmt and a thread lock.
 file(GLOB_RECURSE AV_VENDOR_SOURCES CONFIGURE_DEPENDS src/icd/vendor/*.cpp)
 add_library(av_vendor STATIC ${AV_VENDOR_SOURCES} ${CMAKE_SOURCE_DIR}/src/icd/common/thread_lock_hold.cpp
-  ${CMAKE_SOURCE_DIR}/src/icd/common/adapter_string.cpp)
+  ${CMAKE_SOURCE_DIR}/src/icd/common/adapter_facts.cpp ${CMAKE_SOURCE_DIR}/src/icd/common/adapter_string.cpp)
 target_link_libraries(av_vendor PUBLIC av_core)
 target_compile_options(av_vendor PRIVATE ${AV_TEST_FLAGS})
 target_link_options(av_vendor PUBLIC ${AV_TEST_FLAGS})

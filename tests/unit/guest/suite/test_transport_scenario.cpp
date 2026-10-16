@@ -30,8 +30,8 @@ using av::TransportScenario;
 
 namespace {
 
-const PciIdentity av_gpu(AvgpuAdapters::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
-                      AvgpuAdapters::virtio_vendor, AvgpuAdapters::av_subsystem);
+const PciIdentity av_gpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
+                      PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 /* Microsoft Basic Render, enumerated before av as it is in a real guest. */
 const PciIdentity basic_render(0x1414u, 0x008Cu, 0u, 0u);
 constexpr std::uint32_t unsuccessful = 0xC0000001u;

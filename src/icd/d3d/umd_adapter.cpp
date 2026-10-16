@@ -9,8 +9,7 @@ namespace av::d3d {
 UmdAdapter::UmdAdapter(RuntimeKind runtime, void *runtime_adapter, const D3dddiAdapterCallbacksRecord *callbacks,
                        UmdConnection &connection, uint32_t interface_version, uint32_t runtime_version)
     : runtime_(runtime), runtime_adapter_(runtime_adapter), callbacks_(callbacks), connection_(connection),
-      interface_version_(interface_version), runtime_version_(runtime_version), devices_(0u), versions_(runtime),
-      identity_()
+      interface_version_(interface_version), runtime_version_(runtime_version), devices_(0u), versions_(runtime)
 {
     AV_SCOPE("UmdAdapter::UmdAdapter");
 }
@@ -57,18 +56,6 @@ const DdiVersionList &UmdAdapter::versions() const
     return versions_;
 }
 
-AdapterIdentity &UmdAdapter::identity()
-{
-    AV_SCOPE("UmdAdapter::identity");
-    return identity_;
-}
-
-const AdapterIdentity &UmdAdapter::identity() const
-{
-    AV_SCOPE("UmdAdapter::identity");
-    return identity_;
-}
-
 void UmdAdapter::device_made()
 {
     AV_SCOPE("UmdAdapter::device_made");
@@ -95,7 +82,6 @@ void UmdAdapter::report(StateWriter &writer, uint32_t index) const
     writer.number("runtime", static_cast<uint64_t>(runtime_));
     writer.hex("interface", interface_version_);
     writer.number("devices", devices_);
-    identity_.report(writer);
     writer.close();
 }
 
@@ -104,7 +90,6 @@ bool UmdAdapter::invariants_hold() const
     AV_SCOPE("UmdAdapter::invariants_hold");
     if (callbacks_ == nullptr) return false;
     if (!versions_.invariants_hold()) return false;
-    if (!identity_.invariants_hold()) return false;
     /* An adapter is only ever opened at a version it serves, so one that does
      * not is one whose open wrote its fields in the wrong order. D3D12 carries
      * no Interface at all and records zero. */

@@ -40,11 +40,6 @@ public:
     /* invalid_parameter for a handle this did not hand out; conflict while a
      * device made through it is live. */
     [[nodiscard]] Status close(void *handle);
-    /* Gives back an adapter this table just opened, for a caller that could
-     * not finish making it. Unlike close it judges nothing and can refuse
-     * nothing: the adapter is one the caller is holding, so there is no handle
-     * to be wrong and no device to have been made on it yet. */
-    void                 discard(UmdAdapter &adapter);
     uint32_t             open_adapters() const;
 
     void report(StateWriter &writer) const;

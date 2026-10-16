@@ -11,6 +11,14 @@ class TextBuffer;
 
 class PciIdentity {
 public:
+    /* The PCI vendors the user-mode drivers name: Red Hat's, which is the
+     * virtio function avgpu drives, and the two whose vendor libraries
+     * (docs/vendor-libraries.md) and OpenCL extensions answer for the host
+     * GPU avgpu presents. */
+    static constexpr uint32_t virtio_vendor = 0x1AF4u;
+    static constexpr uint32_t amd_vendor = 0x1002u;
+    static constexpr uint32_t nvidia_vendor = 0x10DEu;
+
     PciIdentity();
     PciIdentity(uint32_t vendor, uint32_t device, uint32_t subsystem_vendor, uint32_t subsystem,
                 uint32_t revision = 0u);

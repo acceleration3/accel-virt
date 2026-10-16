@@ -13,7 +13,6 @@
 #ifndef AV_D3D_UMD_ADAPTER_HPP
 #define AV_D3D_UMD_ADAPTER_HPP
 
-#include "icd/d3d/adapter_identity.hpp"
 #include "icd/d3d/ddi_version_list.hpp"
 #include "icd/d3d/runtime_kind.hpp"
 
@@ -47,8 +46,6 @@ public:
     uint32_t                            interface_version() const;
     uint32_t                            runtime_version() const;
     const DdiVersionList               &versions() const;
-    AdapterIdentity                    &identity();
-    const AdapterIdentity              &identity() const;
 
     void     device_made();
     void     device_gone();
@@ -67,7 +64,6 @@ private:
     uint32_t                            runtime_version_;
     uint32_t                            devices_;
     DdiVersionList                      versions_;
-    AdapterIdentity                     identity_;
 
     friend struct UmdAdapterProbe;
 };

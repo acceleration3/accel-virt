@@ -13,7 +13,7 @@ Connection::Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink 
     : kmt_(kmt), search_(kmt), connection_(kmt),
       channel_(memory, log, "avvk: ", ChannelShape(SubApi::vulkan, ring_order, reply_bytes, command_bytes, 0u, 0u),
                lock),
-      opened_(false), luid_(0u), name_(), host_dma_buf_(false)
+      opened_(false), adapter_(), host_dma_buf_(false)
 {
     AV_SCOPE("Connection::Connection");
 }
@@ -30,11 +30,10 @@ Status Connection::open(uint64_t luid)
     if (opened()) return Status::invalid_state;
     ScopeExit undo([&] { close(); });
     if (search_.find_avgpu(luid) != Status::ok) return Status::not_supported;
-    if (kmt_.adapter_luid(search_.adapter(), luid_) != Status::ok) return Status::not_supported;
     /* A name Windows will not give is no reason to refuse the adapter: the
-     * host's own name stands. */
-    uint16_t wide[AdapterString::bytes] = {};
-    if (kmt_.query_adapter_name(search_.adapter(), wide, AdapterString::bytes) == Status::ok) name_.take(wide);
+     * host's own name stands. Its LUID is what names it. */
+    adapter_.learn(kmt_, search_.adapter());
+    if (!adapter_.knows(AdapterFacts::luid_fact)) return Status::not_supported;
     if (connection_.open(search_.adapter()) != Status::ok) return Status::not_supported;
     const Status opened = channel_.open(connection_);
     if (opened != Status::ok) return opened == Status::no_memory ? Status::no_memory : Status::not_supported;
@@ -52,8 +51,7 @@ void Connection::close()
     connection_.close();
     /* Nothing is left to report a failed close to: the instance is gone. */
     static_cast<void>(search_.close());
-    luid_ = 0u;
-    name_.take(nullptr);
+    adapter_.forget();
 }
 
 void Connection::report(StateWriter &writer) const
@@ -62,7 +60,7 @@ void Connection::report(StateWriter &writer) const
     writer.flag("opened", opened());
     writer.flag("faulted", faulted());
     writer.number("adapter", adapter());
-    writer.hex("luid", luid_);
+    writer.hex("luid", adapter_.luid());
     writer.number("device", opened() ? connection_.device() : 0u);
     writer.number("context", opened() ? channel_.transport().context() : 0u);
 }
@@ -92,12 +90,12 @@ uint32_t Connection::device() const
 uint64_t         Connection::luid() const
 {
     AV_SCOPE("Connection::luid");
-    return luid_;
+    return adapter_.luid();
 }
 const char *Connection::adapter_name() const
 {
     AV_SCOPE("Connection::adapter_name");
-    return name_.text();
+    return adapter_.name();
 }
 
 uint64_t Connection::submissions() const
