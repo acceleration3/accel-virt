@@ -8,7 +8,6 @@
 #include "core/log/log_sink.hpp"
 #include "icd/common/pieces.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
-#include "um/common/guest_setting.hpp"
 #include "um/d3d/d3d9_host_caps.hpp"
 #include "um/d3d/d3d_session.hpp"
 
@@ -23,9 +22,6 @@ namespace {
 
 constexpr uint32_t stage_vertex = 0u;
 /* What a lost device's line is logged once under. */
-/* Calls the trace logs, and what says it is off. */
-constexpr uint32_t trace_most = 20000u;
-constexpr uint32_t trace_none = ~0u;
 constexpr uint32_t stage_pixel = 1u;
 constexpr uint32_t components = 4u;
 /* D3DHAL_STATESET* (reverse-engineering.md §4.4). */
@@ -57,13 +53,13 @@ uint32_t query_bytes(D3DDDIQUERYTYPE type)
 }  // namespace
 
 D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d9HostCaps &caps,
-                       d3d::UmdAdapter &adapter)
+                       d3d::UmdAdapter &adapter, d3d::D3dCallTrace &trace)
     : session_(session), memory_(memory), log_(log), lines_(memory, log, "avumd: "), refused_(lines_), removal_(), caps_(caps), adapter_(adapter), lock_(), channel_(),
       follower_(), resources_(memory), queries_(memory), blocks_(memory), recording_(nullptr), batch_(), shadow_(),
       callbacks_{}, kernel_(), allocations_(kernel_, lines_), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
       user_index_bytes_(0u), bound_indices_(0u), vertex_ring_{}, index16_ring_{}, index32_ring_{},
-      readback_(nullptr), readback_bytes_(0u), traced_(trace_none),
+      readback_(nullptr), readback_bytes_(0u), trace_(trace), context_number_(trace.number_context()), clock_(),
       call_began_(0u), busy_(0u), calls_(0u), draws_{}, rebased_(0u), null_shaders_(0u), written_(0u)
 {
     AV_SCOPE("D3d9Device::D3d9Device");
@@ -97,11 +93,8 @@ D3d9Device::~D3d9Device()
 HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVICE &create)
 {
     AV_SCOPE("D3d9Device::initialize");
-    traced_ = GuestSetting("AV_D3D9_TRACE").value().on() ? 0u : trace_none;
-    LARGE_INTEGER now = {};
-    QueryPerformanceCounter(&now);
     trace("device", static_cast<uint32_t>(reinterpret_cast<uintptr_t>(this)), create.Version, create.Flags.Value,
-          static_cast<uint32_t>(now.QuadPart / 10000));
+          static_cast<uint32_t>(clock_.microseconds() / 1000u));
     if (create.pCallbacks == nullptr || create.pDeviceFuncs == nullptr) return E_INVALIDARG;
     callbacks_ = *create.pCallbacks;
     kernel_.bind(&callbacks_, create.hDevice);
@@ -131,14 +124,14 @@ void D3d9Device::lock_calls()
 {
     AV_SCOPE("D3d9Device::lock_calls");
     lock_.acquire();
-    if (traced_ < trace_most) call_began_ = microseconds();
+    if (trace_.on()) call_began_ = clock_.microseconds();
 }
 
 void D3d9Device::unlock_calls()
 {
     AV_SCOPE("D3d9Device::unlock_calls");
-    if (traced_ < trace_most && call_began_ != 0u) {
-        busy_ += microseconds() - call_began_;
+    if (trace_.on() && call_began_ != 0u) {
+        busy_ += clock_.microseconds() - call_began_;
         calls_++;
     }
     lock_.release();
@@ -165,13 +158,7 @@ D3d9Resource *D3d9Device::resource(HANDLE handle) const
 void D3d9Device::trace(const char *call, uint32_t a, uint32_t b, uint32_t c, uint32_t d)
 {
     AV_SCOPE("D3d9Device::trace");
-    if (traced_ >= trace_most) return;
-    traced_++;
-    LogLine line(lines_);
-    line.text("d3d9 ").text(call);
-    const uint32_t numbers[4] = {a, b, c, d};
-    for (const uint32_t number : numbers) line.text(" ").number(number);
-    line.write();
+    trace_.call(context_number_, call, a, b, c, d);
 }
 
 void D3d9Device::note_failure(const char *call, uint32_t hresult)
@@ -183,29 +170,14 @@ void D3d9Device::note_failure(const char *call, uint32_t hresult)
     if (hresult != still_drawing) refused_.failed(call, static_cast<int32_t>(hresult));
 }
 
-uint64_t D3d9Device::microseconds() const
-{
-    AV_SCOPE("D3d9Device::microseconds");
-    LARGE_INTEGER now = {}, frequency = {};
-    QueryPerformanceCounter(&now);
-    QueryPerformanceFrequency(&frequency);
-    if (frequency.QuadPart == 0) return 0u;
-    /* Whole seconds and the ticks left over, each scaled on its own: the
-     * product of the whole count and a million passes 64 bits after three
-     * weeks of uptime on a 10 MHz counter. */
-    const auto ticks = static_cast<uint64_t>(now.QuadPart);
-    const auto per_second = static_cast<uint64_t>(frequency.QuadPart);
-    return ticks / per_second * 1000000u + ticks % per_second * 1000000u / per_second;
-}
-
 void D3d9Device::trace_wait(const char *call, uint64_t started, uint32_t detail)
 {
     AV_SCOPE("D3d9Device::trace_wait");
     constexpr uint64_t worth_noting = 2000u;
-    if (traced_ >= trace_most) return;
-    const uint64_t took = microseconds() - started;
-    if (took >= worth_noting)
-        trace(call, static_cast<uint32_t>(took), detail, static_cast<uint32_t>(microseconds() / 1000u), 0u);
+    if (!trace_.on()) return;
+    const uint64_t now = clock_.microseconds();
+    const uint64_t took = now - started;
+    if (took >= worth_noting) trace(call, static_cast<uint32_t>(took), detail, static_cast<uint32_t>(now / 1000u), 0u);
 }
 
 uint32_t D3d9Device::id_of(HANDLE handle) const
@@ -642,7 +614,7 @@ HRESULT D3d9Device::get_query_data(const D3DDDIARG_GETQUERYDATA *args)
     uint8_t  answer[sizeof(D3DDDIDEVINFO_VCACHE)] = {};
     uint32_t hresult = 1u;
     uint64_t answered = 0u;
-    const uint64_t started = microseconds();
+    const uint64_t started = clock_.microseconds();
     if (!d3d9proto::av_d3d9_GetQueryData9(wire(), query->id, get_data_flush, &hresult, answer, sizeof(answer),
                                           &answered))
         return lost(__func__);

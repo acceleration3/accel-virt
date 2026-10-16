@@ -7,6 +7,7 @@
 
 #include "core/support/status.hpp"
 #include "guest/kmt/kmt.hpp"
+#include "um/common/performance_clock.hpp"
 
 #include <stdint.h>
 
@@ -109,6 +110,7 @@ private:
     /* One enumeration's handles beside those the searches before it kept. */
     static constexpr uint32_t known_capacity = 2u * max_adapters;
 
+    PerformanceClock clock_;
     void    *event_;
     uint32_t last_code_;
     uint32_t known_adapters_[known_capacity];

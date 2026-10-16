@@ -18,6 +18,7 @@
 #define AV_UM_D3D9_DEVICE_HPP
 
 #include "core/support/object_pool.hpp"
+#include "core/trace/function_scope.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/log/keyed_log.hpp"
 #include "icd/common/refused_calls.hpp"
@@ -28,7 +29,9 @@
 #include "icd/d3d/device_removal.hpp"
 #include "icd/d3d/upload_sink.hpp"
 #include "proto/generated/d3d9/d3d9_wire_types.h"
+#include "um/common/performance_clock.hpp"
 #include "um/d3d/batch_follower.hpp"
+#include "um/d3d/d3d_call_trace.hpp"
 #include "um/d3d/d3d9_ddi.hpp"
 #include "um/d3d/kernel_device.hpp"
 #include "um/d3d/d3d9_records.hpp"
@@ -59,7 +62,7 @@ class D3d9HostCaps;
 class D3d9Device {
 public:
     D3d9Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d9HostCaps &caps,
-               d3d::UmdAdapter &adapter);
+               d3d::UmdAdapter &adapter, d3d::D3dCallTrace &trace);
     ~D3d9Device();
     D3d9Device(const D3d9Device &) = delete;
     D3d9Device &operator=(const D3d9Device &) = delete;
@@ -76,6 +79,9 @@ public:
     void note_failure(const char *call, uint32_t hresult);
     void lock_calls();
     void unlock_calls();
+    /* The call to `slot` written to the process's call trace (DeviceCall::traced). */
+    template <typename... Arguments>
+    void trace_call(const char *slot, const Arguments &...arguments);
 
 #include "um/d3d/generated/d3d9_device_ddi.inc"
 
@@ -139,13 +145,12 @@ private:
     HRESULT                lost(const char *call);
     /* `call` once per device: the runtime asks again on every frame. */
     void                   not_implemented(const char *call);
-    /* With AV_D3D9_TRACE set in the process's environment, the first calls
-     * that place a frame - targets made and bound, viewports, scissors,
-     * presents - are logged with their numbers. */
+    /* While the process's calls are traced (D3dCallTrace), what places a
+     * frame - targets made and bound, viewports, scissors, presents, the
+     * frame's draws and busy time - is written among them with its numbers. */
     void                   trace(const char *call, uint32_t a, uint32_t b, uint32_t c, uint32_t d);
     /* A round trip that took longer than a frame can spare, traced with its
-     * microseconds; `started` is microseconds() when it began. */
-    uint64_t               microseconds() const;
+     * microseconds; `started` is clock_.microseconds() when it began. */
     void                   trace_wait(const char *call, uint64_t started, uint32_t detail);
 
     /* Pending render, sampler and stage states sent before what reads them. */
@@ -267,7 +272,9 @@ private:
     Ring                                 index32_ring_;
     uint8_t                             *readback_;
     size_t                               readback_bytes_;
-    uint32_t                             traced_;
+    d3d::D3dCallTrace                   &trace_;
+    uint32_t                             context_number_;
+    PerformanceClock                     clock_;
     /* While tracing: when the call in progress began, and the time the
      * device's calls took since the last present, and how many. */
     uint64_t                             call_began_;
@@ -281,6 +288,13 @@ private:
     uint32_t                             null_shaders_;
     uint64_t                             written_;
 };
+
+template <typename... Arguments>
+void D3d9Device::trace_call(const char *slot, const Arguments &...arguments)
+{
+    AV_SCOPE("D3d9Device::trace_call");
+    trace_.call(context_number_, slot, arguments...);
+}
 
 }  // namespace av::d3d9
 

@@ -7,6 +7,7 @@
 
 #include "icd/d3d/umd_host_driver.hpp"
 #include "um/d3d/d3d11_driver.hpp"
+#include "um/d3d/d3d_call_trace.hpp"
 #include "um/d3d/d3d9_driver.hpp"
 #include "um/d3d/d3d12_driver.hpp"
 
@@ -43,6 +44,8 @@ public:
     d3d::SharedRowsRequest &shared_rows();
 
 private:
+    /* Before the three halves: every runtime's devices write to it. */
+    d3d::D3dCallTrace  trace_;
     d3d11::D3d11Driver d3d11_;
     d3d12::D3d12Driver d3d12_;
     d3d9::D3d9Driver   d3d9_;

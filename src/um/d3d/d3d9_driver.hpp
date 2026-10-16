@@ -32,6 +32,7 @@ class Kmt;
 
 
 namespace av::d3d {
+class D3dCallTrace;
 class UmdAdapter;
 struct D3d102ddiargGetCapsRecord;
 }  // namespace av::d3d
@@ -40,7 +41,7 @@ namespace av::d3d9 {
 
 class D3d9Driver {
 public:
-    D3d9Driver(BlockSource &memory, Kmt &kmt, LogSink &log);
+    D3d9Driver(BlockSource &memory, Kmt &kmt, LogSink &log, d3d::D3dCallTrace &trace);
     D3d9Driver(const D3d9Driver &) = delete;
     D3d9Driver &operator=(const D3d9Driver &) = delete;
 
@@ -59,6 +60,7 @@ private:
     BlockSource                   &memory_;
     LogSink                  &log_;
     DriverLog                lines_;
+    d3d::D3dCallTrace       &trace_;
     ObjectPool<D3d9Device>         devices_;
     AdapterSessions<D3d9HostCaps>  adapters_;
 };

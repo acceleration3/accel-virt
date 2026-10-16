@@ -38,7 +38,7 @@ namespace av::d3d11 {
 
 class D3d11Driver {
 public:
-    D3d11Driver(BlockSource &memory, Kmt &kmt, LogSink &log);
+    D3d11Driver(BlockSource &memory, Kmt &kmt, LogSink &log, d3d::D3dCallTrace &trace);
 
     d3d::Hresult build(d3d::UmdDevice &adopted, d3d::D3d10ddiargCreateDeviceRecord &create, uint32_t kmt_adapter);
     d3d::Hresult caps(d3d::UmdAdapter &adapter, d3d::D3d102ddiargGetCapsRecord &args, uint32_t kmt_adapter);
@@ -49,7 +49,7 @@ public:
 private:
     BlockSource             &memory_;
     LogSink            &log_;
-    D3d11CallTrace           trace_;
+    d3d::D3dCallTrace       &trace_;
     d3d::SharedRowsRequest   rows_;
     ObjectPool<D3d11Device>  devices_;
     AdapterSessions<D3d11HostCaps> adapters_;

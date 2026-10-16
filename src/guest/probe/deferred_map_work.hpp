@@ -1,5 +1,5 @@
 /* Dark Souls Remastered's frame, as its calls into the driver show it
- * (AV_D3D11_TRACE): the frame recorded on one of two deferred contexts in
+ * (AV_D3D_TRACE): the frame recorded on one of two deferred contexts in
  * turn, its dynamic constant buffers each mapped with WRITE_DISCARD there, a
  * dynamic buffer of one MiB that is both vertex and index buffer mapped with
  * WRITE_DISCARD and then three times with WRITE_NO_OVERWRITE, a piece

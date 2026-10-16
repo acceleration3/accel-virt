@@ -13,6 +13,7 @@
 #ifndef AV_UM_PAGING_QUEUE_HPP
 #define AV_UM_PAGING_QUEUE_HPP
 
+#include "um/common/performance_clock.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 
 #include <stdint.h>
@@ -36,6 +37,7 @@ private:
 
     const D3DDDI_DEVICECALLBACKS &kernel_;
     HANDLE                        device_;
+    PerformanceClock              clock_;
     D3DKMT_HANDLE                 queue_;
     const volatile uint64_t      *fence_;
 };

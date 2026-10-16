@@ -156,7 +156,12 @@ class DdiTable:
                 lines.append(f"{{ {keyword}d3d::umd_binding.root().{self.root_slots[name]}({self.root_argument}); }}")
                 lines.append("")
                 continue
-            if self.note_failures and ret == "HRESULT":
+            if self.note_failures and ret == "HRESULT" and self.trace_calls:
+                traced = "".join(f", {label}" for label in names[1:])
+                lines.append(f"{{ const d3d::DeviceCall<{self.device_class}> call({self.device});")
+                lines.append(f"  return call.noted(\"{name[3:]}\", call.traced(\"{name[3:]}\", "
+                             f"&{self.device_class}::{snake(name)}{traced})); }}")
+            elif self.note_failures and ret == "HRESULT":
                 lines.append(f"{{ {self.device_class} &called = {self.device};")
                 lines.append(f"  return d3d::DeviceCall<{self.device_class}>(called).noted(\"{name[3:]}\", "
                              f"called.{snake(name)}({arguments})); }}")

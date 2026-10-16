@@ -9,12 +9,12 @@ namespace {
 /* A present waits on this, not the GPU: paging an aperture allocation in is a
  * page-table update the miniport answers at once, so a fence still short after
  * two seconds is a kernel that will not page it. */
-constexpr LONGLONG paging_patience_seconds = 2;
+constexpr uint64_t paging_patience_seconds = 2u;
 
 }  // namespace
 
 PagingQueue::PagingQueue(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device)
-    : kernel_(kernel), device_(device), queue_(0u), fence_(nullptr)
+    : kernel_(kernel), device_(device), clock_(), queue_(0u), fence_(nullptr)
 {
     AV_SCOPE("PagingQueue::PagingQueue");
 }
@@ -64,12 +64,9 @@ HRESULT PagingQueue::wait_for(uint64_t fence) const
 {
     AV_SCOPE("PagingQueue::wait_for");
     if (fence_ == nullptr) return E_FAIL;
-    LARGE_INTEGER frequency = {}, started = {}, now = {};
-    QueryPerformanceFrequency(&frequency);
-    QueryPerformanceCounter(&started);
+    const uint64_t started = clock_.ticks();
     while (*fence_ < fence) {
-        QueryPerformanceCounter(&now);
-        if (now.QuadPart - started.QuadPart > frequency.QuadPart * paging_patience_seconds) return E_FAIL;
+        if (clock_.ticks() - started > clock_.frequency() * paging_patience_seconds) return E_FAIL;
         Sleep(0u);
     }
     return S_OK;

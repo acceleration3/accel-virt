@@ -19,9 +19,10 @@ file(GLOB_RECURSE AVTEST_SOURCES CONFIGURE_DEPENDS
 # The ICDs' shims, avvkprobe.exe's and avinspect.exe's are their own
 # targets below.
 list(FILTER AVTEST_SOURCES EXCLUDE REGEX "/um/(common|vulkan|opengl|opencl|d3d|probe|inspect|sample)/")
-# Except the directory the trace services and the crash file write to, which
-# every guest binary shares.
-list(APPEND AVTEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/common/diagnostics_directory.cpp)
+# Except the directory the trace services and the crash file write to, and the
+# performance counter GdiKmt reads, which every guest binary shares.
+list(APPEND AVTEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/common/diagnostics_directory.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/common/performance_clock.cpp)
 # Of the generated tree, only the guest's encoders: the av scenarios send real
 # Vulkan and OpenCL streams (044), and the host-loss scenario Direct3D 11's.
 # The server dispatch is the host's, and the OpenGL client does not link
@@ -278,6 +279,7 @@ list(APPEND AV_VENDOR_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/common/srw_lock.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/common/run_once.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/common/performance_clock.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/kmt/gdi_kmt.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/vendor/vendor_record_layout.cpp)
 foreach(vendor adl nvapi)

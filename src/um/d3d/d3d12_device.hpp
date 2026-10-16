@@ -30,6 +30,7 @@
 
 #include "core/support/object_storage.hpp"
 #include "core/log/keyed_log.hpp"
+#include "core/trace/function_scope.hpp"
 #include "icd/common/refused_calls.hpp"
 #include "icd/d3d/d3d12_address_space.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
@@ -37,6 +38,7 @@
 #include "icd/d3d/pipeline_library_blob.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
 #include "um/d3d/batch_follower.hpp"
+#include "um/d3d/d3d_call_trace.hpp"
 #include "um/d3d/d3d12_ddi.hpp"
 #include "um/d3d/d3d12_recorder.hpp"
 #include "um/d3d/d3d12_records.hpp"
@@ -65,7 +67,7 @@ public:
 
     /* `list_table` is the driver's, and is filled after the device is made. */
     D3d12Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d12HostCaps &caps,
-                void *const &list_table);
+                void *const &list_table, d3d::D3dCallTrace &trace);
     ~D3d12Device();
     D3d12Device(const D3d12Device &) = delete;
     D3d12Device &operator=(const D3d12Device &) = delete;
@@ -81,6 +83,10 @@ public:
     /* `hresult`, what the DDI `slot` answered, logged when it is a refusal:
      * once for each slot and HRESULT. */
     HRESULT answered(const char *slot, HRESULT hresult);
+    /* The call to `slot` written to the process's call trace: every table's
+     * thunk writes its call through the device that made the object. */
+    template <typename... Arguments>
+    void    trace_call(const char *slot, const Arguments &...arguments);
 
 #include "um/d3d/generated/d3d12_device_ddi.inc"
 
@@ -171,7 +177,16 @@ private:
     ResourceRecord                        null_resource_;
     d3d::DeviceRemoval                    removal_;
     d3d::PipelineLibraryBlob              library_blob_;
+    d3d::D3dCallTrace                    &trace_;
+    uint32_t                              context_number_;
 };
+
+template <typename... Arguments>
+void D3d12Device::trace_call(const char *slot, const Arguments &...arguments)
+{
+    AV_SCOPE("D3d12Device::trace_call");
+    trace_.call(context_number_, slot, arguments...);
+}
 
 }  // namespace av::d3d12
 

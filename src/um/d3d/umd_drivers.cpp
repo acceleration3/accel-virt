@@ -7,9 +7,10 @@
 namespace av {
 
 UmdDrivers::UmdDrivers(BlockSource &memory, Kmt &kmt, LogSink &log)
-    : d3d11_(memory, kmt, log), d3d12_(memory, kmt, log), d3d9_(memory, kmt, log)
+    : trace_(), d3d11_(memory, kmt, log, trace_), d3d12_(memory, kmt, log, trace_), d3d9_(memory, kmt, log, trace_)
 {
     AV_SCOPE("UmdDrivers::UmdDrivers");
+    trace_.open();
 }
 
 d3d::SharedRowsRequest &UmdDrivers::shared_rows()

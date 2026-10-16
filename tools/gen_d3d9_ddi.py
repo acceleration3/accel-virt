@@ -74,8 +74,10 @@ D3DDDI_DEVICEFUNCS *probe;
               "um/d3d/d3d9_device.hpp", "um/d3d/device_call.hpp", "um/d3d/d3d9_tables.hpp"],
     preamble=["/* The ABI boundary C requires: the runtime calls each slot with the device",
               " * handle CreateDevice handed back and nothing else, so each thunk is one line",
-              " * into the device that handle is, and a call that fails says so. */"],
+              " * into the device that handle is, written to the call trace, and a call",
+              " * that fails says so. */"],
     note_failures=True,
+    trace_calls=True,
 )
 
 

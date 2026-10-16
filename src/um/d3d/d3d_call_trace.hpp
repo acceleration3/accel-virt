@@ -1,36 +1,40 @@
-/* The Direct3D 11 runtime's calls into this driver, one line each, written to
- * C:\ProgramData\av\avumd-calls-<pid>.log while AV_D3D11_TRACE is set in the
- * process's environment: when, on which thread, into which context (each
- * device and each deferred context numbered as it is made), the slot, and its
- * arguments - a number as it is, an object by the id its record holds, the
- * first of an array of them, and a resource or a view by what it is made of.
- * What an application does at the DDI, for a probe to be written from
- * (docs/testing.md, "Probes from an application's calls").
+/* The Direct3D runtimes' calls into this driver - 9's, 11's and 12's - one
+ * line each, written to C:\ProgramData\av\avumd-calls-<pid>.log while
+ * AV_D3D_TRACE is set in the process's environment: when, on which thread,
+ * into which context (each device, deferred context and Direct3D 9 device
+ * numbered as it is made), the slot, and its arguments - a number as it is, an
+ * object by the id its record's stamp holds, the first of an array of them,
+ * and a resource or a view by what it is made of. What an application does at
+ * the DDI, for a probe to be written from (docs/testing.md, "Probes from an
+ * application's calls"). A Direct3D 9 device writes its frame, wait and state
+ * lines among them.
  *
  * The variable's value is how many calls to write, after how many to pass
  * over: "20000", or "300000+20000" for the twenty thousand after the first
- * three hundred thousand. One per process, in the Direct3D 11 driver; while
- * it is off a call costs a load and a branch. */
-#ifndef AV_UM_D3D11_CALL_TRACE_HPP
-#define AV_UM_D3D11_CALL_TRACE_HPP
+ * three hundred thousand. One per process, which UmdDrivers owns and hands
+ * every runtime's half; while it is off a call costs a load and a branch. */
+#ifndef AV_UM_D3D_CALL_TRACE_HPP
+#define AV_UM_D3D_CALL_TRACE_HPP
 
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "um/common/file_log.hpp"
+#include "um/common/performance_clock.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 
 #include <stdint.h>
 
-namespace av::d3d11 {
+namespace av::d3d {
 
-class D3d11CallTrace {
+class D3dCallTrace {
 public:
-    D3d11CallTrace();
-    D3d11CallTrace(const D3d11CallTrace &) = delete;
-    D3d11CallTrace &operator=(const D3d11CallTrace &) = delete;
+    D3dCallTrace();
+    D3dCallTrace(const D3dCallTrace &) = delete;
+    D3dCallTrace &operator=(const D3dCallTrace &) = delete;
 
     /* Reads the environment once, and opens the file if it asks for calls. */
     void     open();
+    bool     on() const;
     /* The number the next device or deferred context is called by. */
     uint32_t number_context();
     template <typename... Arguments>
@@ -68,20 +72,21 @@ private:
     uint64_t microseconds() const;
     uint32_t thread() const;
 
-    FileLog  file_;
+    FileLog          file_;
+    PerformanceClock clock_;
     bool     on_;
     uint64_t skip_;
     uint64_t count_;
     uint64_t calls_;
     uint32_t contexts_;
+    /* The clock's microseconds when the trace opened. */
     uint64_t started_;
-    uint64_t frequency_;
 };
 
 template <typename... Arguments>
-void D3d11CallTrace::call(uint32_t context, const char *slot, const Arguments &...arguments)
+void D3dCallTrace::call(uint32_t context, const char *slot, const Arguments &...arguments)
 {
-    AV_SCOPE("D3d11CallTrace::call");
+    AV_SCOPE("D3dCallTrace::call");
     if (!on_ || !take()) return;
     Line line(microseconds(), thread(), context, slot);
     (line.put(arguments), ...);
@@ -89,9 +94,9 @@ void D3d11CallTrace::call(uint32_t context, const char *slot, const Arguments &.
 }
 
 template <typename Argument>
-void D3d11CallTrace::Line::put(const Argument &argument)
+void D3dCallTrace::Line::put(const Argument &argument)
 {
-    AV_SCOPE("D3d11CallTrace::Line::put");
+    AV_SCOPE("D3dCallTrace::Line::put");
     if constexpr (requires { argument.pDrvPrivate; }) {
         object(argument.pDrvPrivate);
     } else if constexpr (requires { argument.handle; }) {
@@ -122,15 +127,15 @@ void D3d11CallTrace::Line::put(const Argument &argument)
 }
 
 template <typename View>
-void D3d11CallTrace::Line::view(const View &view)
+void D3dCallTrace::Line::view(const View &view)
 {
-    AV_SCOPE("D3d11CallTrace::Line::view");
+    AV_SCOPE("D3dCallTrace::Line::view");
     body_.append(" of");
     object(view.hDrvResource.pDrvPrivate);
     body_.append(" format=");
     body_.append_decimal(static_cast<uint64_t>(view.Format));
 }
 
-}  // namespace av::d3d11
+}  // namespace av::d3d
 
-#endif  // AV_UM_D3D11_CALL_TRACE_HPP
+#endif  // AV_UM_D3D_CALL_TRACE_HPP

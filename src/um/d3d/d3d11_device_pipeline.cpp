@@ -605,16 +605,12 @@ VOID D3d11Device::query_get_data(D3D10DDI_HQUERY handle, void *data, UINT size, 
      * DO_NOT_FLUSH says about the GPU's. A slot that stays behind - another
      * query sharing it, a full host list - is asked about the old way, once
      * it has been behind longer than any GPU wait a frame makes. */
-    constexpr int64_t patience_per_second = 500;
+    constexpr uint64_t patience_per_second = 500u;
     if (session_.query_results().read(query.stamp.id(), query.last_end, data, size < query.data_bytes ? size : query.data_bytes))
         return;
-    LARGE_INTEGER now = {};
-    LARGE_INTEGER frequency = {};
-    QueryPerformanceCounter(&now);
-    QueryPerformanceFrequency(&frequency);
-    if (query.first_miss == 0u) query.first_miss = static_cast<uint64_t>(now.QuadPart);
-    const int64_t behind = now.QuadPart - static_cast<int64_t>(query.first_miss);
-    if (query.last_end != 0u && behind < frequency.QuadPart / patience_per_second) {
+    const uint64_t now = clock_.ticks();
+    if (query.first_miss == 0u) query.first_miss = now;
+    if (query.last_end != 0u && now - query.first_miss < clock_.frequency() / patience_per_second) {
         query.waited_on = 1u;
         if (wire().flush() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
         else still_drawing();

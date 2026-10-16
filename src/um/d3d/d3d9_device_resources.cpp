@@ -427,7 +427,7 @@ bool D3d9Device::write_piece(uint32_t id, uint32_t index, const d3d9proto::Box &
 {
     AV_SCOPE("D3d9Device::write_piece");
     written_ += bytes;
-    const uint64_t started = microseconds();
+    const uint64_t started = clock_.microseconds();
     const bool     room = wire().make_room_for(bytes);
     trace_wait("wait-room", started, static_cast<uint32_t>(bytes));
     if (room && d3d9proto::av_d3d9_WriteTexture9(wire(), id, index, box, row_pitch, slice_pitch, flags, data, bytes))
@@ -470,7 +470,7 @@ HRESULT D3d9Device::read_surface(const D3d9Resource &resource, uint32_t index, u
     if (!wire().make_room_for(capacity)) return lost(__func__);
     uint32_t hresult = 1u, width = 0u, height = 0u, format = 0u;
     uint64_t read = 0u;
-    const uint64_t started = microseconds();
+    const uint64_t started = clock_.microseconds();
     const bool     sent = d3d9proto::av_d3d9_ReadSurface9(wire(), id, subresource, &hresult, &width, &height, &format, &pitch,
                                          readback_, capacity, &read);
     trace_wait("wait-read", started, static_cast<uint32_t>(capacity));

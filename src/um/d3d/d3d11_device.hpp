@@ -33,13 +33,14 @@
 #include "icd/d3d/write_maps.hpp"
 #include "um/d3d/reentrant_call_lock.hpp"
 #include "um/common/srw_lock.hpp"
-#include "um/d3d/d3d11_call_trace.hpp"
+#include "um/d3d/d3d_call_trace.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "um/d3d/kernel_context_gate.hpp"
 #include "um/d3d/kernel_device.hpp"
 #include "um/d3d/d3d11_records.hpp"
 #include "um/d3d/watched_shadows.hpp"
 #include "um/d3d/batch_follower.hpp"
+#include "um/common/performance_clock.hpp"
 #include "um/d3d/presented_allocations.hpp"
 
 #include <stdint.h>
@@ -65,7 +66,7 @@ class D3d11HostCaps;
 class D3d11Device {
 public:
     D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps,
-                D3d11CallTrace &trace, const d3d::SharedRowsRequest &rows);
+                d3d::D3dCallTrace &trace, const d3d::SharedRowsRequest &rows);
     ~D3d11Device();
     D3d11Device(const D3d11Device &) = delete;
     D3d11Device &operator=(const D3d11Device &) = delete;
@@ -280,6 +281,7 @@ private:
     D3D10DDI_HRTDEVICE     runtime_;
     D3D10DDI_HRTCORELAYER  core_layer_;
     d3d::KernelDevice                           kernel_;
+    PerformanceClock                            clock_;
     d3d::PresentedAllocations                   allocations_;
     const D3D11DDI_CORELAYER_DEVICECALLBACKS   *core_;
     const DXGI_DDI_BASE_CALLBACKS              *dxgi_;
@@ -314,7 +316,7 @@ private:
     icd::OnceLatch  token_refused_;
     /* Presents so far: a GDI surface is refreshed once a frame, when first bound. */
     uint32_t        frame_;
-    D3d11CallTrace &trace_;
+    d3d::D3dCallTrace &trace_;
     /* Which threads make shared textures another API reads as rows. */
     const d3d::SharedRowsRequest &rows_;
     /* What the call trace calls this device or deferred context. */

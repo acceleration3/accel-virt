@@ -18,8 +18,8 @@ constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
 
 }  // namespace
 
-D3d9Driver::D3d9Driver(BlockSource &memory, Kmt &kmt, LogSink &log)
-    : memory_(memory), log_(log), lines_(log, "avumd: "), devices_(memory),
+D3d9Driver::D3d9Driver(BlockSource &memory, Kmt &kmt, LogSink &log, d3d::D3dCallTrace &trace)
+    : memory_(memory), log_(log), lines_(log, "avumd: "), trace_(trace), devices_(memory),
       adapters_(kmt, memory, log, "the host answers no Direct3D 9 on this adapter", session_arena_bytes, 0u,
                 d3d9proto::kCmd_SelectDevice9, d3d9proto::kCmd_Flush9)
 {
@@ -74,7 +74,7 @@ d3d::Hresult D3d9Driver::build(d3d::UmdAdapter &adapter, void *create, uint32_t 
     auto &arguments = *static_cast<D3DDDIARG_CREATEDEVICE *>(create);
     D3d9Device *device = nullptr;
     d3d::D3dSession *const joined = adapters_.session(slot);
-    if (joined == nullptr || devices_.create(device, *joined, memory_, log_, adapters_.caps(slot), adapter) != Status::ok)
+    if (joined == nullptr || devices_.create(device, *joined, memory_, log_, adapters_.caps(slot), adapter, trace_) != Status::ok)
         return d3d::hr_out_of_memory;
     const HRESULT opened = device->initialize(kmt_adapter, arguments);
     if (FAILED(opened)) {

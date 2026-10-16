@@ -977,11 +977,12 @@ gives it (docs/host-memory.md, Budgets).
   device for the probe on the system's runtime - `gpu_matrix.py`'s probes
   suite - on a QEMU whose environment loads the layer.
 
-  **Probes from an application's calls.** With `AV_D3D11_TRACE` in a
-  process's environment, avumd writes the Direct3D 11 runtime's calls into it
-  to `C:\ProgramData\av\avumd-calls-<pid>.log`, one line each: microseconds,
-  thread, context (`c0` an immediate device, then each device and deferred
-  context in the order it was made), the slot and its arguments - an object
+  **Probes from an application's calls.** With `AV_D3D_TRACE` in a
+  process's environment, avumd writes the Direct3D 9, 11 and 12 runtimes'
+  calls into it to `C:\ProgramData\av\avumd-calls-<pid>.log`
+  (`D3dCallTrace`), one line each: microseconds, thread, context (`c0` the
+  first device, then each device, deferred context and Direct3D 9 device in
+  the order it was made), the slot and its arguments - an object
   by its id (`#12`), the first of an array of them, a created resource by
   its dimension, size, format, usage, bind, CPU access and misc flags, a view
   by its resource and format. The value is how many calls to write, after how
@@ -1332,8 +1333,7 @@ log, call trace, event file and crash file goes for the runner to collect.
 | `AV_PTRACE` | host env | switch | lets a profiler attach to a QEMU this shell did not start (Yama ptrace_scope 1) |
 | `AV_VK_SUBMIT_TIMING` | host env | switch | times each Vulkan submission on the host |
 | `AV_D3D_PATH` | host env | path | the directory DXVK's and vkd3d-proton's libraries load from |
-| `AV_D3D11_TRACE` | guest env | number, or `skip+count` | avumd writes the runtime's calls to `avumd-calls-<pid>.log` ("Probes from an application's calls") |
-| `AV_D3D9_TRACE` | guest env | switch | avumd's Direct3D 9 devices write their present, frame and wait lines to the driver's log |
+| `AV_D3D_TRACE` | guest env | number, or `skip+count` | avumd writes the Direct3D 9, 11 and 12 runtimes' calls to `avumd-calls-<pid>.log`, a Direct3D 9 device's frame, wait and state lines among them ("Probes from an application's calls") |
 | `perfetto` | guest flag file | `<events per slot> <depth> <scopes>`, each optional | a guest process's timeline to `events-<module>-<pid>.bin` |
 | `trace-scopes` | guest flag file | present or not | binds a guest process's trace table without a timeline |
 

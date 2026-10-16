@@ -213,13 +213,13 @@ def default_return(ret):
 def thunks(tables):
     lines = [HEADER, "/* The ABI boundary C requires: the runtime calls each slot with the handle it",
              " * was given and nothing else, so each thunk is one line into the object the",
-             " * handle's block names, or the answer a driver without the slot's feature",
-             " * gives. */",
+             " * handle's block names, written to the call trace by the device that made",
+             " * it, or the answer a driver without the slot's feature gives. */",
              '#include "core/trace/function_scope.hpp"', '#include "icd/d3d/device_block.hpp"', '#include "um/d3d/d3d12_ddi.hpp"',
              '#include "um/d3d/d3d12_device.hpp"', '#include "um/d3d/d3d12_record_handle.hpp"',
              '#include "um/d3d/d3d12_recorder.hpp"', '#include "um/d3d/d3d12_tables.hpp"', "", "namespace av::d3d12 {", "", "namespace {", ""]
     fills = []
-    for table, first, prefix, target, _owner in TABLES:
+    for table, first, prefix, target, owner in TABLES:
         fill = [f"void {FILLERS[table]}({table} &table)", "{", f'    AV_SCOPE("{FILLERS[table]}");']
         for name, ret, parameters in tables[table]:
             if ret is None:
@@ -235,13 +235,25 @@ def thunks(tables):
                 if not owned:
                     raise SystemExit(f"{name}: implemented, but its first parameter is {parameters[0]}")
                 call_arguments = ", ".join(names) if table == LIST_TABLE or table == QUEUE_TABLE else arguments
+                traced = "".join(f", {label}" for label in call_arguments.split(", ") if label)
+                # Every call is written to the process's call trace (D3dCallTrace) by the device it
+                # reaches: after it, so what it made has its id - a destroy before, while its id is there.
+                tracer = "target" if owner == "device" else target.format(h='handle').replace(".recorder()", ".device()")
+                trace = f"{tracer}.trace_call(\"{name[3:]}\"{traced});"
+                kind = "D3d12Recorder" if owner == "recorder" else "D3d12Device"
+                call = f"target.{snake(name)}({call_arguments})"
+                head = f"{{ {kind} &target = {target.format(h='handle')};"
                 if table in (DEVICE_TABLE, EXTENDED_TABLE) and ret == "HRESULT":
                     # A refusal is logged with the slot's name: most say nothing of why, and the runtime
                     # hands the bare code to the application.
-                    lines.append(f"{{ D3d12Device &device = {target.format(h='handle')}; "
-                                 f"return device.answered(\"{name[3:]}\", device.{snake(name)}({call_arguments})); }}")
+                    lines.append(f"{head} const HRESULT answer = {call}; {trace} "
+                                 f"return target.answered(\"{name[3:]}\", answer); }}")
+                elif ret == "void" and name.startswith("pfnDestroy"):
+                    lines.append(f"{head} {trace} {call}; }}")
+                elif ret == "void":
+                    lines.append(f"{head} {call}; {trace} }}")
                 else:
-                    lines.append(f"{{ {keyword}{target.format(h='handle')}.{snake(name)}({call_arguments}); }}")
+                    lines.append(f"{head} const {ret_type(ret)} answer = {call}; {trace} return answer; }}")
             else:
                 answer = default_return(ret)
                 unused = "".join(f" static_cast<void>({label});" for label in names)

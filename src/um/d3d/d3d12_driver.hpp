@@ -31,6 +31,7 @@ class Kmt;
 
 
 namespace av::d3d {
+class D3dCallTrace;
 struct D3d102ddiargGetCapsRecord;
 struct D3d12ddiargCreateDeviceRecord;
 }  // namespace av::d3d
@@ -39,7 +40,7 @@ namespace av::d3d12 {
 
 class D3d12Driver {
 public:
-    D3d12Driver(BlockSource &memory, Kmt &kmt, LogSink &log);
+    D3d12Driver(BlockSource &memory, Kmt &kmt, LogSink &log, d3d::D3dCallTrace &trace);
     D3d12Driver(const D3d12Driver &) = delete;
     D3d12Driver &operator=(const D3d12Driver &) = delete;
 
@@ -59,6 +60,7 @@ private:
     BlockSource               &memory_;
     LogSink                   &log_;
     DriverLog                      lines_;
+    d3d::D3dCallTrace             &trace_;
     ObjectPool<D3d12Device>         devices_;
     AdapterSessions<D3d12HostCaps>  adapters_;
     /* D3D12Core's handle for the command-list table this driver filled. */

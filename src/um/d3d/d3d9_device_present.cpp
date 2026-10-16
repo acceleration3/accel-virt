@@ -179,7 +179,7 @@ HRESULT D3d9Device::present(const D3DDDIARG_PRESENT *args)
     D3d9Resource *const source = resource(args->hSrcResource);
     if (source == nullptr || args->SrcSubResourceIndex >= source->count) return E_INVALIDARG;
     const D3d9Resource *const destination = resource(args->hDstResource);
-    const uint64_t began = microseconds();
+    const uint64_t began = clock_.microseconds();
     trace("present", static_cast<uint32_t>(busy_), calls_, 0u,
           static_cast<uint32_t>(began / 1000u));
     trace("frame", draws_[0] | (draws_[1] << 16u), draws_[2] | (draws_[3] << 16u), rebased_ | (null_shaders_ << 16u),
@@ -214,7 +214,7 @@ HRESULT D3d9Device::present(const D3DDDIARG_PRESENT *args)
     present.hDstAllocation = destination == nullptr ? 0u : destination->allocation;
     present.hContext = context_;
     const HRESULT presented = kernel_.present(present);
-    trace("presented", static_cast<uint32_t>(presented), static_cast<uint32_t>(microseconds() - began), 0u, 0u);
+    trace("presented", static_cast<uint32_t>(presented), static_cast<uint32_t>(clock_.microseconds() - began), 0u, 0u);
     return presented;
 }
 

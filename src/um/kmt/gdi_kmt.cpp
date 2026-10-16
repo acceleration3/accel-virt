@@ -117,7 +117,7 @@ constexpr uint32_t hardware_queue_node = 1u;
 
 }  // namespace
 
-GdiKmt::GdiKmt() : event_(nullptr), last_code_(0u), known_adapters_{}, known_luids_{}, known_(0u)
+GdiKmt::GdiKmt() : clock_(), event_(nullptr), last_code_(0u), known_adapters_{}, known_luids_{}, known_(0u)
 {
     AV_SCOPE("GdiKmt::GdiKmt");
 }
@@ -921,12 +921,8 @@ Status GdiKmt::escape(uint32_t adapter, uint32_t device, uint32_t context, uint8
 uint64_t GdiKmt::performance_counter(uint64_t &frequency) const
 {
     AV_SCOPE("GdiKmt::performance_counter");
-    LARGE_INTEGER ticks = {};
-    LARGE_INTEGER rate = {};
-    QueryPerformanceFrequency(&rate);
-    QueryPerformanceCounter(&ticks);
-    frequency = static_cast<uint64_t>(rate.QuadPart);
-    return static_cast<uint64_t>(ticks.QuadPart);
+    frequency = clock_.frequency();
+    return clock_.ticks();
 }
 
 uint32_t GdiKmt::last_code() const

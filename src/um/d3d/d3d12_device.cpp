@@ -42,9 +42,10 @@ uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 
 D3d12Device::D3d12Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log,
                          const D3d12HostCaps &caps,
-                         void *const &list_table)
+                         void *const &list_table, d3d::D3dCallTrace &trace)
     : session_(session), log_(log), lines_(memory, log, "avumd: "), refused_(lines_), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), follower_(), residency_(), channel_(), addresses_(),
-      recorder_(*this), null_resource_{}, removal_(), library_blob_()
+      recorder_(*this), null_resource_{}, removal_(), library_blob_(), trace_(trace),
+      context_number_(trace.number_context())
 {
     AV_SCOPE("D3d12Device::D3d12Device");
     null_resource_.depth_or_array = 1u;
