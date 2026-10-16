@@ -12,6 +12,8 @@
 #ifndef AV_ICD_CHAINED_IMAGE_HPP
 #define AV_ICD_CHAINED_IMAGE_HPP
 
+#include "icd/common/chain_slots.hpp"
+
 #include <stdint.h>
 
 #include <vulkan/vulkan_core.h>
@@ -23,7 +25,6 @@ class ClientTransport;
 namespace av::icd {
 
 class EntryLookup;
-class WindowChains;
 struct ChainedImageProbe;
 
 class ChainedImage {
@@ -54,16 +55,13 @@ public:
     bool invariants_hold() const;
 
 private:
-    [[nodiscard]] bool open_slot(uint64_t id, uint64_t bytes, uint32_t dxgi_format, VkExtent2D extent);
+    [[nodiscard]] bool make_image(uint32_t dxgi_format, VkExtent2D extent);
 
     EntryLookup     &entries_;
     VkDevice         device_;
     WindowChains    &chains_;
+    ChainSlots       slots_;
     ClientTransport &wire_;
-    void            *window_;
-    uint64_t         id_;
-    uint64_t         bytes_;
-    VkDeviceMemory   memory_;
     VkImage          image_;
 
     friend struct ChainedImageProbe;

@@ -14,6 +14,7 @@
 #ifndef AV_GLICD_CHAINED_FRAMES_HPP
 #define AV_GLICD_CHAINED_FRAMES_HPP
 
+#include "icd/common/chain_slots.hpp"
 #include "icd/common/window_chains.hpp"
 
 #include <stdint.h>
@@ -51,24 +52,17 @@ public:
     void               draw(ClientTransport &wire, uint32_t source, uint32_t slot);
     /* The slots' names deleted and their objects released through `wire` -
      * without one they went with the host's context - and the chain closed. */
-    void               close(ClientTransport *wire, icd::WindowChains &chains);
+    void               close(ClientTransport *wire);
 
     bool invariants_hold() const;
 
 private:
-    void delete_slots(ClientTransport &wire);
-    void forget();
+    void delete_textures(ClientTransport &wire);
 
-    void    *window_;
-    uint32_t width_;
-    uint32_t height_;
-    uint64_t ids_[slot_count];
-    uint64_t bytes_[slot_count];
-    /* The host's names: the memory each slot was opened as, and the texture
-     * over it. 0 for none. */
-    uint32_t memories_[slot_count];
-    uint32_t textures_[slot_count];
-    bool     opened_;
+    icd::ChainSlots slots_;
+    /* The host's names of the textures over the slots' memory; 0 for none. */
+    uint32_t        textures_[slot_count];
+    bool            opened_;
 };
 
 }  // namespace av::glicd

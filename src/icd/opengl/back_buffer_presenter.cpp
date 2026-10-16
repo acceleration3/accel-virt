@@ -172,7 +172,7 @@ void BackBufferPresenter::release(ClientTransport *wire)
     give_room_back();
     pending_ = slot_count;
     pending_chained_ = false;
-    if (loop_ != nullptr) chained_.close(wire, loop_->chains());
+    chained_.close(wire);
     loop_ = nullptr;
     if (wire != nullptr) delete_objects(*wire);
     forget_objects();
