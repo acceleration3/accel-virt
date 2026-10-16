@@ -15,6 +15,7 @@
 #include "proto/d3d/dxgi_format.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/d3d/resource_misc.hpp"
+#include "proto/resources/pitched_extent.hpp"
 #include "executor/imported_blob.hpp"
 #include "executor/poll_budget.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
@@ -1681,11 +1682,8 @@ bool D3dBackend::on_UpdateSubresource(uint32_t resource, uint32_t subresource, u
         depth = box.back - box.front;
     }
     const DxgiFormatLayout layout(format);
-    const uint64_t row = layout.copied_row_bytes(width);
-    const uint64_t rows = layout.rows(height);
-    const uint64_t needed = static_cast<uint64_t>(depth - 1u) * depth_pitch +
-                            static_cast<uint64_t>(rows - 1u) * row_pitch + row;
-    if (needed > data_size) return false;
+    const uint64_t         row = layout.copied_row_bytes(width);
+    if (!PitchedExtent(row, layout.rows(height), depth, row_pitch, depth_pitch).within(data_size)) return false;
     if (update_dynamic_buffer(resource, found, has_box != 0u ? box.left : 0u, data, row, copy_flags)) return true;
     constants_.release(device11_->context(), states_.selected_id(), resource, static_cast<ID3D11Buffer *>(found));
     const D3D11_BOX region = {box.left, box.top, box.front, box.right, box.bottom, box.back};

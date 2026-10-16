@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
+#include "proto/resources/pitched_extent.hpp"
 
 namespace av {
 
@@ -34,9 +35,9 @@ bool D3d12Footprint::holds(const d3d12proto::Box &region, uint64_t buffer_bytes)
         return false;
     if (region.left == region.right || region.top == region.bottom || region.front == region.back) return true;
     const uint64_t slice = static_cast<uint64_t>(row_pitch_) * layout_.rows(height_);
-    const uint64_t end = (region.back - 1u) * slice + static_cast<uint64_t>(layout_.rows(region.bottom) - 1u) * row_pitch_ +
-                         layout_.row_bytes(region.right);
-    return end <= buffer_bytes - offset_;
+    /* A format with no layout is measured a byte a texel, as a copy moves it. */
+    return PitchedExtent(layout_.copied_row_bytes(region.right), layout_.rows(region.bottom), region.back, row_pitch_, slice)
+        .within(buffer_bytes - offset_);
 }
 
 }  // namespace av

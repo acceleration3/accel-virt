@@ -12,8 +12,8 @@
 #include "core/log/log_sink.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/kernel_surface.hpp"
-#include "icd/d3d/pitched_rows.hpp"
 #include "proto/d3d/d3d9_present_format.hpp"
+#include "proto/resources/pitched_rows.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "proto/escape/next_point_record.hpp"
 #include "um/d3d/d3d9_device.hpp"
@@ -185,8 +185,8 @@ HRESULT D3d9Device::publish(D3d9Resource &resource, uint32_t index)
     auto *const pixels = static_cast<uint8_t *>(kernel_.lock_to_write(resource.allocation));
     if (pixels == nullptr) return E_FAIL;
     const uint32_t height = resource.subresources[index].height;
-    d3d::PitchedRows(pixels, resource.allocation_pitch, size_t{height} * resource.allocation_pitch)
-        .copy_from(d3d::PitchedRows(readback_, pitch, size_t{rows} * pitch), rows);
+    PitchedRows(pixels, resource.allocation_pitch, size_t{height} * resource.allocation_pitch)
+        .copy_from(PitchedRows(readback_, pitch, size_t{rows} * pitch), rows);
     kernel_.unlock(resource.allocation);
     return S_OK;
 }

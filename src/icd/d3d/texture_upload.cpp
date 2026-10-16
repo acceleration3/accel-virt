@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "icd/common/row_pieces.hpp"
 #include "icd/d3d/upload_sink.hpp"
+#include "proto/resources/pitched_extent.hpp"
 
 namespace av::d3d {
 
@@ -31,22 +32,23 @@ uint32_t TextureUpload::slices() const
     return box_.back > box_.front ? box_.back - box_.front : 0u;
 }
 
+PitchedExtent TextureUpload::extent() const
+{
+    AV_SCOPE("TextureUpload::extent");
+    return PitchedExtent(layout_.row_bytes(width()), layout_.rows(height()), slices(), row_pitch_, slice_pitch_);
+}
+
 uint64_t TextureUpload::bytes() const
 {
     AV_SCOPE("TextureUpload::bytes");
-    const uint64_t line = layout_.row_bytes(width());
-    if (line == 0u || height() == 0u || slices() == 0u) return 0u;
-    return uint64_t{slices() - 1u} * slice_pitch_ + uint64_t{layout_.rows(height()) - 1u} * row_pitch_ + line;
+    uint64_t reach = 0u;
+    return extent().end(0u, reach) ? reach : 0u;
 }
 
 bool TextureUpload::readable() const
 {
     AV_SCOPE("TextureUpload::readable");
-    const uint64_t line = layout_.row_bytes(width());
-    const uint32_t rows = layout_.rows(height());
-    if (bytes() == 0u) return false;
-    if (rows > 1u && row_pitch_ < line) return false;
-    return slices() <= 1u || slice_pitch_ >= uint64_t{rows - 1u} * row_pitch_ + line;
+    return extent().pitches_hold();
 }
 
 bool TextureUpload::send_slice(UploadSink &sink, const uint8_t *data, uint32_t slice) const

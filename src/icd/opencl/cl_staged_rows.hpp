@@ -29,7 +29,8 @@ public:
 
 private:
     /* Where the piece's `index`th row starts from where the layout does. */
-    size_t row(size_t index) const;
+    size_t   row(size_t index) const;
+    uint64_t spread() const;
 
     const ClImageRegion &layout_;
     size_t               slice_;

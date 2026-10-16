@@ -1,6 +1,7 @@
 #include "executor/d3d/d3d9_texture_write.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/resources/pitched_extent.hpp"
 #include "proto/resources/texel_layout.hpp"
 
 namespace av {
@@ -24,11 +25,9 @@ bool D3d9TextureWrite::fits(uint32_t width, uint32_t height, uint32_t depth) con
     if (layout_.element_bytes() == 0u || !spans(box_.left, box_.right, width, layout_.element_width()) ||
         !spans(box_.top, box_.bottom, height, layout_.element_height()) || !spans(box_.front, box_.back, depth, 1u))
         return false;
-    if (row_pitch_ < row_bytes() || (slices() > 1u && uint64_t{slice_pitch_} < uint64_t{row_pitch_} * rows()))
-        return false;
-    const uint64_t last_slice = uint64_t{slices() - 1u} * slice_pitch_;
-    const uint64_t last_row = uint64_t{rows() - 1u} * row_pitch_;
-    return last_slice + last_row + row_bytes() <= data_size_;
+    /* The guest's driver measures the same box the same way (TextureUpload):
+     * a write it found readable is one this takes. */
+    return PitchedExtent(row_bytes(), rows(), slices(), row_pitch_, slice_pitch_).fits(data_size_);
 }
 
 uint32_t D3d9TextureWrite::rows() const

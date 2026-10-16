@@ -1,6 +1,7 @@
 #include "icd/opengl/pixel_store.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/resources/pitched_extent.hpp"
 
 namespace av::glicd {
 
@@ -65,24 +66,22 @@ size_t PixelStore::span(uint32_t format, uint32_t type, int32_t width, int32_t h
     const size_t values_per_pixel = packed != 0u ? 1u : count;
     const size_t pixel = values_per_pixel * value;
     const size_t alignment = static_cast<size_t>(get(Field::alignment));
-    const size_t row_pixels = static_cast<size_t>(get(Field::row_length) > 0 ? get(Field::row_length) : width);
-    size_t       row = row_pixels * pixel;
+    const uint64_t row_pixels = static_cast<uint64_t>(get(Field::row_length) > 0 ? get(Field::row_length) : width);
+    uint64_t       row = row_pixels * pixel;
     /* Rows are padded to the alignment only when one value is narrower than it. */
     if (value < alignment) row = (row + alignment - 1u) / alignment * alignment;
-    const size_t rows_before = static_cast<size_t>(get(Field::skip_rows)) + static_cast<size_t>(height) - 1u;
-    const size_t last_row = (static_cast<size_t>(get(Field::skip_pixels)) + static_cast<size_t>(width)) * pixel;
-    size_t       plane = 0u;
-    if (__builtin_mul_overflow(rows_before, row, &plane) || __builtin_add_overflow(plane, last_row, &plane))
+    /* Images are skipped, and their height counts, only for a 3D image. */
+    const uint64_t image_rows = static_cast<uint64_t>(get(Field::image_height) > 0 ? get(Field::image_height) : height);
+    const uint64_t skipped_images = depth == 1 ? 0u : static_cast<uint64_t>(get(Field::skip_images));
+    uint64_t       image = 0u, start = 0u, end = 0u;
+    if (__builtin_mul_overflow(image_rows, row, &image)) return 0u;
+    const PitchedExtent extent(static_cast<uint64_t>(width) * pixel, static_cast<uint64_t>(height),
+                               static_cast<uint64_t>(depth), row, image);
+    if (!extent.offset_of(static_cast<uint64_t>(get(Field::skip_rows)), skipped_images, start) ||
+        __builtin_add_overflow(start, static_cast<uint64_t>(get(Field::skip_pixels)) * pixel, &start) ||
+        !extent.end(start, end) || static_cast<uint64_t>(static_cast<size_t>(end)) != end)
         return 0u;
-    if (depth == 1) return plane;
-    const size_t image_rows =
-        static_cast<size_t>(get(Field::image_height) > 0 ? get(Field::image_height) : height);
-    const size_t images_before = static_cast<size_t>(get(Field::skip_images)) + static_cast<size_t>(depth) - 1u;
-    size_t       total = 0u;
-    if (__builtin_mul_overflow(image_rows, row, &total) || __builtin_mul_overflow(images_before, total, &total) ||
-        __builtin_add_overflow(total, plane, &total))
-        return 0u;
-    return total;
+    return static_cast<size_t>(end);
 }
 
 bool PixelStore::invariants_hold() const

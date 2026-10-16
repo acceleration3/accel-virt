@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "icd/common/row_pieces.hpp"
 #include "icd/opencl/cl_image_region.hpp"
+#include "proto/resources/pitched_rows.hpp"
 
 namespace av::clicd {
 
@@ -13,18 +14,28 @@ ClStagedRows::ClStagedRows(const ClImageRegion &layout, const icd::RowPieces &pi
     AV_SCOPE("ClStagedRows::ClStagedRows");
 }
 
+/* The application's rows of the piece, from its first: a row pitch apart,
+ * the last only as long as the piece's row. */
+uint64_t ClStagedRows::spread() const
+{
+    AV_SCOPE("ClStagedRows::spread");
+    return rows_ == 0u ? 0u : uint64_t{rows_ - 1u} * layout_.row_pitch() + row_bytes_;
+}
+
 void ClStagedRows::pack(const uint8_t *application, uint8_t *staged) const
 {
     AV_SCOPE("ClStagedRows::pack");
-    for (size_t index = 0u; index < rows_; ++index)
-        __builtin_memcpy(staged + index * row_bytes_, application + row(index), row_bytes_);
+    static_cast<void>(PitchedRows(staged, row_bytes_, uint64_t{rows_} * row_bytes_)
+                          .copy_lines(PitchedRows(application + row(0u), layout_.row_pitch(), spread()),
+                                      static_cast<uint32_t>(rows_), row_bytes_));
 }
 
 void ClStagedRows::unpack(const uint8_t *staged, uint8_t *application) const
 {
     AV_SCOPE("ClStagedRows::unpack");
-    for (size_t index = 0u; index < rows_; ++index)
-        __builtin_memcpy(application + row(index), staged + index * row_bytes_, row_bytes_);
+    static_cast<void>(PitchedRows(application + row(0u), layout_.row_pitch(), spread())
+                          .copy_lines(PitchedRows(staged, row_bytes_, uint64_t{rows_} * row_bytes_),
+                                      static_cast<uint32_t>(rows_), row_bytes_));
 }
 
 size_t ClStagedRows::row(size_t index) const

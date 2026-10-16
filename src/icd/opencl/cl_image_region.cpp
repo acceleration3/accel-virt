@@ -1,6 +1,7 @@
 #include "icd/opencl/cl_image_region.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/resources/pitched_extent.hpp"
 
 namespace av::clicd {
 
@@ -94,12 +95,13 @@ void ClImageRegion::origin_of(size_t x, size_t row, size_t slice, size_t *into) 
 bool ClImageRegion::offset_of(const size_t *point, size_t &offset) const
 {
     AV_SCOPE("ClImageRegion::offset_of");
-    size_t in_slices = 0u, in_rows = 0u, in_row = 0u;
-    if (__builtin_mul_overflow(point[2], slice_pitch(), &in_slices) ||
-        __builtin_mul_overflow(point[1], row_pitch(), &in_rows) ||
-        __builtin_mul_overflow(point[0], element_bytes_, &in_row))
+    const PitchedExtent extent(row_bytes(), region_[1], region_[2], row_pitch(), slice_pitch());
+    uint64_t            at = 0u, in_row = 0u;
+    if (!extent.offset_of(point[1], point[2], at) || __builtin_mul_overflow(uint64_t{point[0]}, element_bytes_, &in_row) ||
+        __builtin_add_overflow(at, in_row, &at) || static_cast<uint64_t>(static_cast<size_t>(at)) != at)
         return false;
-    return !__builtin_add_overflow(in_slices, in_rows, &offset) && !__builtin_add_overflow(offset, in_row, &offset);
+    offset = static_cast<size_t>(at);
+    return true;
 }
 
 bool ClImageRegion::slices_are_whole_rows() const

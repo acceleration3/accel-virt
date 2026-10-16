@@ -1,6 +1,7 @@
 #include "executor/opencl/cl_bounced_rect.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/resources/pitched_extent.hpp"
 
 namespace av {
 
@@ -38,17 +39,14 @@ cl_int ClBouncedRect::read(cl_command_queue queue, cl_mem buffer, const size_t *
     const size_t row = host_row_pitch != 0u ? host_row_pitch : region[0];
     size_t       slice = host_slice_pitch;
     if (slice == 0u && __builtin_mul_overflow(region[1], row, &slice)) return CL_INVALID_VALUE;
-    /* With the slice at least its rows, the region's last row cannot wrap
-     * where its last slice did not. */
-    size_t down = 0u, across = 0u, first = 0u, reach = 0u;
-    if (row < region[0] || slice / row < region[1] || __builtin_mul_overflow(host_origin[1], row, &across) ||
-        __builtin_mul_overflow(host_origin[2], slice, &down) || __builtin_add_overflow(across, down, &first) ||
-        __builtin_add_overflow(first, host_origin[0], &first) ||
-        __builtin_mul_overflow(region[2] - 1u, slice, &down) || __builtin_add_overflow(first, down, &reach) ||
-        __builtin_add_overflow(reach, (region[1] - 1u) * row, &reach) ||
-        __builtin_add_overflow(reach, region[0], &reach))
+    /* OpenCL's own rule: a slice is whole rows. */
+    if (row < region[0] || slice / row < region[1]) return CL_INVALID_VALUE;
+    const PitchedExtent extent(region[0], region[1], region[2], row, slice);
+    uint64_t            first = 0u, reach = 0u;
+    if (!extent.offset_of(host_origin[1], host_origin[2], first) ||
+        __builtin_add_overflow(first, host_origin[0], &first) || !extent.end(first, reach))
         return CL_INVALID_VALUE;
-    if (!staging_.reserve(reach)) return CL_OUT_OF_HOST_MEMORY;
+    if (!staging_.reserve(static_cast<size_t>(reach))) return CL_OUT_OF_HOST_MEMORY;
     const cl_int read = ::clEnqueueReadBufferRect(queue, buffer, CL_TRUE, buffer_origin, host_origin, region,
                                                   buffer_row_pitch, buffer_slice_pitch, row, slice, staging_.bytes(),
                                                   num_events_in_wait_list, event_wait_list, event);
@@ -56,7 +54,7 @@ cl_int ClBouncedRect::read(cl_command_queue queue, cl_mem buffer, const size_t *
     uint8_t *const to = static_cast<uint8_t *>(ptr);
     for (size_t z = 0u; z < region[2]; z++)
         for (size_t y = 0u; y < region[1]; y++) {
-            const size_t at = first + z * slice + y * row;
+            const size_t at = static_cast<size_t>(first) + z * slice + y * row;
             __builtin_memcpy(to + at, staging_.bytes() + at, region[0]);
         }
     return CL_SUCCESS;

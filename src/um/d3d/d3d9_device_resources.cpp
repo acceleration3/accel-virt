@@ -16,7 +16,7 @@
 #include "icd/common/pieces.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/texture_upload.hpp"
-#include "icd/d3d/pitched_rows.hpp"
+#include "proto/resources/pitched_rows.hpp"
 #include "proto/d3d/d3d9_format_layout.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "um/d3d/d3d9_device.hpp"
@@ -319,8 +319,8 @@ HRESULT D3d9Device::lock(D3DDDIARG_LOCK *args)
          * the device is gone rather than shown what the shadow held before. */
         if (removal_.removed()) return read;
         if (SUCCEEDED(read))
-            static_cast<void>(d3d::PitchedRows(subresource.shadow, subresource.shadow_pitch, subresource.shadow_bytes)
-                                  .copy_from(d3d::PitchedRows(readback_, pitch, size_t{rows} * pitch), rows));
+            static_cast<void>(PitchedRows(subresource.shadow, subresource.shadow_pitch, subresource.shadow_bytes)
+                                  .copy_from(PitchedRows(readback_, pitch, size_t{rows} * pitch), rows));
     }
     args->pSurfData =
         subresource.shadow + lock_offset(*locked, *args, subresource.shadow_pitch, subresource.shadow_slice_pitch);
