@@ -93,16 +93,14 @@ bool VirtualRange::invariants_hold(const ByteRange &bounds,
 /* -------------------------------------------------- GpuVirtualAddressSpace */
 
 GpuVirtualAddressSpace::GpuVirtualAddressSpace(Platform &platform)
-    : platform_(platform), ranges_(nullptr), count_(0u), capacity_(0u),
-      ceiling_(maximum_range_count), bounds_(), page_(page_size)
-      {
-          AV_SCOPE("GpuVirtualAddressSpace::GpuVirtualAddressSpace");
-      }
+    : platform_(platform), ranges_(platform, Pool::non_paged), packed_(0u), bounds_(), page_(page_size)
+{
+    AV_SCOPE("GpuVirtualAddressSpace::GpuVirtualAddressSpace");
+}
 
 GpuVirtualAddressSpace::~GpuVirtualAddressSpace()
 {
     AV_SCOPE("GpuVirtualAddressSpace::~GpuVirtualAddressSpace");
-    release_table();
 }
 
 Status GpuVirtualAddressSpace::initialize(const ByteRange &bounds)
@@ -120,23 +118,17 @@ Status GpuVirtualAddressSpace::initialize(const ByteRange &bounds)
 uint32_t GpuVirtualAddressSpace::range_count() const
 {
     AV_SCOPE("GpuVirtualAddressSpace::range_count");
-    return count_;
-}
-
-void GpuVirtualAddressSpace::set_range_ceiling(uint32_t ceiling)
-{
-    AV_SCOPE("GpuVirtualAddressSpace::set_range_ceiling");
-    ceiling_ = ceiling;
+    return ranges_.size();
 }
 
 uint32_t GpuVirtualAddressSpace::lower_bound(uint64_t base) const
 {
     AV_SCOPE("GpuVirtualAddressSpace::lower_bound");
-    uint32_t low = 0u, high = count_;
+    uint32_t low = 0u, high = ranges_.size();
     while (low < high) {
         const uint32_t mid = low + (high - low) / 2u;
-        if (ranges_[mid].span().base() < base) low = mid + 1u;
-        else                                   high = mid;
+        if (ranges_.at(mid).span().base() < base) low = mid + 1u;
+        else                                      high = mid;
     }
     return low;
 }
@@ -145,55 +137,21 @@ VirtualRange *GpuVirtualAddressSpace::find_exact(uint64_t base)
 {
     AV_SCOPE("GpuVirtualAddressSpace::find_exact");
     const uint32_t index = lower_bound(base);
-    if (index < count_ && ranges_[index].span().base() == base)
-        return &ranges_[index];
+    if (index < ranges_.size() && ranges_.at(index).span().base() == base)
+        return &ranges_.at(index);
     return nullptr;
 }
 
-/* The table does not exist until the first grow, and the kernel bugchecks on
- * a null release. */
-void GpuVirtualAddressSpace::release_table()
+uint64_t GpuVirtualAddressSpace::packed_end() const
 {
-    AV_SCOPE("GpuVirtualAddressSpace::release_table");
-    if (ranges_ != nullptr) platform_.release(ranges_);
+    AV_SCOPE("GpuVirtualAddressSpace::packed_end");
+    return packed_ == 0u ? bounds_.base() : ranges_.at(packed_ - 1u).span().end();
 }
 
-Status GpuVirtualAddressSpace::grow()
+void GpuVirtualAddressSpace::extend_packed()
 {
-    AV_SCOPE("GpuVirtualAddressSpace::grow");
-    uint32_t wanted = (capacity_ == 0u) ? 16u : capacity_ * 2u;
-    if (wanted > ceiling_) {
-        if (capacity_ >= ceiling_) return Status::no_space;
-        wanted = ceiling_;
-    }
-    const size_t bytes =
-        static_cast<size_t>(wanted) * sizeof(VirtualRange);
-    auto *fresh = static_cast<VirtualRange *>(
-        platform_.allocate(bytes, Pool::non_paged));
-    if (fresh == nullptr) return Status::no_memory;
-
-    platform_.zero(fresh, bytes);
-    if (count_ != 0u)
-        platform_.copy(fresh, ranges_,
-                       static_cast<size_t>(count_) * sizeof(VirtualRange));
-    release_table();
-    ranges_ = fresh;
-    capacity_ = wanted;
-    return Status::ok;
-}
-
-Status GpuVirtualAddressSpace::insert(uint32_t index,
-                                      const VirtualRange &range)
-{
-    AV_SCOPE("GpuVirtualAddressSpace::insert");
-    if (count_ == capacity_) {
-        const Status status = grow();
-        if (status != Status::ok) return status;
-    }
-    for (uint32_t i = count_; i > index; i--) ranges_[i] = ranges_[i - 1u];
-    ranges_[index] = range;
-    count_++;
-    return Status::ok;
+    AV_SCOPE("GpuVirtualAddressSpace::extend_packed");
+    while (packed_ < ranges_.size() && ranges_.at(packed_).span().base() == packed_end()) packed_++;
 }
 
 Status GpuVirtualAddressSpace::reserve(uint64_t size,
@@ -209,21 +167,24 @@ Status GpuVirtualAddressSpace::reserve(uint64_t size,
     if (size == 0u || !page_.divides(size)) return Status::invalid_parameter;
     if (size > bounds_.size())            return Status::too_large;
 
+    /* No gap lies before packed_: the search starts at its end. */
     uint64_t cursor = 0u;
-    if (!alignment.align_up(bounds_.base(), cursor)) return Status::no_space;
+    if (!alignment.align_up(packed_end(), cursor)) return Status::no_space;
 
-    for (uint32_t i = 0u; i <= count_; i++) {
+    const uint32_t count = ranges_.size();
+    for (uint32_t i = packed_; i <= count; i++) {
         const uint64_t next =
-            (i < count_) ? ranges_[i].span().base() : bounds_.end();
+            (i < count) ? ranges_.at(i).span().base() : bounds_.end();
         if (cursor < next && next - cursor >= size) {
-            const Status status = insert(i, VirtualRange(ByteRange(cursor, size)));
+            const Status status = ranges_.insert_at(i, VirtualRange(ByteRange(cursor, size)));
             if (status != Status::ok) return status;
+            extend_packed();
             reserved_base = cursor;
             return Status::ok;
         }
-        if (i < count_) {
+        if (i < count) {
             uint64_t after = 0u;
-            if (!alignment.align_up(ranges_[i].span().end(), after))
+            if (!alignment.align_up(ranges_.at(i).span().end(), after))
                 return Status::no_space;
             /* An aligned cursor past the end of the space cannot host a hole. */
             if (after >= bounds_.end()) return Status::no_space;
@@ -265,13 +226,12 @@ Status GpuVirtualAddressSpace::release(uint64_t base)
     InvariantScope<GpuVirtualAddressSpace> guard(platform_, *this, "release");
 
     const uint32_t index = lower_bound(base);
-    if (index >= count_ || ranges_[index].span().base() != base)
+    if (index >= ranges_.size() || ranges_.at(index).span().base() != base)
         return Status::not_found;
-    if (ranges_[index].is_mapped()) return Status::invalid_state;
+    if (ranges_.at(index).is_mapped()) return Status::invalid_state;
 
-    for (uint32_t i = index; i + 1u < count_; i++) ranges_[i] = ranges_[i + 1u];
-    count_--;
-    ranges_[count_] = VirtualRange();
+    ranges_.remove_at(index);
+    if (index < packed_) packed_ = index;
     return Status::ok;
 }
 
@@ -286,11 +246,11 @@ Status GpuVirtualAddressSpace::translate(uint64_t address,
     uint32_t index = lower_bound(address);
     /* lower_bound lands on the range starting at `address`, or the one after
      * it; in the latter case the only candidate is the range before. */
-    if (index == count_ || ranges_[index].span().base() != address) {
+    if (index == ranges_.size() || ranges_.at(index).span().base() != address) {
         if (index == 0u) return Status::not_found;
         index--;
     }
-    const VirtualRange &range = ranges_[index];
+    const VirtualRange &range = ranges_.at(index);
     if (!range.span().contains(address))              return Status::not_found;
     if (!range.translate(address, object, object_offset))
         return Status::invalid_state;
@@ -300,15 +260,13 @@ Status GpuVirtualAddressSpace::translate(uint64_t address,
 bool GpuVirtualAddressSpace::invariants_hold() const
 {
     AV_SCOPE("GpuVirtualAddressSpace::invariants_hold");
-    if (count_ > capacity_)                     return false;
-    if (capacity_ != 0u && ranges_ == nullptr)  return false;
-    if (capacity_ > ceiling_)                   return false;
-    if (ceiling_ == 0u || ceiling_ > maximum_range_count) return false;
-    if (count_ != 0u && !bounds_.is_representable()) return false;
+    if (!ranges_.invariants_hold() || packed_ > ranges_.size()) return false;
+    if (ranges_.size() != 0u && !bounds_.is_representable()) return false;
 
     uint64_t previous_end = bounds_.base();
-    for (uint32_t i = 0u; i < count_; i++) {
-        const VirtualRange &range = ranges_[i];
+    for (uint32_t i = 0u; i < ranges_.size(); i++) {
+        const VirtualRange &range = ranges_.at(i);
+        if (i < packed_ && range.span().base() != previous_end) return false;
         if (!range.invariants_hold(bounds_, page_)) return false;
         if (range.span().base() < previous_end)     return false;
         previous_end = range.span().end();

@@ -3,7 +3,9 @@
  * The driver reports GPU MMU support, so VidMm hands out GPU virtual addresses
  * and asks the driver to maintain the translation. There is no real page
  * table: a virtual range translates to (device object, offset), which the QEMU
- * device resolves to host memory.
+ * device resolves to host memory. The ranges are kept sorted by base and grow
+ * with what the device reserves: there is no count past which a reservation
+ * is refused, only the space itself.
  * See docs/kb/04-memory.md. */
 #ifndef AV_GPU_VIRTUAL_ADDRESS_SPACE_HPP
 #define AV_GPU_VIRTUAL_ADDRESS_SPACE_HPP
@@ -11,6 +13,7 @@
 #include "core/platform/platform.hpp"
 #include "core/support/alignment.hpp"
 #include "core/support/byte_range.hpp"
+#include "core/support/growable_array.hpp"
 #include "core/support/status.hpp"
 
 namespace av {
@@ -48,7 +51,6 @@ private:
 class GpuVirtualAddressSpace {
 public:
     static constexpr uint64_t page_size            = 4096u;
-    static constexpr uint32_t maximum_range_count  = 65536u;
 
     explicit GpuVirtualAddressSpace(Platform &platform);
     ~GpuVirtualAddressSpace();
@@ -71,22 +73,22 @@ public:
     bool          invariants_hold() const;
     uint32_t range_count() const;
 
-    /* Lowered by tests so the table-exhaustion path is reachable without
-     * allocating 64K ranges. */
-    void set_range_ceiling(uint32_t ceiling);
-
 private:
-    [[nodiscard]] Status grow();
-    void                 release_table();
-    [[nodiscard]] Status insert(uint32_t index, const VirtualRange &range);
     uint32_t        lower_bound(uint64_t base) const;
-    VirtualRange        *find_exact(uint64_t base);
+    VirtualRange   *find_exact(uint64_t base);
+    /* Where the range at `packed_` would start were there no gap before it. */
+    uint64_t        packed_end() const;
+    /* packed_ moved past every range that now follows the one before it with
+     * no gap. */
+    void            extend_packed();
 
-    Platform     &platform_;
-    VirtualRange *ranges_;
-    uint32_t count_;
-    uint32_t capacity_;
-    uint32_t ceiling_;
+    Platform                   &platform_;
+    /* Non-paged: translate reads it at DISPATCH. */
+    GrowableArray<VirtualRange> ranges_;
+    /* The ranges from the start of the space with no gap before any of them:
+     * a reservation's search for a gap starts after them, so reserving range
+     * after range is not a walk over every one already reserved. */
+    uint32_t                    packed_;
     ByteRange     bounds_;
     Alignment     page_;
 

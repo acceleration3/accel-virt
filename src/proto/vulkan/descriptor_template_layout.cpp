@@ -19,7 +19,6 @@ DescriptorTemplateLayout::DescriptorTemplateLayout() : bytes_(0u), entries_(0u)
 Status DescriptorTemplateLayout::take(const VkDescriptorUpdateTemplateEntry *entries, uint32_t count)
 {
     AV_SCOPE("DescriptorTemplateLayout::take");
-    if (count > max_entries) return Status::too_large;
     if (entries == nullptr && count != 0u) return Status::invalid_parameter;
     uint64_t longest = 0u;
     for (uint32_t index = 0u; index < count; index++) {
@@ -108,7 +107,7 @@ Status DescriptorTemplateLayout::end_of(const VkDescriptorUpdateTemplateEntry &e
 bool DescriptorTemplateLayout::invariants_hold() const
 {
     AV_SCOPE("DescriptorTemplateLayout::invariants_hold");
-    return entries_ <= max_entries && (entries_ != 0u || bytes_ == 0u);
+    return entries_ != 0u || bytes_ == 0u;
 }
 
 }  // namespace av

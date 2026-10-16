@@ -27,17 +27,15 @@ struct DoorbellTableProbe;
 
 class DoorbellTable {
 public:
-    /* One per doorbell page and one spare per queue: a process may hold a
-     * doorbell for a queue it is about to destroy while it makes the next. */
-    static constexpr uint32_t max_doorbells = 128u;
-
     DoorbellTable(Platform &platform, MappedRegisterWindow &doorbells);
     DoorbellTable(const DoorbellTable &) = delete;
     DoorbellTable &operator=(const DoorbellTable &) = delete;
 
     /* A doorbell for `queue` on `page`, answering its handle. invalid_parameter
      * for no queue or a page past the BAR - a page no store could reach -
-     * and no_space when the table is full. */
+     * and no_memory when there is none to make it in. As many as processes
+     * ask for: a process may hold a doorbell for a queue it is about to
+     * destroy while it makes the next. */
     [[nodiscard]] Status create(HwQueue &queue, uint32_t page, void *&handle);
     /* The kernel address of the doorbell's page, the status a process is to
      * read and the queue it hangs off - which is what tells the caller whose

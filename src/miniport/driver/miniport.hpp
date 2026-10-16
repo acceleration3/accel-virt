@@ -8,6 +8,7 @@
 #include "core/platform/platform.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
+#include "proto/context/av_device_count.hpp"
 
 #include <stdint.h>
 
@@ -17,8 +18,8 @@ struct MiniportProbe;
 
 class Miniport {
 public:
-    /* One adapter per host GPU; eight is the ceiling. */
-    static constexpr uint32_t max_adapters = 8u;
+    /* One adapter per av device the VM has. */
+    static constexpr uint32_t max_adapters = most_av_devices;
 
     explicit Miniport(Platform &platform);
     Miniport(const Miniport &) = delete;

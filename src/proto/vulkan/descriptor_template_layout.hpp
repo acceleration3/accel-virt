@@ -29,18 +29,13 @@ struct DescriptorTemplateLayoutProbe;
 
 class DescriptorTemplateLayout {
 public:
-    /* More than either translation layer builds: DXVK describes a handful of
-     * bindings per template and vkd3d-proton at most one entry per root
-     * parameter. */
-    static constexpr uint32_t max_entries = 64u;
-
     DescriptorTemplateLayout();
 
-    /* The `count` entries of one create info. Unchanged unless ok, so a
-     * refused create leaves the layout it had rather than half of one:
-     * too_large past `max_entries` or when an entry's end leaves 64 bits,
-     * not_supported for a descriptor type a template may not carry,
-     * invalid_parameter for a count with no array. */
+    /* The `count` entries of one create info - as many as the application
+     * describes: nothing is kept per entry. Unchanged unless ok, so a refused
+     * create leaves the layout it had rather than half of one: too_large when
+     * an entry's end leaves 64 bits, not_supported for a descriptor type a
+     * template may not carry, invalid_parameter for a count with no array. */
     [[nodiscard]] Status take(const VkDescriptorUpdateTemplateEntry *entries, uint32_t count);
 
     /* The bytes one update reads: the end of the entry that ends last. */

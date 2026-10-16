@@ -14,6 +14,7 @@
 #include "device/abi/av_device.h"
 #include "device/abi/av_executor.h"
 #include "device/module/device_instance.hpp"
+#include "proto/context/av_device_count.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -24,7 +25,7 @@ struct DeviceModuleProbe;
 
 class DeviceModule final : public StateReporter {
 public:
-    static constexpr uint32_t max_devices = 16u;
+    static constexpr uint32_t max_devices = most_av_devices;
 
     constexpr DeviceModule() = default;
     DeviceModule(const DeviceModule &) = delete;

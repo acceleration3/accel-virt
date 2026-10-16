@@ -219,21 +219,21 @@ TEST(doorbell_table, a_queue_destroyed_takes_its_doorbells)
   CHECK_EQ(held.table().live(), 1u);
   CHECK(held.table().invariants_hold()); }
 
-/* A table with no room refuses rather than handing out a doorbell that names
- * someone else's page. */
-TEST(doorbell_table, a_table_with_no_room_refuses)
+/* The 128 doorbells the table once held are no bound: doorbells well past
+ * them are made, each its own handle, and a queue forgotten takes its own. */
+TEST(doorbell_table, holds_doorbells_well_past_the_old_table)
 { Doorbells held;
   void     *made = nullptr;
-  for (std::uint32_t taken = 0u; taken < DoorbellTable::max_doorbells; taken++)
+  for (std::uint32_t taken = 0u; taken < 300u; taken++)
       CHECK_STATUS(held.table().create(held.first(), taken % pages, made), Status::ok);
-  CHECK_EQ(held.table().live(), DoorbellTable::max_doorbells);
   void *past = nullptr;
-  CHECK_STATUS(held.table().create(held.second(), 0u, past), Status::no_space);
-  CHECK(past == nullptr);
+  CHECK_STATUS(held.table().create(held.second(), 0u, past), Status::ok);
+  CHECK(past != nullptr);
+  CHECK_EQ(held.table().live(), 301u);
   CHECK(held.table().invariants_hold());
   held.table().forget_queue(&held.first());
-  CHECK_EQ(held.table().live(), 0u);
-  CHECK_STATUS(held.table().create(held.second(), 0u, past), Status::ok); }
+  CHECK_EQ(held.table().live(), 1u);
+  CHECK(held.table().invariants_hold()); }
 
 /* A doorbell the platform cannot find memory for is no doorbell, and the table
  * is left as it was. */

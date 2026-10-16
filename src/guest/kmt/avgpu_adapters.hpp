@@ -16,6 +16,7 @@
 
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
+#include "proto/context/av_device_count.hpp"
 
 #include <stdint.h>
 
@@ -25,7 +26,8 @@ class Kmt;
 
 class AvgpuAdapters {
 public:
-    static constexpr uint32_t max_adapters = 16u;
+    /* One per av device the VM has. */
+    static constexpr uint32_t max_adapters = most_av_devices;
     /* avgpu's PCI identity: virtio-gpu's vendor and device, and the
      * subsystem only this device presents. */
     static constexpr uint32_t virtio_vendor = 0x1AF4u;

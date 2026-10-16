@@ -39,10 +39,8 @@ struct GpuVirtualAddressSpaceProbe {
 
     VirtualRange &range_at(std::uint32_t index);
     std::uint32_t capacity() const;
-    void          set_count(std::uint32_t count);
-    void          set_capacity(std::uint32_t capacity);
-    void          drop_table();
-    void          set_ceiling(std::uint32_t ceiling);
+    std::uint32_t packed() const;
+    void          set_packed(std::uint32_t packed);
     void          set_bounds(const ByteRange &bounds);
     void          set_span(std::uint32_t index, const ByteRange &span);
     void          set_object(std::uint32_t index, std::uint32_t object);

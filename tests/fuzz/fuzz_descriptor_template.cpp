@@ -13,7 +13,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
 
 namespace {
 
-constexpr std::uint32_t max_read = av::DescriptorTemplateLayout::max_entries + 1u;
+/* As many entries as one byte counts: the layout keeps nothing per entry. */
+constexpr std::uint32_t max_read = 255u;
 
 }  // namespace
 
@@ -21,7 +22,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
 {
     av::WireReader                  reader(data, size);
     VkDescriptorUpdateTemplateEntry entries[max_read] = {};
-    const std::uint32_t             count = reader.read_u8() % (max_read + 1u);
+    const std::uint32_t             count = reader.read_u8();
     for (std::uint32_t index = 0u; index < count; index++) {
         VkDescriptorUpdateTemplateEntry &entry = entries[index];
         entry.dstBinding = reader.read_u32();

@@ -44,7 +44,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     av::GpuVirtualAddressSpace space(platform);
     if (space.initialize(av::ByteRange(0x1000000000ull, 0x400000ull)) != av::Status::ok)
         return 0;
-    space.set_range_ceiling(64u);
 
     OperationStream stream(data, size);
     while (!stream.exhausted()) {

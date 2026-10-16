@@ -183,19 +183,37 @@ TEST(address_space_reserve, grows_the_table_past_its_initial_capacity)
   GpuVirtualAddressSpaceProbe probe(fixture.space());
   CHECK(probe.capacity() >= 20u); }
 
-TEST(address_space_reserve, clamps_table_growth_to_the_ceiling)
-{ AddressSpaceFixture fixture;
-  fixture.space().set_range_ceiling(20u);
-  for (int i = 0; i < 17; i++) (void)fixture.reserve_page();
-  GpuVirtualAddressSpaceProbe probe(fixture.space());
-  CHECK_EQ(probe.capacity(), 20u); }
-
-TEST(address_space_reserve, refuses_once_the_table_ceiling_is_reached)
+/* No count of ranges refuses a reservation, only the space: every page of the
+ * fixture's megabyte is reserved one at a time, and the next has nowhere to go. */
+TEST(address_space_reserve, fills_the_whole_space_and_refuses_only_when_it_is_full)
 { AddressSpaceFixture fixture; std::uint64_t out = 0u;
-  fixture.space().set_range_ceiling(16u);
-  for (int i = 0; i < 16; i++) (void)fixture.reserve_page();
-  MUTATE(fixture, fixture.space().reserve(kPage, Alignment(kPage), out),
-         Status::no_space); }
+  for (std::uint64_t i = 0u; i < kSize / kPage; i++) {
+      CHECK_STATUS(fixture.space().reserve(kPage, Alignment(kPage), out), Status::ok);
+      CHECK_EQ(out, kBase + i * kPage);
+  }
+  CHECK_EQ(fixture.space().range_count(), kSize / kPage);
+  MUTATE(fixture, fixture.space().reserve(kPage, Alignment(kPage), out), Status::no_space); }
+
+/* Reserving after a packed run starts past it, and a range released inside
+ * the run is the first gap the next reservation takes. */
+TEST(address_space_reserve, takes_the_first_gap_whether_inside_or_after_the_packed_run)
+{ AddressSpaceFixture fixture; std::uint64_t out = 0u;
+  const std::uint64_t first = fixture.reserve_page();
+  const std::uint64_t second = fixture.reserve_page();
+  const std::uint64_t third = fixture.reserve_page();
+  GpuVirtualAddressSpaceProbe probe(fixture.space());
+  CHECK_EQ(probe.packed(), 3u);
+  MUTATE(fixture, fixture.space().release(second), Status::ok);
+  CHECK_EQ(probe.packed(), 1u);
+  MUTATE(fixture, fixture.space().reserve(kPage, Alignment(kPage), out), Status::ok);
+  CHECK_EQ(out, second);
+  CHECK_EQ(probe.packed(), 3u);
+  MUTATE(fixture, fixture.space().reserve(2u * kPage, Alignment(4u * kPage), out), Status::ok);
+  CHECK_EQ(out, first + 4u * kPage);
+  CHECK_EQ(probe.packed(), 3u);
+  MUTATE(fixture, fixture.space().reserve(kPage, Alignment(kPage), out), Status::ok);
+  CHECK_EQ(out, third + kPage);
+  CHECK_EQ(probe.packed(), 5u); }
 
 /* ----------------------------------------------------------------------- map */
 
@@ -368,7 +386,8 @@ TEST(address_space_reserve, is_rejected_at_dispatch_level)
 { AddressSpaceFixture fixture; std::uint64_t out = 0u;
   fixture.platform().set_irql(Irql::dispatch);
   CHECK_STATUS(fixture.space().reserve(kPage, Alignment(kPage), out), Status::no_memory);
-  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));   /* the space's own ceiling */
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));   /* and the table's */
   CHECK(fixture.platform().claim(Violation::allocation_at_dispatch));
   fixture.platform().set_irql(Irql::passive); }
 
@@ -440,29 +459,19 @@ TEST(address_space_invariants, reject_a_corrupted_table)
   probe.set_mapped(0u, false);
   CHECK(space.invariants_hold());
 
-  probe.set_count(probe.capacity() + 1u);
-  CHECK(!space.invariants_hold());
-  probe.set_count(2u);
-
-  probe.set_ceiling(GpuVirtualAddressSpace::maximum_range_count + 1u);
-  CHECK(!space.invariants_hold());
-  probe.set_ceiling(1u);
-  CHECK(!space.invariants_hold());                       /* capacity > ceiling */
-  probe.set_ceiling(GpuVirtualAddressSpace::maximum_range_count);
+  probe.set_packed(3u);
+  CHECK(!space.invariants_hold());                       /* packed past the ranges */
+  probe.set_packed(2u);
+  CHECK(space.invariants_hold());
+  probe.set_span(1u, ByteRange(second + kPage, kPage));
+  CHECK(!space.invariants_hold());                       /* a gap inside the packed run */
+  probe.set_span(1u, ByteRange(second, kPage));
   CHECK(space.invariants_hold());
 
   probe.set_bounds(ByteRange(kBase, 0u));
   CHECK(!space.invariants_hold());
   probe.set_bounds(ByteRange(kBase, kSize));
   CHECK(space.invariants_hold()); }
-
-TEST(address_space_invariants, reject_a_zero_ceiling_on_an_untouched_table)
-{ AddressSpaceFixture fixture;
-  GpuVirtualAddressSpaceProbe probe(fixture.space());
-  /* capacity is still zero, so this is the first check that can see it */
-  probe.set_ceiling(0u);
-  CHECK(!fixture.space().invariants_hold());
-  probe.set_ceiling(GpuVirtualAddressSpace::maximum_range_count); }
 
 TEST(address_space, reports_a_broken_invariant_from_a_mutating_call)
 { AddressSpaceFixture fixture;
@@ -478,14 +487,6 @@ TEST(address_space, reports_a_broken_invariant_from_a_mutating_call)
 
   probe.set_object(0u, 0u);
   CHECK(fixture.space().invariants_hold()); }
-
-TEST(address_space_invariants, reject_a_capacity_with_no_table)
-{ AddressSpaceFixture fixture;
-  GpuVirtualAddressSpaceProbe probe(fixture.space());
-  probe.set_capacity(4u);
-  probe.drop_table();
-  CHECK(!fixture.space().invariants_hold());
-  probe.set_capacity(0u); }
 
 TEST(address_space_invariants, hold_across_a_pseudorandom_operation_sequence)
 { AddressSpaceFixture fixture;

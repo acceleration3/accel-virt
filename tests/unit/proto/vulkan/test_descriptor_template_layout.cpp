@@ -15,10 +15,6 @@ namespace av {
 /* The states no create can leave it in, which is what makes each clause of the
  * invariant worth stating. */
 struct DescriptorTemplateLayoutProbe {
-    static void more_entries_than_it_holds(DescriptorTemplateLayout &layout)
-    {
-        layout.entries_ = DescriptorTemplateLayout::max_entries + 1u;
-    }
     static void bytes_without_an_entry(DescriptorTemplateLayout &layout)
     {
         layout.entries_ = 0u;
@@ -152,14 +148,19 @@ TEST(descriptor_template_layout, the_blob_is_as_long_as_the_entry_that_ends_last
   const VkDescriptorUpdateTemplateEntry reordered[] = {entries[1], entries[2], entries[0]};
   CHECK_STATUS(layout.take(reordered, 3u), Status::ok);
   CHECK_EQ(layout.bytes(), 256u + buffer_bytes);
-  /* As many entries as it holds, and one more than that. */
-  VkDescriptorUpdateTemplateEntry many[DescriptorTemplateLayout::max_entries + 1u] = {};
-  for (VkDescriptorUpdateTemplateEntry &one : many) one = entry(VK_DESCRIPTOR_TYPE_SAMPLER, 1u, 0u, image_bytes);
-  CHECK_STATUS(layout.take(many, DescriptorTemplateLayout::max_entries), Status::ok);
-  CHECK_EQ(layout.entries(), DescriptorTemplateLayout::max_entries);
-  CHECK_STATUS(layout.take(many, DescriptorTemplateLayout::max_entries + 1u), Status::too_large);
+  /* Well past the 64 entries a template was once allowed: nothing is kept per
+   * entry, so an application's thousand are measured like its three. */
+  static VkDescriptorUpdateTemplateEntry many[1000] = {};
+  for (std::uint32_t index = 0u; index < 1000u; index++)
+      many[index] = entry(VK_DESCRIPTOR_TYPE_SAMPLER, 1u, index * image_bytes, image_bytes);
+  CHECK_STATUS(layout.take(many, 1000u), Status::ok);
+  CHECK_EQ(layout.entries(), 1000u);
+  CHECK_EQ(layout.bytes(), 1000u * image_bytes);
   /* A refused create leaves what it had, not half of what it was given. */
-  CHECK_EQ(layout.entries(), DescriptorTemplateLayout::max_entries);
+  many[999].descriptorType = static_cast<VkDescriptorType>(0x7FFFFFFF);
+  CHECK(layout.take(many, 1000u) != Status::ok);
+  CHECK_EQ(layout.entries(), 1000u);
+  CHECK_EQ(layout.bytes(), 1000u * image_bytes);
   CHECK(layout.invariants_hold()); }
 
 /* The arithmetic is where an application can reach: an offset at the end of
@@ -199,12 +200,8 @@ TEST(descriptor_template_layout, an_entry_whose_end_overflows_is_refused)
   CHECK_EQ(layout.bytes(), room + image_bytes);
   CHECK(layout.invariants_hold()); }
 
-/* Each clause of the invariant refuses the state it names. No create can put
- * the layout in either, which is what the clauses are for. */
-TEST(descriptor_template_layout, an_invariant_refuses_each_state_it_names)
-{ DescriptorTemplateLayout entries_past_the_end;
-  DescriptorTemplateLayoutProbe::more_entries_than_it_holds(entries_past_the_end);
-  CHECK(!entries_past_the_end.invariants_hold());
-  DescriptorTemplateLayout bytes_from_nowhere;
+/* The invariant refuses the state it names, which no create can leave. */
+TEST(descriptor_template_layout, an_invariant_refuses_the_state_it_names)
+{ DescriptorTemplateLayout bytes_from_nowhere;
   DescriptorTemplateLayoutProbe::bytes_without_an_entry(bytes_from_nowhere);
   CHECK(!bytes_from_nowhere.invariants_hold()); }

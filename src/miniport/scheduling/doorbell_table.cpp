@@ -25,7 +25,6 @@ Status DoorbellTable::create(HwQueue &queue, uint32_t page, void *&handle)
     if ((uint64_t{page} + 1u) * RingSubmitter::doorbell_page_bytes > doorbells_.length())
         return Status::invalid_parameter;
     MutexGuard lock(lock_);
-    if (held_.live() >= max_doorbells) return Status::no_space;
     QueueDoorbell *made = nullptr;
     const Status created = held_.create(made, platform_, queue, page);
     if (created != Status::ok) return created;

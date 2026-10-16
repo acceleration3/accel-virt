@@ -36,38 +36,33 @@ GpuVirtualAddressSpaceProbe::GpuVirtualAddressSpaceProbe(
     GpuVirtualAddressSpace &target) : space(target) {}
 
 VirtualRange &GpuVirtualAddressSpaceProbe::range_at(std::uint32_t index)
-{ return space.ranges_[index]; }
+{ return space.ranges_.at(index); }
 
 std::uint32_t GpuVirtualAddressSpaceProbe::capacity() const
-{ return space.capacity_; }
+{ return space.ranges_.capacity(); }
 
-void GpuVirtualAddressSpaceProbe::set_count(std::uint32_t count)
-{ space.count_ = count; }
+std::uint32_t GpuVirtualAddressSpaceProbe::packed() const
+{ return space.packed_; }
 
-void GpuVirtualAddressSpaceProbe::set_capacity(std::uint32_t capacity)
-{ space.capacity_ = capacity; }
-
-void GpuVirtualAddressSpaceProbe::drop_table() { space.ranges_ = nullptr; }
-
-void GpuVirtualAddressSpaceProbe::set_ceiling(std::uint32_t ceiling)
-{ space.ceiling_ = ceiling; }
+void GpuVirtualAddressSpaceProbe::set_packed(std::uint32_t packed)
+{ space.packed_ = packed; }
 
 void GpuVirtualAddressSpaceProbe::set_bounds(const ByteRange &bounds)
 { space.bounds_ = bounds; }
 
 void GpuVirtualAddressSpaceProbe::set_span(std::uint32_t index,
                                            const ByteRange &span)
-{ space.ranges_[index].span_ = span; }
+{ space.ranges_.at(index).span_ = span; }
 
 void GpuVirtualAddressSpaceProbe::set_object(std::uint32_t index,
                                              std::uint32_t object)
-{ space.ranges_[index].object_ = object; }
+{ space.ranges_.at(index).object_ = object; }
 
 void GpuVirtualAddressSpaceProbe::set_object_offset(std::uint32_t index,
                                                     std::uint64_t offset)
-{ space.ranges_[index].object_offset_ = offset; }
+{ space.ranges_.at(index).object_offset_ = offset; }
 
 void GpuVirtualAddressSpaceProbe::set_mapped(std::uint32_t index, bool mapped)
-{ space.ranges_[index].mapped_ = mapped; }
+{ space.ranges_.at(index).mapped_ = mapped; }
 
 }  // namespace av
