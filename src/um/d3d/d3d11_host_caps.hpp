@@ -10,6 +10,7 @@
 #define AV_UM_D3D11_HOST_CAPS_HPP
 
 #include "icd/d3d/dxgi_format_table.hpp"
+#include "proto/d3d/dxgi_format.hpp"
 #include "proto/generated/d3d/d3d_wire_types.h"
 #include "um/d3d/d3d11_ddi.hpp"
 
@@ -24,8 +25,6 @@ namespace av::d3d11 {
 
 class D3d11HostCaps {
 public:
-    static constexpr uint32_t format_count = 192u;
-
     D3d11HostCaps();
     D3d11HostCaps(const D3d11HostCaps &) = delete;
     D3d11HostCaps &operator=(const D3d11HostCaps &) = delete;

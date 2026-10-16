@@ -25,9 +25,9 @@ bool D3d11HostCaps::learn(ClientTransport &transport, Kmt &kmt, uint32_t adapter
     AV_SCOPE("D3d11HostCaps::learn");
     if (learned_) return true;
     uint64_t             answered = 0u;
-    d3dproto::FormatCaps rows[format_count] = {};
+    d3dproto::FormatCaps rows[DxgiFormat::count] = {};
     if (!d3dproto::av_d3d_QueryCaps11(transport, &caps_, rows, sizeof(rows), &answered)) return false;
-    for (uint32_t format = 0u; format < format_count; format++) {
+    for (uint32_t format = 0u; format < DxgiFormat::count; format++) {
         formats_.record(format, rows[format].support, rows[format].support2);
         /* A row's sample counts are a bit per power of two, all at one level count. */
         for (uint32_t step = 1u; step < d3d::DxgiFormatTable::sample_steps; step++)

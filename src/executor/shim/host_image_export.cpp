@@ -2,8 +2,8 @@
 
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d_headers.hpp"
-#include "executor/shim/drm_fourcc.hpp"
 #include "executor/shim/dxvk_vulkan_device.hpp"
+#include "proto/d3d/dxgi_format.hpp"
 
 #include <unistd.h>
 
@@ -13,19 +13,6 @@ namespace {
 
 /* DRM_FORMAT_MOD_LINEAR, from drm_fourcc.h. */
 constexpr uint64_t drm_format_mod_linear = 0u;
-
-/* The formats a scanout's image is copied out of as they are; undefined for
- * any other. */
-VkFormat vk_format(uint32_t format)
-{
-    AV_SCOPE("vk_format");
-    switch (format) {
-    case DXGI_FORMAT_B8G8R8A8_UNORM:
-    case DXGI_FORMAT_B8G8R8X8_UNORM: return VK_FORMAT_B8G8R8A8_UNORM;
-    case DXGI_FORMAT_R8G8B8A8_UNORM: return VK_FORMAT_R8G8B8A8_UNORM;
-    default: return VK_FORMAT_UNDEFINED;
-    }
-}
 
 }  // namespace
 
@@ -58,7 +45,7 @@ bool HostImageExport::make_image(ID3D11Device5 *device, Image &image)
     created.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     created.pNext = &external;
     created.imageType = VK_IMAGE_TYPE_2D;
-    created.format = vk_format(format_);
+    created.format = static_cast<VkFormat>(DxgiFormat(format_).vk_format());
     created.extent = {width_, height_, 1u};
     created.mipLevels = 1u;
     created.arrayLayers = 1u;
@@ -113,7 +100,7 @@ bool HostImageExport::stage(ID3D11Device5 *device, ID3D11DeviceContext4 *context
     if (unavailable_) return false;
     D3D11_TEXTURE2D_DESC described = {};
     source->GetDesc(&described);
-    if (vk_format(static_cast<uint32_t>(described.Format)) == VK_FORMAT_UNDEFINED || described.SampleDesc.Count != 1u)
+    if (!DxgiFormat(static_cast<uint32_t>(described.Format)).scanned_out() || described.SampleDesc.Count != 1u)
         return false;
     if (!vulkan_.connected() || !make(device, described.Width, described.Height, static_cast<uint32_t>(described.Format))) {
         unavailable_ = true;
@@ -144,7 +131,7 @@ void HostImageExport::describe(uint32_t slot, AvExportedImage &image) const
     image.height = height_;
     image.stride = shown.stride_;
     image.offset = shown.offset_;
-    image.fourcc = DrmFourcc(format_).value();
+    image.fourcc = DxgiFormat(format_).drm_fourcc();
     image.reserved = 0u;
     image.modifier = 0u;   /* DRM_FORMAT_MOD_LINEAR */
 }

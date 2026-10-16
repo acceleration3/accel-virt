@@ -14,6 +14,7 @@
 #include "executor/source_memory.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/d3d/dxbc_container.hpp"
+#include "proto/d3d/dxgi_format.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/d3d/resource_misc.hpp"
 #include "executor/imported_blob.hpp"
@@ -657,7 +658,7 @@ bool D3dBackend::on_QueryCaps11(d3dproto::Caps11 &caps, uint8_t *formats, uint64
 {
     AV_SCOPE("D3dBackend::on_QueryCaps11");
     caps = device11_->capabilities().caps();
-    const uint64_t table = sizeof(d3dproto::FormatCaps) * D3d11Capabilities::format_count;
+    const uint64_t table = sizeof(d3dproto::FormatCaps) * DxgiFormat::count;
     formats_size = formats_capacity < table ? formats_capacity / sizeof(d3dproto::FormatCaps) *
                                                   sizeof(d3dproto::FormatCaps)
                                             : table;

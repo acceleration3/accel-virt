@@ -53,20 +53,6 @@ constexpr uint32_t api_depth_stencil = 0x10000u;
 /* D3D12_FORMAT_SUPPORT2_TILED. */
 constexpr uint32_t api_tiled = 0x200u;
 
-struct Family {
-    uint32_t head;
-    uint32_t last;
-};
-constexpr Family families[] = {{1u, 4u},   {5u, 8u},   {9u, 14u},  {15u, 18u}, {19u, 22u}, {23u, 25u},
-                               {27u, 32u}, {33u, 38u}, {39u, 43u}, {44u, 47u}, {48u, 52u}, {53u, 59u},
-                               {60u, 64u}, {70u, 72u}, {73u, 75u}, {76u, 78u}, {79u, 81u}, {82u, 84u},
-                               {94u, 96u}, {97u, 99u}};
-/* B8G8R8A8: 87 and 91 under 90; B8G8R8X8: 88 and 93 under 92. */
-constexpr uint32_t bgra_head = 90u, bgrx_head = 92u;
-constexpr uint32_t bgra_unorm = 87u, bgra_srgb = 91u, bgrx_unorm = 88u, bgrx_srgb = 93u;
-/* D32_FLOAT_S8X24_UINT, D32_FLOAT, D24_UNORM_S8_UINT, D16_UNORM. */
-constexpr uint32_t depth_formats[] = {20u, 40u, 45u, 55u};
-
 }  // namespace
 
 DxgiFormatTable::DxgiFormatTable() : support_{}, support2_{}, levels_{}, family_levels_{}, keeps_{}
@@ -77,7 +63,7 @@ DxgiFormatTable::DxgiFormatTable() : support_{}, support2_{}, levels_{}, family_
 void DxgiFormatTable::record(uint32_t format, uint32_t support, uint32_t support2)
 {
     AV_SCOPE("DxgiFormatTable::record");
-    if (format >= format_count) return;
+    if (format >= DxgiFormat::count) return;
     support_[format] = support;
     support2_[format] = support2;
 }
@@ -86,7 +72,7 @@ void DxgiFormatTable::record_samples(uint32_t format, uint32_t samples, uint32_t
 {
     AV_SCOPE("DxgiFormatTable::record_samples");
     const uint32_t step = step_of(samples);
-    if (format >= format_count || step == sample_steps) return;
+    if (format >= DxgiFormat::count || step == sample_steps) return;
     levels_[format][step] = levels;
 }
 
@@ -97,8 +83,8 @@ void DxgiFormatTable::settle()
         for (uint32_t &levels : family) levels = 0u;
     for (bool &keeps : keeps_) keeps = false;
     /* A head is its own family's: a typeless head, or a format in no family. */
-    for (uint32_t format = 1u; format < format_count; format++)
-        if (family_of(format) == format) settle_family(format);
+    for (uint32_t format = 1u; format < DxgiFormat::count; format++)
+        if (DxgiFormat(format).family() == format) settle_family(format);
 }
 
 /* The runtime holds a family's members that claim multisampled rendering to
@@ -116,10 +102,10 @@ void DxgiFormatTable::settle_family(uint32_t head)
     constexpr uint32_t most_members = 8u;
     uint32_t members[most_members] = {};
     uint32_t count = 0u, loads = 0u;
-    for (uint32_t format = 1u; format < format_count && count < most_members; format++) {
+    for (uint32_t format = 1u; format < DxgiFormat::count && count < most_members; format++) {
         /* A member the host supports not at all is never viewed, so it has
          * no part to take. */
-        if (family_of(format) != head || typeless(format) || carried(format) == 0u) continue;
+        if (DxgiFormat(format).family() != head || DxgiFormat(format).family_head() || carried(format) == 0u) continue;
         const bool load = (carried(format) & ddi_multisample_load) != 0u;
         bool       counted = false;
         for (uint32_t step = 1u; step < sample_steps; step++) counted = counted || levels_[format][step] != 0u;
@@ -178,36 +164,9 @@ void DxgiFormatTable::settle_family(uint32_t head)
 bool DxgiFormatTable::family_multisamples(uint32_t format) const
 {
     AV_SCOPE("DxgiFormatTable::family_multisamples");
-    const uint32_t *const shared = family_levels_[family_of(format)];
+    const uint32_t *const shared = family_levels_[DxgiFormat(format).family()];
     for (uint32_t step = 1u; step < sample_steps; step++)
         if (shared[step] != 0u) return true;
-    return false;
-}
-
-uint32_t DxgiFormatTable::family_of(uint32_t format) const
-{
-    AV_SCOPE("DxgiFormatTable::family_of");
-    if (format == bgra_unorm || format == bgra_srgb) return bgra_head;
-    if (format == bgrx_unorm || format == bgrx_srgb) return bgrx_head;
-    for (const Family &family : families)
-        if (format >= family.head && format <= family.last) return family.head;
-    return format;
-}
-
-bool DxgiFormatTable::typeless(uint32_t format) const
-{
-    AV_SCOPE("DxgiFormatTable::typeless");
-    if (format == bgra_head || format == bgrx_head) return true;
-    for (const Family &family : families)
-        if (format == family.head) return true;
-    return false;
-}
-
-bool DxgiFormatTable::depth(uint32_t format) const
-{
-    AV_SCOPE("DxgiFormatTable::depth");
-    for (const uint32_t candidate : depth_formats)
-        if (format == candidate) return true;
     return false;
 }
 
@@ -223,7 +182,7 @@ uint32_t DxgiFormatTable::carried(uint32_t format) const
      * renderable (it stops at R32_FLOAT_X8X24_TYPELESS). A depth format is
      * sampled through its view format, never itself, and Vulkan's answer -
      * which can sample depth - is not Direct3D's. */
-    if (depth(format)) {
+    if (DxgiFormat(format).depth()) {
         if ((support_[format] & api_depth_stencil) != 0u) support |= ddi_render_target;
         support &= ~(ddi_shader_sample | ddi_multisample_load | ddi_shader_gather | ddi_buffer | ddi_vertex_buffer |
                      ddi_uav_writes | ddi_uav_reads);
@@ -237,7 +196,7 @@ bool DxgiFormatTable::multisamples(uint32_t format) const
 {
     AV_SCOPE("DxgiFormatTable::multisamples");
     if ((carried(format) & ddi_multisample_render_target) == 0u) return false;
-    if (!typeless(format)) return keeps_[format];
+    if (!DxgiFormat(format).family_head()) return keeps_[format];
     const uint32_t *const shared = family_levels_[format];
     for (uint32_t step = 1u; step < sample_steps; step++)
         if (shared[step] != 0u) return true;
@@ -247,14 +206,14 @@ bool DxgiFormatTable::multisamples(uint32_t format) const
 uint32_t DxgiFormatTable::tiled_support(uint32_t format) const
 {
     AV_SCOPE("DxgiFormatTable::tiled_support");
-    if (format >= format_count || (support2_[format] & api_tiled) == 0u) return 0u;
+    if (format >= DxgiFormat::count || (support2_[format] & api_tiled) == 0u) return 0u;
     return ddi_tiled;
 }
 
 uint32_t DxgiFormatTable::format_support(uint32_t format) const
 {
     AV_SCOPE("DxgiFormatTable::format_support");
-    if (format == 0u || format >= format_count) return 0u;
+    if (format == 0u || format >= DxgiFormat::count) return 0u;
     uint32_t support = carried(format);
     /* Multisampled use at no count past one is a table the runtime refuses
      * the driver over ("MSAA quality reported to be 0"). A member that only
@@ -279,16 +238,16 @@ uint32_t DxgiFormatTable::quality_levels(uint32_t format, uint32_t samples) cons
 {
     AV_SCOPE("DxgiFormatTable::quality_levels");
     const uint32_t step = step_of(samples);
-    if (format == 0u || format >= format_count || step == sample_steps) return 0u;
+    if (format == 0u || format >= DxgiFormat::count || step == sample_steps) return 0u;
     if (step == 0u) return 1u;
-    if (!typeless(format) && !multisamples(format)) return 0u;
-    return family_levels_[family_of(format)][step];
+    if (!DxgiFormat(format).family_head() && !multisamples(format)) return 0u;
+    return family_levels_[DxgiFormat(format).family()][step];
 }
 
 bool DxgiFormatTable::multisample_candidate(uint32_t format) const
 {
     AV_SCOPE("DxgiFormatTable::multisample_candidate");
-    return format < format_count && (carried(format) & ddi_multisample_render_target) != 0u;
+    return format < DxgiFormat::count && (carried(format) & ddi_multisample_render_target) != 0u;
 }
 
 uint32_t DxgiFormatTable::step_of(uint32_t samples) const

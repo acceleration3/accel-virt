@@ -15,7 +15,8 @@
  *   tells it with the memory (AvExportedImage).
  *
  * Only what interop shares is described - one 2D mip, one layer and one
- * sample of a colour format below, drawn and sampled. Anything else is not
+ * sample of a colour format DxgiFormat gives a Vulkan format, drawn and
+ * sampled. Anything else is not
  * supported(), and DXVK makes it as it would any texture, with memory nothing
  * else can open. The image is the memory's alone (ExportableImages binds it
  * dedicated), which is what lets another driver read its layout. A format

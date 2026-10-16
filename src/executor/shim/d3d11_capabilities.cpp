@@ -96,7 +96,7 @@ void D3d11Capabilities::measure_options(ID3D11Device5 &device)
 void D3d11Capabilities::measure_formats(ID3D11Device5 &device)
 {
     AV_SCOPE("D3d11Capabilities::measure_formats");
-    for (uint32_t format = 0u; format < format_count; format++) {
+    for (uint32_t format = 0u; format < DxgiFormat::count; format++) {
         d3dproto::FormatCaps &row = formats_[format];
         row = d3dproto::FormatCaps{};
         UINT support = 0u;

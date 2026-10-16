@@ -67,7 +67,7 @@ through guest memory per acquire and release.
 | `WindowsD3d11Bridge` | `src/um/opencl/` | The COM implementation. |
 | `D3d11Rows` | `src/icd/opencl/` (interface) | Handed a mapped subresource's rows: writes them into a `cl_mem`, or reads a `cl_mem` into them. |
 | `ClD3d11Objects` | `src/icd/opencl/` | The `cl_mem` objects of one context made from Direct3D 11: the resource, the subresource, its shape, and whether it is acquired. |
-| `DxgiImageFormat` | `src/icd/opencl/` | The extension's table from `DXGI_FORMAT` to `cl_image_format`. |
+| `DxgiFormat` | `src/proto/d3d/` | The one DXGI table: the extension's `cl_image_format` for each `DXGI_FORMAT`, and whether the host makes an image over a shared texture of it (`cl_image_on_host`). |
 | `ClIcdRoot` | | The six entry points; context, memory and image queries; refusals. |
 
 ### Errors
@@ -114,7 +114,7 @@ Built. For a 2D texture, the copies never leave the GPU:
    (`ClExternalMemory::open_own`, which closes the handle once adopted), and
    the OpenCL backend makes a 2D image over the buffer it imports, at that
    pitch and in the order the bytes are (`OpenClBackend::image_over`,
-   `DxgiClFormat`: BGRA as `CL_BGRA`). The application's `cl_mem` is that
+   `DxgiFormat::cl_image_on_host`: BGRA as `CL_BGRA`). The application's `cl_mem` is that
    image.
 3. **Acquire and release.** Acquire copies the subresource into the twin
    (`CopySubresourceRegion`) and waits for it with a map of one texel of
@@ -126,6 +126,9 @@ Built. For a 2D texture, the copies never leave the GPU:
 A twin the device will not make, or whose handle the host cannot open as an
 image, leaves the object to stage 1. That covers a format with no exportable
 or OpenCL equivalent, sRGB, and a host without `cl_khr_image2d_from_buffer`.
+avcl asks for no twin of a format the host would open as bytes - the same
+`DxgiFormat::cl_image_on_host` the backend reads - so an sRGB texture, which
+OpenCL would decode where Direct3D did not encode, crosses through memory.
 The application sees the same object either way. The twin is let go after
 the image over it, when the `cl_mem`'s last reference goes.
 

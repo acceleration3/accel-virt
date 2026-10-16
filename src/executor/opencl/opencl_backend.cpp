@@ -3,7 +3,6 @@
 #include "core/support/growable_array.hpp"
 
 #include "executor/opencl/cl_extension_list.hpp"
-#include "executor/opencl/dxgi_cl_format.hpp"
 #include "device/host/stdio_log.hpp"
 #include "core/log/driver_log.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
@@ -23,6 +22,7 @@
 #include "device/abi/av_executor.h"
 #include "executor/opencl/cl_event_registration.hpp"
 #include "executor/imported_blob.hpp"
+#include "proto/d3d/dxgi_format.hpp"
 #include "proto/resources/cl_blob_backing.hpp"
 #include "executor/shim/opencl_device.hpp"
 #include "proto/generated/opencl/cl_command_names.h"
@@ -1008,10 +1008,10 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
 cl_mem OpenClBackend::image_over(cl_mem buffer, const SharedImageShape &shape)
 {
     AV_SCOPE("OpenClBackend::image_over");
-    const DxgiClFormat format(shape.format());
-    if (!shape.described() || !format.known()) return buffer;
-    const cl_image_format named = {static_cast<cl_channel_order>(format.order()),
-                                   static_cast<cl_channel_type>(format.type())};
+    const DxgiFormat format(shape.format());
+    if (!shape.described() || !format.cl_image_on_host()) return buffer;
+    const cl_image_format named = {static_cast<cl_channel_order>(format.cl_order()),
+                                   static_cast<cl_channel_type>(format.cl_type())};
     cl_image_desc         described = {};
     described.image_type = CL_MEM_OBJECT_IMAGE2D;
     described.image_width = shape.width();

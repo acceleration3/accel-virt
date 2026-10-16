@@ -360,7 +360,7 @@ dma-bufs already do.
    staging into `SharedSurfaces`. Getting Portal's frames on screen also took:
    - a multisampled present resolved before it is read - Direct3D 9 on 12
      presents its antialiased back buffer as it is - into a texture of the
-     frame's own, in a typed format (`DxgiResolveFormat`), at a single-sample
+     frame's own, in a typed format (`DxgiFormat::resolved`), at a single-sample
      placement;
    - texture copies judged by the region they touch (`D3d12Footprint`,
      `D3d12CopyExtent`), and the DDI's physical footprint taken as texels:

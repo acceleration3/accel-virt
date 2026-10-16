@@ -2,26 +2,13 @@
 
 #include "core/support/alignment.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/d3d/dxgi_format.hpp"
 
 namespace av {
 
 namespace {
 
-/* DXGI_FORMAT and D3D11_BIND_FLAG values. */
-constexpr uint32_t dxgi_r32g32b32a32_float = 2u;
-constexpr uint32_t dxgi_r16g16b16a16_float = 10u;
-constexpr uint32_t dxgi_r16g16b16a16_unorm = 11u;
-constexpr uint32_t dxgi_r32g32_float = 16u;
-constexpr uint32_t dxgi_r16g16_float = 34u;
-constexpr uint32_t dxgi_r32_float = 41u;
-constexpr uint32_t dxgi_r8g8_unorm = 49u;
-constexpr uint32_t dxgi_r16_float = 54u;
-constexpr uint32_t dxgi_r8_unorm = 61u;
-constexpr uint32_t dxgi_r10g10b10a2_unorm = 24u;
-constexpr uint32_t dxgi_r8g8b8a8_unorm = 28u;
-constexpr uint32_t dxgi_r8g8b8a8_unorm_srgb = 29u;
-constexpr uint32_t dxgi_b8g8r8a8_unorm = 87u;
-constexpr uint32_t dxgi_b8g8r8a8_unorm_srgb = 91u;
+/* D3D11_BIND_FLAG values. */
 constexpr uint32_t bind_shader_resource = 0x8u;
 constexpr uint32_t bind_render_target = 0x20u;
 constexpr uint32_t shared_binds = bind_shader_resource | bind_render_target;
@@ -34,34 +21,6 @@ constexpr uint64_t drm_format_mod_linear = 0u;
  * and with it every Direct3D 11 session on the GPU. 256 is what RADV lays
  * linear rows at itself, and RADV, ANV and NVIDIA all take it. */
 constexpr uint32_t row_alignment = 256u;
-
-/* A format, its sRGB or linear sibling (VK_FORMAT_UNDEFINED for none), and
- * the bytes of one texel. */
-struct ViewPair {
-    uint32_t dxgi;
-    VkFormat format;
-    VkFormat sibling;
-    uint32_t texel_bytes;
-};
-
-constexpr ViewPair pairs[] = {
-    {dxgi_r8g8b8a8_unorm, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_SRGB, 4u},
-    {dxgi_r8g8b8a8_unorm_srgb, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_UNORM, 4u},
-    {dxgi_b8g8r8a8_unorm, VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB, 4u},
-    {dxgi_b8g8r8a8_unorm_srgb, VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_B8G8R8A8_UNORM, 4u},
-    {dxgi_r10g10b10a2_unorm, VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_FORMAT_UNDEFINED, 4u},
-    {dxgi_r16g16b16a16_float, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_UNDEFINED, 8u},
-    /* What an OpenCL image over a shared texture reads as itself
-     * (DxgiClFormat): video processing's float and single-channel planes. */
-    {dxgi_r32g32b32a32_float, VK_FORMAT_R32G32B32A32_SFLOAT, VK_FORMAT_UNDEFINED, 16u},
-    {dxgi_r16g16b16a16_unorm, VK_FORMAT_R16G16B16A16_UNORM, VK_FORMAT_UNDEFINED, 8u},
-    {dxgi_r32g32_float, VK_FORMAT_R32G32_SFLOAT, VK_FORMAT_UNDEFINED, 8u},
-    {dxgi_r16g16_float, VK_FORMAT_R16G16_SFLOAT, VK_FORMAT_UNDEFINED, 4u},
-    {dxgi_r32_float, VK_FORMAT_R32_SFLOAT, VK_FORMAT_UNDEFINED, 4u},
-    {dxgi_r8g8_unorm, VK_FORMAT_R8G8_UNORM, VK_FORMAT_UNDEFINED, 2u},
-    {dxgi_r16_float, VK_FORMAT_R16_SFLOAT, VK_FORMAT_UNDEFINED, 2u},
-    {dxgi_r8_unorm, VK_FORMAT_R8_UNORM, VK_FORMAT_UNDEFINED, 1u},
-};
 
 }  // namespace
 
@@ -76,17 +35,15 @@ ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32
       info_{}, supported_(false)
 {
     AV_SCOPE("ExportableImageInfo::ExportableImageInfo");
-    const ViewPair *pair = nullptr;
-    for (const ViewPair &candidate : pairs)
-        if (candidate.dxgi == format) pair = &candidate;
-    if (pair == nullptr || width == 0u || height == 0u || mips != 1u || layers != 1u || samples > 1u ||
+    const DxgiFormat shared(format);
+    if (shared.vk_format() == 0u || width == 0u || height == 0u || mips != 1u || layers != 1u || samples > 1u ||
         (bind_flags & ~shared_binds) != 0u ||
-        !Alignment(row_alignment).align_up(static_cast<uint64_t>(width) * pair->texel_bytes, plane_.rowPitch))
+        !Alignment(row_alignment).align_up(static_cast<uint64_t>(width) * shared.element_bytes(), plane_.rowPitch))
         return;
     info_.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     info_.pNext = &external_;
     info_.imageType = VK_IMAGE_TYPE_2D;
-    info_.format = pair->format;
+    info_.format = static_cast<VkFormat>(shared.vk_format());
     info_.extent = {width, height, 1u};
     info_.mipLevels = 1u;
     info_.arrayLayers = 1u;
@@ -111,9 +68,9 @@ ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32
     info_.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info_.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     external_.pNext = &layout_;
-    if (pair->sibling != VK_FORMAT_UNDEFINED) {
-        views_[0] = pair->format;
-        views_[1] = pair->sibling;
+    if (shared.vk_sibling() != 0u) {
+        views_[0] = static_cast<VkFormat>(shared.vk_format());
+        views_[1] = static_cast<VkFormat>(shared.vk_sibling());
         list_.viewFormatCount = max_views;
         list_.pNext = &layout_;
         external_.pNext = &list_;

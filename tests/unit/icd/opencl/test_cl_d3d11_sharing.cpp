@@ -810,6 +810,42 @@ TEST(cl_d3d11_sharing, a_twin_that_cannot_be_opened_leaves_the_object_to_cross_t
   CHECK_EQ(rig.loader().release_mem(image), CL_SUCCESS);
   CHECK(rig.root().invariants_hold()); }
 
+/* An sRGB texture is an image to the guest (CL_sRGBA) but never one the host
+ * makes over shared memory, since OpenCL would decode bytes Direct3D did not
+ * encode: the host opens such a twin as bytes (DxgiFormat::cl_image_on_host).
+ * So no twin is made for one, and the object crosses through memory, an image
+ * the host made itself, rather than a twin the guest takes for an image the
+ * host opened as a buffer. */
+TEST(cl_d3d11_sharing, an_srgb_texture_is_never_twinned_and_crosses_through_memory)
+{ ClIcdRig rig;
+  Shared   shared(rig);
+  CHECK(shared.made());
+  if (!shared.made()) return;
+  constexpr std::uint32_t rgba8_srgb = 29u;
+  const D3d11Resource     srgb_texture(D3d11Resource::Kind::texture2d, rgba8_srgb, 0u, 4u, 2u, 1u, 1u, 1u, 1u);
+  int                     srgb = 0;
+  std::uint8_t            texels[32] = {};
+  rig.d3d11().name_resource(&srgb, shared.d3d_device(), srgb_texture, texels, sizeof texels, 16u, 32u);
+  int twin = 0;
+  rig.d3d11().offer_twin(&twin, shared_handle(rig));
+  rig.host().cl_handle(host_image, CL_SUCCESS);
+  const std::uint32_t sent = rig.kmt().commands();
+  cl_int              error = CL_INVALID_VALUE;
+  const cl_mem        image = shared.from_texture2d(CL_MEM_READ_WRITE, &srgb, 0u, error);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK(image != nullptr);
+  if (image == nullptr) return;
+  CHECK(rig.kmt().command_id(sent) != av::CommandHeader::open_shared_object_id);
+  CHECK_EQ(rig.d3d11().references(&twin), 0);
+  shared.element_is(4u);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  CHECK_EQ(shared.acquire(1u, &image), CL_SUCCESS);
+  CHECK_EQ(rig.d3d11().reads(), 1u);
+  CHECK_EQ(rig.d3d11().to_twins(), 0u);
+  CHECK_EQ(rig.loader().release_mem(image), CL_SUCCESS);
+  CHECK(rig.root().invariants_hold()); }
+
 /* A copy into or out of the twin Direct3D refuses is the acquire's or the
  * release's error, and leaves the object where it was. */
 TEST(cl_d3d11_sharing, a_twin_copy_direct3d_refuses_is_the_call_s_error)

@@ -4,6 +4,7 @@
  * answer is one the runtime refuses the driver over. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/d3d/dxgi_format_table.hpp"
+#include "proto/d3d/dxgi_format.hpp"
 
 #include <cstdint>
 #include <initializer_list>
@@ -103,7 +104,7 @@ TEST(dxgi_format_table, the_hosts_bits_become_the_ddis_bits)
   /* Nothing recorded, nothing claimed; and no format is 0 or past the table. */
   CHECK_EQ(table.format_support(1u), 0u);
   CHECK_EQ(table.format_support(0u), 0u);
-  CHECK_EQ(table.format_support(DxgiFormatTable::format_count), 0u); }
+  CHECK_EQ(table.format_support(av::DxgiFormat::count), 0u); }
 
 /* An overlay plane is composed on the host from a format the scanout shows:
  * the three 32-bit RGB layouts, and only while the host displays them. */
@@ -131,7 +132,7 @@ TEST(dxgi_format_table, a_format_the_host_tiles_is_told_apart_from_its_other_sup
   table.settle();
   CHECK_EQ(table.tiled_support(rgba8_unorm), ddi_tiled);
   CHECK_EQ(table.tiled_support(rgba32_float), 0u);
-  CHECK_EQ(table.tiled_support(DxgiFormatTable::format_count), 0u);
+  CHECK_EQ(table.tiled_support(av::DxgiFormat::count), 0u);
   CHECK_EQ(table.format_support(rgba8_unorm) & ddi_tiled, 0u); }
 
 /* Blending and multisampled rendering are rendering: claimed without a render
@@ -185,7 +186,7 @@ TEST(dxgi_format_table, a_family_answers_one_set_of_levels)
   CHECK_EQ(table.quality_levels(rgba8_unorm, 3u), 0u);
   CHECK_EQ(table.quality_levels(rgba8_unorm, 32u), 0u);
   CHECK_EQ(table.quality_levels(0u, 1u), 0u);
-  CHECK_EQ(table.quality_levels(DxgiFormatTable::format_count, 1u), 0u); }
+  CHECK_EQ(table.quality_levels(av::DxgiFormat::count, 1u), 0u); }
 
 /* A member that claims multisampled rendering at no count is told none, and
  * its siblings keep theirs: pooled, it took its family down with it, and the
@@ -288,8 +289,8 @@ TEST(dxgi_format_table, any_hosts_answers_keep_every_family_consistent)
   };
   for (int round = 0; round < 2000; round++) {
       DxgiFormatTable table;
-      std::uint32_t   recorded[DxgiFormatTable::format_count][DxgiFormatTable::sample_steps] = {};
-      for (std::uint32_t format = 1u; format < DxgiFormatTable::format_count; format++) {
+      std::uint32_t   recorded[av::DxgiFormat::count][DxgiFormatTable::sample_steps] = {};
+      for (std::uint32_t format = 1u; format < av::DxgiFormat::count; format++) {
           if (next() % 3u == 0u) continue;
           const std::uint32_t kind = next() % 3u;
           table.record(format,
@@ -304,7 +305,7 @@ TEST(dxgi_format_table, any_hosts_answers_keep_every_family_consistent)
           }
       }
       table.settle();
-      for (std::uint32_t format = 1u; format < DxgiFormatTable::format_count; format++) {
+      for (std::uint32_t format = 1u; format < av::DxgiFormat::count; format++) {
           const bool claims = (table.format_support(format) & ddi_multisample_render_target) != 0u;
           const std::uint32_t parent = typeless_parent(format);
           bool counted = false;
@@ -346,13 +347,13 @@ TEST(dxgi_format_table, a_multisample_candidate_claims_multisampled_rendering)
   CHECK(table.multisample_candidate(rgba8_unorm));
   CHECK(table.multisample_candidate(rgba8_snorm));
   CHECK(!table.multisample_candidate(rgba8_uint));
-  CHECK(!table.multisample_candidate(DxgiFormatTable::format_count)); }
+  CHECK(!table.multisample_candidate(av::DxgiFormat::count)); }
 
 /* What is out of the table's range is not recorded, and changes nothing. */
 TEST(dxgi_format_table, an_answer_for_no_format_or_no_count_is_dropped)
 { DxgiFormatTable table;
-  table.record(DxgiFormatTable::format_count, renders, 0u);
-  table.record_samples(DxgiFormatTable::format_count, 4u, 9u);
+  table.record(av::DxgiFormat::count, renders, 0u);
+  table.record_samples(av::DxgiFormat::count, 4u, 9u);
   table.record(rgba8_unorm, renders, 0u);
   table.record_samples(rgba8_unorm, 3u, 9u);
   table.record_samples(rgba8_unorm, 32u, 9u);

@@ -8,6 +8,7 @@
  * buffer, and the open is the bytes themselves, read at the pitch Direct3D
  * laid them out with. A host without DXVK, OpenGL or OpenCL on one GPU
  * returns without judging. */
+#include "proto/d3d/dxgi_format.hpp"
 #include "proto/d3d/resource_misc.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/opencl/opencl_backend.hpp"
@@ -35,6 +36,7 @@ using namespace av::d3dproto;
 
 constexpr std::uint32_t size = 64u;
 constexpr std::uint32_t format_b8g8r8a8 = 87u;
+constexpr std::uint32_t format_r8g8b8a8_srgb = 29u;
 constexpr std::uint32_t bind_shader_resource = 0x8u;
 constexpr std::uint32_t bind_render_target = 0x20u;
 /* Shared and asked for as rows, as the code of ours that makes a texture
@@ -86,9 +88,10 @@ std::uint32_t texture_pitch(av::HostShares &shares, av::D3d11HostDevice &device)
     return pitch;
 }
 
-}  // namespace
-
-TEST(d3d_cl_interop_device, a_shared_texture_opened_by_opencl_is_the_image_direct3d_wrote)
+/* A shared texture of `dxgi` opened by an OpenCL session: the image over
+ * its memory where the host views the format as one, else its bytes - and
+ * either way texel for texel what Direct3D wrote. */
+void opened_by_opencl(std::uint32_t dxgi)
 {
     if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
     av::LoaderHostApis apis;
@@ -116,7 +119,7 @@ TEST(d3d_cl_interop_device, a_shared_texture_opened_by_opencl_is_the_image_direc
     shared.height = size;
     shared.depth_or_array = 1u;
     shared.mip_levels = 1u;
-    shared.format = format_b8g8r8a8;
+    shared.format = dxgi;
     shared.sample_count = 1u;
     shared.bind_flags = bind_shader_resource | bind_render_target;
     shared.misc_flags = misc_shared;
@@ -153,7 +156,7 @@ TEST(d3d_cl_interop_device, a_shared_texture_opened_by_opencl_is_the_image_direc
     CHECK(cl_session.open(key, AV_SHARED_MEMORY, static_cast<std::uint64_t>(bytes), handle) == av::Status::ok);
     cl_mem const image = reinterpret_cast<cl_mem>(handle);
     cl_device_id const device = static_cast<cl_device_id>(apis.opencl_device(gpu)->device());
-    const bool         as_image = images_over_buffers(device);
+    const bool         as_image = images_over_buffers(device) && av::DxgiFormat(dxgi).cl_image_on_host();
     cl_mem_object_type type = 0u;
     CHECK_EQ(::clGetMemObjectInfo(image, CL_MEM_TYPE, sizeof type, &type, nullptr), CL_SUCCESS);
     CHECK_EQ(type, static_cast<cl_mem_object_type>(as_image ? CL_MEM_OBJECT_IMAGE2D : CL_MEM_OBJECT_BUFFER));
@@ -166,7 +169,7 @@ TEST(d3d_cl_interop_device, a_shared_texture_opened_by_opencl_is_the_image_direc
     if (as_image) {
         cl_image_format format = {};
         CHECK_EQ(::clGetImageInfo(image, CL_IMAGE_FORMAT, sizeof format, &format, nullptr), CL_SUCCESS);
-        CHECK_EQ(format.image_channel_order, static_cast<cl_channel_order>(CL_BGRA));
+        CHECK_EQ(format.image_channel_order, static_cast<cl_channel_order>(av::DxgiFormat(shared.format).cl_order()));
         const std::size_t region[3] = {size, size, 1u};
         CHECK_EQ(::clEnqueueReadImage(queue, image, CL_TRUE, origin, region, size * 4u, 0u, read, 0u, nullptr,
                                       nullptr),
@@ -188,3 +191,14 @@ TEST(d3d_cl_interop_device, a_shared_texture_opened_by_opencl_is_the_image_direc
     direct3d.shut_down();
     shares->release(domain, 0u);
 }
+}  // namespace
+
+TEST(d3d_cl_interop_device, a_shared_texture_opened_by_opencl_is_the_image_direct3d_wrote)
+{ opened_by_opencl(format_b8g8r8a8); }
+
+/* OpenCL would decode an sRGB image's texels where Direct3D did not encode
+ * them, so the host opens one as its bytes - which the guest's driver knows
+ * from the same row, and copies through instead of taking it for an image. */
+TEST(d3d_cl_interop_device, an_srgb_texture_opened_by_opencl_is_its_bytes_never_an_image)
+{ CHECK(!av::DxgiFormat(format_r8g8b8a8_srgb).cl_image_on_host());
+  opened_by_opencl(format_r8g8b8a8_srgb); }

@@ -4,9 +4,9 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "executor/shim/d3d_headers.hpp"
-#include "executor/shim/drm_fourcc.hpp"
 #include "executor/shim/dxvk_vulkan_device.hpp"
 #include "executor/shim/vkd3d_image_export.hpp"
+#include "proto/d3d/dxgi_format.hpp"
 #include "proto/vulkan/exportable_image_info.hpp"
 
 #include <stdio.h>
@@ -250,7 +250,7 @@ bool ExportableImages::export_image(ID3D11Texture2D *texture, AvExportedImage &i
     if (made == nullptr || made->modifier() == drm_format_mod_invalid) return false;
     D3D11_TEXTURE2D_DESC described = {};
     texture->GetDesc(&described);
-    const uint32_t fourcc = DrmFourcc(static_cast<uint32_t>(described.Format)).value();
+    const uint32_t fourcc = DxgiFormat(static_cast<uint32_t>(described.Format)).drm_fourcc();
     int            fd = -1;
     if (fourcc == 0u || !vulkan_.table().memory_fd(made->memory(), VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd))
         return false;

@@ -6,6 +6,7 @@
 #ifndef AV_D3D11_CAPABILITIES_HPP
 #define AV_D3D11_CAPABILITIES_HPP
 
+#include "proto/d3d/dxgi_format.hpp"
 #include "proto/generated/d3d/d3d_wire_types.h"
 
 #include <stdint.h>
@@ -16,9 +17,6 @@ namespace av {
 
 class D3d11Capabilities {
 public:
-    /* DXGI_FORMAT_A4B4G4R4_UNORM is the last format DXGI defines. */
-    static constexpr uint32_t format_count = 192u;
-
     D3d11Capabilities();
 
     void measure(ID3D11Device5 &device, uint32_t feature_level, uint32_t vendor_id, uint32_t device_id,
@@ -32,7 +30,7 @@ private:
     void measure_formats(ID3D11Device5 &device);
 
     d3dproto::Caps11     caps_;
-    d3dproto::FormatCaps formats_[format_count];
+    d3dproto::FormatCaps formats_[DxgiFormat::count];
 };
 
 }  // namespace av

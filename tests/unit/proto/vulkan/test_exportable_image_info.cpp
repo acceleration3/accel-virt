@@ -125,6 +125,24 @@ TEST(exportable_image_info, every_row_starts_256_bytes_aligned_whatever_the_widt
       CHECK(pitch >= width * 4u && pitch < width * 4u + 256u);
   } }
 
+/* A B8G8R8X8 texture is what DXVK makes it: B8G8R8A8 memory whose alpha no
+ * view reads, mutable to its sRGB sibling as B8G8R8A8's is - the same Vulkan
+ * format the scanout's export copies an X8 frame into (DxgiFormat's one row
+ * for both). */
+TEST(exportable_image_info, an_x8_texture_is_shared_as_the_b8g8r8a8_memory_dxvk_makes)
+{ constexpr std::uint32_t b8g8r8x8_unorm = 88u;
+  constexpr std::uint32_t b8g8r8x8_unorm_srgb = 93u;
+  const ExportableImageInfo x8(4u, 4u, 1u, 1u, 1u, b8g8r8x8_unorm, bind_shader_resource | bind_render_target);
+  CHECK(x8.supported());
+  CHECK_EQ(x8.info().format, VK_FORMAT_B8G8R8A8_UNORM);
+  const auto *external = static_cast<const VkExternalMemoryImageCreateInfo *>(x8.info().pNext);
+  const auto *views = static_cast<const VkImageFormatListCreateInfo *>(external->pNext);
+  CHECK_EQ(views->viewFormatCount, 2u);
+  CHECK_EQ(views->pViewFormats[1], VK_FORMAT_B8G8R8A8_SRGB);
+  const ExportableImageInfo srgb(4u, 4u, 1u, 1u, 1u, b8g8r8x8_unorm_srgb, bind_shader_resource);
+  CHECK(srgb.supported());
+  CHECK_EQ(srgb.info().format, VK_FORMAT_B8G8R8A8_SRGB); }
+
 TEST(exportable_image_info, what_interop_does_not_share_is_left_to_dxvk)
 { const std::uint32_t binds = bind_shader_resource | bind_render_target;
   constexpr std::uint32_t r32g32b32_float = 6u;

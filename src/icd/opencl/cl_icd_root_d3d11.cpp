@@ -10,7 +10,7 @@
 #include "icd/opencl/cl_d3d11_upload.hpp"
 #include "icd/opencl/d3d11_bridge.hpp"
 #include "icd/opencl/d3d11_object.hpp"
-#include "icd/opencl/dxgi_image_format.hpp"
+#include "proto/d3d/dxgi_format.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
 
 namespace av::clicd {
@@ -98,13 +98,15 @@ cl_mem ClIcdRoot::create_from_d3d11_texture(cl_context context, cl_mem_flags fla
         report_d3d11_error(error, judged_resource);
         return nullptr;
     }
-    const DxgiImageFormat mapped(described.format());
-    if (!mapped.mapped()) {
+    const DxgiFormat mapped(described.format());
+    if (mapped.cl_order() == 0u) {
         report_d3d11_error(error, CL_INVALID_IMAGE_FORMAT_DESCRIPTOR);
         return nullptr;
     }
     void        *twin = nullptr;
-    const cl_mem twinned = kind == D3d11Resource::Kind::texture2d
+    /* A twin is opened on the host as the image it is only where the host
+     * views its format as one; any other is opened as bytes there. */
+    const cl_mem twinned = kind == D3d11Resource::Kind::texture2d && mapped.cl_image_on_host()
                                ? d3d11_twin(context, *owner, resource, subresource, described, twin)
                                : nullptr;
     if (twinned != nullptr) {
@@ -118,7 +120,8 @@ cl_mem ClIcdRoot::create_from_d3d11_texture(cl_context context, cl_mem_flags fla
         lock_.release();
         return kept;
     }
-    const cl_image_format format = mapped.format();
+    const cl_image_format format = {static_cast<cl_channel_order>(mapped.cl_order()),
+                                     static_cast<cl_channel_type>(mapped.cl_type())};
     cl_image_desc         desc = {};
     desc.image_type = kind == D3d11Resource::Kind::texture3d ? CL_MEM_OBJECT_IMAGE3D : CL_MEM_OBJECT_IMAGE2D;
     desc.image_width = described.width_of(subresource);

@@ -23,13 +23,14 @@
 #ifndef AV_ICD_D3D_DXGI_FORMAT_TABLE_HPP
 #define AV_ICD_D3D_DXGI_FORMAT_TABLE_HPP
 
+#include "proto/d3d/dxgi_format.hpp"
+
 #include <stdint.h>
 
 namespace av::d3d {
 
 class DxgiFormatTable {
 public:
-    static constexpr uint32_t format_count = 192u;
     /* 1, 2, 4, 8 and 16 samples. */
     static constexpr uint32_t sample_steps = 5u;
 
@@ -58,11 +59,6 @@ public:
     bool     multisample_candidate(uint32_t format) const;
 
 private:
-    /* The family's typeless head: DXGI numbers a family's formats after it,
-     * except the two BGRA families, named member by member. */
-    uint32_t family_of(uint32_t format) const;
-    bool     typeless(uint32_t format) const;
-    bool     depth(uint32_t format) const;
     /* The support bits before multisampling is judged. */
     uint32_t carried(uint32_t format) const;
     /* Claims multisampled rendering, and its family can do it at some count. */
@@ -73,14 +69,14 @@ private:
     /* Settles the family under `head`: its counts and who keeps them. */
     void     settle_family(uint32_t head);
 
-    uint32_t support_[format_count];
-    uint32_t support2_[format_count];
-    uint32_t levels_[format_count][sample_steps];
+    uint32_t support_[DxgiFormat::count];
+    uint32_t support2_[DxgiFormat::count];
+    uint32_t levels_[DxgiFormat::count][sample_steps];
     /* Per family head: the levels every member that keeps multisampling
      * answers at each count, and the typeless head with them. */
-    uint32_t family_levels_[format_count][sample_steps];
+    uint32_t family_levels_[DxgiFormat::count][sample_steps];
     /* Per member: whether it keeps multisampling. */
-    bool     keeps_[format_count];
+    bool     keeps_[DxgiFormat::count];
 };
 
 }  // namespace av::d3d

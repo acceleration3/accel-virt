@@ -2,8 +2,8 @@
 
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d_headers.hpp"
+#include "proto/d3d/dxgi_format.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
-#include "proto/d3d/dxgi_resolve_format.hpp"
 
 namespace av {
 
@@ -36,7 +36,7 @@ StagedFrame *D3d12FramePool::stage(ID3D12CommandQueue *queue, ID3D12Resource *so
     if (queue->GetDesc().Type != D3D12_COMMAND_LIST_TYPE_DIRECT) return nullptr;
     const D3D12_RESOURCE_DESC desc = source->GetDesc();
     const bool                resolve = desc.SampleDesc.Count > 1u;
-    const uint32_t            typed = DxgiResolveFormat(static_cast<uint32_t>(desc.Format)).typed();
+    const uint32_t            typed = DxgiFormat(static_cast<uint32_t>(desc.Format)).resolved();
     if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D || !DxgiFormatLayout(static_cast<uint32_t>(desc.Format)).word_texels() || (resolve && typed == 0u))
         return nullptr;
     /* The frame's image: the source's first subresource at one sample. */

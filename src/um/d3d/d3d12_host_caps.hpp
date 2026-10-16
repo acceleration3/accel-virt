@@ -19,6 +19,7 @@
 #define AV_UM_D3D12_HOST_CAPS_HPP
 
 #include "icd/d3d/dxgi_format_table.hpp"
+#include "proto/d3d/dxgi_format.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
 #include "um/d3d/d3d12_ddi.hpp"
 
@@ -33,8 +34,6 @@ namespace av::d3d12 {
 
 class D3d12HostCaps {
 public:
-    static constexpr uint32_t format_count = 192u;
-
     D3d12HostCaps();
     D3d12HostCaps(const D3d12HostCaps &) = delete;
     D3d12HostCaps &operator=(const D3d12HostCaps &) = delete;
