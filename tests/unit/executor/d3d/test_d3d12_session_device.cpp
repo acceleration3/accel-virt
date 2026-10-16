@@ -787,6 +787,57 @@ TEST(d3d12_session_device, a_buffer_placed_inside_a_spanning_buffer_is_taken_and
     backend.shut_down();
 }
 
+/* The ways a placed resource is refused, each on a device of its own since a
+ * refusal removes it - each says why in QEMU's log (what a refusal in a game
+ * a thousand resources in needs): a buffer running past its heap, a texture
+ * in a heap that denies textures (the host's CreatePlacedResource refuses
+ * it), and an id already in use (made, then let go). */
+TEST(d3d12_session_device, a_placed_resource_past_its_heap_of_a_denied_kind_or_an_id_in_use_is_refused)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    av::HostShares      *shares = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
+    constexpr std::uint64_t heap_size = 1u << 20u, piece = 64u * 1024u, base = 0x300000000ull;
+    constexpr std::uint32_t heap = 1u, first = 2u, deny_non_rt_ds_textures = 0x80u;
+    ResourceDesc texture = {};
+    texture.width = 64u;
+    texture.dimension = dimension_texture2d;
+    texture.height = 64u;
+    texture.depth_or_array = 1u;
+    texture.mip_levels = 1u;
+    texture.format = format_b8g8r8a8;
+    texture.sample_count = 1u;
+    for (std::uint32_t refusal = 0u; refusal < 3u; refusal++) {
+        av::D3dBackend backend;
+        av::SessionShares session;
+        CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
+        av::D3dLoopback wire(backend, source, region_bytes, lent_bytes);
+        std::uint32_t hresult = 1u;
+        Caps12 caps = {};
+        CHECK(av_d3d12_OpenDevice12(wire, 0u, &hresult, &caps));
+        CHECK(av_d3d12_CreateHeap12(wire, heap, heap_of(heap_default), refusal == 1u ? deny_non_rt_ds_textures : 0u,
+                                    heap_size, piece, 0u));
+        CHECK(av_d3d12_CreatePlacedResource12(wire, first, heap, 0u, buffer_of(piece), 0u, ClearValue{}, base));
+        std::uint32_t removed = 1u;
+        CHECK(av_d3d12_Finish12(wire, &removed));
+        CHECK_EQ(removed, 0u);
+        if (refusal == 0u)
+            CHECK(av_d3d12_CreatePlacedResource12(wire, 3u, heap, heap_size - piece, buffer_of(2u * piece), 0u,
+                                                   ClearValue{}, base + heap_size - piece));
+        else if (refusal == 1u)
+            CHECK(av_d3d12_CreatePlacedResource12(wire, 3u, heap, piece, texture, 0u, ClearValue{}, 0u));
+        else
+            CHECK(av_d3d12_CreatePlacedResource12(wire, first, heap, piece, texture, 0u, ClearValue{}, 0u));
+        CHECK(av_d3d12_Finish12(wire, &removed));
+        CHECK_EQ(removed, driver_internal_error);
+        CHECK(backend.invariants_hold());
+        backend.shut_down();
+    }
+}
+
 namespace {
 
 constexpr std::uint32_t heap_flag_shared = 0x1u;

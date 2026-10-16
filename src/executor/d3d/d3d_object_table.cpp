@@ -3,6 +3,8 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d_headers.hpp"
 
+#include <sys/mman.h>
+
 namespace av {
 
 namespace {
@@ -13,9 +15,36 @@ constexpr uint32_t golden_ratio = 2654435769u;
 
 }  // namespace
 
-D3dObjectTable::D3dObjectTable() : ids_{}, kinds_{}, tombstones_{}, objects_{}, viewed_{}, view_slots_{}, view_at_{}, views_(0u), count_(0u)
+D3dObjectTable::D3dObjectTable()
+    : table_(nullptr), objects_(nullptr), viewed_(nullptr), ids_(nullptr), view_slots_(nullptr), view_at_(nullptr),
+      kinds_(nullptr), tombstones_(nullptr), views_(0u), count_(0u)
 {
     AV_SCOPE("D3dObjectTable::D3dObjectTable");
+}
+
+D3dObjectTable::~D3dObjectTable()
+{
+    AV_SCOPE("D3dObjectTable::~D3dObjectTable");
+    if (table_ != nullptr) munmap(table_, table_bytes);
+}
+
+/* Anonymous and unreserved: pages are zero, and count only once touched. */
+bool D3dObjectTable::reserve()
+{
+    AV_SCOPE("D3dObjectTable::reserve");
+    if (table_ != nullptr) return true;
+    void *const mapped = mmap(nullptr, table_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
+                              -1, 0);
+    if (mapped == MAP_FAILED) return false;
+    table_ = mapped;
+    objects_ = static_cast<IUnknown **>(mapped);
+    viewed_ = objects_ + capacity;
+    ids_ = reinterpret_cast<uint32_t *>(viewed_ + capacity);
+    view_slots_ = ids_ + capacity;
+    view_at_ = view_slots_ + capacity;
+    kinds_ = reinterpret_cast<D3dObjectKind *>(view_at_ + capacity);
+    tombstones_ = reinterpret_cast<bool *>(kinds_ + capacity);
+    return true;
 }
 
 uint32_t D3dObjectTable::home_of(uint32_t id) const
@@ -27,6 +56,7 @@ uint32_t D3dObjectTable::home_of(uint32_t id) const
 uint32_t D3dObjectTable::slot_of(uint32_t id) const
 {
     AV_SCOPE("D3dObjectTable::slot_of");
+    if (table_ == nullptr) return capacity;
     uint32_t slot = home_of(id);
     for (uint32_t probe = 0u; probe < capacity; probe++) {
         if (ids_[slot] == id && kinds_[slot] != D3dObjectKind::none) return slot;
@@ -74,7 +104,7 @@ bool D3dObjectTable::insert(uint32_t id, D3dObjectKind kind, IUnknown *object)
     if (id == 0u || kind == D3dObjectKind::none || object == nullptr) return false;
     /* Three quarters full is where linear probing stops being cheap; past it a
      * guest is refused rather than made to walk the table on every lookup. */
-    if (count_ >= capacity / 4u * 3u || slot_of(id) != capacity) return false;
+    if (count_ >= capacity / 4u * 3u || slot_of(id) != capacity || !reserve()) return false;
     uint32_t slot = home_of(id);
     while (kinds_[slot] != D3dObjectKind::none) slot = (slot + 1u) % capacity;
     set(slot, id, kind, false, object);
@@ -140,6 +170,7 @@ uint32_t D3dObjectTable::view_slot(uint32_t index) const
 uint32_t D3dObjectTable::next_used(uint32_t from) const
 {
     AV_SCOPE("D3dObjectTable::next_used");
+    if (table_ == nullptr) return capacity;
     for (uint32_t slot = from; slot < capacity; slot++)
         if (kinds_[slot] != D3dObjectKind::none) return slot;
     return capacity;
@@ -148,19 +179,19 @@ uint32_t D3dObjectTable::next_used(uint32_t from) const
 IUnknown *D3dObjectTable::viewed(uint32_t slot) const
 {
     AV_SCOPE("D3dObjectTable::viewed");
-    return slot < capacity ? viewed_[slot] : nullptr;
+    return slot < capacity && table_ != nullptr ? viewed_[slot] : nullptr;
 }
 
 void D3dObjectTable::note_viewed(uint32_t slot, IUnknown *resource)
 {
     AV_SCOPE("D3dObjectTable::note_viewed");
-    if (slot < capacity) viewed_[slot] = resource;
+    if (slot < capacity && table_ != nullptr) viewed_[slot] = resource;
 }
 
 IUnknown *D3dObjectTable::at(uint32_t slot, uint32_t &id, D3dObjectKind &kind) const
 {
     AV_SCOPE("D3dObjectTable::at");
-    const bool used = slot < capacity && kinds_[slot] != D3dObjectKind::none;
+    const bool used = slot < capacity && table_ != nullptr && kinds_[slot] != D3dObjectKind::none;
     id = used ? ids_[slot] : 0u;
     kind = used ? kinds_[slot] : D3dObjectKind::none;
     return used ? objects_[slot] : nullptr;
@@ -192,13 +223,13 @@ uint32_t D3dObjectTable::count_kinds(D3dObjectKind first, D3dObjectKind last) co
     return kept;
 }
 
+/* The pages go back zeroed, so nothing is left to reset slot by slot. */
 void D3dObjectTable::clear()
 {
     AV_SCOPE("D3dObjectTable::clear");
-    for (uint32_t slot = 0u; slot < capacity; slot++) {
-        if (kinds_[slot] != D3dObjectKind::none) objects_[slot]->Release();
-        set(slot, 0u, D3dObjectKind::none, false, nullptr);
-    }
+    for (uint32_t slot = next_used(0u); slot < capacity; slot = next_used(slot + 1u)) objects_[slot]->Release();
+    if (table_ != nullptr) static_cast<void>(madvise(table_, table_bytes, MADV_DONTNEED));
+    views_ = 0u;
     count_ = 0u;
 }
 
@@ -211,6 +242,7 @@ uint32_t D3dObjectTable::count() const
 bool D3dObjectTable::invariants_hold() const
 {
     AV_SCOPE("D3dObjectTable::invariants_hold");
+    if (table_ == nullptr) return count_ == 0u && views_ == 0u;
     uint32_t live = 0u;
     for (uint32_t slot = 0u; slot < capacity; slot++) {
         if (kinds_[slot] == D3dObjectKind::none) {

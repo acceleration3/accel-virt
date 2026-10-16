@@ -9,8 +9,26 @@
 
 #include <cstdint>
 
+#include <sys/resource.h>
+
 using av::D3dObjectKind;
 using av::D3dObjectTable;
+
+namespace av {
+
+struct D3dObjectTableProbe {
+    static bool mapped(const D3dObjectTable &table) { return table.table_ != nullptr; }
+    static bool tombstone(const D3dObjectTable &table, std::uint32_t slot) { return table.tombstones_[slot]; }
+    static void counts(D3dObjectTable &table, std::uint32_t count, std::uint32_t views)
+    {
+        table.count_ = count;
+        table.views_ = views;
+    }
+};
+
+}  // namespace av
+
+using av::D3dObjectTableProbe;
 
 namespace {
 
@@ -32,8 +50,8 @@ public:
     ULONG released = 0u;
 };
 
-/* The table is most of a megabyte: one, cleared at the start and end of each
- * test, before the test's objects go. */
+/* One table, cleared at the start and end of each test, before the test's
+ * objects go: a full one is eight megabytes of pages. */
 D3dObjectTable &fresh_table()
 {
     static D3dObjectTable table;
@@ -264,3 +282,91 @@ TEST(d3d_object_table_kinds, count_and_remove_a_range_of_kinds_only)
   CHECK(table.find(1u, D3dObjectKind::resource) == &resource);
   CHECK(table.invariants_hold());
   table.clear(); }
+
+/* A table nothing was put in has no memory and answers as an empty one. */
+TEST(d3d_object_table_mapping, an_unused_table_holds_no_memory_and_answers_empty)
+{ D3dObjectTable table;
+  CHECK(!D3dObjectTableProbe::mapped(table));
+  CHECK(table.find(1u, D3dObjectKind::resource) == nullptr);
+  D3dObjectKind kind = D3dObjectKind::resource;
+  CHECK(table.find_any(1u, kind) == nullptr);
+  CHECK(kind == D3dObjectKind::none);
+  CHECK(table.find_view(1u) == nullptr);
+  Counted object;
+  CHECK(table.exchange(1u, D3dObjectKind::resource, &object) == nullptr);
+  CHECK_EQ(table.next_used(0u), D3dObjectTable::capacity);
+  CHECK_EQ(table.view_slot(0u), D3dObjectTable::capacity);
+  table.note_viewed(0u, &object);
+  CHECK(table.viewed(0u) == nullptr);
+  std::uint32_t id = 9u;
+  CHECK(table.at(0u, id, kind) == nullptr);
+  CHECK_EQ(id, 0u);
+  table.remove(1u);
+  table.remove_kinds(D3dObjectKind::resource, D3dObjectKind::query9);
+  CHECK_EQ(table.count_kinds(D3dObjectKind::resource, D3dObjectKind::query9), 0u);
+  table.clear();
+  CHECK(!D3dObjectTableProbe::mapped(table));
+  CHECK_EQ(table.count(), 0u);
+  CHECK(table.invariants_hold());
+  /* The first object maps it. */
+  CHECK(table.insert(1u, D3dObjectKind::resource, &object));
+  CHECK(D3dObjectTableProbe::mapped(table));
+  CHECK(table.find(1u, D3dObjectKind::resource) == &object);
+  table.clear(); }
+
+/* The address space closed to new mappings for the one call: the object is
+ * refused - kept, the made one released - and taken once memory can be had. */
+TEST(d3d_object_table_mapping, a_table_no_memory_can_be_had_for_refuses_the_object)
+{ D3dObjectTable table;
+  Counted made;
+  rlimit was = {};
+  CHECK_EQ(getrlimit(RLIMIT_AS, &was), 0);
+  rlimit closed = was;
+  closed.rlim_cur = 0u;
+  CHECK_EQ(setrlimit(RLIMIT_AS, &closed), 0);
+  const bool kept = table.keep(4u, D3dObjectKind::resource, &made);
+  CHECK_EQ(setrlimit(RLIMIT_AS, &was), 0);
+  CHECK(!kept);
+  CHECK_EQ(made.released, 1u);
+  CHECK(!D3dObjectTableProbe::mapped(table));
+  CHECK_EQ(table.count(), 0u);
+  CHECK(table.invariants_hold());
+  Counted again;
+  CHECK(table.keep(4u, D3dObjectKind::resource, &again));
+  CHECK_EQ(table.count(), 1u);
+  table.clear(); }
+
+/* A clear gives back every reference and every page: the holes removals
+ * left are gone too, the views forgotten, and the table maps the same memory
+ * on. */
+TEST(d3d_object_table_mapping, a_clear_leaves_no_object_view_or_hole_behind)
+{ D3dObjectTable table;
+  Counted gone, view;
+  CHECK(table.insert(1u, D3dObjectKind::resource, &gone));
+  CHECK(table.insert(2u, D3dObjectKind::shader_resource_view, &view));
+  table.note_viewed(table.view_slot(0u), &gone);
+  std::uint32_t id = 0u;
+  D3dObjectKind kind = D3dObjectKind::none;
+  std::uint32_t hole = D3dObjectTable::capacity;
+  for (std::uint32_t slot = table.next_used(0u); slot < D3dObjectTable::capacity; slot = table.next_used(slot + 1u))
+      if (table.at(slot, id, kind) == &gone) hole = slot;
+  table.remove(1u);
+  CHECK(D3dObjectTableProbe::tombstone(table, hole));
+  const std::uint32_t view_slot = table.view_slot(0u);
+  table.clear();
+  CHECK_EQ(view.released, 1u);
+  CHECK(D3dObjectTableProbe::mapped(table));
+  CHECK(!D3dObjectTableProbe::tombstone(table, hole));
+  CHECK(table.viewed(view_slot) == nullptr);
+  CHECK_EQ(table.views(), 0u);
+  CHECK_EQ(table.next_used(0u), D3dObjectTable::capacity);
+  CHECK(table.invariants_hold()); }
+
+/* An unmapped table holds nothing: a count or a view says otherwise. */
+TEST(d3d_object_table_mapping, the_invariant_catches_an_unmapped_table_that_claims_objects)
+{ D3dObjectTable counted;
+  D3dObjectTableProbe::counts(counted, 1u, 0u);
+  CHECK(!counted.invariants_hold());
+  D3dObjectTable viewing;
+  D3dObjectTableProbe::counts(viewing, 0u, 1u);
+  CHECK(!viewing.invariants_hold()); }

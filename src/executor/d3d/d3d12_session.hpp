@@ -174,6 +174,9 @@ private:
     bool                       gpu_handle(const d3d12proto::DescriptorRef &ref, uint64_t &handle) const;
     /* Registers a buffer's guest range, or refuses the resource. */
     bool                       place(uint32_t id, IUnknown *resource, uint64_t address, uint64_t width);
+    /* objects_.keep, and a line saying how full the table is when it cannot:
+     * a refused create says only its command's name. */
+    bool                       kept(uint32_t id, D3dObjectKind kind, IUnknown *made);
     /* A resource placed at `offset` in `in`, and kept as `resource`. */
     bool                       placed(uint32_t resource, ID3D12Heap *in, uint64_t offset,
                                       const d3d12proto::ResourceDesc &desc, uint32_t state,
