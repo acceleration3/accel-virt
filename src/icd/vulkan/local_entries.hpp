@@ -107,6 +107,9 @@ VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceMemoryProperties2(VkPhysical
                                                                       VkPhysicalDeviceMemoryProperties2 *pMemoryProperties);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkAllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
                                                       const VkAllocationCallbacks *pAllocator, VkDeviceMemory *pMemory);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetMemoryHostPointerPropertiesEXT(
+    VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType, const void *pHostPointer,
+    VkMemoryHostPointerPropertiesEXT *pMemoryHostPointerProperties);
 VKAPI_ATTR void VKAPI_CALL local_vkFreeMemory(VkDevice device, VkDeviceMemory memory,
                                               const VkAllocationCallbacks *pAllocator);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkMapMemory(VkDevice device, VkDeviceMemory memory, VkDeviceSize offset,

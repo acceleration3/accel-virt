@@ -7,7 +7,7 @@ namespace av::icd {
 
 namespace {
 
-const char *const withheld[] = {"VK_KHR_surface", "VK_KHR_win32_surface", "VK_EXT_external_memory_host"};
+const char *const withheld[] = {"VK_KHR_surface", "VK_KHR_win32_surface"};
 
 }  // namespace
 

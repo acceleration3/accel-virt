@@ -1183,8 +1183,6 @@ inline void serialize_VkMemoryGetFdInfoKHR(::av::WireWriter&, const VkMemoryGetF
 [[nodiscard]] inline bool deserialize_VkMemoryGetFdInfoKHR(::av::WireReader&, VkMemoryGetFdInfoKHR*, ::av::WireArena&);
 inline void serialize_VkMemoryHeap(::av::WireWriter&, const VkMemoryHeap&);
 [[nodiscard]] inline bool deserialize_VkMemoryHeap(::av::WireReader&, VkMemoryHeap*, ::av::WireArena&);
-inline void serialize_VkMemoryHostPointerPropertiesEXT(::av::WireWriter&, const VkMemoryHostPointerPropertiesEXT&);
-[[nodiscard]] inline bool deserialize_VkMemoryHostPointerPropertiesEXT(::av::WireReader&, VkMemoryHostPointerPropertiesEXT*, ::av::WireArena&);
 inline void serialize_VkMemoryOpaqueCaptureAddressAllocateInfo(::av::WireWriter&, const VkMemoryOpaqueCaptureAddressAllocateInfo&);
 [[nodiscard]] inline bool deserialize_VkMemoryOpaqueCaptureAddressAllocateInfo(::av::WireReader&, VkMemoryOpaqueCaptureAddressAllocateInfo*, ::av::WireArena&);
 inline void serialize_VkMemoryPriorityAllocateInfoEXT(::av::WireWriter&, const VkMemoryPriorityAllocateInfoEXT&);
@@ -8712,20 +8710,6 @@ inline void serialize_VkMemoryHeap(::av::WireWriter& buf, const VkMemoryHeap& v)
     (void)arena;
     if (!r.read_pod(out->size)) { return false; }
     if (!r.read_pod(out->flags)) { return false; }
-    return true;
-}
-
-inline void serialize_VkMemoryHostPointerPropertiesEXT(::av::WireWriter& buf, const VkMemoryHostPointerPropertiesEXT& v) {
-    buf.write_pod(v.sType);
-    serialize_pnext_chain(buf, v.pNext);
-    buf.write_pod(v.memoryTypeBits);
-}
-
-[[nodiscard]] inline bool deserialize_VkMemoryHostPointerPropertiesEXT(::av::WireReader& r, VkMemoryHostPointerPropertiesEXT* out, ::av::WireArena& arena) {
-    (void)arena;
-    if (!r.read_pod(out->sType)) { return false; }
-    if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
-    if (!r.read_pod(out->memoryTypeBits)) { return false; }
     return true;
 }
 

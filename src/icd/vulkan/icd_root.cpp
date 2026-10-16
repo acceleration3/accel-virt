@@ -111,6 +111,8 @@ const Entry        local_rows[] = {
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceMemoryProperties2), Level::physical_device},
     {"vkAllocateMemory", reinterpret_cast<PFN_vkVoidFunction>(&local_vkAllocateMemory), Level::device},
     {"vkFreeMemory", reinterpret_cast<PFN_vkVoidFunction>(&local_vkFreeMemory), Level::device},
+    {"vkGetMemoryHostPointerPropertiesEXT",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetMemoryHostPointerPropertiesEXT), Level::device},
     {"vkCreateDescriptorUpdateTemplate",
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkCreateDescriptorUpdateTemplate), Level::device},
     {"vkCreateDescriptorUpdateTemplateKHR",
@@ -179,6 +181,9 @@ constexpr uint32_t vulkan_1_3 = (1u << 22u) | (3u << 12u);
  * arrive with T037. */
 constexpr ExtensionPolicy::Row reported_extensions[] = {
     {"VK_EXT_memory_budget", 1u, "icd_memory.the_budget_nodes_in_the_chain_are_the_adapter_s"},
+    /* An application's own pages lent to the device and imported as the
+     * type it asked (docs/host-memory.md, "Application memory"). */
+    {"VK_EXT_external_memory_host", 1u, "device_memory.a_host_pointer_is_lent_and_imported"},
     {"VK_KHR_swapchain", 70u, "icd_presentation.a_swapchain_presents_its_frame_on_the_window"},
     /* Feature 047. VK_EXT_map_memory_placed is deliberately absent: a chunk's
      * view is at the address VidMm chose, so this driver cannot place a
@@ -1399,6 +1404,21 @@ VkResult IcdRoot::allocate_memory(VkDevice device, const VkMemoryAllocateInfo *i
     if (owned == nullptr) return VK_ERROR_OUT_OF_HOST_MEMORY;
     const auto physical = static_cast<VkPhysicalDevice>(static_cast<void *>(made->parent()));
     return owned->allocate(physical, device, *info, allocator, *memory);
+}
+
+VkResult IcdRoot::memory_host_pointer_properties(VkDevice device, VkExternalMemoryHandleTypeFlagBits type,
+                                                 const void *pointer, VkMemoryHostPointerPropertiesEXT *properties)
+{
+    AV_SCOPE("IcdRoot::memory_host_pointer_properties");
+    if (properties == nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    properties->memoryTypeBits = 0u;
+    LoaderHandle *const made = allocating_device(device);
+    if (made == nullptr) return VK_ERROR_DEVICE_LOST;
+    const icd::ThreadLockHold release(memory_lock_);
+    DeviceMemory *const owned = memory_of(*made);
+    if (owned == nullptr) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    const auto physical = static_cast<VkPhysicalDevice>(static_cast<void *>(made->parent()));
+    return owned->host_pointer_types(physical, type, pointer, properties->memoryTypeBits);
 }
 
 void IcdRoot::free_memory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *allocator)

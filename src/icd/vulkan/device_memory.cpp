@@ -44,11 +44,13 @@ VkResult DeviceMemory::allocate(VkPhysicalDevice physical, VkDevice device, cons
 {
     AV_SCOPE("DeviceMemory::allocate");
     if (!learn(physical)) return refusal();
+    for (auto *link = static_cast<const VkBaseInStructure *>(info.pNext); link != nullptr; link = link->pNext)
+        if (link->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT)
+            return lend(info, *reinterpret_cast<const VkImportMemoryHostPointerInfoEXT *>(link), memory);
     if (!types_.host_visible(info.memoryTypeIndex)) {
         return vkproto::av_vkAllocateMemory(connection_.transport(), device, &info, allocator, &memory);
     }
-    const uint32_t slot = slot_of(nullptr);
-    if (info.allocationSize == 0u || slot == max_allocations) return refusal();
+    if (info.allocationSize == 0u || slot_of(nullptr) == max_allocations) return refusal();
     HostAllocation *made = nullptr;
     const Status    opened = connection_.open_memory(
         info.allocationSize, HostMemoryRequest(HostMemoryRequest::Kind::vulkan, info.memoryTypeIndex), made);
@@ -56,9 +58,54 @@ VkResult DeviceMemory::allocate(VkPhysicalDevice physical, VkDevice device, cons
         lines_.note("vkAllocateMemory: no host-visible memory, status", static_cast<uint64_t>(opened));
         return refusal();
     }
-    held_[slot] = made;
+    return hold(*made, memory);
+}
+
+VkResult DeviceMemory::hold(HostAllocation &made, VkDeviceMemory &memory)
+{
+    AV_SCOPE("DeviceMemory::hold");
+    held_[slot_of(nullptr)] = &made;
     count_++;
-    memory = HandleBits(made->handle()).as<VkDeviceMemory>();
+    memory = HandleBits(made.handle()).as<VkDeviceMemory>();
+    return VK_SUCCESS;
+}
+
+/* The spec has the application keep the pointer and the size aligned to
+ * minImportedHostPointerAlignment - a page, as every host answers - and the
+ * type one vkGetMemoryHostPointerPropertiesEXT offered; anything else is
+ * refused as the spec says, not passed on. */
+VkResult DeviceMemory::lend(const VkMemoryAllocateInfo &info, const VkImportMemoryHostPointerInfoEXT &import,
+                            VkDeviceMemory &memory)
+{
+    AV_SCOPE("DeviceMemory::lend");
+    const auto at = reinterpret_cast<uintptr_t>(import.pHostPointer);
+    if (import.handleType != VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT || at == 0u ||
+        at % host_pointer_alignment != 0u || info.allocationSize == 0u ||
+        info.allocationSize % host_pointer_alignment != 0u || info.memoryTypeIndex >= 32u ||
+        (types_.lendable_types() & (1u << info.memoryTypeIndex)) == 0u)
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    if (slot_of(nullptr) == max_allocations) return refusal();
+    HostAllocation *made = nullptr;
+    const Status    lent = connection_.adopt_memory(
+        import.pHostPointer, info.allocationSize, HostMemoryRequest(HostMemoryRequest::Kind::vulkan, info.memoryTypeIndex),
+        made);
+    if (lent != Status::ok) {
+        lines_.note("vkAllocateMemory: the device took no host pointer's pages, status", static_cast<uint64_t>(lent));
+        return connection_.faulted() ? VK_ERROR_DEVICE_LOST : VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    }
+    return hold(*made, memory);
+}
+
+VkResult DeviceMemory::host_pointer_types(VkPhysicalDevice physical, VkExternalMemoryHandleTypeFlagBits type,
+                                          const void *pointer, uint32_t &types)
+{
+    AV_SCOPE("DeviceMemory::host_pointer_types");
+    types = 0u;
+    if (type != VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT || pointer == nullptr ||
+        reinterpret_cast<uintptr_t>(pointer) % host_pointer_alignment != 0u)
+        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+    if (!learn(physical)) return refusal();
+    types = types_.lendable_types();
     return VK_SUCCESS;
 }
 

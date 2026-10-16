@@ -132,6 +132,9 @@ public:
     VkResult           allocate_memory(VkDevice device, const VkMemoryAllocateInfo *info,
                                        const VkAllocationCallbacks *allocator, VkDeviceMemory *memory);
     void               free_memory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *allocator);
+    /* vkGetMemoryHostPointerPropertiesEXT (DeviceMemory::host_pointer_types). */
+    VkResult           memory_host_pointer_properties(VkDevice device, VkExternalMemoryHandleTypeFlagBits type,
+                                                      const void *pointer, VkMemoryHostPointerPropertiesEXT *properties);
     VkResult           map_memory(VkDevice device, VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size,
                                   VkMemoryMapFlags flags, void **data);
     /* The same mapping out of a `VkMemoryMapInfoKHR` (feature 047). A placed

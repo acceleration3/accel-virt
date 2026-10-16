@@ -41,6 +41,12 @@ public:
      * the connection meanwhile; any other type as the host answers it. */
     VkResult allocate(VkPhysicalDevice physical, VkDevice device, const VkMemoryAllocateInfo &info,
                       const VkAllocationCallbacks *allocator, VkDeviceMemory &memory);
+    /* vkGetMemoryHostPointerPropertiesEXT: the types a host allocation's
+     * pages can be imported as (MemoryTypeTable::lendable_types).
+     * VK_ERROR_INVALID_EXTERNAL_HANDLE for another handle type or a pointer
+     * off the import alignment. */
+    VkResult host_pointer_types(VkPhysicalDevice physical, VkExternalMemoryHandleTypeFlagBits type,
+                                const void *pointer, uint32_t &types);
     /* Host memory is released; anything else is the host's to free. */
     void     free(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *allocator);
     /* The view at `offset`, with no host call. VK_ERROR_MEMORY_MAP_FAILED for
@@ -60,7 +66,16 @@ public:
 
 private:
     static constexpr uint32_t max_allocations = 4096u;
+    /* minImportedHostPointerAlignment: what the device lends, a page. */
+    static constexpr uintptr_t host_pointer_alignment = 4096u;
 
+    /* The application's pages `import` names, lent to the device as host
+     * memory of the type `info` asks (docs/host-memory.md, "Application
+     * memory"). */
+    VkResult           lend(const VkMemoryAllocateInfo &info, const VkImportMemoryHostPointerInfoEXT &import,
+                            VkDeviceMemory &memory);
+    /* Keeps `made` in a free slot and answers its handle. */
+    VkResult           hold(HostAllocation &made, VkDeviceMemory &memory);
     [[nodiscard]] bool learn(VkPhysicalDevice physical);
     VkResult           refusal() const;
     /* The host allocation the guest names `memory`, or null. */

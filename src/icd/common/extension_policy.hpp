@@ -9,10 +9,11 @@
  * implements on top of a different host mechanism; its version is then the
  * row's own, since the host's version is a different extension's.
  *
- * Four are never reported whatever says otherwise: the surface and swapchain
- * extensions until presentation exists (046), and host-memory import, which is
- * the ICD's own mechanism for host-visible memory rather than something an
- * application may use. The host's list is read as bytes the host wrote: a name
+ * The surface extensions are never reported whatever says otherwise: the
+ * ICD presents itself (046). Host-memory import is reported: the ICD lends
+ * the application's pages to the device and imports them as the type asked
+ * (docs/host-memory.md, "Application memory"), never the host's own import
+ * of a pointer. The host's list is read as bytes the host wrote: a name
  * is compared whole, terminator included, within its fixed field. */
 #ifndef AV_ICD_EXTENSION_POLICY_HPP
 #define AV_ICD_EXTENSION_POLICY_HPP

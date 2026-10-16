@@ -48,6 +48,11 @@ public:
     void                 budget(VkPhysicalDeviceMemoryBudgetPropertiesEXT &answer) const;
     /* Whether `type` exists and is one the ICD maps. */
     bool                 host_visible(uint32_t type) const;
+    /* The types an application's own pages can be imported as
+     * (VK_EXT_external_memory_host): those the ICD maps that are cached and
+     * coherent, since the device lays the memory under pages the process
+     * maps write-back (docs/host-memory.md, "Application memory"). */
+    uint32_t             lendable_types() const;
 
     /* Counts inside the arrays, a heap for every type, each type on one of them,
      * and each heap that is not device-local the size of the non-local budget. */

@@ -99,6 +99,8 @@ public:
      * invalid_state while not open or faulted, with nothing asked of the Kmt;
      * otherwise the channel's answer. */
     [[nodiscard]] Status open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made);
+    /* The application's own pages lent the same way (HostChannel::adopt_memory). */
+    [[nodiscard]] Status adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made);
     /* What open_memory made, released under the lock - abandoned on a faulted
      * connection, whose context frees it on the host. */
     [[nodiscard]] Status close_memory(HostAllocation &allocation);

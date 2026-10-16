@@ -271,6 +271,15 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkAllocateMemory(VkDevice device, const VkM
     return icd_binding.root().allocate_memory(device, pAllocateInfo, pAllocator, pMemory);
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetMemoryHostPointerPropertiesEXT(
+    VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType, const void *pHostPointer,
+    VkMemoryHostPointerPropertiesEXT *pMemoryHostPointerProperties)
+{
+    AV_SCOPE("local_vkGetMemoryHostPointerPropertiesEXT");
+    return icd_binding.root().memory_host_pointer_properties(device, handleType, pHostPointer,
+                                                             pMemoryHostPointerProperties);
+}
+
 VKAPI_ATTR void VKAPI_CALL local_vkFreeMemory(VkDevice device, VkDeviceMemory memory,
                                               const VkAllocationCallbacks *pAllocator)
 {

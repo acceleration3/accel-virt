@@ -128,6 +128,12 @@ Status Connection::open_memory(uint64_t bytes, HostMemoryRequest memory, HostAll
     return channel_.open_memory(bytes, memory, made);
 }
 
+Status Connection::adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made)
+{
+    AV_SCOPE("Connection::adopt_memory");
+    return channel_.adopt_memory(address, bytes, memory, made);
+}
+
 Status Connection::close_memory(HostAllocation &allocation)
 {
     AV_SCOPE("Connection::close_memory");

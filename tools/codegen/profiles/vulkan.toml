@@ -294,6 +294,12 @@ exclude = [
     # answers this", and the ICD checks it at startup: naming the xcb,
     # wayland and win32 spellings here claimed entry points nobody had
     # written, which is the same silent null the list exists to prevent.
+    # A host pointer is this process's memory: the ICD lends its pages to
+    # the device, which makes them host memory where they are, and answers
+    # which types such memory can be (docs/host-memory.md, "Application
+    # memory"). VkImportMemoryHostPointerInfoEXT never crosses either.
+    "vkGetMemoryHostPointerPropertiesEXT",
+
     "vkCreateXlibSurfaceKHR",
     "vkGetPhysicalDeviceXlibPresentationSupportKHR",
     "vkDestroySurfaceKHR",

@@ -100,6 +100,17 @@ bool MemoryTypeTable::host_visible(uint32_t type) const
     return (properties_.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u;
 }
 
+uint32_t MemoryTypeTable::lendable_types() const
+{
+    AV_SCOPE("MemoryTypeTable::lendable_types");
+    constexpr VkMemoryPropertyFlags wanted = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+                                             VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+    uint32_t types = 0u;
+    for (uint32_t type = 0u; type < properties_.memoryTypeCount; type++)
+        if ((properties_.memoryTypes[type].propertyFlags & wanted) == wanted) types |= 1u << type;
+    return types;
+}
+
 bool MemoryTypeTable::invariants_hold() const
 {
     AV_SCOPE("MemoryTypeTable::invariants_hold");
