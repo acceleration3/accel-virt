@@ -21,10 +21,9 @@
 #include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/gl_extension_list.hpp"
-#include "icd/common/frame_pacer.hpp"
+#include "icd/common/present_pacing.hpp"
 #include "icd/opengl/frames_in_flight.hpp"
 #include "icd/opengl/granted_profile.hpp"
-#include "icd/opengl/swap_interval.hpp"
 #include "icd/opengl/gl_external_objects.hpp"
 #include "icd/opengl/mapped_buffers.hpp"
 #include "icd/opengl/pixel_staging_buffer.hpp"
@@ -177,16 +176,10 @@ public:
     const char *string(uint32_t name) const;
     /* What the host granted this context, learned at make (feature 051). */
     const GrantedProfile &profile() const;
-    /* How many vertical blanks this context's swaps wait for. */
-    SwapInterval         &interval();
-    /* Waits for them, once the frame is on its window; nothing at interval 0,
-     * and nothing before the context is made. */
-    void                  pace();
-    /* Whether a frame swapped now is one the screen shows: every one when
-     * the interval paces swaps to blanks; unpaced, the first after each blank
-     * (FramePacer::admits) - the rest would be read back and blitted only to
-     * be covered before DWM composed them. */
-    bool                  admits();
+    /* How many vertical blanks this context's swaps wait for, waited on the
+     * adapter it is made on: nothing waits, and every frame is admitted,
+     * before it is made. */
+    icd::PresentPacing   &pacing();
     /* The LUID of the adapter the context draws on, which a window's chain is
      * made on (ChainedFrames); 0 before the context is made, or when the
      * kernel would not say. */
@@ -240,11 +233,8 @@ private:
     UniformShapes                  uniforms_;
     QueryShapes                    queries_;
     GrantedProfile                 profile_;
-    SwapInterval                   interval_;
+    icd::PresentPacing             pacing_;
     FramesInFlight                 frames_;
-    /* Made with the device, since a blank is waited for on the adapter it
-     * belongs to. */
-    ObjectStorage<icd::FramePacer> pacer_;
     GlExtensionList                extensions_;
     WindowFramebuffers             framebuffers_;
     BufferShadows                  shadows_;

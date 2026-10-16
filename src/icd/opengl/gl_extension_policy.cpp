@@ -12,7 +12,7 @@ namespace av::glicd {
 namespace {
 
 /* Tear control means a negative interval, which nothing here honours: the
- * pacing is a wait for whole blanks (feature 051, SwapInterval). */
+ * pacing is a wait for whole blanks (feature 051, PresentPacing). */
 const char *const never_reported[] = {"WGL_EXT_swap_control_tear"};
 
 }  // namespace

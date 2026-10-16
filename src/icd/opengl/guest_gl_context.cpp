@@ -35,7 +35,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
     : memory_(memory), log_(log), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_reported_(false),
-      channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), interval_(), frames_(), pacer_(), extensions_(), framebuffers_(memory, log), shadows_(memory), staging_(), mappings_(memory, shadows_, log), externals_(handles, memory, log),
+      channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), extensions_(), framebuffers_(memory, log), shadows_(memory), staging_(), mappings_(memory, shadows_, log), externals_(handles, memory, log),
       strings_{},
       debug_callback_(0u), debug_user_(0u), luid_(0u)
 {
@@ -329,27 +329,10 @@ const char *GuestGlContext::string(uint32_t name) const
     return nullptr;
 }
 
-SwapInterval &GuestGlContext::interval()
+icd::PresentPacing &GuestGlContext::pacing()
 {
-    AV_SCOPE("GuestGlContext::interval");
-    return interval_;
-}
-
-void GuestGlContext::pace()
-{
-    AV_SCOPE("GuestGlContext::pace");
-    if (state_ != State::made) return;
-    for (uint32_t blank = 0u; blank < interval_.blanks(); blank++) {
-        pacer_.object().wait();
-        interval_.waited_one();
-    }
-}
-
-bool GuestGlContext::admits()
-{
-    AV_SCOPE("GuestGlContext::admits");
-    if (state_ != State::made || interval_.blanks() != 0u) return true;
-    return pacer_.object().admits();
+    AV_SCOPE("GuestGlContext::pacing");
+    return pacing_;
 }
 
 const GrantedProfile &GuestGlContext::profile() const
@@ -433,7 +416,7 @@ bool GuestGlContext::invariants_hold() const
         if (strings_[row][string_bytes - 1u] != '\0') return false;
     return arrays_.invariants_hold() && uniforms_.invariants_hold() && queries_.invariants_hold() &&
            framebuffers_.invariants_hold() && mappings_.invariants_hold() && shadows_.invariants_hold() &&
-           staging_.invariants_hold() && channel_.invariants_hold();
+           staging_.invariants_hold() && channel_.invariants_hold() && pacing_.invariants_hold();
 }
 
 Status GuestGlContext::build()
@@ -443,7 +426,7 @@ Status GuestGlContext::build()
     GuestConnection &device = link_.device();
     const Status     opened = channel_.open(device, options_);
     if (opened != Status::ok) return opened == Status::no_memory ? Status::no_memory : Status::invalid_parameter;
-    static_cast<void>(pacer_.construct(device.kmt(), log_, device.adapter(), device.device()));
+    static_cast<void>(pacing_.bind(device.kmt(), log_, device.adapter(), device.device()));
     if (device.kmt().adapter_luid(device.adapter(), luid_) != Status::ok) luid_ = 0u;
     return Status::ok;
 }
@@ -523,7 +506,7 @@ void GuestGlContext::teardown()
      * context goes; a lost context's goes with DestroyContext, and its arena
      * import with it, so nothing is asked of the host. */
     channel_.close(state_ == State::lost);
-    pacer_.destroy();
+    pacing_.unbind();
     frames_.forget();
     link_.release();
     loss_reported_ = false;

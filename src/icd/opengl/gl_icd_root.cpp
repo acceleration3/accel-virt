@@ -377,7 +377,7 @@ bool GlIcdRoot::swap_buffers(void *dc)
     const Shown shown = show_frame(dc);
     if (shown == Shown::refused) return false;
     currents_.current()->end_frame();
-    if (shown == Shown::handed) currents_.current()->pace();
+    if (shown == Shown::handed) currents_.current()->pacing().after_present();
     return true;
 }
 
@@ -399,7 +399,7 @@ GlIcdRoot::Shown GlIcdRoot::show_frame(void *dc)
     if (!WindowVisibility(surface_, window).showing()) return Shown::nothing;
     /* Minecraft swapped 175 times a second and every frame was read back and
      * blitted onto its window for DWM to show 60 of. */
-    if (!context->admits()) return Shown::nothing;
+    if (!context->pacing().admits()) return Shown::nothing;
     WindowFramebuffers &framebuffers = context->framebuffers();
     framebuffers.drop_gone(*transport, surface_);
     if (!framebuffers.present(*transport, context->arrays(), dc, window, surface_, &presents_,
@@ -431,7 +431,7 @@ bool GlIcdRoot::set_swap_interval(int32_t interval)
         fail(error_invalid_operation);
         return false;
     }
-    if (!context->interval().ask(interval)) {
+    if (!context->pacing().ask(interval)) {
         fail(error_invalid_data);
         return false;
     }
@@ -442,7 +442,7 @@ int32_t GlIcdRoot::swap_interval()
 {
     AV_SCOPE("GlIcdRoot::swap_interval");
     GuestGlContext *const context = currents_.current();
-    return context != nullptr ? static_cast<int32_t>(context->interval().blanks()) : 0;
+    return context != nullptr ? static_cast<int32_t>(context->pacing().blanks()) : 0;
 }
 
 void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *attributes)

@@ -21,12 +21,14 @@ Swapchain::Swapchain(BlockSource &memory, WindowSurface &windows, WindowChains &
                      VkDevice device, VkPhysicalDevice physical, Kmt &kmt, LogSink &log, Connection &connection)
     : memory_(memory), windows_(windows), device_(entries, device, physical),
       chained_(entries, device, chains, connection.transport()),
-      pacer_(kmt, log, connection.adapter(), connection.device()), log_(log), luid_(connection.luid()),
+      pacing_(), log_(log), luid_(connection.luid()),
       app_device_(device), window_(nullptr), extent_{0u, 0u}, format_(static_cast<int32_t>(VK_FORMAT_UNDEFINED)),
-      mode_(static_cast<int32_t>(VK_PRESENT_MODE_FIFO_KHR)), held_{}, count_(0u), next_(0u), frame_(nullptr),
+      held_{}, count_(0u), next_(0u), frame_(nullptr),
       through_chain_(false), retired_(false), presented_(0u), window_refused_(), chain_refused_()
 {
     AV_SCOPE("Swapchain::Swapchain");
+    /* Fresh, so the bind cannot be refused. */
+    static_cast<void>(pacing_.bind(kmt, log, connection.adapter(), connection.device()));
 }
 
 Swapchain::~Swapchain()
@@ -57,7 +59,9 @@ VkResult Swapchain::initialize(const VkSwapchainCreateInfoKHR &info, void *windo
     }
     window_ = window;
     extent_ = info.imageExtent;
-    mode_ = foreign_enum(info.presentMode);
+    /* judge() has held the mode to FIFO or IMMEDIATE: a blank a present, or
+     * none. */
+    static_cast<void>(pacing_.ask(foreign_enum(info.presentMode) == static_cast<int32_t>(VK_PRESENT_MODE_FIFO_KHR) ? 1 : 0));
     count_ = info.minImageCount;
     return VK_SUCCESS;
 }
@@ -170,8 +174,7 @@ VkResult Swapchain::present(VkQueue queue, uint32_t index, uint32_t wait_count, 
     held_[index] = false;
     const VkResult state = window_state();
     if (state != VK_SUCCESS) return state;
-    if (mode_ == static_cast<int32_t>(VK_PRESENT_MODE_IMMEDIATE_KHR) && !pacer_.admits())
-        return device_.skip(queue, wait_count, waits);
+    if (!pacing_.admits()) return device_.skip(queue, wait_count, waits);
     if (through_chain_) return present_chained(queue, index, wait_count, waits);
     const VkResult copied = device_.copy(queue, device_.made(index).image_, extent_, wait_count, waits);
     if (copied != VK_SUCCESS) return copied;
@@ -185,7 +188,7 @@ VkResult Swapchain::present(VkQueue queue, uint32_t index, uint32_t wait_count, 
         return window_state();
     }
     presented_++;
-    if (mode_ == static_cast<int32_t>(VK_PRESENT_MODE_FIFO_KHR)) pacer_.wait();
+    pacing_.after_present();
     return VK_SUCCESS;
 }
 
@@ -207,7 +210,7 @@ VkResult Swapchain::present_chained(VkQueue queue, uint32_t index, uint32_t wait
         return window_state();
     }
     presented_++;
-    if (mode_ == static_cast<int32_t>(VK_PRESENT_MODE_FIFO_KHR)) pacer_.wait();
+    pacing_.after_present();
     return VK_SUCCESS;
 }
 
@@ -264,10 +267,10 @@ uint64_t Swapchain::presented() const
     return presented_;
 }
 
-FramePacer &Swapchain::pacer()
+PresentPacing &Swapchain::pacing()
 {
-    AV_SCOPE("Swapchain::pacer");
-    return pacer_;
+    AV_SCOPE("Swapchain::pacing");
+    return pacing_;
 }
 
 /* A retired swapchain's window is its successor's, chain and all. */
@@ -291,7 +294,7 @@ void Swapchain::release()
 bool Swapchain::invariants_hold() const
 {
     AV_SCOPE("Swapchain::invariants_hold");
-    if (!device_.invariants_hold() || !pacer_.invariants_hold() || !chained_.invariants_hold()) return false;
+    if (!device_.invariants_hold() || !pacing_.invariants_hold() || !chained_.invariants_hold()) return false;
     if (count_ > PresentDevice::max_images) return false;
     const bool reads_rgba = !through_chain_ && !shows_bgra();
     if (count_ != 0u && ((frame_ != nullptr) != reads_rgba || device_.images() != count_)) return false;

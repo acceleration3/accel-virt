@@ -8,7 +8,7 @@
 #ifndef AV_SWAPCHAIN_HPP
 #define AV_SWAPCHAIN_HPP
 
-#include "icd/common/frame_pacer.hpp"
+#include "icd/common/present_pacing.hpp"
 #include "icd/common/once_latch.hpp"
 #include "icd/vulkan/chained_image.hpp"
 #include "icd/vulkan/present_device.hpp"
@@ -68,7 +68,7 @@ public:
     void     retire();
     VkDevice device() const;
     uint64_t presented() const;
-    FramePacer &pacer();
+    PresentPacing &pacing();
 
     bool invariants_hold() const;
 
@@ -92,7 +92,7 @@ private:
     WindowSurface &windows_;
     PresentDevice  device_;
     ChainedImage   chained_;
-    FramePacer     pacer_;
+    PresentPacing  pacing_;
     LogSink       &log_;
     uint64_t       luid_;
     VkDevice       app_device_;
@@ -100,7 +100,6 @@ private:
     VkExtent2D     extent_;
     /* The application's own values, as integers (foreign_enum.hpp). */
     int32_t        format_;
-    int32_t        mode_;
     bool           held_[PresentDevice::max_images];
     uint32_t       count_;
     uint32_t       next_;
