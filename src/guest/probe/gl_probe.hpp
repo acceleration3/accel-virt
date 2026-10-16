@@ -9,7 +9,8 @@
  * here refused to a second thread with ERROR_BUSY: the error); attribs (4.7
  * refused with ERROR_INVALID_VERSION_ARB and both profile bits with
  * ERROR_INVALID_PROFILE_ARB); lost (a robust context faulted through the
- * ICD's avForceContextFault answers GL_UNKNOWN_CONTEXT_RESET, then
+ * ICD's avForceContextFault, a command the host cannot decode and so the
+ * context's own fault, answers GL_GUILTY_CONTEXT_RESET, then
  * GL_CONTEXT_LOST from glGetError once and nothing after: the reset status);
  * recreated (a context made after the loss passes draw: its pixels). A step
  * that cannot run past a failure ends the run there; every context made is
@@ -40,7 +41,7 @@ public:
         gl_triangles = 0x0004u, gl_color_buffer_bit = 0x4000u, gl_renderer = 0x1F01u, gl_version = 0x1F02u,
         gl_fragment_shader = 0x8B30u, gl_vertex_shader = 0x8B31u, gl_compile_status = 0x8B81u,
         gl_link_status = 0x8B82u, error_invalid_version_arb = 0x2095u, error_invalid_profile_arb = 0x2096u,
-        error_busy = 170u, gl_context_lost = 0x0507u, gl_unknown_context_reset = 0x8255u,
+        error_busy = 170u, gl_context_lost = 0x0507u, gl_guilty_context_reset = 0x8253u,
         gl_context_profile_mask = 0x9126u, gl_compatibility_profile_bit = 0x2u,
     };
     /* What the interval step swaps, and the interval it asks for. */

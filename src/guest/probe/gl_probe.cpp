@@ -320,7 +320,7 @@ void GlProbe::lost_step()
     const uint32_t after = gl_.error();
     static_cast<void>(gl_.make_current(nullptr));
     static_cast<void>(gl_.delete_context(context));
-    const bool lost = forced == 1 && status == gl_unknown_context_reset && reported == gl_context_lost && after == 0u;
+    const bool lost = forced == 1 && status == gl_guilty_context_reset && reported == gl_context_lost && after == 0u;
     static_cast<void>(steps_.check_measured("lost", lost ? Status::ok : Status::invalid_state, status));
 }
 
