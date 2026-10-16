@@ -13,7 +13,6 @@
 #include <stdint.h>
 
 namespace av {
-class ClientBlobArena;
 class ClientTransport;
 }  // namespace av
 
@@ -27,10 +26,9 @@ public:
     QueryResults(const QueryResults &) = delete;
     QueryResults &operator=(const QueryResults &) = delete;
 
-    /* Takes the slots from the tail of the `bytes` at `view` the arena
-     * lends, and lends it what lies before them. Nothing without an arena,
-     * or one too small to lend as much again as the slots take. */
-    void     reserve(ClientBlobArena &arena, uint8_t *view, uint64_t bytes);
+    /* Reads the slots at `view`, `offset` into the arena, where the
+     * session's ArenaSpans set them aside. */
+    void     take(uint8_t *view, uint64_t offset);
     /* Names the slots to the host, once: it takes them only with a device made. */
     void     bind(ClientTransport &wire);
     /* The count of the end being sent now, which the host will write back. */

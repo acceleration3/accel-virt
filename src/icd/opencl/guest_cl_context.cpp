@@ -10,7 +10,7 @@
 #include "core/log/log_sink.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
-#include "proto/submission/published_slot_layout.hpp"
+#include "icd/common/arena_spans.hpp"
 
 namespace av::clicd {
 
@@ -102,12 +102,13 @@ Status GuestClContext::build(uint32_t gl_share)
     }
     /* The arena is the memory a mappable buffer is made over, on both sides:
      * the device holds it as one import, so an offset names the same bytes
-     * here and there and a map costs no copy. Its top is the transfers' own;
-     * of that, not its last word, which is the host's to publish errors in -
-     * and so not the page that holds it, since blocks are whole pages. */
-    const uint64_t buffers = channel_.arena_bytes() - staging_reserve;
-    blocks_.lend(channel_.arena_view(), buffers);
-    staging_.lend(channel_.arena_view() + buffers, staging_reserve - PublishedSlotLayout::error_word_bytes);
+     * here and there and a map costs no copy. Its top is the transfers' own
+     * (ArenaSpans). */
+    icd::ArenaSpans spans(channel_);
+    uint8_t        *staging = nullptr;
+    uint64_t        staged = 0u;
+    if (spans.span(staging_reserve, staging, staged)) staging_.lend(staging, staged);
+    blocks_.lend(channel_.arena_view(), spans.lent());
     log_.write("avcl: buffers map through the blob arena; no copy");
     return Status::ok;
 }

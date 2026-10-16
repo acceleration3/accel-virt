@@ -1,6 +1,7 @@
 #include "um/d3d/d3d_session.hpp"
 
 #include "core/platform/block_source.hpp"
+#include "icd/common/arena_spans.hpp"
 #include "guest/transport/host_allocation.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "core/trace/function_scope.hpp"
@@ -87,8 +88,10 @@ HRESULT D3dSession::open(uint32_t adapter)
     if (opened != Status::ok) return opened == Status::no_memory ? E_OUTOFMEMORY : E_FAIL;
     static_cast<void>(stream_.construct(channel_.transport()));
     stream_.object().speak_with(select_command_, flush_command_);
-    if (channel_.arena_view() != nullptr)
-        query_results_.reserve(channel_.transport().blobs(), channel_.arena_view(), channel_.arena_bytes());
+    icd::ArenaSpans spans(channel_);
+    uint8_t        *slots = nullptr;
+    uint64_t        slots_at = 0u;
+    if (spans.slots(d3d11::QueryResults::slots, slots, slots_at)) query_results_.take(slots, slots_at);
     if (host_has_slices()) open_slices();
     return S_OK;
 }
