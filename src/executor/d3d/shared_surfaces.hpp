@@ -40,6 +40,7 @@
 namespace av {
 
 class BlockSource;
+class FrameStager;
 class StagedFrame;
 
 class SharedSurfaces {
@@ -58,21 +59,13 @@ public:
      * one a blt has read before. */
     enum class Staging { every_present, once_blt_read };
 
-    /* A writer published `frame`: true when it is to stage it now (keep) -
-     * every present, or once a blt has read its surface before - and the
-     * frame is pending until it is kept or abandoned. A frame that names
-     * nothing is false. */
-    bool presented(const SurfacePoint &frame, Staging staging);
-    /* `staged` kept as `frame` until it is read and let go, or evicted for a
-     * newer one; it replaces one already kept as `frame`. False when every
-     * slot is being read, and `staged` is the caller's to give back. */
-    [[nodiscard]] bool keep(const SurfacePoint &frame, StagedFrame &staged);
-    /* A writer told to stage `frame` could not: a blt asking for it is
-     * refused rather than left waiting for it. */
-    void               abandon(const SurfacePoint &frame);
-    /* What a writer does with what it staged for `frame`: kept, or given back
-     * when no slot will take it; null - staging failed - abandons the frame. */
-    void               hold(const SurfacePoint &frame, StagedFrame *staged);
+    /* A writer published `frame`, which `stager` stages when it is wanted -
+     * every present, or once a blt has read its surface before - and keeps
+     * until the present engine has read it. One the writer's API cannot
+     * stage is abandoned: a blt asking for it is refused at once rather than
+     * left waiting. Nothing is staged for a frame that names nothing. Every
+     * Direct3D runtime's present point is this. */
+    void stage(const SurfacePoint &frame, Staging staging, FrameStager &stager);
     /* The present engine: `frame` mapped into `view`, waiting up to `wait_ms`
      * for its writer to reach it and the GPU to copy it. False at once for a
      * point its writer passed without staging - this surface is a blt's from
@@ -87,6 +80,16 @@ public:
     bool invariants_hold() const;
 
 private:
+    /* `frame` published: true when it is to be staged now, and pending until
+     * it is kept or abandoned. */
+    bool               presented(const SurfacePoint &frame, Staging staging);
+    /* `staged` kept as `frame` until it is read and let go, or evicted for a
+     * newer one; it replaces one already kept as `frame`. False when every
+     * slot is being read, and `staged` is the caller's to give back. */
+    [[nodiscard]] bool keep(const SurfacePoint &frame, StagedFrame &staged);
+    void               abandon(const SurfacePoint &frame);
+    /* Kept, or given back when no slot will take it; null abandons. */
+    void               hold(const SurfacePoint &frame, StagedFrame *staged);
     struct Surface {
         uint32_t point_;
         /* The point its writer was told to stage and has not yet kept, so a

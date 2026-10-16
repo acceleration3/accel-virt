@@ -53,8 +53,6 @@ private:
         ~Frame();
 
         void    bind(D3d11HostDevice &device);
-        /* Taken for a present (FramePool). */
-        bool    claim();
         bool    fits(uint32_t width, uint32_t height, uint32_t format) const;
         /* Under the device's lock: the copy queued into this frame, which is
          * out until given back. False when no texture of that shape is made. */
@@ -62,10 +60,9 @@ private:
                      uint32_t format);
         /* Under the device's lock: the texture let go. */
         void    drop();
-        Reading read(AvFrameView &view) override;
-        void    release() override;
-
     private:
+        Reading map_when_copied(const uint8_t *&pixels, uint32_t &row_pitch) override;
+        void    unmap() override;
         /* Under the device's lock: the staging texture made if it is not, and
          * the frame copied into it. */
         bool    copy_to_staging();
@@ -74,11 +71,8 @@ private:
         ID3D11Texture2D *held_;
         ID3D11Texture2D *texture_;
         bool             staged_;
-        uint32_t         width_;
-        uint32_t         height_;
         uint32_t         format_;
         bool             mapped_;
-        FrameClaim       claim_;
     };
 
     FramePool<Frame> frames_;

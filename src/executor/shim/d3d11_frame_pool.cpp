@@ -37,8 +37,7 @@ void D3d11FramePool::clear()
 }
 
 D3d11FramePool::Frame::Frame()
-    : device_(nullptr), held_(nullptr), texture_(nullptr), staged_(false), width_(0u), height_(0u), format_(0u),
-      mapped_(false), claim_()
+    : device_(nullptr), held_(nullptr), texture_(nullptr), staged_(false), format_(0u), mapped_(false)
 {
     AV_SCOPE("D3d11FramePool::Frame::Frame");
 }
@@ -56,16 +55,10 @@ void D3d11FramePool::Frame::bind(D3d11HostDevice &device)
     device_ = &device;
 }
 
-bool D3d11FramePool::Frame::claim()
-{
-    AV_SCOPE("D3d11FramePool::Frame::claim");
-    return claim_.claim();
-}
-
 bool D3d11FramePool::Frame::fits(uint32_t width, uint32_t height, uint32_t format) const
 {
     AV_SCOPE("D3d11FramePool::Frame::fits");
-    return held_ != nullptr && width_ == width && height_ == height && format_ == format;
+    return held_ != nullptr && this->width() == width && this->height() == height && format_ == format;
 }
 
 bool D3d11FramePool::Frame::take(ID3D11Texture2D *source, uint32_t subresource, uint32_t width, uint32_t height,
@@ -80,8 +73,7 @@ bool D3d11FramePool::Frame::take(ID3D11Texture2D *source, uint32_t subresource, 
             held_ = nullptr;
             return false;
         }
-        width_ = width;
-        height_ = height;
+        size(width, height);
         format_ = format;
     }
     device_->context()->CopySubresourceRegion(held_, 0u, 0u, 0u, 0u, source, subresource, nullptr);
@@ -94,7 +86,7 @@ bool D3d11FramePool::Frame::copy_to_staging()
 {
     AV_SCOPE("D3d11FramePool::Frame::copy_to_staging");
     if (texture_ == nullptr) {
-        const D3D11_TEXTURE2D_DESC staging = {width_, height_, 1u, 1u, static_cast<DXGI_FORMAT>(format_), {1u, 0u},
+        const D3D11_TEXTURE2D_DESC staging = {width(), height(), 1u, 1u, static_cast<DXGI_FORMAT>(format_), {1u, 0u},
                                               D3D11_USAGE_STAGING, 0u, D3D11_CPU_ACCESS_READ, 0u};
         if (FAILED(device_->device()->CreateTexture2D(&staging, nullptr, &texture_))) {
             texture_ = nullptr;
@@ -117,12 +109,13 @@ void D3d11FramePool::Frame::drop()
     held_ = nullptr;
     staged_ = false;
     mapped_ = false;
-    width_ = height_ = format_ = 0u;
+    size(0u, 0u);
+    format_ = 0u;
 }
 
-StagedFrame::Reading D3d11FramePool::Frame::read(AvFrameView &view)
+StagedFrame::Reading D3d11FramePool::Frame::map_when_copied(const uint8_t *&pixels, uint32_t &row_pitch)
 {
-    AV_SCOPE("D3d11FramePool::Frame::read");
+    AV_SCOPE("D3d11FramePool::Frame::map_when_copied");
     device_->lock(nullptr);
     /* A frame of a device that was lost - or lost and made again, which let
      * its textures go - is never copied. */
@@ -136,24 +129,19 @@ StagedFrame::Reading D3d11FramePool::Frame::read(AvFrameView &view)
     device_->unlock();
     if (result == DXGI_ERROR_WAS_STILL_DRAWING) return Reading::copying;
     if (FAILED(result)) return Reading::failed;
-    view.pixels = static_cast<const uint8_t *>(mapped.pData);
-    view.row_pitch = mapped.RowPitch;
-    view.width = width_;
-    view.height = height_;
-    view.reserved = 0u;
+    pixels = static_cast<const uint8_t *>(mapped.pData);
+    row_pitch = mapped.RowPitch;
     return Reading::mapped;
 }
 
-void D3d11FramePool::Frame::release()
+void D3d11FramePool::Frame::unmap()
 {
-    AV_SCOPE("D3d11FramePool::Frame::release");
-    if (mapped_) {
-        device_->lock(nullptr);
-        device_->context()->Unmap(texture_, 0u);
-        mapped_ = false;
-        device_->unlock();
-    }
-    claim_.give_back();
+    AV_SCOPE("D3d11FramePool::Frame::unmap");
+    if (!mapped_) return;
+    device_->lock(nullptr);
+    device_->context()->Unmap(texture_, 0u);
+    mapped_ = false;
+    device_->unlock();
 }
 
 }  // namespace av

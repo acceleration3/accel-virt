@@ -77,8 +77,7 @@ D3d12FramePool::Frame *D3d12FramePool::claim(uint64_t bytes)
 
 D3d12FramePool::Frame::Frame()
     : buffer_(nullptr), resolved_(nullptr), resolved_format_(0u), mapped_(nullptr), bytes_(0u), allocator_(nullptr), list_(nullptr), fence_(nullptr),
-      value_(0u), offset_(0u), row_pitch_(0u), width_(0u), height_(0u), device_(nullptr),
-      claim_(), forsaken_(false)
+      value_(0u), offset_(0u), row_pitch_(0u), device_(nullptr)
 {
     AV_SCOPE("D3d12FramePool::Frame::Frame");
 }
@@ -92,7 +91,7 @@ D3d12FramePool::Frame::~Frame()
 bool D3d12FramePool::Frame::claim()
 {
     AV_SCOPE("D3d12FramePool::Frame::claim");
-    return idle() && claim_.claim();
+    return idle() && StagedFrame::claim();
 }
 
 /* A frame given back before its copy finished - evicted for a newer one -
@@ -100,7 +99,7 @@ bool D3d12FramePool::Frame::claim()
 bool D3d12FramePool::Frame::idle() const
 {
     AV_SCOPE("D3d12FramePool::Frame::idle");
-    return __atomic_load_n(&forsaken_, __ATOMIC_ACQUIRE) || fence_ == nullptr || fence_->GetCompletedValue() >= value_;
+    return forsaken() || fence_ == nullptr || fence_->GetCompletedValue() >= value_;
 }
 
 bool D3d12FramePool::Frame::holds(uint64_t bytes) const
@@ -112,9 +111,9 @@ bool D3d12FramePool::Frame::holds(uint64_t bytes) const
 bool D3d12FramePool::Frame::prepare(ID3D12Device *device, uint64_t bytes, const void *resolved)
 {
     AV_SCOPE("D3d12FramePool::Frame::prepare");
-    if (__atomic_load_n(&forsaken_, __ATOMIC_ACQUIRE)) {
+    if (forsaken()) {
         drop();
-        __atomic_store_n(&forsaken_, false, __ATOMIC_RELEASE);
+        readmit();
     }
     device_ = device;
     if (resolved != nullptr) {
@@ -211,8 +210,7 @@ bool D3d12FramePool::Frame::copy(ID3D12CommandQueue *queue, ID3D12Resource *sour
     value_++;
     offset_ = placed.Offset;
     row_pitch_ = placed.Footprint.RowPitch;
-    width_ = width;
-    height_ = height;
+    size(width, height);
     return true;
 }
 
@@ -256,29 +254,20 @@ void D3d12FramePool::Frame::drop()
     value_ = 0u;
 }
 
-void D3d12FramePool::Frame::forsake()
+StagedFrame::Reading D3d12FramePool::Frame::map_when_copied(const uint8_t *&pixels, uint32_t &row_pitch)
 {
-    AV_SCOPE("D3d12FramePool::Frame::forsake");
-    __atomic_store_n(&forsaken_, true, __ATOMIC_RELEASE);
-}
-
-StagedFrame::Reading D3d12FramePool::Frame::read(AvFrameView &view)
-{
-    AV_SCOPE("D3d12FramePool::Frame::read");
-    if (mapped_ == nullptr || __atomic_load_n(&forsaken_, __ATOMIC_ACQUIRE)) return Reading::failed;
+    AV_SCOPE("D3d12FramePool::Frame::map_when_copied");
+    if (mapped_ == nullptr) return Reading::failed;
     if (!idle()) return Reading::copying;
-    view.pixels = mapped_ + offset_;
-    view.row_pitch = row_pitch_;
-    view.width = width_;
-    view.height = height_;
-    view.reserved = 0u;
+    pixels = mapped_ + offset_;
+    row_pitch = row_pitch_;
     return Reading::mapped;
 }
 
-void D3d12FramePool::Frame::release()
+/* The readback buffer stays mapped for the frame's life. */
+void D3d12FramePool::Frame::unmap()
 {
-    AV_SCOPE("D3d12FramePool::Frame::release");
-    claim_.give_back();
+    AV_SCOPE("D3d12FramePool::Frame::unmap");
 }
 
 }  // namespace av

@@ -23,6 +23,7 @@
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/surface_identity.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
+#include "executor/d3d/frame_stager.hpp"
 #include "executor/d3d/staged_frame.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "proto/generated/d3d/d3d_command_names.h"
@@ -62,6 +63,39 @@ constexpr uint32_t max_buffer_bytes = 1u << 30u;
 constexpr uint32_t no_stream = 0xffffffffu;
 constexpr size_t   container_slack = 64u * 1024u;
 
+
+/* A Direct3D 11 present's frame, staged through its GPU's device: a 2D
+ * texture of four-byte texels, or nothing. */
+class PresentedTexture final : public FrameStager {
+public:
+    /* `texture` null for a resource that is no 2D texture. */
+    PresentedTexture(D3d11HostDevice &device, ID3D11Texture2D *texture, uint32_t subresource, uint32_t width,
+                     uint32_t height, uint32_t format);
+
+    StagedFrame *stage() override;
+
+private:
+    D3d11HostDevice &device_;
+    ID3D11Texture2D *texture_;
+    uint32_t         subresource_;
+    uint32_t         width_;
+    uint32_t         height_;
+    uint32_t         format_;
+};
+
+PresentedTexture::PresentedTexture(D3d11HostDevice &device, ID3D11Texture2D *texture, uint32_t subresource,
+                                   uint32_t width, uint32_t height, uint32_t format)
+    : device_(device), texture_(texture), subresource_(subresource), width_(width), height_(height), format_(format)
+{
+    AV_SCOPE("PresentedTexture::PresentedTexture");
+}
+
+StagedFrame *PresentedTexture::stage()
+{
+    AV_SCOPE("PresentedTexture::stage");
+    if (texture_ == nullptr || !DxgiFormatLayout(format_).word_texels()) return nullptr;
+    return device_.stage_frame(texture_, subresource_, width_, height_, format_);
+}
 
 }  // namespace
 
@@ -1847,15 +1881,13 @@ bool D3dBackend::on_PresentPoint(uint32_t resource, uint32_t subresource, uint32
         }
         return true;
     }
-    if (surfaces_ == nullptr || !frame.names()) return true;
-    uint32_t width = 0u, height = 0u, depth = 0u, format = 0u;
-    if (dimension != D3D11_RESOURCE_DIMENSION_TEXTURE2D || !extent_of(found, subresource, width, height, depth, format))
-        return true;
-    if (!DxgiFormatLayout(format).word_texels()) return true;
-    static_cast<void>(surfaces_->presented(frame, SharedSurfaces::Staging::every_present));
-    StagedFrame *const staged =
-        device11_->stage_frame(static_cast<ID3D11Texture2D *>(found), subresource, width, height, format);
-    surfaces_->hold(frame, staged);
+    if (surfaces_ == nullptr) return true;
+    uint32_t   width = 0u, height = 0u, depth = 0u, format = 0u;
+    const bool texture = dimension == D3D11_RESOURCE_DIMENSION_TEXTURE2D &&
+                         extent_of(found, subresource, width, height, depth, format);
+    PresentedTexture presented(*device11_, texture ? static_cast<ID3D11Texture2D *>(found) : nullptr, subresource,
+                               width, height, format);
+    surfaces_->stage(frame, SharedSurfaces::Staging::every_present, presented);
     return true;
 }
 

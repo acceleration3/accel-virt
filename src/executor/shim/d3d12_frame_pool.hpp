@@ -79,13 +79,13 @@ private:
         bool    copy(ID3D12CommandQueue *queue, ID3D12Resource *source, const void *footprint, uint32_t width,
                      uint32_t height, bool resolve);
         void    drop();
-        /* Made on a device that was lost: idle from now on - its copy will
-         * never finish - unreadable, and dropped when next prepared. */
-        void    forsake();
-        Reading read(AvFrameView &view) override;
-        void    release() override;
 
     private:
+        /* A forsaken frame - made on a device that was lost - is idle from
+         * then on, since its copy will never finish, and dropped when next
+         * prepared. */
+        Reading map_when_copied(const uint8_t *&pixels, uint32_t &row_pitch) override;
+        void    unmap() override;
         /* The resolve into resolved_ and its transitions, recorded. */
         void    record_resolve(ID3D12Resource *source);
 
@@ -100,13 +100,8 @@ private:
         uint64_t                   value_;
         uint64_t                   offset_;
         uint32_t                   row_pitch_;
-        uint32_t                   width_;
-        uint32_t                   height_;
         /* The device prepare made the frame on; not held, the pool's own. */
         ID3D12Device              *device_;
-        FrameClaim                 claim_;
-        /* Written by the thread that renews the device, read by the engine's. */
-        bool                       forsaken_;
     };
 
     /* A free, idle frame, claimed: one already holding `bytes` first. */

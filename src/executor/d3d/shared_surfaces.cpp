@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "executor/poll_budget.hpp"
+#include "executor/d3d/frame_stager.hpp"
 #include "executor/d3d/staged_frame.hpp"
 
 namespace av {
@@ -68,6 +69,12 @@ void SharedSurfaces::abandon(const SurfacePoint &frame)
     Surface *const abandoned = frame.names() ? known(frame.surface()) : nullptr;
     if (abandoned != nullptr && abandoned->pending_ == frame.point()) abandoned->pending_ = 0u;
     unlock();
+}
+
+void SharedSurfaces::stage(const SurfacePoint &frame, Staging staging, FrameStager &stager)
+{
+    AV_SCOPE("SharedSurfaces::stage");
+    if (presented(frame, staging)) hold(frame, stager.stage());
 }
 
 void SharedSurfaces::hold(const SurfacePoint &frame, StagedFrame *staged)

@@ -52,9 +52,6 @@ private:
         Frame();
         ~Frame();
 
-        bool    out() const;
-        /* Taken for a present (FramePool). */
-        bool    claim();
         bool    fits(IDirect3DDevice9 *device, uint32_t width, uint32_t height, uint32_t format,
                      bool multisampled) const;
         /* The copy queued into this frame, which is out until given back.
@@ -65,10 +62,10 @@ private:
          * where the device will not. */
         bool    make(IDirect3DDevice9 *device, uint32_t width, uint32_t height, uint32_t format, bool multisampled);
         void    drop();
-        Reading read(AvFrameView &view) override;
-        void    release() override;
 
     private:
+        Reading map_when_copied(const uint8_t *&pixels, uint32_t &row_pitch) override;
+        void    unmap() override;
         /* The copy into system memory queued, behind the one into held_. */
         bool    copy_to_memory();
 
@@ -79,14 +76,11 @@ private:
         IDirect3DQuery9   *copied_;
         bool               multisampled_;
         bool               staged_;
-        uint32_t           width_;
-        uint32_t           height_;
         uint32_t           format_;
         bool               mapped_;
         /* What the lock handed back while mapped. */
         const uint8_t     *pixels_;
         uint32_t           pitch_;
-        FrameClaim         claim_;
     };
 
     FramePool<Frame> frames_;

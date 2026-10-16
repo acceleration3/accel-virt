@@ -16,6 +16,7 @@
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/surface_identity.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
+#include "executor/d3d/frame_stager.hpp"
 #include "executor/d3d/staged_frame.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/generated/d3d12/d3d12_command_names.h"
@@ -107,6 +108,32 @@ const D3D12_CLEAR_VALUE *host_clear(const d3d12proto::ClearValue &clear, D3D12_C
                        clear.format == DXGI_FORMAT_D16_UNORM || clear.format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
     if (depth) made.DepthStencil = {clear.depth, static_cast<UINT8>(clear.stencil)};
     return &made;
+}
+
+/* A Direct3D 12 present's frame, staged by a copy on the presenting queue
+ * behind the work that drew it. */
+class PresentedResource final : public FrameStager {
+public:
+    PresentedResource(D3d12HostDevice &device, ID3D12CommandQueue *queue, ID3D12Resource *resource);
+
+    StagedFrame *stage() override;
+
+private:
+    D3d12HostDevice    &device_;
+    ID3D12CommandQueue *queue_;
+    ID3D12Resource     *resource_;
+};
+
+PresentedResource::PresentedResource(D3d12HostDevice &device, ID3D12CommandQueue *queue, ID3D12Resource *resource)
+    : device_(device), queue_(queue), resource_(resource)
+{
+    AV_SCOPE("PresentedResource::PresentedResource");
+}
+
+StagedFrame *PresentedResource::stage()
+{
+    AV_SCOPE("PresentedResource::stage");
+    return device_.stage_frame(queue_, resource_);
 }
 
 }  // namespace
@@ -745,10 +772,10 @@ bool D3d12Session::on_PresentResource12(uint32_t queue, uint32_t resource, uint3
     ID3D12CommandQueue *const from = objects_.find_as<ID3D12CommandQueue>(queue, D3dObjectKind::queue12);
     ID3D12Resource *const     shown = objects_.find_as<ID3D12Resource>(resource, D3dObjectKind::resource12);
     if (from == nullptr || shown == nullptr || !presentation_.present(from)) return false;
-    const SurfacePoint frame(SurfaceIdentity(shown).surface(), point);
-    if (surfaces_ == nullptr || !surfaces_->presented(frame, SharedSurfaces::Staging::once_blt_read)) return true;
-    StagedFrame *const staged = device_->stage_frame(from, shown);
-    surfaces_->hold(frame, staged);
+    if (surfaces_ == nullptr) return true;
+    PresentedResource presented(*device_, from, shown);
+    surfaces_->stage(SurfacePoint(SurfaceIdentity(shown).surface(), point), SharedSurfaces::Staging::once_blt_read,
+                     presented);
     return true;
 }
 

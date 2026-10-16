@@ -39,8 +39,7 @@ void D3d9FramePool::clear()
 
 D3d9FramePool::Frame::Frame()
     : device_(nullptr), surface_(nullptr), held_(nullptr), copied_(nullptr), multisampled_(false), staged_(false),
-      width_(0u), height_(0u), format_(0u), mapped_(false), pixels_(nullptr),
-      pitch_(0u), claim_()
+      format_(0u), mapped_(false), pixels_(nullptr), pitch_(0u)
 {
     AV_SCOPE("D3d9FramePool::Frame::Frame");
 }
@@ -51,23 +50,11 @@ D3d9FramePool::Frame::~Frame()
     drop();
 }
 
-bool D3d9FramePool::Frame::out() const
-{
-    AV_SCOPE("D3d9FramePool::Frame::out");
-    return claim_.out();
-}
-
-bool D3d9FramePool::Frame::claim()
-{
-    AV_SCOPE("D3d9FramePool::Frame::claim");
-    return claim_.claim();
-}
-
 bool D3d9FramePool::Frame::fits(IDirect3DDevice9 *device, uint32_t width, uint32_t height, uint32_t format,
                                 bool multisampled) const
 {
     AV_SCOPE("D3d9FramePool::Frame::fits");
-    return surface_ != nullptr && device_ == device && width_ == width && height_ == height && format_ == format &&
+    return surface_ != nullptr && device_ == device && this->width() == width && this->height() == height && format_ == format &&
            multisampled_ == multisampled;
 }
 
@@ -88,8 +75,7 @@ bool D3d9FramePool::Frame::make(IDirect3DDevice9 *device, uint32_t width, uint32
     device->AddRef();
     device_ = device;
     multisampled_ = multisampled;
-    width_ = width;
-    height_ = height;
+    size(width, height);
     format_ = format;
     return true;
 }
@@ -131,14 +117,15 @@ void D3d9FramePool::Frame::drop()
     copied_ = nullptr;
     device_ = nullptr;
     mapped_ = false;
-    width_ = height_ = format_ = 0u;
+    size(0u, 0u);
+    format_ = 0u;
 }
 
 /* The first read copies the frame into memory and flushes it to the GPU; a
  * later one finds it done. */
-StagedFrame::Reading D3d9FramePool::Frame::read(AvFrameView &view)
+StagedFrame::Reading D3d9FramePool::Frame::map_when_copied(const uint8_t *&pixels, uint32_t &row_pitch)
 {
-    AV_SCOPE("D3d9FramePool::Frame::read");
+    AV_SCOPE("D3d9FramePool::Frame::map_when_copied");
     if (!staged_ && !copy_to_memory()) return Reading::failed;
     if (!mapped_) {
         const HRESULT done = copied_->GetData(nullptr, 0u, D3DGETDATA_FLUSH);
@@ -149,22 +136,17 @@ StagedFrame::Reading D3d9FramePool::Frame::read(AvFrameView &view)
         pixels_ = static_cast<const uint8_t *>(locked.pBits);
         pitch_ = static_cast<uint32_t>(locked.Pitch);
     }
-    view.pixels = pixels_;
-    view.row_pitch = pitch_;
-    view.width = width_;
-    view.height = height_;
-    view.reserved = 0u;
+    pixels = pixels_;
+    row_pitch = pitch_;
     return Reading::mapped;
 }
 
-void D3d9FramePool::Frame::release()
+void D3d9FramePool::Frame::unmap()
 {
-    AV_SCOPE("D3d9FramePool::Frame::release");
-    if (mapped_) {
-        surface_->UnlockRect();
-        mapped_ = false;
-    }
-    claim_.give_back();
+    AV_SCOPE("D3d9FramePool::Frame::unmap");
+    if (!mapped_) return;
+    surface_->UnlockRect();
+    mapped_ = false;
 }
 
 }  // namespace av

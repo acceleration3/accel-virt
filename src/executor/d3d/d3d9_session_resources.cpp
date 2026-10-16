@@ -7,6 +7,7 @@
 #include "executor/shim/d3d9_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
+#include "executor/d3d/frame_stager.hpp"
 #include "executor/d3d/staged_frame.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "proto/d3d/d3d9_format_layout.hpp"
@@ -53,6 +54,36 @@ DWORD lock_flags(D3DPOOL pool, uint32_t flags)
 {
     AV_SCOPE("lock_flags");
     return pool == D3DPOOL_DEFAULT ? flags & write_flags : 0u;
+}
+
+/* A Direct3D 9 present's frame, staged through its GPU's Direct3D 9: a
+ * surface of four-byte X8R8G8B8 or A8R8G8B8 pixels, or nothing. */
+class PresentedSurface final : public FrameStager {
+public:
+    PresentedSurface(D3d9HostDevice &host, IDirect3DDevice9 *device, IDirect3DSurface9 *source);
+
+    StagedFrame *stage() override;
+
+private:
+    D3d9HostDevice    &host_;
+    IDirect3DDevice9  *device_;
+    IDirect3DSurface9 *source_;
+};
+
+PresentedSurface::PresentedSurface(D3d9HostDevice &host, IDirect3DDevice9 *device, IDirect3DSurface9 *source)
+    : host_(host), device_(device), source_(source)
+{
+    AV_SCOPE("PresentedSurface::PresentedSurface");
+}
+
+StagedFrame *PresentedSurface::stage()
+{
+    AV_SCOPE("PresentedSurface::stage");
+    D3DSURFACE_DESC desc = {};
+    if (FAILED(source_->GetDesc(&desc)) || (desc.Format != D3DFMT_X8R8G8B8 && desc.Format != D3DFMT_A8R8G8B8))
+        return nullptr;
+    return host_.stage_frame(device_, source_, desc.Width, desc.Height, static_cast<uint32_t>(desc.Format),
+                             desc.MultiSampleType != D3DMULTISAMPLE_NONE);
 }
 
 }  // namespace
@@ -437,18 +468,9 @@ bool D3d9Session::on_PresentPoint9(uint32_t surface_id, uint32_t subresource, ui
         if (shown != Status::ok && shown != Status::not_supported) lines_.note_hex("a primary's flip was not shared, key", key, 16u);
         return true;
     }
-    const SurfacePoint    frame(key, point);
-    if (surfaces_ == nullptr || host_ == nullptr || !frame.names()) return true;
-    D3DSURFACE_DESC desc = {};
-    if (FAILED(source->GetDesc(&desc)) || (desc.Format != D3DFMT_X8R8G8B8 && desc.Format != D3DFMT_A8R8G8B8)) {
-        surfaces_->abandon(frame);
-        return true;
-    }
-    static_cast<void>(surfaces_->presented(frame, SharedSurfaces::Staging::every_present));
-    StagedFrame *const staged = host_->stage_frame(device(), source, desc.Width, desc.Height,
-                                                   static_cast<uint32_t>(desc.Format),
-                                                   desc.MultiSampleType != D3DMULTISAMPLE_NONE);
-    surfaces_->hold(frame, staged);
+    if (surfaces_ == nullptr || host_ == nullptr) return true;
+    PresentedSurface presented(*host_, device(), source);
+    surfaces_->stage(SurfacePoint(key, point), SharedSurfaces::Staging::every_present, presented);
     return true;
 }
 
