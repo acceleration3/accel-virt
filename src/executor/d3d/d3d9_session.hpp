@@ -84,12 +84,9 @@ public:
 
 
     bool on_CreateDevice9(uint32_t device, uint32_t flags, uint32_t &hresult) override;
-    bool on_QueryCaps9(uint32_t &hresult, uint8_t *caps, uint64_t caps_capacity,
-                       uint64_t &caps_size) override;
-    bool on_QueryFormats9(uint32_t count, const uint32_t *formats, uint8_t *support, uint64_t support_capacity,
-                          uint64_t &support_size) override;
-    bool on_QueryMultisample9(uint32_t format, uint32_t multisample, uint32_t &hresult,
-                              uint32_t &quality_levels) override;
+    bool on_QueryCaps9(uint32_t count, const uint32_t *formats, uint32_t &hresult, uint8_t *caps,
+                       uint64_t caps_capacity, uint64_t &caps_size, uint8_t *rows, uint64_t rows_capacity,
+                       uint64_t &rows_size) override;
     bool on_Flush9() override;
     bool on_SelectDevice9(uint32_t device) override;
     bool on_Finish9(uint32_t &hresult) override;

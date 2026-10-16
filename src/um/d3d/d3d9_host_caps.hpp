@@ -5,14 +5,15 @@
  * whether the adapter has a hardware device at all - and once a Direct3D 9
  * driver is named there is no fallback, so a wrong answer is no Direct3D 9
  * on this GPU (docs/research/d3d9/reverse-engineering.md §2). So this opens
- * its own connection, asks the host (QueryCaps9, QueryFormats9,
- * QueryMultisample9), closes it, and keeps the answers with the few fix-ups
+ * its own connection, asks the host once (QueryCaps9: D3DCAPS9 and a row per
+ * format), closes it, and keeps the answers with the few fix-ups
  * the runtime's HAL check requires of a driver that DXVK's answers, which
  * are an application's view, leave out. */
 #ifndef AV_UM_D3D9_HOST_CAPS_HPP
 #define AV_UM_D3D9_HOST_CAPS_HPP
 
 #include "icd/d3d/d3d9_format_ops.hpp"
+#include "proto/generated/d3d9/d3d9_wire_types.h"
 #include "um/d3d/d3d9_ddi.hpp"
 
 #include <stdint.h>
@@ -44,13 +45,6 @@ public:
     const D3DCAPS9 &caps() const;
 
 private:
-    struct Quality {
-        uint32_t format;
-        uint32_t type;
-        uint32_t levels;
-    };
-    static constexpr uint32_t max_qualities = 256u;
-
     /* The runtime's HAL check (reverse-engineering.md §2.3) on what DXVK said. */
     void    fix_up();
     HRESULT copy_out(const D3DDDIARG_GETCAPS &args, const void *data, size_t bytes) const;
@@ -59,8 +53,9 @@ private:
 
     D3DCAPS9            caps_;
     d3d::D3d9FormatOps  formats_;
-    Quality             qualities_[max_qualities];
-    uint32_t            quality_count_;
+    /* The host's row for each format asked, in the order asked: what
+     * GETMULTISAMPLEQUALITYLEVELS is answered from. */
+    d3d9proto::FormatCaps9 rows_[d3d::D3d9FormatOps::max_formats];
     bool                snapshots_;
     bool                learned_;
 };

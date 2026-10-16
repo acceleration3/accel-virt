@@ -27,7 +27,7 @@ constexpr uint32_t asked_formats[] = {
 constexpr uint32_t asked_count = sizeof(asked_formats) / sizeof(asked_formats[0]);
 static_assert(asked_count <= D3d9FormatOps::max_formats, "every format asked fits the table");
 
-/* QueryFormats9's bits (d3d9.toml). */
+/* FormatCaps9's support bits (d3d9.toml). */
 constexpr uint32_t can_texture = 1u << 0u;
 constexpr uint32_t can_cube = 1u << 1u;
 constexpr uint32_t can_volume = 1u << 2u;
@@ -149,7 +149,7 @@ void D3d9FormatOps::record(uint32_t format, uint32_t support, uint32_t multisamp
     AV_SCOPE("D3d9FormatOps::record");
     if (!asked(format)) return;
     const uint32_t granted = operations(format, support);
-    /* QueryFormats9 gives bit n for D3DMULTISAMPLE_TYPE n; the runtime reads
+    /* FormatCaps9 gives bit n for D3DMULTISAMPLE_TYPE n; the runtime reads
      * bit (n - 1), and a mask with any type in it must have NONMASKABLE's
      * (type 1, bit 0) too, or the driver is disabled. */
     const uint32_t types = multisample >> 1u;

@@ -88,11 +88,16 @@ bool av_d3d9_CreateDevice9(::av::ClientTransport& t, uint32_t device, uint32_t f
     return r.remaining() == 0u;
 }
 
-bool av_d3d9_QueryCaps9(::av::ClientTransport& t, uint32_t* hresult, void* caps, uint64_t caps_capacity, uint64_t* caps_size) {
+bool av_d3d9_QueryCaps9(::av::ClientTransport& t, uint32_t count, const uint32_t* formats, uint32_t* hresult, void* caps, uint64_t caps_capacity, uint64_t* caps_size, void* rows, uint64_t rows_capacity, uint64_t* rows_size) {
     AV_SCOPE("av_d3d9_QueryCaps9");
     ::av::WireWriter b = t.request_writer();
+    b.write_pod<uint32_t>(count);
+    if (count > 256u || (count != 0u && formats == nullptr)) return abandon(t);
+    if (count != 0u) b.write(formats, sizeof(*formats) * count);
     ::av::ClientBlobLease caps_lease;
     if (!ask_bytes(t, b, caps, caps_capacity, caps_lease)) return abandon(t);
+    ::av::ClientBlobLease rows_lease;
+    if (!ask_bytes(t, b, rows, rows_capacity, rows_lease)) return abandon(t);
     const ::av::SyncCallScope call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_QueryCaps9, b, r) != ::av::TransportResult::ok) return false;
@@ -100,38 +105,7 @@ bool av_d3d9_QueryCaps9(::av::ClientTransport& t, uint32_t* hresult, void* caps,
       if (!r.read_pod(value)) return false;
       if (hresult != nullptr) *hresult = value; }
     if (!take_bytes(r, caps, caps_capacity, caps_lease, caps_size)) return false;
-    return r.remaining() == 0u;
-}
-
-bool av_d3d9_QueryFormats9(::av::ClientTransport& t, uint32_t count, const uint32_t* formats, void* support, uint64_t support_capacity, uint64_t* support_size) {
-    AV_SCOPE("av_d3d9_QueryFormats9");
-    ::av::WireWriter b = t.request_writer();
-    b.write_pod<uint32_t>(count);
-    if (count > 256u || (count != 0u && formats == nullptr)) return abandon(t);
-    if (count != 0u) b.write(formats, sizeof(*formats) * count);
-    ::av::ClientBlobLease support_lease;
-    if (!ask_bytes(t, b, support, support_capacity, support_lease)) return abandon(t);
-    const ::av::SyncCallScope call{t};
-    ::av::WireReader r{nullptr, 0u};
-    if (t.send_sync(kCmd_QueryFormats9, b, r) != ::av::TransportResult::ok) return false;
-    if (!take_bytes(r, support, support_capacity, support_lease, support_size)) return false;
-    return r.remaining() == 0u;
-}
-
-bool av_d3d9_QueryMultisample9(::av::ClientTransport& t, uint32_t format, uint32_t multisample, uint32_t* hresult, uint32_t* quality_levels) {
-    AV_SCOPE("av_d3d9_QueryMultisample9");
-    ::av::WireWriter b = t.request_writer();
-    b.write_pod<uint32_t>(format);
-    b.write_pod<uint32_t>(multisample);
-    const ::av::SyncCallScope call{t};
-    ::av::WireReader r{nullptr, 0u};
-    if (t.send_sync(kCmd_QueryMultisample9, b, r) != ::av::TransportResult::ok) return false;
-    { uint32_t value{};
-      if (!r.read_pod(value)) return false;
-      if (hresult != nullptr) *hresult = value; }
-    { uint32_t value{};
-      if (!r.read_pod(value)) return false;
-      if (quality_levels != nullptr) *quality_levels = value; }
+    if (!take_bytes(r, rows, rows_capacity, rows_lease, rows_size)) return false;
     return r.remaining() == 0u;
 }
 

@@ -17,7 +17,7 @@ constexpr UINT unused_back_buffer = 16u;
 constexpr D3DFORMAT display = D3DFMT_X8R8G8B8;
 constexpr uint32_t  last_multisample = D3DMULTISAMPLE_16_SAMPLES;
 
-/* QueryFormats9's bits (d3d9.toml), each a CheckDeviceFormat question. */
+/* FormatCaps9's support bits (d3d9.toml), each a CheckDeviceFormat question. */
 struct FormatCheck {
     uint32_t usage;
     uint32_t type;
@@ -141,33 +141,40 @@ bool D3d9HostDevice::checks(uint32_t usage, uint32_t type, uint32_t format) cons
                                     static_cast<D3DFORMAT>(format)) == D3D_OK;
 }
 
-void D3d9HostDevice::format_support(uint32_t format, uint32_t &support, uint32_t &multisample) const
+/* NONMASKABLE is asked only of a format that renders at some count: the
+ * runtime offers it beside the counts and never alone. */
+d3d9proto::FormatCaps9 D3d9HostDevice::format_caps(uint32_t format) const
 {
-    AV_SCOPE("D3d9HostDevice::format_support");
-    support = 0u;
-    multisample = 0u;
-    if (d3d9_ == nullptr) return;
+    AV_SCOPE("D3d9HostDevice::format_caps");
+    d3d9proto::FormatCaps9 row = {};
+    if (d3d9_ == nullptr) return row;
     uint32_t bit = 0u;
     for (const FormatCheck &check : format_checks) {
-        if (checks(check.usage, check.type, format)) support |= 1u << bit;
+        if (checks(check.usage, check.type, format)) row.support |= 1u << bit;
         bit++;
     }
     const auto as = static_cast<D3DFORMAT>(format);
-    if (d3d9_->CheckDeviceType(adapter_, D3DDEVTYPE_HAL, display, as, TRUE) == D3D_OK) support |= 1u << back_buffer_bit;
-    if (checks(0u, D3DRTYPE_SURFACE, format)) support |= 1u << offscreen_bit;
-    if (checks(D3DUSAGE_QUERY_LEGACYBUMPMAP, D3DRTYPE_TEXTURE, format)) support |= 1u << bump_bit;
-    if (checks(D3DUSAGE_DEPTHSTENCIL, D3DRTYPE_TEXTURE, format)) support |= 1u << depth_texture_bit;
+    if (d3d9_->CheckDeviceType(adapter_, D3DDEVTYPE_HAL, display, as, TRUE) == D3D_OK)
+        row.support |= 1u << back_buffer_bit;
+    if (checks(0u, D3DRTYPE_SURFACE, format)) row.support |= 1u << offscreen_bit;
+    if (checks(D3DUSAGE_QUERY_LEGACYBUMPMAP, D3DRTYPE_TEXTURE, format)) row.support |= 1u << bump_bit;
+    if (checks(D3DUSAGE_DEPTHSTENCIL, D3DRTYPE_TEXTURE, format)) row.support |= 1u << depth_texture_bit;
     for (uint32_t type = D3DMULTISAMPLE_2_SAMPLES; type <= last_multisample; type++) {
         uint32_t levels = 0u;
-        if (this->multisample(format, type, levels) == D3D_OK) multisample |= 1u << type;
+        if (multisample(format, type, levels) != D3D_OK) continue;
+        row.multisample |= 1u << type;
+        row.quality_levels[type - 1u] = levels;
     }
+    uint32_t nonmaskable = 0u;
+    if (row.multisample != 0u && multisample(format, D3DMULTISAMPLE_NONMASKABLE, nonmaskable) == D3D_OK)
+        row.quality_levels[D3DMULTISAMPLE_NONMASKABLE - 1u] = nonmaskable;
+    return row;
 }
 
 int32_t D3d9HostDevice::multisample(uint32_t format, uint32_t type, uint32_t &quality_levels) const
 {
     AV_SCOPE("D3d9HostDevice::multisample");
     quality_levels = 0u;
-    if (d3d9_ == nullptr) return D3DERR_NOTAVAILABLE;
     DWORD levels = 0u;
     const HRESULT answer = d3d9_->CheckDeviceMultiSampleType(adapter_, D3DDEVTYPE_HAL, static_cast<D3DFORMAT>(format),
                                                              TRUE, static_cast<D3DMULTISAMPLE_TYPE>(type), &levels);

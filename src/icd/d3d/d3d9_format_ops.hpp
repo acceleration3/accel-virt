@@ -1,6 +1,6 @@
 /* The formats a Direct3D 9 adapter offers d3d9.dll (GetCaps GETFORMATCOUNT and
  * GETFORMATDATA): a FORMATOP per format, built from what the host's own
- * Direct3D 9 answered for it (QueryFormats9), never from a list written here -
+ * Direct3D 9 answered for it (QueryCaps9), never from a list written here -
  * a runtime told of a format the host cannot make makes it, and the device is
  * lost on the host instead. The formats asked are every one a Direct3D 9
  * application may check: the API's, the depth and block FourCCs games probe
@@ -30,7 +30,7 @@ public:
     /* The formats to ask the host about, in order. */
     uint32_t formats_to_ask() const;
     uint32_t format_to_ask(uint32_t index) const;
-    /* QueryFormats9's two words for `format`: offered when it can be anything
+    /* FormatCaps9's support and multisample words for `format`: offered when it can be anything
      * at all, withdrawn when it now cannot. A format not asked is ignored. */
     void     record(uint32_t format, uint32_t support, uint32_t multisample);
 

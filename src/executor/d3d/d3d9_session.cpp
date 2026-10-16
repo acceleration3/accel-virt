@@ -12,13 +12,6 @@
 
 namespace av {
 
-namespace {
-
-/* QueryFormats9 answers two words a format. */
-constexpr uint64_t format_answer_bytes = 2u * sizeof(uint32_t);
-
-}  // namespace
-
 D3d9Session::D3d9Session(const GuestBytes &guest, D3dObjectTable &objects, WatchedBlocks &blocks)
     : d3d9proto::ServerDispatch(guest), host_(nullptr), surfaces_(nullptr), flips_(blocks), objects_(objects), blocks_(blocks),
       devices_(blocks), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d9: "), refusal_(lines_), arena_(nullptr), lost_(false)
@@ -105,42 +98,28 @@ bool D3d9Session::on_CreateDevice9(uint32_t device, uint32_t, uint32_t &hresult)
     return true;
 }
 
-bool D3d9Session::on_QueryCaps9(uint32_t &hresult, uint8_t *caps, uint64_t caps_capacity, uint64_t &caps_size)
+/* A guest that makes too little room for the rows it asked for is refused:
+ * its own driver sizes them. */
+bool D3d9Session::on_QueryCaps9(uint32_t count, const uint32_t *formats, uint32_t &hresult, uint8_t *caps,
+                                uint64_t caps_capacity, uint64_t &caps_size, uint8_t *rows, uint64_t rows_capacity,
+                                uint64_t &rows_size)
 {
     AV_SCOPE("D3d9Session::on_QueryCaps9");
     caps_size = 0u;
+    rows_size = 0u;
     hresult = static_cast<uint32_t>(D3DERR_NOTAVAILABLE);
     D3DCAPS9 answer = {};
     if (host_ == nullptr || caps_capacity < sizeof(answer)) return true;
+    if (rows_capacity < uint64_t{count} * sizeof(d3d9proto::FormatCaps9)) return false;
     hresult = static_cast<uint32_t>(host_->caps(answer));
     if (hresult != D3D_OK) return true;
     memcpy(caps, &answer, sizeof(answer));
     caps_size = sizeof(answer);
-    return true;
-}
-
-bool D3d9Session::on_QueryFormats9(uint32_t count, const uint32_t *formats, uint8_t *support,
-                                   uint64_t support_capacity, uint64_t &support_size)
-{
-    AV_SCOPE("D3d9Session::on_QueryFormats9");
-    support_size = 0u;
-    if (host_ == nullptr || support_capacity < count * format_answer_bytes) return false;
     for (uint32_t index = 0u; index < count; index++) {
-        uint32_t words[2] = {};
-        host_->format_support(formats[index], words[0], words[1]);
-        memcpy(support + index * format_answer_bytes, words, sizeof(words));
+        const d3d9proto::FormatCaps9 row = host_->format_caps(formats[index]);
+        memcpy(rows + index * sizeof(row), &row, sizeof(row));
     }
-    support_size = count * format_answer_bytes;
-    return true;
-}
-
-bool D3d9Session::on_QueryMultisample9(uint32_t format, uint32_t multisample, uint32_t &hresult,
-                                       uint32_t &quality_levels)
-{
-    AV_SCOPE("D3d9Session::on_QueryMultisample9");
-    quality_levels = 0u;
-    hresult = static_cast<uint32_t>(D3DERR_NOTAVAILABLE);
-    if (host_ != nullptr) hresult = static_cast<uint32_t>(host_->multisample(format, multisample, quality_levels));
+    rows_size = uint64_t{count} * sizeof(d3d9proto::FormatCaps9);
     return true;
 }
 

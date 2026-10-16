@@ -13,6 +13,7 @@
 #define AV_D3D9_HOST_DEVICE_HPP
 
 #include "executor/shim/d3d9_frame_pool.hpp"
+#include "proto/generated/d3d9/d3d9_wire_types.h"
 
 #include <stdint.h>
 
@@ -44,11 +45,10 @@ public:
     int32_t make_device(IDirect3DDevice9 *&device) const;
     /* What IDirect3D9 says of the adapter; the HRESULT. */
     int32_t caps(_D3DCAPS9 &caps) const;
-    /* QueryFormats9's two words for `format` (d3d9.toml): what it can be,
-     * and the multisample types it renders at windowed. */
-    void    format_support(uint32_t format, uint32_t &support, uint32_t &multisample) const;
-    /* CheckDeviceMultiSampleType, windowed; the HRESULT. */
-    int32_t multisample(uint32_t format, uint32_t type, uint32_t &quality_levels) const;
+    /* QueryCaps9's row for `format` (d3d9.toml's FormatCaps9): what it can
+     * be, the multisample types it renders at windowed and their quality
+     * levels. */
+    d3d9proto::FormatCaps9 format_caps(uint32_t format) const;
     /* A present's render target staged for the present engine
      * (D3d9FramePool); null when none could be. */
     StagedFrame *stage_frame(IDirect3DDevice9 *device, IDirect3DSurface9 *source, uint32_t width, uint32_t height,
@@ -58,6 +58,8 @@ private:
     /* The ordinal of the adapter whose Vulkan device has this UUID; ~0u for none. */
     uint32_t adapter_for(const uint8_t *uuid);
     bool     checks(uint32_t usage, uint32_t type, uint32_t format) const;
+    /* CheckDeviceMultiSampleType, windowed; the HRESULT. */
+    int32_t  multisample(uint32_t format, uint32_t type, uint32_t &quality_levels) const;
 
     IDirect3D9 *d3d9_;
     uint32_t    adapter_;

@@ -32,14 +32,11 @@ constexpr DWORD hw_vertex_buffer = 0x02000000u;    /* D3DDEVCAPS_HWVERTEXBUFFER 
 constexpr DWORD hw_index_buffer = 0x04000000u;     /* D3DDEVCAPS_HWINDEXBUFFER */
 constexpr DWORD sub_volume_lock = 0x08000000u;     /* D3DDEVCAPS_SUBVOLUMELOCK */
 constexpr DWORD most_render_targets = 4u;
-constexpr uint32_t last_multisample = 16u;
-constexpr uint32_t multisample_bits_from = 1u;      /* D3DMULTISAMPLE_NONMASKABLE */
-constexpr uint32_t words_per_format = 2u;
 
 }  // namespace
 
 D3d9HostCaps::D3d9HostCaps()
-    : caps_{}, formats_(), qualities_{}, quality_count_(0u), snapshots_(false), learned_(false)
+    : caps_{}, formats_(), rows_{}, snapshots_(false), learned_(false)
 {
     AV_SCOPE("D3d9HostCaps::D3d9HostCaps");
 }
@@ -48,30 +45,17 @@ bool D3d9HostCaps::learn(ClientTransport &transport, Kmt &kmt, uint32_t adapter)
 {
     AV_SCOPE("D3d9HostCaps::learn");
     if (learned_) return true;
-    uint32_t hresult = 1u;
-    uint64_t answered = 0u;
-    if (!d3d9proto::av_d3d9_QueryCaps9(transport, &hresult, &caps_, sizeof(caps_), &answered) ||
-        hresult != 0u || answered != sizeof(caps_))
-        return false;
-    uint32_t asked[d3d::D3d9FormatOps::max_formats] = {};
-    uint32_t support[d3d::D3d9FormatOps::max_formats * words_per_format] = {};
+    uint32_t       hresult = 1u;
+    uint64_t       caps_answered = 0u, rows_answered = 0u;
+    uint32_t       asked[d3d::D3d9FormatOps::max_formats] = {};
     const uint32_t count = formats_.formats_to_ask();
     for (uint32_t index = 0u; index < count; index++) asked[index] = formats_.format_to_ask(index);
-    if (!d3d9proto::av_d3d9_QueryFormats9(transport, count, asked, support, sizeof(support), &answered) ||
-        answered != uint64_t{count} * words_per_format * sizeof(uint32_t))
+    if (!d3d9proto::av_d3d9_QueryCaps9(transport, count, asked, &hresult, &caps_, sizeof(caps_), &caps_answered,
+                                       rows_, sizeof(rows_), &rows_answered) ||
+        hresult != 0u || caps_answered != sizeof(caps_) || rows_answered != uint64_t{count} * sizeof(rows_[0]))
         return false;
-    for (uint32_t index = 0u; index < count; index++) {
-        formats_.record(asked[index], support[index * words_per_format], support[index * words_per_format + 1u]);
-        /* Each multisample type the format renders at, and NONMASKABLE with them. */
-        const uint32_t types = support[index * words_per_format + 1u];
-        for (uint32_t type = multisample_bits_from; type <= last_multisample && types != 0u; type++) {
-            if (type != multisample_bits_from && (types & (1u << type)) == 0u) continue;
-            uint32_t answer = 1u, levels = 0u;
-            if (!d3d9proto::av_d3d9_QueryMultisample9(transport, asked[index], type, &answer, &levels)) return false;
-            if (answer == 0u && quality_count_ < max_qualities)
-                qualities_[quality_count_++] = Quality{asked[index], type, levels};
-        }
-    }
+    for (uint32_t index = 0u; index < count; index++)
+        formats_.record(asked[index], rows_[index].support, rows_[index].multisample);
     fix_up();
     UmdAdapterInfo info;
     snapshots_ = kmt.query_adapter_features(adapter, info) == Status::ok &&
@@ -139,16 +123,20 @@ HRESULT D3d9HostCaps::answer_formats(const D3DDDIARG_GETCAPS &args) const
     return S_OK;
 }
 
+/* A type past the row's (or NONE, type 0) and a format not asked have no
+ * quality levels. */
 HRESULT D3d9HostCaps::answer_quality(const D3DDDIARG_GETCAPS &args) const
 {
     AV_SCOPE("D3d9HostCaps::answer_quality");
     if (args.pData == nullptr || args.DataSize < sizeof(DDIMULTISAMPLEQUALITYLEVELSDATA)) return E_INVALIDARG;
-    auto *const asked = static_cast<DDIMULTISAMPLEQUALITYLEVELSDATA *>(args.pData);
+    auto *const    asked = static_cast<DDIMULTISAMPLEQUALITYLEVELSDATA *>(args.pData);
+    const uint32_t type = static_cast<uint32_t>(asked->MsType);
+    constexpr uint32_t types = sizeof(d3d9proto::FormatCaps9::quality_levels) / sizeof(uint32_t);
     asked->QualityLevels = 0u;
-    for (uint32_t index = 0u; index < quality_count_; index++)
-        if (qualities_[index].format == static_cast<uint32_t>(asked->Format) &&
-            qualities_[index].type == static_cast<uint32_t>(asked->MsType))
-            asked->QualityLevels = qualities_[index].levels;
+    if (type == 0u || type > types) return S_OK;
+    for (uint32_t index = 0u; index < formats_.formats_to_ask(); index++)
+        if (formats_.format_to_ask(index) == static_cast<uint32_t>(asked->Format))
+            asked->QualityLevels = rows_[index].quality_levels[type - 1u];
     return S_OK;
 }
 

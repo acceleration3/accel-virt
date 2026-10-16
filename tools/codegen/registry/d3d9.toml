@@ -46,6 +46,21 @@ fields = ["f32 diffuse[4]", "f32 ambient[4]", "f32 specular[4]", "f32 emissive[4
 fields = ["u32 type", "f32 diffuse[4]", "f32 specular[4]", "f32 ambient[4]", "f32 position[3]",
           "f32 direction[3]", "f32 range", "f32 falloff", "f32 attenuation[3]", "f32 theta", "f32 phi"]
 
+# One D3DFORMAT as the host's Direct3D 9 answers it against an X8R8G8B8 display.
+# support is a bit each answered by IDirect3D9::CheckDeviceFormat (or CheckDeviceType
+# for bit 12): bit 0 a texture, 1 a cube texture, 2 a volume texture, 3 a
+# render-target texture, 4 a render-target surface, 5 a depth-stencil surface, 6 a
+# vertex texture, 7 read as sRGB, 8 written as sRGB, 9 filtered, 10 blended after the
+# pixel shader, 11 mipmaps it makes itself, 12 a windowed back buffer, 13 an
+# offscreen plain surface, 14 a legacy bump map, 15 a depth texture
+# (D3DUSAGE_DEPTHSTENCIL on a texture). multisample has bit n for each
+# D3DMULTISAMPLE_TYPE n from 2 to 16 it renders at windowed
+# (CheckDeviceMultiSampleType), and quality_levels[n - 1] is the quality level count
+# of type n: 0 where it does not render at it, and NONMASKABLE's (type 1) asked
+# only of a format that renders at some count.
+[structs.FormatCaps9]
+fields = ["u32 support", "u32 multisample", "u32 quality_levels[16]"]
+
 # ---------------------------------------------------------------- device
 
 [[command]]
@@ -61,32 +76,12 @@ reply = ["u32 hresult"]
 [[command]]
 name = "QueryCaps9"
 id = 0x2004
-doc = """What the GPU's Direct3D 9 can do, as IDirect3D9 answers for its adapter: the D3DCAPS9 structure as its
-bytes. hresult is not S_OK for a GPU with no Direct3D 9, and then nothing else is answered. The adapter's
-identity is the capset's (GpuIdentity), not asked here."""
-params = []
-reply = ["u32 hresult", "out_bytes caps"]
-
-[[command]]
-name = "QueryFormats9"
-id = 0x2005
-doc = """What each D3DFORMAT in `formats` can be, as a u32 of bits each answered by IDirect3D9::CheckDeviceFormat
-(or CheckDeviceType for bit 12) against an X8R8G8B8 display: bit 0 a texture, 1 a cube texture, 2 a volume
-texture, 3 a render-target texture, 4 a render-target surface, 5 a depth-stencil surface, 6 a vertex texture,
-7 read as sRGB, 8 written as sRGB, 9 filtered, 10 blended after the pixel shader, 11 mipmaps it makes itself,
-12 a windowed back buffer, 13 an offscreen plain surface, 14 a legacy bump map, 15 a depth texture
-(D3DUSAGE_DEPTHSTENCIL on a texture), 16 a vertex buffer element (D3DUSAGE_QUERY_VERTEXTEXTURE is bit 6);
-and in the next u32 the multisample types (bit n: D3DMULTISAMPLE_TYPE n) it renders at windowed. Two u32s a
-format, in the order asked."""
+doc = """What the GPU's Direct3D 9 can do, as IDirect3D9 answers for its adapter, asked once: the D3DCAPS9
+structure as its bytes, and a FormatCaps9 for each D3DFORMAT in `formats`, in the order asked. hresult is not
+S_OK for a GPU with no Direct3D 9, and then nothing else is answered. The adapter's identity is the capset's
+(GpuIdentity), not asked here."""
 params = ["u32 count", "u32 formats[count] max 256"]
-reply = ["out_bytes support"]
-
-[[command]]
-name = "QueryMultisample9"
-id = 0x2006
-doc = """IDirect3D9::CheckDeviceMultiSampleType, windowed: hresult, and the quality levels it offers."""
-params = ["u32 format", "u32 multisample"]
-reply = ["u32 hresult", "u32 quality_levels"]
+reply = ["u32 hresult", "out_bytes caps", "out_bytes rows"]
 
 [[command]]
 name = "Flush9"

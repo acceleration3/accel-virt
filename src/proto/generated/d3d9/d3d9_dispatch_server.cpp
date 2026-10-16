@@ -88,24 +88,6 @@ static bool decode_QueryCaps9(ServerDispatch& s, ::av::WireReader& r, ::av::Wire
     (void)s;
     (void)reply;
     (void)arena;
-    uint32_t hresult{};
-    uint8_t* caps = nullptr;
-    uint64_t caps_capacity = 0u;
-    uint64_t caps_size = 0u;
-    bool caps_in_blob = false;
-    if (!read_out_bytes(s, r, arena, caps, caps_capacity, caps_in_blob)) return false;
-    if (r.remaining() != 0u) return false;
-    if (!s.on_QueryCaps9(hresult, caps, caps_capacity, caps_size)) return false;
-    reply.write_pod(hresult);
-    write_out_bytes(reply, caps, caps_size, caps_capacity, caps_in_blob);
-    return true;
-}
-
-static bool decode_QueryFormats9(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
-    AV_SCOPE("server:d3d9:QueryFormats9");
-    (void)s;
-    (void)reply;
-    (void)arena;
     uint32_t count{};
     if (!r.read_pod(count)) return false;
     if (count > 256u) return false;
@@ -115,32 +97,22 @@ static bool decode_QueryFormats9(ServerDispatch& s, ::av::WireReader& r, ::av::W
         if (formats == nullptr) return false;
         if (!r.read(formats, sizeof(uint32_t) * count)) return false;
     }
-    uint8_t* support = nullptr;
-    uint64_t support_capacity = 0u;
-    uint64_t support_size = 0u;
-    bool support_in_blob = false;
-    if (!read_out_bytes(s, r, arena, support, support_capacity, support_in_blob)) return false;
-    if (r.remaining() != 0u) return false;
-    if (!s.on_QueryFormats9(count, formats, support, support_capacity, support_size)) return false;
-    write_out_bytes(reply, support, support_size, support_capacity, support_in_blob);
-    return true;
-}
-
-static bool decode_QueryMultisample9(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
-    AV_SCOPE("server:d3d9:QueryMultisample9");
-    (void)s;
-    (void)reply;
-    (void)arena;
-    uint32_t format{};
-    if (!r.read_pod(format)) return false;
-    uint32_t multisample{};
-    if (!r.read_pod(multisample)) return false;
     uint32_t hresult{};
-    uint32_t quality_levels{};
+    uint8_t* caps = nullptr;
+    uint64_t caps_capacity = 0u;
+    uint64_t caps_size = 0u;
+    bool caps_in_blob = false;
+    if (!read_out_bytes(s, r, arena, caps, caps_capacity, caps_in_blob)) return false;
+    uint8_t* rows = nullptr;
+    uint64_t rows_capacity = 0u;
+    uint64_t rows_size = 0u;
+    bool rows_in_blob = false;
+    if (!read_out_bytes(s, r, arena, rows, rows_capacity, rows_in_blob)) return false;
     if (r.remaining() != 0u) return false;
-    if (!s.on_QueryMultisample9(format, multisample, hresult, quality_levels)) return false;
+    if (!s.on_QueryCaps9(count, formats, hresult, caps, caps_capacity, caps_size, rows, rows_capacity, rows_size)) return false;
     reply.write_pod(hresult);
-    reply.write_pod(quality_levels);
+    write_out_bytes(reply, caps, caps_size, caps_capacity, caps_in_blob);
+    write_out_bytes(reply, rows, rows_size, rows_capacity, rows_in_blob);
     return true;
 }
 
@@ -970,8 +942,6 @@ bool knows_command(uint32_t cmd_id) {
     switch (cmd_id) {
         case kCmd_CreateDevice9:
         case kCmd_QueryCaps9:
-        case kCmd_QueryFormats9:
-        case kCmd_QueryMultisample9:
         case kCmd_Flush9:
         case kCmd_SelectDevice9:
         case kCmd_Finish9:
@@ -1029,8 +999,6 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
     switch (cmd_id) {
         case kCmd_CreateDevice9: return decode_CreateDevice9(s, r, reply, arena);
         case kCmd_QueryCaps9: return decode_QueryCaps9(s, r, reply, arena);
-        case kCmd_QueryFormats9: return decode_QueryFormats9(s, r, reply, arena);
-        case kCmd_QueryMultisample9: return decode_QueryMultisample9(s, r, reply, arena);
         case kCmd_Flush9: return decode_Flush9(s, r, reply, arena);
         case kCmd_SelectDevice9: return decode_SelectDevice9(s, r, reply, arena);
         case kCmd_Finish9: return decode_Finish9(s, r, reply, arena);

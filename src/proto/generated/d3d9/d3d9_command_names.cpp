@@ -14,8 +14,6 @@ const char* command_name(uint32_t id) {
         case kCmd_Finish9: return "Finish9";
         case kCmd_Destroy9: return "Destroy9";
         case kCmd_QueryCaps9: return "QueryCaps9";
-        case kCmd_QueryFormats9: return "QueryFormats9";
-        case kCmd_QueryMultisample9: return "QueryMultisample9";
         case kCmd_Flush9: return "Flush9";
         case kCmd_CreateSurface9: return "CreateSurface9";
         case kCmd_ReadSurface9: return "ReadSurface9";

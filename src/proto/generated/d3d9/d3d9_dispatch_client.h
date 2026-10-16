@@ -18,21 +18,11 @@ namespace av::d3d9proto {
 // screen through the guest's presents, never through a host swap chain. An hresult that is not S_OK makes no
 // device.
 [[nodiscard]] bool av_d3d9_CreateDevice9(::av::ClientTransport& t, uint32_t device, uint32_t flags, uint32_t* hresult);
-// What the GPU's Direct3D 9 can do, as IDirect3D9 answers for its adapter: the D3DCAPS9 structure as its
-// bytes. hresult is not S_OK for a GPU with no Direct3D 9, and then nothing else is answered. The adapter's
-// identity is the capset's (GpuIdentity), not asked here.
-[[nodiscard]] bool av_d3d9_QueryCaps9(::av::ClientTransport& t, uint32_t* hresult, void* caps, uint64_t caps_capacity, uint64_t* caps_size);
-// What each D3DFORMAT in `formats` can be, as a u32 of bits each answered by IDirect3D9::CheckDeviceFormat
-// (or CheckDeviceType for bit 12) against an X8R8G8B8 display: bit 0 a texture, 1 a cube texture, 2 a volume
-// texture, 3 a render-target texture, 4 a render-target surface, 5 a depth-stencil surface, 6 a vertex texture,
-// 7 read as sRGB, 8 written as sRGB, 9 filtered, 10 blended after the pixel shader, 11 mipmaps it makes itself,
-// 12 a windowed back buffer, 13 an offscreen plain surface, 14 a legacy bump map, 15 a depth texture
-// (D3DUSAGE_DEPTHSTENCIL on a texture), 16 a vertex buffer element (D3DUSAGE_QUERY_VERTEXTEXTURE is bit 6);
-// and in the next u32 the multisample types (bit n: D3DMULTISAMPLE_TYPE n) it renders at windowed. Two u32s a
-// format, in the order asked.
-[[nodiscard]] bool av_d3d9_QueryFormats9(::av::ClientTransport& t, uint32_t count, const uint32_t* formats, void* support, uint64_t support_capacity, uint64_t* support_size);
-// IDirect3D9::CheckDeviceMultiSampleType, windowed: hresult, and the quality levels it offers.
-[[nodiscard]] bool av_d3d9_QueryMultisample9(::av::ClientTransport& t, uint32_t format, uint32_t multisample, uint32_t* hresult, uint32_t* quality_levels);
+// What the GPU's Direct3D 9 can do, as IDirect3D9 answers for its adapter, asked once: the D3DCAPS9
+// structure as its bytes, and a FormatCaps9 for each D3DFORMAT in `formats`, in the order asked. hresult is not
+// S_OK for a GPU with no Direct3D 9, and then nothing else is answered. The adapter's identity is the capset's
+// (GpuIdentity), not asked here.
+[[nodiscard]] bool av_d3d9_QueryCaps9(::av::ClientTransport& t, uint32_t count, const uint32_t* formats, uint32_t* hresult, void* caps, uint64_t caps_capacity, uint64_t* caps_size, void* rows, uint64_t rows_capacity, uint64_t* rows_size);
 // Ends the scene the selected device is in and begins the next: what it drew so far goes to the GPU.
 [[nodiscard]] bool av_d3d9_Flush9(::av::ClientTransport& t);
 // The device every later Direct3D 9 command runs on, until the next selection.

@@ -76,4 +76,12 @@ struct Light {
 static_assert(sizeof(Light) == 104, "Light crosses as 104 bytes");
 static_assert(__is_trivially_copyable(Light), "Light is plain data");
 
+struct FormatCaps9 {
+    uint32_t support;
+    uint32_t multisample;
+    uint32_t quality_levels[16];
+};
+static_assert(sizeof(FormatCaps9) == 72, "FormatCaps9 crosses as 72 bytes");
+static_assert(__is_trivially_copyable(FormatCaps9), "FormatCaps9 is plain data");
+
 }  // namespace av::d3d9proto
