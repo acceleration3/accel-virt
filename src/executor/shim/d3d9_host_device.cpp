@@ -43,7 +43,7 @@ constexpr uint32_t depth_texture_bit = 15u;
 
 }  // namespace
 
-D3d9HostDevice::D3d9HostDevice() : d3d9_(nullptr), adapter_(~0u), memory_mb_(0u), frames_()
+D3d9HostDevice::D3d9HostDevice() : d3d9_(nullptr), adapter_(~0u), frames_()
 {
     AV_SCOPE("D3d9HostDevice::D3d9HostDevice");
 }
@@ -73,7 +73,6 @@ void D3d9HostDevice::close()
     if (d3d9_ != nullptr) d3d9_->Release();
     d3d9_ = nullptr;
     adapter_ = ~0u;
-    memory_mb_ = 0u;
 }
 
 StagedFrame *D3d9HostDevice::stage_frame(IDirect3DDevice9 *device, IDirect3DSurface9 *source, uint32_t width,
@@ -89,8 +88,6 @@ bool D3d9HostDevice::opened() const
     return d3d9_ != nullptr;
 }
 
-/* The adapter found also says how much device-local memory it has, through
- * the same instance: a physical device is only meaningful to its own. */
 uint32_t D3d9HostDevice::adapter_for(const uint8_t *uuid)
 {
     AV_SCOPE("D3d9HostDevice::adapter_for");
@@ -103,17 +100,7 @@ uint32_t D3d9HostDevice::adapter_for(const uint8_t *uuid)
     for (UINT ordinal = 0u; found == ~0u && ordinal < d3d9_->GetAdapterCount(); ordinal++) {
         VkPhysicalDevice physical = VK_NULL_HANDLE;
         interop->GetPhysicalDeviceHandle(ordinal, &physical);
-        if (!PhysicalDeviceIdentity(instance, physical).is(uuid)) continue;
-        found = ordinal;
-        auto query = reinterpret_cast<PFN_vkGetPhysicalDeviceMemoryProperties>(
-            vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceMemoryProperties"));
-        VkPhysicalDeviceMemoryProperties memory = {};
-        if (query != nullptr) query(physical, &memory);
-        uint64_t local = 0u;
-        for (uint32_t heap = 0u; heap < memory.memoryHeapCount; heap++)
-            if ((memory.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0u)
-                local += memory.memoryHeaps[heap].size;
-        memory_mb_ = static_cast<uint32_t>(local >> 20u);
+        if (PhysicalDeviceIdentity(instance, physical).is(uuid)) found = ordinal;
     }
     interop->Release();
     return found;
@@ -145,19 +132,6 @@ int32_t D3d9HostDevice::caps(D3DCAPS9 &answer) const
     AV_SCOPE("D3d9HostDevice::caps");
     if (d3d9_ == nullptr) return D3DERR_NOTAVAILABLE;
     return d3d9_->GetDeviceCaps(adapter_, D3DDEVTYPE_HAL, &answer);
-}
-
-int32_t D3d9HostDevice::identity(D3DADAPTER_IDENTIFIER9 &identifier) const
-{
-    AV_SCOPE("D3d9HostDevice::identity");
-    if (d3d9_ == nullptr) return D3DERR_NOTAVAILABLE;
-    return d3d9_->GetAdapterIdentifier(adapter_, 0u, &identifier);
-}
-
-uint32_t D3d9HostDevice::video_memory_mb() const
-{
-    AV_SCOPE("D3d9HostDevice::video_memory_mb");
-    return memory_mb_;
 }
 
 bool D3d9HostDevice::checks(uint32_t usage, uint32_t type, uint32_t format) const

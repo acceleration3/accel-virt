@@ -348,9 +348,6 @@ struct Caps12 {
     uint32_t rovs;
     uint32_t max_gpu_va_bits_per_resource;
     uint32_t max_gpu_va_bits_per_process;
-    uint32_t vendor_id;
-    uint32_t device_id;
-    uint32_t dedicated_video_memory_mb;
     uint32_t descriptor_sizes[4];
     uint32_t double_ops;
     uint32_t int64_ops;
@@ -360,7 +357,7 @@ struct Caps12 {
     uint32_t total_lanes;
     uint32_t reserved;
 };
-static_assert(sizeof(Caps12) == 96, "Caps12 crosses as 96 bytes");
+static_assert(sizeof(Caps12) == 84, "Caps12 crosses as 84 bytes");
 static_assert(__is_trivially_copyable(Caps12), "Caps12 is plain data");
 
 }  // namespace av::d3d12proto

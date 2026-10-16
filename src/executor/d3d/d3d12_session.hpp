@@ -19,7 +19,6 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/d3d12_address_map.hpp"
-#include "executor/d3d/d3d12_fence_publisher.hpp"
 #include "executor/d3d/d3d12_pipeline_builder.hpp"
 #include "executor/d3d/d3d12_queue_progress.hpp"
 #include "executor/d3d/d3d12_tile_update.hpp"
@@ -79,9 +78,6 @@ public:
 
     bool               knows(uint32_t command_id) const;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply, WireArena &arena);
-    /* Publishes fences that moved; true while one is still to reach a value
-     * a queue will signal. */
-    bool               poll();
     /* The mark the latest execute left, and the highest mark everything up to
      * which the GPU has finished (D3d12QueueProgress). */
     void               gpu_progress(uint64_t &marked, uint64_t &reached) const;
@@ -124,12 +120,7 @@ public:
     bool on_CreateCommandList12(uint32_t list, uint32_t allocator, uint32_t type, uint32_t pipeline) override;
     bool on_ResetCommandList12(uint32_t list, uint32_t allocator, uint32_t pipeline) override;
     bool on_CloseCommandList12(uint32_t list) override;
-    bool on_CreateFence12(uint32_t fence, uint64_t initial, uint32_t flags) override;
     bool on_ExecuteCommandLists12(uint32_t queue, uint32_t count, const uint32_t* lists) override;
-    bool on_SignalFence12(uint32_t queue, uint32_t fence, uint64_t value) override;
-    bool on_WaitFence12(uint32_t queue, uint32_t fence, uint64_t value) override;
-    bool on_FenceValue12(uint32_t fence, uint32_t wait, uint64_t value, uint64_t& completed) override;
-    bool on_PublishFence12(uint32_t fence, uint64_t offset) override;
     bool on_UpdateTileMappings12(uint32_t queue, uint32_t resource, uint32_t region_count, const d3d12proto::TileRegion* regions, uint32_t heap, uint32_t range_count, const d3d12proto::TileRange* ranges, uint32_t flags) override;
     bool on_CopyTileMappings12(uint32_t queue, uint32_t destination, const d3d12proto::TileCoordinate& destination_start, uint32_t source, const d3d12proto::TileCoordinate& source_start, const d3d12proto::TileSize& size, uint32_t flags) override;
     bool on_CreateQueryHeap12(uint32_t heap, uint32_t type, uint32_t count) override;
@@ -212,7 +203,6 @@ private:
     D3dObjectTable        &objects_;
     WatchedBlocks         &blocks_;
     D3d12AddressMap        addresses_;
-    D3d12FencePublisher    fences_;
     D3d12QueueProgress     progress_;
     D3d12ViewWriter        views_;
     D3d12PipelineBuilder   pipelines_;

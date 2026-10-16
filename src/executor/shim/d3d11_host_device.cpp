@@ -53,8 +53,6 @@ bool D3d11HostDevice::make()
     AV_SCOPE("D3d11HostDevice::make");
     IDXGIAdapter1 *const adapter = runtime_->adapter_for(uuid_.raw());
     if (adapter == nullptr) return false;
-    DXGI_ADAPTER_DESC1 description = {};
-    adapter->GetDesc1(&description);
     ID3D11Device *device = nullptr;
     ID3D11DeviceContext *context = nullptr;
     uint32_t level = 0u;
@@ -73,8 +71,7 @@ bool D3d11HostDevice::make()
         return false;
     }
     feature_level_ = level;
-    capabilities_.measure(*device_, level, description.VendorId, description.DeviceId,
-                          description.DedicatedVideoMemory);
+    capabilities_.measure(*device_, level);
     /* Without DXVK's Vulkan interop the scanout is read back rather than
      * exported, and a Direct3D 12 swap chain has nothing to be shown by. */
     if (!vulkan_.connect(device_))

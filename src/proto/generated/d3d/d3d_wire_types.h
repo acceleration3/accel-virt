@@ -253,12 +253,9 @@ struct Caps11 {
     uint32_t vp_and_rt_array_index_from_any_shader;
     uint32_t extended_nv12_shared_texture;
     uint32_t shared_resource_tier;
-    uint32_t dedicated_video_memory_mb;
-    uint32_t vendor_id;
-    uint32_t device_id;
     uint32_t reserved[6];
 };
-static_assert(sizeof(Caps11) == 168, "Caps11 crosses as 168 bytes");
+static_assert(sizeof(Caps11) == 156, "Caps11 crosses as 156 bytes");
 static_assert(__is_trivially_copyable(Caps11), "Caps11 is plain data");
 
 struct FormatCaps {

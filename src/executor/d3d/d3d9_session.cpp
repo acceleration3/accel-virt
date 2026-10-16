@@ -118,24 +118,15 @@ bool D3d9Session::on_CreateDevice9(uint32_t device, uint32_t, uint32_t &hresult)
     return true;
 }
 
-bool D3d9Session::on_QueryCaps9(uint32_t &hresult, uint32_t &vendor_id, uint32_t &device_id, uint32_t &subsystem_id,
-                                uint32_t &revision, uint32_t &video_memory_mb, uint8_t *caps, uint64_t caps_capacity,
-                                uint64_t &caps_size)
+bool D3d9Session::on_QueryCaps9(uint32_t &hresult, uint8_t *caps, uint64_t caps_capacity, uint64_t &caps_size)
 {
     AV_SCOPE("D3d9Session::on_QueryCaps9");
     caps_size = 0u;
     hresult = static_cast<uint32_t>(D3DERR_NOTAVAILABLE);
-    D3DCAPS9               answer = {};
-    D3DADAPTER_IDENTIFIER9 identity = {};
+    D3DCAPS9 answer = {};
     if (host_ == nullptr || caps_capacity < sizeof(answer)) return true;
     hresult = static_cast<uint32_t>(host_->caps(answer));
-    if (hresult == D3D_OK) hresult = static_cast<uint32_t>(host_->identity(identity));
     if (hresult != D3D_OK) return true;
-    vendor_id = identity.VendorId;
-    device_id = identity.DeviceId;
-    subsystem_id = identity.SubSysId;
-    revision = identity.Revision;
-    video_memory_mb = host_->video_memory_mb();
     memcpy(caps, &answer, sizeof(answer));
     caps_size = sizeof(answer);
     return true;

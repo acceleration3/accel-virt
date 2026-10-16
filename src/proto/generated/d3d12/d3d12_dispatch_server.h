@@ -58,13 +58,8 @@ public:
     virtual bool on_CreateCommandList12(uint32_t list, uint32_t allocator, uint32_t type, uint32_t pipeline) = 0;
     virtual bool on_ResetCommandList12(uint32_t list, uint32_t allocator, uint32_t pipeline) = 0;
     virtual bool on_CloseCommandList12(uint32_t list) = 0;
-    virtual bool on_CreateFence12(uint32_t fence, uint64_t initial, uint32_t flags) = 0;
     virtual bool on_ExecuteCommandLists12(uint32_t queue, uint32_t count, const uint32_t* lists) = 0;
     virtual bool on_PresentResource12(uint32_t queue, uint32_t resource, uint32_t point) = 0;
-    virtual bool on_SignalFence12(uint32_t queue, uint32_t fence, uint64_t value) = 0;
-    virtual bool on_WaitFence12(uint32_t queue, uint32_t fence, uint64_t value) = 0;
-    virtual bool on_FenceValue12(uint32_t fence, uint32_t wait, uint64_t value, uint64_t& completed) = 0;
-    virtual bool on_PublishFence12(uint32_t fence, uint64_t offset) = 0;
     virtual bool on_UpdateTileMappings12(uint32_t queue, uint32_t resource, uint32_t region_count, const TileRegion* regions, uint32_t heap, uint32_t range_count, const TileRange* ranges, uint32_t flags) = 0;
     virtual bool on_CopyTileMappings12(uint32_t queue, uint32_t destination, const TileCoordinate& destination_start, uint32_t source, const TileCoordinate& source_start, const TileSize& size, uint32_t flags) = 0;
     virtual bool on_CreateQueryHeap12(uint32_t heap, uint32_t type, uint32_t count) = 0;

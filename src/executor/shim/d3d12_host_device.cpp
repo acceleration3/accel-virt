@@ -12,7 +12,6 @@ namespace av {
 
 namespace {
 
-constexpr uint64_t mebibyte = 1u << 20u;
 constexpr uint32_t level_12_2 = 0xc200u;
 /* The highest shader model asked about; the answer is the device's highest
  * at or below it. */
@@ -45,16 +44,7 @@ bool D3d12HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
         runtime_ = nullptr;
         return false;
     }
-    /* What the GPU is - its vendor, device and memory - is its DXGI adapter's
-     * answer, as Direct3D 11's is: a Direct3D 12 device has no adapter
-     * description of its own. No DXGI is no answer, and zeroes. */
-    DXGI_ADAPTER_DESC1   description = {};
-    IDXGIAdapter1 *const adapter = runtime.adapter_for(uuid);
-    if (adapter != nullptr) {
-        adapter->GetDesc1(&description);
-        adapter->Release();
-    }
-    measure(description.VendorId, description.DeviceId, description.DedicatedVideoMemory);
+    measure();
     return true;
 }
 
@@ -220,7 +210,7 @@ ID3D12RootSignature *D3d12HostDevice::root_signature(const void *desc) const
     return made;
 }
 
-void D3d12HostDevice::measure(uint32_t vendor_id, uint32_t device_id, uint64_t video_memory)
+void D3d12HostDevice::measure()
 {
     AV_SCOPE("D3d12HostDevice::measure");
     /* 12_2 is 0xc200, newer than the native headers' enum. */
@@ -263,9 +253,6 @@ void D3d12HostDevice::measure(uint32_t vendor_id, uint32_t device_id, uint64_t v
         caps_.max_gpu_va_bits_per_resource = address.MaxGPUVirtualAddressBitsPerResource;
         caps_.max_gpu_va_bits_per_process = address.MaxGPUVirtualAddressBitsPerProcess;
     }
-    caps_.vendor_id = vendor_id;
-    caps_.device_id = device_id;
-    caps_.dedicated_video_memory_mb = static_cast<uint32_t>(video_memory / mebibyte);
     for (uint32_t type = 0u; type < 4u; type++)
         caps_.descriptor_sizes[type] =
             device_->GetDescriptorHandleIncrementSize(static_cast<D3D12_DESCRIPTOR_HEAP_TYPE>(type));

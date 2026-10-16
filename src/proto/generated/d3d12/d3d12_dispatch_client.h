@@ -71,7 +71,6 @@ namespace av::d3d12proto {
 [[nodiscard]] bool av_d3d12_CreateCommandList12(::av::ClientTransport& t, uint32_t list, uint32_t allocator, uint32_t type, uint32_t pipeline);
 [[nodiscard]] bool av_d3d12_ResetCommandList12(::av::ClientTransport& t, uint32_t list, uint32_t allocator, uint32_t pipeline);
 [[nodiscard]] bool av_d3d12_CloseCommandList12(::av::ClientTransport& t, uint32_t list);
-[[nodiscard]] bool av_d3d12_CreateFence12(::av::ClientTransport& t, uint32_t fence, uint64_t initial, uint32_t flags);
 [[nodiscard]] bool av_d3d12_ExecuteCommandLists12(::av::ClientTransport& t, uint32_t queue, uint32_t count, const uint32_t* lists);
 // `resource`, shared by ShareResource12, is presented from `queue`, the `point`th present of it: what the
 // queue executed before is done on the GPU before the host's Direct3D 11 device runs anything it is given after.
@@ -79,16 +78,6 @@ namespace av::d3d12proto {
 // present engine reads by the surface's shared id and `point` (docs/shared-surfaces.md); a point of 0 stages
 // nothing.
 [[nodiscard]] bool av_d3d12_PresentResource12(::av::ClientTransport& t, uint32_t queue, uint32_t resource, uint32_t point);
-// `fence` reaches `value` once `queue` has finished what was executed on it before; queue 0 signals
-// from the CPU, now.
-[[nodiscard]] bool av_d3d12_SignalFence12(::av::ClientTransport& t, uint32_t queue, uint32_t fence, uint64_t value);
-// `queue` waits on the GPU for `fence` to reach `value` before what is executed on it after.
-[[nodiscard]] bool av_d3d12_WaitFence12(::av::ClientTransport& t, uint32_t queue, uint32_t fence, uint64_t value);
-// The value `fence` has reached. With wait 1 the host waits until it is at least `value` first.
-[[nodiscard]] bool av_d3d12_FenceValue12(::av::ClientTransport& t, uint32_t fence, uint32_t wait, uint64_t value, uint64_t* completed);
-// The host writes `fence`'s completed value, as a u64, at arena offset `offset` whenever it advances,
-// so the guest reads memory instead of asking. offset ~0 stops it.
-[[nodiscard]] bool av_d3d12_PublishFence12(::av::ClientTransport& t, uint32_t fence, uint64_t offset);
 // Maps the tiles of `regions` of a reserved resource, in order, to the heap tiles `ranges` name, in order,
 // on `queue` - between the work executed on it before and after. heap is 0 when every range unmaps or skips. A
 // call the guest made with more regions or ranges than one command carries crosses as several, in order.

@@ -114,7 +114,7 @@ const D3D12_CLEAR_VALUE *host_clear(const d3d12proto::ClearValue &clear, D3D12_C
 D3d12Session::D3d12Session(GuestRegion &region, ImportedMemories &imported, D3dObjectTable &objects,
                            WakeSignal &tenant, EventfdWake &fence_wake, WatchedBlocks &blocks)
     : region_(region), imported_(imported), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
-      joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks), fences_(region),
+      joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks),
       progress_(fence_wake, blocks), views_(objects_, addresses_),
       pipelines_(objects_), presentation_(), tile_update_(), arena_(nullptr), removed_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "), refusal_(lines_), clock_()
 {
@@ -141,7 +141,6 @@ void D3d12Session::shut_down()
     AV_SCOPE("D3d12Session::shut_down");
     drain();
     presentation_.bind(nullptr, nullptr, nullptr);
-    fences_.clear();
     progress_.clear();
     addresses_.clear();
     objects_.remove_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12);
@@ -176,12 +175,6 @@ bool D3d12Session::run(uint32_t command_id, WireReader &payload, WireWriter &rep
     if (!refusal_.removes(d3d12proto::command_name(command_id), only_device, removed_ != 0u)) return false;
     if (removed_ == 0u) removed_ = blocks_.refusal(static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR));
     return true;
-}
-
-bool D3d12Session::poll()
-{
-    AV_SCOPE("D3d12Session::poll");
-    return fences_.update();
 }
 
 void D3d12Session::gpu_progress(uint64_t &marked, uint64_t &reached) const
@@ -369,7 +362,6 @@ bool D3d12Session::on_Destroy12(uint32_t id)
         kind > D3dObjectKind::command_signature12)
         return false;
     if (kind == D3dObjectKind::resource12) addresses_.remove(id);
-    if (kind == D3dObjectKind::fence12) fences_.forget(id);
     if (kind == D3dObjectKind::queue12) progress_.forget(id);
     objects_.remove(id);
     return true;
@@ -382,7 +374,6 @@ bool D3d12Session::on_Finish12(uint32_t &hresult)
     if (device_ == nullptr) return true;
     drain();
     if (hresult == 0u) hresult = static_cast<uint32_t>(device_->device()->GetDeviceRemovedReason());
-    fences_.update();
     return true;
 }
 
@@ -675,7 +666,7 @@ bool D3d12Session::on_CreateComputePipeline12(uint32_t pipeline, uint32_t root, 
     return kept(pipeline, D3dObjectKind::pipeline12, pipelines_.compute(root, cs, cs_size, *arena_));
 }
 
-// ---------------------------------------------------------------- queues, lists, fences
+// ---------------------------------------------------------------- queues and lists
 
 bool D3d12Session::on_CreateCommandQueue12(uint32_t queue, uint32_t type, uint32_t priority, uint32_t flags)
 {
@@ -744,17 +735,6 @@ bool D3d12Session::on_CloseCommandList12(uint32_t id)
     return recorded != nullptr && SUCCEEDED(recorded->Close());
 }
 
-bool D3d12Session::on_CreateFence12(uint32_t fence, uint64_t initial, uint32_t flags)
-{
-    AV_SCOPE("D3d12Session::on_CreateFence12");
-    if (device_ == nullptr) return false;
-    ID3D12Fence *made = nullptr;
-    if (FAILED(device_->device()->CreateFence(initial, static_cast<D3D12_FENCE_FLAGS>(flags), __uuidof(ID3D12Fence),
-                                              reinterpret_cast<void **>(&made))))
-        return false;
-    return kept(fence, D3dObjectKind::fence12, made);
-}
-
 /* The frame a blt reads is copied on the presenting queue here, behind the
  * work that drew it and ahead of whatever the queue is given next; only for a
  * surface a blt has read before (SharedSurfaces). One the host cannot stage
@@ -795,45 +775,6 @@ bool D3d12Session::on_ExecuteCommandLists12(uint32_t queue, uint32_t count, cons
     return progress_.executed(queue, on, device_->device());
 }
 
-bool D3d12Session::on_SignalFence12(uint32_t queue, uint32_t fence, uint64_t value)
-{
-    AV_SCOPE("D3d12Session::on_SignalFence12");
-    ID3D12Fence *const signalled = objects_.find_as<ID3D12Fence>(fence, D3dObjectKind::fence12);
-    if (signalled == nullptr) return false;
-    if (queue == 0u) return SUCCEEDED(signalled->Signal(value));
-    ID3D12CommandQueue *const on = objects_.find_as<ID3D12CommandQueue>(queue, D3dObjectKind::queue12);
-    if (on == nullptr || FAILED(on->Signal(signalled, value))) return false;
-    fences_.expect(fence, value);
-    return true;
-}
-
-bool D3d12Session::on_WaitFence12(uint32_t queue, uint32_t fence, uint64_t value)
-{
-    AV_SCOPE("D3d12Session::on_WaitFence12");
-    ID3D12Fence        *const waited = objects_.find_as<ID3D12Fence>(fence, D3dObjectKind::fence12);
-    ID3D12CommandQueue *const on = objects_.find_as<ID3D12CommandQueue>(queue, D3dObjectKind::queue12);
-    return waited != nullptr && on != nullptr && SUCCEEDED(on->Wait(waited, value));
-}
-
-bool D3d12Session::on_FenceValue12(uint32_t fence, uint32_t wait, uint64_t value, uint64_t &completed)
-{
-    AV_SCOPE("D3d12Session::on_FenceValue12");
-    completed = 0u;
-    ID3D12Fence *const asked = objects_.find_as<ID3D12Fence>(fence, D3dObjectKind::fence12);
-    if (asked == nullptr) return false;
-    if (wait != 0u && asked->GetCompletedValue() < value) asked->SetEventOnCompletion(value, nullptr);
-    completed = asked->GetCompletedValue();
-    return true;
-}
-
-bool D3d12Session::on_PublishFence12(uint32_t fence, uint64_t offset)
-{
-    AV_SCOPE("D3d12Session::on_PublishFence12");
-    ID3D12Fence *const published = objects_.find_as<ID3D12Fence>(fence, D3dObjectKind::fence12);
-    if (published == nullptr && offset != D3d12FencePublisher::stop) return false;
-    return fences_.publish(fence, published, offset);
-}
-
 bool D3d12Session::on_CreateQueryHeap12(uint32_t heap, uint32_t type, uint32_t count)
 {
     AV_SCOPE("D3d12Session::on_CreateQueryHeap12");
@@ -852,7 +793,7 @@ bool D3d12Session::on_CreateQueryHeap12(uint32_t heap, uint32_t type, uint32_t c
 bool D3d12Session::invariants_hold() const
 {
     AV_SCOPE("D3d12Session::invariants_hold");
-    return objects_.invariants_hold() && addresses_.invariants_hold() && fences_.invariants_hold() &&
+    return objects_.invariants_hold() && addresses_.invariants_hold() &&
            (device_ != nullptr ||
             objects_.count_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12) == 0u);
 }

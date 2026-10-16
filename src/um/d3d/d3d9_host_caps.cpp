@@ -48,10 +48,9 @@ bool D3d9HostCaps::learn(ClientTransport &transport, Kmt &kmt, uint32_t adapter)
 {
     AV_SCOPE("D3d9HostCaps::learn");
     if (learned_) return true;
-    uint32_t hresult = 1u, vendor = 0u, device = 0u, subsystem = 0u, revision = 0u, memory_mb = 0u;
+    uint32_t hresult = 1u;
     uint64_t answered = 0u;
-    if (!d3d9proto::av_d3d9_QueryCaps9(transport, &hresult, &vendor, &device, &subsystem, &revision, &memory_mb,
-                                       &caps_, sizeof(caps_), &answered) ||
+    if (!d3d9proto::av_d3d9_QueryCaps9(transport, &hresult, &caps_, sizeof(caps_), &answered) ||
         hresult != 0u || answered != sizeof(caps_))
         return false;
     uint32_t asked[d3d::D3d9FormatOps::max_formats] = {};

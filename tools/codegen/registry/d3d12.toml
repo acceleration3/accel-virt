@@ -184,7 +184,7 @@ fields = ["u32 flags", "u32 heap_offset", "u32 tiles"]
 fields = ["u32 feature_level", "u32 shader_model", "u32 resource_binding_tier", "u32 tiled_resources_tier",
           "u32 resource_heap_tier", "u32 conservative_rasterization_tier", "u32 typed_uav_load_additional_formats",
           "u32 rovs", "u32 max_gpu_va_bits_per_resource", "u32 max_gpu_va_bits_per_process",
-          "u32 vendor_id", "u32 device_id", "u32 dedicated_video_memory_mb", "u32 descriptor_sizes[4]",
+          "u32 descriptor_sizes[4]",
           "u32 double_ops", "u32 int64_ops", "u32 wave_ops", "u32 wave_lane_min", "u32 wave_lane_max",
           "u32 total_lanes", "u32 reserved"]
 
@@ -352,7 +352,7 @@ name = "CreateComputePipeline12"
 id = 0x1302
 params = ["u32 pipeline", "u32 root", "bytes cs"]
 
-# ---------------------------------------------------------------- queues, lists, fences
+# ---------------------------------------------------------------- queues and lists
 
 [[command]]
 name = "CreateCommandQueue12"
@@ -386,11 +386,6 @@ id = 0x1405
 params = ["u32 list"]
 
 [[command]]
-name = "CreateFence12"
-id = 0x1406
-params = ["u32 fence", "u64 initial", "u32 flags"]
-
-[[command]]
 name = "ExecuteCommandLists12"
 id = 0x1407
 params = ["u32 queue", "u32 count", "u32 lists[count] max 64"]
@@ -404,33 +399,6 @@ Where a blt-model present has read this surface before, the host stages the fram
 present engine reads by the surface's shared id and `point` (docs/shared-surfaces.md); a point of 0 stages
 nothing."""
 params = ["u32 queue", "u32 resource", "u32 point"]
-
-[[command]]
-name = "SignalFence12"
-id = 0x1408
-doc = """`fence` reaches `value` once `queue` has finished what was executed on it before; queue 0 signals
-from the CPU, now."""
-params = ["u32 queue", "u32 fence", "u64 value"]
-
-[[command]]
-name = "WaitFence12"
-id = 0x1409
-doc = """`queue` waits on the GPU for `fence` to reach `value` before what is executed on it after."""
-params = ["u32 queue", "u32 fence", "u64 value"]
-
-[[command]]
-name = "FenceValue12"
-id = 0x140a
-doc = """The value `fence` has reached. With wait 1 the host waits until it is at least `value` first."""
-params = ["u32 fence", "u32 wait", "u64 value"]
-reply = ["u64 completed"]
-
-[[command]]
-name = "PublishFence12"
-id = 0x140b
-doc = """The host writes `fence`'s completed value, as a u64, at arena offset `offset` whenever it advances,
-so the guest reads memory instead of asking. offset ~0 stops it."""
-params = ["u32 fence", "u64 offset"]
 
 [[command]]
 name = "UpdateTileMappings12"

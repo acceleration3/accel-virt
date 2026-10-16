@@ -134,8 +134,7 @@ fields = ["u32 feature_level", "u32 driver_concurrent_creates", "u32 driver_comm
           "u32 typed_uav_load_additional_formats", "u32 rovs", "u32 conservative_rasterization_tier",
           "u32 tiled_resources_tier", "u32 map_on_default_textures", "u32 standard_swizzle",
           "u32 unified_memory_architecture", "u32 vp_and_rt_array_index_from_any_shader",
-          "u32 extended_nv12_shared_texture", "u32 shared_resource_tier", "u32 dedicated_video_memory_mb",
-          "u32 vendor_id", "u32 device_id", "u32 reserved[6]"]
+          "u32 extended_nv12_shared_texture", "u32 shared_resource_tier", "u32 reserved[6]"]
 
 # One DXGI_FORMAT's D3D11_FEATURE_DATA_FORMAT_SUPPORT{,2}, and which sample
 # counts it renders at (bit n: 2^n samples) with their quality levels.

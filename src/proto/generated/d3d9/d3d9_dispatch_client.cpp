@@ -88,7 +88,7 @@ bool av_d3d9_CreateDevice9(::av::ClientTransport& t, uint32_t device, uint32_t f
     return r.remaining() == 0u;
 }
 
-bool av_d3d9_QueryCaps9(::av::ClientTransport& t, uint32_t* hresult, uint32_t* vendor_id, uint32_t* device_id, uint32_t* subsystem_id, uint32_t* revision, uint32_t* video_memory_mb, void* caps, uint64_t caps_capacity, uint64_t* caps_size) {
+bool av_d3d9_QueryCaps9(::av::ClientTransport& t, uint32_t* hresult, void* caps, uint64_t caps_capacity, uint64_t* caps_size) {
     AV_SCOPE("av_d3d9_QueryCaps9");
     ::av::WireWriter b = t.request_writer();
     ::av::ClientBlobLease caps_lease;
@@ -99,21 +99,6 @@ bool av_d3d9_QueryCaps9(::av::ClientTransport& t, uint32_t* hresult, uint32_t* v
     { uint32_t value{};
       if (!r.read_pod(value)) return false;
       if (hresult != nullptr) *hresult = value; }
-    { uint32_t value{};
-      if (!r.read_pod(value)) return false;
-      if (vendor_id != nullptr) *vendor_id = value; }
-    { uint32_t value{};
-      if (!r.read_pod(value)) return false;
-      if (device_id != nullptr) *device_id = value; }
-    { uint32_t value{};
-      if (!r.read_pod(value)) return false;
-      if (subsystem_id != nullptr) *subsystem_id = value; }
-    { uint32_t value{};
-      if (!r.read_pod(value)) return false;
-      if (revision != nullptr) *revision = value; }
-    { uint32_t value{};
-      if (!r.read_pod(value)) return false;
-      if (video_memory_mb != nullptr) *video_memory_mb = value; }
     if (!take_bytes(r, caps, caps_capacity, caps_lease, caps_size)) return false;
     return r.remaining() == 0u;
 }

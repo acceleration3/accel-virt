@@ -83,24 +83,14 @@ static bool decode_QueryCaps9(ServerDispatch& s, ::av::WireReader& r, ::av::Wire
     (void)reply;
     (void)arena;
     uint32_t hresult{};
-    uint32_t vendor_id{};
-    uint32_t device_id{};
-    uint32_t subsystem_id{};
-    uint32_t revision{};
-    uint32_t video_memory_mb{};
     uint8_t* caps = nullptr;
     uint64_t caps_capacity = 0u;
     uint64_t caps_size = 0u;
     bool caps_in_blob = false;
     if (!read_out_bytes(s, r, arena, caps, caps_capacity, caps_in_blob)) return false;
     if (r.remaining() != 0u) return false;
-    if (!s.on_QueryCaps9(hresult, vendor_id, device_id, subsystem_id, revision, video_memory_mb, caps, caps_capacity, caps_size)) return false;
+    if (!s.on_QueryCaps9(hresult, caps, caps_capacity, caps_size)) return false;
     reply.write_pod(hresult);
-    reply.write_pod(vendor_id);
-    reply.write_pod(device_id);
-    reply.write_pod(subsystem_id);
-    reply.write_pod(revision);
-    reply.write_pod(video_memory_mb);
     write_out_bytes(reply, caps, caps_size, caps_capacity, caps_in_blob);
     return true;
 }

@@ -19,9 +19,9 @@ namespace av::d3d9proto {
 // device.
 [[nodiscard]] bool av_d3d9_CreateDevice9(::av::ClientTransport& t, uint32_t device, uint32_t flags, uint32_t* hresult);
 // What the GPU's Direct3D 9 can do, as IDirect3D9 answers for its adapter: the D3DCAPS9 structure as its
-// bytes, and the adapter's identity. hresult is not S_OK for a GPU with no Direct3D 9, and then nothing else is
-// answered.
-[[nodiscard]] bool av_d3d9_QueryCaps9(::av::ClientTransport& t, uint32_t* hresult, uint32_t* vendor_id, uint32_t* device_id, uint32_t* subsystem_id, uint32_t* revision, uint32_t* video_memory_mb, void* caps, uint64_t caps_capacity, uint64_t* caps_size);
+// bytes. hresult is not S_OK for a GPU with no Direct3D 9, and then nothing else is answered. The adapter's
+// identity is the capset's (GpuIdentity), not asked here.
+[[nodiscard]] bool av_d3d9_QueryCaps9(::av::ClientTransport& t, uint32_t* hresult, void* caps, uint64_t caps_capacity, uint64_t* caps_size);
 // What each D3DFORMAT in `formats` can be, as a u32 of bits each answered by IDirect3D9::CheckDeviceFormat
 // (or CheckDeviceType for bit 12) against an X8R8G8B8 display: bit 0 a texture, 1 a cube texture, 2 a volume
 // texture, 3 a render-target texture, 4 a render-target surface, 5 a depth-stencil surface, 6 a vertex texture,

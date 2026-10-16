@@ -16,7 +16,6 @@
 
 #include <stdint.h>
 
-struct _D3DADAPTER_IDENTIFIER9;
 struct _D3DCAPS9;
 struct IDirect3D9;
 struct IDirect3DDevice9;
@@ -45,9 +44,6 @@ public:
     int32_t make_device(IDirect3DDevice9 *&device) const;
     /* What IDirect3D9 says of the adapter; the HRESULT. */
     int32_t caps(_D3DCAPS9 &caps) const;
-    int32_t identity(_D3DADAPTER_IDENTIFIER9 &identifier) const;
-    /* The GPU's device-local memory, which Direct3D 9 itself never says. */
-    uint32_t video_memory_mb() const;
     /* QueryFormats9's two words for `format` (d3d9.toml): what it can be,
      * and the multisample types it renders at windowed. */
     void    format_support(uint32_t format, uint32_t &support, uint32_t &multisample) const;
@@ -65,7 +61,6 @@ private:
 
     IDirect3D9 *d3d9_;
     uint32_t    adapter_;
-    uint32_t    memory_mb_;
     D3d9FramePool frames_;
 };
 

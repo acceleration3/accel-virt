@@ -17,15 +17,11 @@ D3d11Capabilities::D3d11Capabilities() : caps_{}, formats_{}
     AV_SCOPE("D3d11Capabilities::D3d11Capabilities");
 }
 
-void D3d11Capabilities::measure(ID3D11Device5 &device, uint32_t feature_level, uint32_t vendor_id,
-                                uint32_t device_id, uint64_t video_memory)
+void D3d11Capabilities::measure(ID3D11Device5 &device, uint32_t feature_level)
 {
     AV_SCOPE("D3d11Capabilities::measure");
     caps_ = d3dproto::Caps11{};
     caps_.feature_level = feature_level;
-    caps_.vendor_id = vendor_id;
-    caps_.device_id = device_id;
-    caps_.dedicated_video_memory_mb = static_cast<uint32_t>(video_memory >> 20u);
     measure_options(device);
     measure_formats(device);
 }

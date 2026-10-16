@@ -19,8 +19,7 @@ class D3d11Capabilities {
 public:
     D3d11Capabilities();
 
-    void measure(ID3D11Device5 &device, uint32_t feature_level, uint32_t vendor_id, uint32_t device_id,
-                 uint64_t video_memory);
+    void measure(ID3D11Device5 &device, uint32_t feature_level);
 
     const d3dproto::Caps11     &caps() const;
     const d3dproto::FormatCaps *formats() const;

@@ -38,12 +38,7 @@ const char* command_name(uint32_t id) {
         case kCmd_CreateCommandList12: return "CreateCommandList12";
         case kCmd_ResetCommandList12: return "ResetCommandList12";
         case kCmd_CloseCommandList12: return "CloseCommandList12";
-        case kCmd_CreateFence12: return "CreateFence12";
         case kCmd_ExecuteCommandLists12: return "ExecuteCommandLists12";
-        case kCmd_SignalFence12: return "SignalFence12";
-        case kCmd_WaitFence12: return "WaitFence12";
-        case kCmd_FenceValue12: return "FenceValue12";
-        case kCmd_PublishFence12: return "PublishFence12";
         case kCmd_CreateQueryHeap12: return "CreateQueryHeap12";
         case kCmd_PresentResource12: return "PresentResource12";
         case kCmd_UpdateTileMappings12: return "UpdateTileMappings12";

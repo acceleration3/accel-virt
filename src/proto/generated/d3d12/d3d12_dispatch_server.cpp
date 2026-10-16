@@ -609,22 +609,6 @@ static bool decode_CloseCommandList12(ServerDispatch& s, ::av::WireReader& r, ::
     return true;
 }
 
-static bool decode_CreateFence12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
-    AV_SCOPE("server:d3d12:CreateFence12");
-    (void)s;
-    (void)reply;
-    (void)arena;
-    uint32_t fence{};
-    if (!r.read_pod(fence)) return false;
-    uint64_t initial{};
-    if (!r.read_pod(initial)) return false;
-    uint32_t flags{};
-    if (!r.read_pod(flags)) return false;
-    if (r.remaining() != 0u) return false;
-    if (!s.on_CreateFence12(fence, initial, flags)) return false;
-    return true;
-}
-
 static bool decode_ExecuteCommandLists12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d12:ExecuteCommandLists12");
     (void)s;
@@ -659,70 +643,6 @@ static bool decode_PresentResource12(ServerDispatch& s, ::av::WireReader& r, ::a
     if (!r.read_pod(point)) return false;
     if (r.remaining() != 0u) return false;
     if (!s.on_PresentResource12(queue, resource, point)) return false;
-    return true;
-}
-
-static bool decode_SignalFence12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
-    AV_SCOPE("server:d3d12:SignalFence12");
-    (void)s;
-    (void)reply;
-    (void)arena;
-    uint32_t queue{};
-    if (!r.read_pod(queue)) return false;
-    uint32_t fence{};
-    if (!r.read_pod(fence)) return false;
-    uint64_t value{};
-    if (!r.read_pod(value)) return false;
-    if (r.remaining() != 0u) return false;
-    if (!s.on_SignalFence12(queue, fence, value)) return false;
-    return true;
-}
-
-static bool decode_WaitFence12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
-    AV_SCOPE("server:d3d12:WaitFence12");
-    (void)s;
-    (void)reply;
-    (void)arena;
-    uint32_t queue{};
-    if (!r.read_pod(queue)) return false;
-    uint32_t fence{};
-    if (!r.read_pod(fence)) return false;
-    uint64_t value{};
-    if (!r.read_pod(value)) return false;
-    if (r.remaining() != 0u) return false;
-    if (!s.on_WaitFence12(queue, fence, value)) return false;
-    return true;
-}
-
-static bool decode_FenceValue12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
-    AV_SCOPE("server:d3d12:FenceValue12");
-    (void)s;
-    (void)reply;
-    (void)arena;
-    uint32_t fence{};
-    if (!r.read_pod(fence)) return false;
-    uint32_t wait{};
-    if (!r.read_pod(wait)) return false;
-    uint64_t value{};
-    if (!r.read_pod(value)) return false;
-    uint64_t completed{};
-    if (r.remaining() != 0u) return false;
-    if (!s.on_FenceValue12(fence, wait, value, completed)) return false;
-    reply.write_pod(completed);
-    return true;
-}
-
-static bool decode_PublishFence12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
-    AV_SCOPE("server:d3d12:PublishFence12");
-    (void)s;
-    (void)reply;
-    (void)arena;
-    uint32_t fence{};
-    if (!r.read_pod(fence)) return false;
-    uint64_t offset{};
-    if (!r.read_pod(offset)) return false;
-    if (r.remaining() != 0u) return false;
-    if (!s.on_PublishFence12(fence, offset)) return false;
     return true;
 }
 
@@ -1474,13 +1394,8 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_CreateCommandList12:
         case kCmd_ResetCommandList12:
         case kCmd_CloseCommandList12:
-        case kCmd_CreateFence12:
         case kCmd_ExecuteCommandLists12:
         case kCmd_PresentResource12:
-        case kCmd_SignalFence12:
-        case kCmd_WaitFence12:
-        case kCmd_FenceValue12:
-        case kCmd_PublishFence12:
         case kCmd_UpdateTileMappings12:
         case kCmd_CopyTileMappings12:
         case kCmd_CreateQueryHeap12:
@@ -1553,13 +1468,8 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_CreateCommandList12: return decode_CreateCommandList12(s, r, reply, arena);
         case kCmd_ResetCommandList12: return decode_ResetCommandList12(s, r, reply, arena);
         case kCmd_CloseCommandList12: return decode_CloseCommandList12(s, r, reply, arena);
-        case kCmd_CreateFence12: return decode_CreateFence12(s, r, reply, arena);
         case kCmd_ExecuteCommandLists12: return decode_ExecuteCommandLists12(s, r, reply, arena);
         case kCmd_PresentResource12: return decode_PresentResource12(s, r, reply, arena);
-        case kCmd_SignalFence12: return decode_SignalFence12(s, r, reply, arena);
-        case kCmd_WaitFence12: return decode_WaitFence12(s, r, reply, arena);
-        case kCmd_FenceValue12: return decode_FenceValue12(s, r, reply, arena);
-        case kCmd_PublishFence12: return decode_PublishFence12(s, r, reply, arena);
         case kCmd_UpdateTileMappings12: return decode_UpdateTileMappings12(s, r, reply, arena);
         case kCmd_CopyTileMappings12: return decode_CopyTileMappings12(s, r, reply, arena);
         case kCmd_CreateQueryHeap12: return decode_CreateQueryHeap12(s, r, reply, arena);

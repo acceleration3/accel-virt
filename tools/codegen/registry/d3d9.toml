@@ -62,11 +62,10 @@ reply = ["u32 hresult"]
 name = "QueryCaps9"
 id = 0x2004
 doc = """What the GPU's Direct3D 9 can do, as IDirect3D9 answers for its adapter: the D3DCAPS9 structure as its
-bytes, and the adapter's identity. hresult is not S_OK for a GPU with no Direct3D 9, and then nothing else is
-answered."""
+bytes. hresult is not S_OK for a GPU with no Direct3D 9, and then nothing else is answered. The adapter's
+identity is the capset's (GpuIdentity), not asked here."""
 params = []
-reply = ["u32 hresult", "u32 vendor_id", "u32 device_id", "u32 subsystem_id", "u32 revision",
-         "u32 video_memory_mb", "out_bytes caps"]
+reply = ["u32 hresult", "out_bytes caps"]
 
 [[command]]
 name = "QueryFormats9"

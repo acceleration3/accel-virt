@@ -205,15 +205,15 @@ void D3dBackend::end_batch()
 bool D3dBackend::poll()
 {
     AV_SCOPE("D3dBackend::poll");
-    const bool fences_pending = d3d12_.poll() || progress11_.polled();
-    if (device11_ == nullptr || held_ || !published_.pending()) return fences_pending;
+    const bool unwatched = progress11_.polled();
+    if (device11_ == nullptr || held_ || !published_.pending()) return unwatched;
     /* GetData reads no pipeline state, so no device's state is selected. */
     device11_->lock(nullptr);
     const bool pending = published_.publish(device11_->context());
     device11_->unlock();
     /* Either still waiting keeps the worker polling: queries all published
-     * say nothing of Direct3D 12's fences. */
-    return pending || fences_pending;
+     * say nothing of a batch no wake watches. */
+    return pending || unwatched;
 }
 
 void D3dBackend::bind_signal(void (*signal)(void *context), void *context)

@@ -61,7 +61,6 @@ enum class D3dObjectKind : uint8_t {
     queue12,
     allocator12,
     list12,
-    fence12,
     query_heap12,
     command_signature12,
     /* Direct3D 9's, last: the session's table is shared, and a Direct3D 9

@@ -97,7 +97,7 @@ public:
     StagedFrame               *stage_frame(ID3D12CommandQueue *queue, ID3D12Resource *source);
 
 private:
-    void measure(uint32_t vendor_id, uint32_t device_id, uint64_t video_memory);
+    void measure();
     /* vkd3d-proton's device made on the GPU open found. */
     [[nodiscard]] bool make();
     void               declare(const char *why);

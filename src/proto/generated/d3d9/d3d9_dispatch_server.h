@@ -30,7 +30,7 @@ public:
     virtual uint8_t* guest_bytes_out(uint64_t offset, uint64_t size) = 0;
 
     virtual bool on_CreateDevice9(uint32_t device, uint32_t flags, uint32_t& hresult) = 0;
-    virtual bool on_QueryCaps9(uint32_t& hresult, uint32_t& vendor_id, uint32_t& device_id, uint32_t& subsystem_id, uint32_t& revision, uint32_t& video_memory_mb, uint8_t* caps, uint64_t caps_capacity, uint64_t& caps_size) = 0;
+    virtual bool on_QueryCaps9(uint32_t& hresult, uint8_t* caps, uint64_t caps_capacity, uint64_t& caps_size) = 0;
     virtual bool on_QueryFormats9(uint32_t count, const uint32_t* formats, uint8_t* support, uint64_t support_capacity, uint64_t& support_size) = 0;
     virtual bool on_QueryMultisample9(uint32_t format, uint32_t multisample, uint32_t& hresult, uint32_t& quality_levels) = 0;
     virtual bool on_Flush9() = 0;

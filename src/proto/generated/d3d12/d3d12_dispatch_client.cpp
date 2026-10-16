@@ -402,15 +402,6 @@ bool av_d3d12_CloseCommandList12(::av::ClientTransport& t, uint32_t list) {
     return t.send_async(kCmd_CloseCommandList12, b) == ::av::TransportResult::ok;
 }
 
-bool av_d3d12_CreateFence12(::av::ClientTransport& t, uint32_t fence, uint64_t initial, uint32_t flags) {
-    AV_SCOPE("av_d3d12_CreateFence12");
-    ::av::WireWriter b = t.request_writer();
-    b.write_pod<uint32_t>(fence);
-    b.write_pod<uint64_t>(initial);
-    b.write_pod<uint32_t>(flags);
-    return t.send_async(kCmd_CreateFence12, b) == ::av::TransportResult::ok;
-}
-
 bool av_d3d12_ExecuteCommandLists12(::av::ClientTransport& t, uint32_t queue, uint32_t count, const uint32_t* lists) {
     AV_SCOPE("av_d3d12_ExecuteCommandLists12");
     ::av::WireWriter b = t.request_writer();
@@ -428,47 +419,6 @@ bool av_d3d12_PresentResource12(::av::ClientTransport& t, uint32_t queue, uint32
     b.write_pod<uint32_t>(resource);
     b.write_pod<uint32_t>(point);
     return t.send_async(kCmd_PresentResource12, b) == ::av::TransportResult::ok;
-}
-
-bool av_d3d12_SignalFence12(::av::ClientTransport& t, uint32_t queue, uint32_t fence, uint64_t value) {
-    AV_SCOPE("av_d3d12_SignalFence12");
-    ::av::WireWriter b = t.request_writer();
-    b.write_pod<uint32_t>(queue);
-    b.write_pod<uint32_t>(fence);
-    b.write_pod<uint64_t>(value);
-    return t.send_async(kCmd_SignalFence12, b) == ::av::TransportResult::ok;
-}
-
-bool av_d3d12_WaitFence12(::av::ClientTransport& t, uint32_t queue, uint32_t fence, uint64_t value) {
-    AV_SCOPE("av_d3d12_WaitFence12");
-    ::av::WireWriter b = t.request_writer();
-    b.write_pod<uint32_t>(queue);
-    b.write_pod<uint32_t>(fence);
-    b.write_pod<uint64_t>(value);
-    return t.send_async(kCmd_WaitFence12, b) == ::av::TransportResult::ok;
-}
-
-bool av_d3d12_FenceValue12(::av::ClientTransport& t, uint32_t fence, uint32_t wait, uint64_t value, uint64_t* completed) {
-    AV_SCOPE("av_d3d12_FenceValue12");
-    ::av::WireWriter b = t.request_writer();
-    b.write_pod<uint32_t>(fence);
-    b.write_pod<uint32_t>(wait);
-    b.write_pod<uint64_t>(value);
-    const ::av::SyncCallScope call{t};
-    ::av::WireReader r{nullptr, 0u};
-    if (t.send_sync(kCmd_FenceValue12, b, r) != ::av::TransportResult::ok) return false;
-    { uint64_t answer{};
-      if (!r.read_pod(answer)) return false;
-      if (completed != nullptr) *completed = answer; }
-    return r.remaining() == 0u;
-}
-
-bool av_d3d12_PublishFence12(::av::ClientTransport& t, uint32_t fence, uint64_t offset) {
-    AV_SCOPE("av_d3d12_PublishFence12");
-    ::av::WireWriter b = t.request_writer();
-    b.write_pod<uint32_t>(fence);
-    b.write_pod<uint64_t>(offset);
-    return t.send_async(kCmd_PublishFence12, b) == ::av::TransportResult::ok;
 }
 
 bool av_d3d12_UpdateTileMappings12(::av::ClientTransport& t, uint32_t queue, uint32_t resource, uint32_t region_count, const TileRegion* regions, uint32_t heap, uint32_t range_count, const TileRange* ranges, uint32_t flags) {
