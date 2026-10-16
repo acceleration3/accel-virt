@@ -16,7 +16,7 @@ constexpr uint32_t polls_per_ms = 10u;
 
 }  // namespace
 
-SharedSurfaces::SharedSurfaces() : mutex_(), surfaces_{}, slots_{}, clock_(0u)
+SharedSurfaces::SharedSurfaces(BlockSource &blocks) : mutex_(), surfaces_(blocks, Pool::paged), slots_{}, clock_(0u)
 {
     AV_SCOPE("SharedSurfaces::SharedSurfaces");
     pthread_mutex_init(&mutex_, nullptr);
@@ -35,11 +35,12 @@ bool SharedSurfaces::presented(const SurfacePoint &frame, Staging staging)
     AV_SCOPE("SharedSurfaces::presented");
     if (!frame.names()) return false;
     lock();
-    Surface &presenting = row(frame.surface());
-    presenting.point_ = frame.point();
-    presenting.presented_ = ++clock_;
-    const bool stage = staging == Staging::every_present || presenting.blt_read_;
-    presenting.pending_ = stage ? frame.point() : 0u;
+    Surface *const presenting = row(frame.surface());
+    const bool     stage = staging == Staging::every_present || presenting == nullptr || presenting->blt_read_;
+    if (presenting != nullptr) {
+        presenting->point_ = frame.point();
+        presenting->pending_ = stage ? frame.point() : 0u;
+    }
     unlock();
     return stage;
 }
@@ -170,8 +171,8 @@ void SharedSurfaces::release(uint64_t surface)
         going[count++] = kept.staged_;
         kept = Slot{};
     }
-    for (Surface &row : surfaces_)
-        if (row.id_ != 0u && (surface == 0u || row.id_ == surface)) row = Surface{};
+    if (surface == 0u) surfaces_.clear();
+    else static_cast<void>(surfaces_.erase(surface));
     unlock();
     for (uint32_t index = 0u; index < count; index++) going[index]->release();
 }
@@ -179,26 +180,17 @@ void SharedSurfaces::release(uint64_t surface)
 SharedSurfaces::Surface *SharedSurfaces::known(uint64_t surface)
 {
     AV_SCOPE("SharedSurfaces::known");
-    for (Surface &candidate : surfaces_)
-        if (candidate.id_ == surface) return &candidate;
-    return nullptr;
+    return surfaces_.find(surface);
 }
 
-SharedSurfaces::Surface &SharedSurfaces::row(uint64_t surface)
+SharedSurfaces::Surface *SharedSurfaces::row(uint64_t surface)
 {
     AV_SCOPE("SharedSurfaces::row");
     Surface *const found = known(surface);
-    if (found != nullptr) return *found;
-    Surface *chosen = &surfaces_[0];
-    for (Surface &candidate : surfaces_) {
-        if (candidate.id_ == 0u) {
-            chosen = &candidate;
-            break;
-        }
-        if (candidate.presented_ < chosen->presented_) chosen = &candidate;
-    }
-    *chosen = Surface{surface, 0u, 0u, false, 0u};
-    return *chosen;
+    if (found != nullptr) return found;
+    uint32_t slot = 0u;
+    if (surfaces_.insert(surface, Surface{0u, 0u, false}, slot) != Status::ok) return nullptr;
+    return surfaces_.at(slot);
 }
 
 SharedSurfaces::Slot *SharedSurfaces::slot(const SurfacePoint &frame)
@@ -255,9 +247,7 @@ bool SharedSurfaces::invariants_hold() const
         for (uint32_t other = one + 1u; other < max_frames; other++)
             holds = holds && !(slots_[other].staged_ != nullptr && slots_[other].frame_ == kept.frame_);
     }
-    for (uint32_t one = 0u; one < max_surfaces; one++)
-        for (uint32_t other = one + 1u; other < max_surfaces && surfaces_[one].id_ != 0u; other++)
-            holds = holds && surfaces_[other].id_ != surfaces_[one].id_;
+    holds = holds && surfaces_.invariants_hold();
     unlock();
     return holds;
 }

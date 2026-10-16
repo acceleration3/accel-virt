@@ -18,10 +18,16 @@
  * Elsewhere each flip is read back on the Direct3D 9 device and written into
  * the texture on the Direct3D 11 one. That copy is never waited for where it
  * is made: a flip queues its frame's copy and writes the texture from an
- * earlier copy the GPU has finished, so what DWM sees is a frame behind. */
+ * earlier copy the GPU has finished, so what DWM sees is a frame behind.
+ *
+ * Each device that flips has a lane of its own for as long as it lives, any
+ * number of them; a lane that cannot be made for want of memory leaves its
+ * device flipping on the CPU. */
 #ifndef AV_EXECUTOR_D3D9_FLIP_SHARES_HPP
 #define AV_EXECUTOR_D3D9_FLIP_SHARES_HPP
 
+#include "core/support/keyed_slots.hpp"
+#include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "executor/shim/d3d9_vulkan_lane.hpp"
 #include "executor/shim/vulkan_image.hpp"
@@ -36,6 +42,8 @@ struct ID3D11Texture2D;
 
 namespace av {
 
+class BlockSource;
+class CompositorDevice;
 class D3d11HostDevice;
 class SessionShares;
 
@@ -46,10 +54,8 @@ public:
     static constexpr uint32_t most_primaries = 8u;
     /* Copies a primary read back on the CPU has in flight at once. */
     static constexpr uint32_t copy_slots = 2u;
-    /* Direct3D 9 devices of a session that flip through the compositor. */
-    static constexpr uint32_t most_lanes = 4u;
 
-    D3d9FlipShares();
+    explicit D3d9FlipShares(BlockSource &blocks);
     ~D3d9FlipShares();
     D3d9FlipShares(const D3d9FlipShares &) = delete;
     D3d9FlipShares &operator=(const D3d9FlipShares &) = delete;
@@ -62,6 +68,8 @@ public:
      * other than X8R8G8B8 and A8R8G8B8, or with nothing bound; failed where
      * either device refused. */
     [[nodiscard]] Status flip(IDirect3DDevice9 *device, IDirect3DSurface9 *source, uint64_t key);
+    /* `device` is going: its lane closed and its primaries let go. */
+    void forget_device(IDirect3DDevice9 *device);
     /* Every texture, image and staging surface let go; the registry keeps
      * what it published until the guest releases the key. */
     void release();
@@ -104,8 +112,11 @@ private:
     };
 
     /* `device`'s lane, connected the first time it is asked for; null where
-     * the GPU has no compositor or DXVK's Direct3D 9 no interop. */
+     * the GPU has no compositor, DXVK's Direct3D 9 no interop, or the host no
+     * memory for one. */
     Lane    *lane_for(IDirect3DDevice9 *device);
+    /* The lane connected for `device`, or refused. */
+    Lane    *connect(IDirect3DDevice9 *device, Lane &lane, CompositorDevice &compositor);
     void     close_lane(Lane &lane);
     /* The primary for `key` at that size and format, made and published if
      * new - in the least recently flipped slot when every slot is taken. */
@@ -123,7 +134,9 @@ private:
 
     D3d11HostDevice *device11_;
     SessionShares   *shares_;
-    Lane             lanes_[most_lanes];
+    /* Each device's lane, by the device, which it is made for once. */
+    ObjectPool<Lane>            lanes_;
+    KeyedSlots<uint64_t, Lane *> lane_of_;
     Primary          primaries_[most_primaries];
     uint64_t         flips_;
 };

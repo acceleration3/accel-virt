@@ -6,7 +6,9 @@
 #include "executor/d3d/query_result_publisher.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/d3d_runtime.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -17,7 +19,9 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+using av::MockPlatform;
 using av::QueryResultPublisher;
+using av::Status;
 
 namespace {
 
@@ -45,12 +49,13 @@ alignas(8) std::uint8_t results[4u * QueryResultPublisher::slot_bytes];
 }  // namespace
 
 TEST(query_result_publisher_ended, holds_a_reference_to_each_pending_query_and_asks_for_a_flush)
-{ QueryResultPublisher publisher;
+{ MockPlatform         platform;
+  QueryResultPublisher publisher(platform);
   publisher.bind(results, 4u);
   CountedQuery query;
   CHECK(!publisher.needs_flush());
   CHECK(!publisher.pending());
-  publisher.ended(1u, &query);
+  CHECK_STATUS(publisher.ended(1u, &query), Status::ok);
   CHECK_EQ(query.references, 2u);
   CHECK(publisher.pending());
   CHECK(publisher.needs_flush());
@@ -64,11 +69,12 @@ TEST(query_result_publisher_ended, holds_a_reference_to_each_pending_query_and_a
 /* D3D11 reads only a query's latest end: a second end replaces the first and
  * gives its reference back. */
 TEST(query_result_publisher_ended, a_query_ended_again_supersedes_its_last_end)
-{ QueryResultPublisher publisher;
+{ MockPlatform         platform;
+  QueryResultPublisher publisher(platform);
   publisher.bind(results, 4u);
   CountedQuery first, second;
-  publisher.ended(1u, &first);
-  publisher.ended(1u, &second);
+  CHECK_STATUS(publisher.ended(1u, &first), Status::ok);
+  CHECK_STATUS(publisher.ended(1u, &second), Status::ok);
   CHECK_EQ(first.references, 1u);
   CHECK_EQ(second.references, 2u);
   publisher.forget(1u);
@@ -80,47 +86,71 @@ TEST(query_result_publisher_ended, a_query_ended_again_supersedes_its_last_end)
 /* Unbound, or with no query behind the end, nothing is held and nothing asks
  * for a flush; the end is still counted. */
 TEST(query_result_publisher_ended, an_unbound_publisher_or_a_missing_query_holds_nothing)
-{ QueryResultPublisher publisher;
+{ MockPlatform         platform;
+  QueryResultPublisher publisher(platform);
   CountedQuery query;
-  publisher.ended(1u, &query);
+  CHECK_STATUS(publisher.ended(1u, &query), Status::ok);
   CHECK_EQ(query.references, 1u);
   CHECK(!publisher.needs_flush());
   publisher.bind(results, 0u);   /* no slots is no binding */
-  publisher.ended(1u, &query);
+  CHECK_STATUS(publisher.ended(1u, &query), Status::ok);
   CHECK_EQ(query.references, 1u);
   publisher.bind(results, 4u);
-  publisher.ended(2u, nullptr);
+  CHECK_STATUS(publisher.ended(2u, nullptr), Status::ok);
   CHECK(!publisher.needs_flush());
   CHECK(!publisher.pending()); }
 
 TEST(query_result_publisher_bind, a_new_binding_or_an_unbind_drops_every_pending_query)
-{ QueryResultPublisher publisher;
+{ MockPlatform         platform;
+  QueryResultPublisher publisher(platform);
   publisher.bind(results, 4u);
   CountedQuery one, two;
-  publisher.ended(1u, &one);
-  publisher.ended(2u, &two);
+  CHECK_STATUS(publisher.ended(1u, &one), Status::ok);
+  CHECK_STATUS(publisher.ended(2u, &two), Status::ok);
   publisher.bind(results, 2u);
   CHECK_EQ(one.references, 1u);
   CHECK_EQ(two.references, 1u);
   CHECK(!publisher.pending());
-  publisher.ended(1u, &one);
+  CHECK_STATUS(publisher.ended(1u, &one), Status::ok);
   publisher.unbind();
   CHECK_EQ(one.references, 1u);
-  publisher.ended(1u, &one);
+  CHECK_STATUS(publisher.ended(1u, &one), Status::ok);
   CHECK_EQ(one.references, 1u); }
 
-TEST(query_result_publisher_ended, a_full_list_leaves_the_next_query_unpublished_and_unreferenced)
-{ QueryResultPublisher publisher;
+/* The old list held 256: a frame of occlusion queries well past it keeps
+ * every one pending, each with its reference, and each given back once. */
+TEST(query_result_publisher_ended, keeps_every_query_pending_well_past_the_old_list)
+{ MockPlatform         platform;
+  QueryResultPublisher publisher(platform);
   publisher.bind(results, 4u);
-  static CountedQuery queries[QueryResultPublisher::pending_capacity + 1u];
-  for (std::uint32_t id = 0u; id <= QueryResultPublisher::pending_capacity; id++) {
+  constexpr std::uint32_t many = 5000u;
+  static CountedQuery queries[many];
+  for (std::uint32_t id = 0u; id < many; id++) {
       queries[id].references = 1u;
-      publisher.ended(id + 1u, &queries[id]);
+      CHECK_STATUS(publisher.ended(id + 1u, &queries[id]), Status::ok);
   }
-  CHECK_EQ(queries[0].references, 2u);
-  CHECK_EQ(queries[QueryResultPublisher::pending_capacity].references, 1u);
+  std::uint32_t held = 0u;
+  for (const CountedQuery &query : queries) held += query.references == 2u;
+  CHECK_EQ(held, many);
+  publisher.forget(1234u);
+  CHECK_EQ(queries[1233].references, 1u);
   publisher.release_all();
   for (const CountedQuery &query : queries) CHECK_EQ(query.references, 1u); }
+
+/* A query that cannot be kept pending is answered with no_memory and holds
+ * nothing; the end is still counted, and the next one is kept. */
+TEST(query_result_publisher_ended, a_query_that_cannot_be_kept_holds_nothing)
+{ MockPlatform         platform;
+  QueryResultPublisher publisher(platform);
+  publisher.bind(results, 4u);
+  CountedQuery query;
+  platform.fail_allocation_at(1u);
+  CHECK_STATUS(publisher.ended(1u, &query), Status::no_memory);
+  CHECK_EQ(query.references, 1u);
+  CHECK(!publisher.pending());
+  CHECK_STATUS(publisher.ended(1u, &query), Status::ok);
+  CHECK_EQ(query.references, 2u);
+  publisher.release_all(); }
 
 /* ---- on the host GPU ------------------------------------------------------ */
 
@@ -189,11 +219,13 @@ Published publish_an_event_query()
         FAILED(device->CreateQuery(&desc, &query)))
         return seen;
     std::memset(results, 0, sizeof results);
-    QueryResultPublisher publisher;
+    av::HostHeap         heap;
+    QueryResultPublisher publisher(heap);
     publisher.bind(results, 4u);
-    publisher.ended(9u, nullptr);   /* an end the guest counted that never ran */
+    /* An end the guest counted that never ran. */
+    if (publisher.ended(9u, nullptr) != Status::ok) return seen;
     context->End(query);
-    publisher.ended(6u, query);
+    if (publisher.ended(6u, query) != Status::ok) return seen;
     context->Flush();
     publisher.flushed();
     bool pending = true;

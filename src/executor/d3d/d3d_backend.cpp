@@ -79,7 +79,12 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), surfaces_(nullptr), shares_(nullptr), wake_(), admitted_(false), held_(false), remade_old_{}, remade_new_{}, remade_(0u), states_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(), region_(), imported_(), d3d12_(region_, imported_, objects_, wake_), d3d9_(region_, objects_), published_(), progress11_(), slice_storage_(), slice_memory_(nullptr), slice_storage_refused_(false),
+    : device11_(nullptr), surfaces_(nullptr), shares_(nullptr), wake_(), admitted_(false), held_(false), heap_(),
+      blocks_(heap_), remade_(blocks_, Pool::paged), states_(blocks_), sink_(stderr),
+      lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(blocks_), region_(),
+      imported_(), d3d12_(region_, imported_, objects_, wake_, blocks_), d3d9_(region_, objects_, blocks_),
+      published_(blocks_), progress11_(), constants_(blocks_), slice_storage_(), slice_memory_(nullptr),
+      slice_storage_refused_(false),
       missed_key_(0u), mark_refused_(false), show_refused_(false), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
@@ -143,6 +148,7 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
 {
     AV_SCOPE("D3dBackend::run");
     if (device11_ == nullptr) return false;
+    blocks_.forget();
     /* Direct3D 12 has no immediate context to share: its commands take no
      * Direct3D 11 lock, and a batch mixing both holds it only across the 11
      * ones - a 12 command can take it itself (sharing a surface does), and
@@ -164,7 +170,7 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
     arena_ = nullptr;
     if (ran) return true;
     return states_.refuse(refusal_, d3dproto::command_name(command_id),
-                          static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR));
+                          blocks_.refusal(static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR)));
 }
 
 /* A batch that ended queries is flushed, so DXVK starts the work their
@@ -455,11 +461,12 @@ bool D3dBackend::on_CreateDevice11(uint32_t device, uint32_t feature_level, uint
     device11_->unlock();
     uint32_t made = 0u;
     ID3DDeviceContextState *const state = device11_->make_state(made);
-    const bool kept = state != nullptr && states_.add(device, state);
-    if (kept) static_cast<void>(states_.select(device));
-    if (!kept && state != nullptr) state->Release();
+    const Status kept = state == nullptr ? Status::invalid_state : states_.add(device, state);
+    if (kept == Status::ok) static_cast<void>(states_.select(device));
+    if (kept != Status::ok && state != nullptr) state->Release();
     device11_->lock(states_.selected());
-    if (!kept) return true;
+    if (kept == Status::no_memory) hresult = static_cast<uint32_t>(E_OUTOFMEMORY);
+    if (kept != Status::ok) return true;
     hresult = static_cast<uint32_t>(S_OK);
     level = feature_level != 0u && feature_level < made ? feature_level : made;
     return true;
@@ -508,16 +515,18 @@ bool D3dBackend::on_RotateResources11(uint32_t count, const uint32_t *resources)
     }
     for (uint32_t index = 0u; index < count; index++)
         static_cast<void>(objects_.exchange(resources[index], D3dObjectKind::resource, textures[(index + 1u) % count]));
-    remake_views(textures, count);
-    return true;
+    return remake_views(textures, count) == Status::ok;
 }
 
 /* Every view of a rotated texture is made again, with its own description, on
- * the texture its resource's id now names: the next one in the rotation. */
-void D3dBackend::remake_views(IUnknown *const *textures, uint32_t count)
+ * the texture its resource's id now names: the next one in the rotation. A
+ * remade view's place in remade_ is had before it replaces the old one, so
+ * a view either is remade and rebound or stays as it was. */
+Status D3dBackend::remake_views(IUnknown *const *textures, uint32_t count)
 {
     AV_SCOPE("D3dBackend::remake_views");
-    for (uint32_t view = 0u; view < objects_.views(); view++) {
+    Status remade = Status::ok;
+    for (uint32_t view = 0u; view < objects_.views() && remade == Status::ok; view++) {
         const uint32_t slot = objects_.view_slot(view);
         uint32_t      id = 0u;
         D3dObjectKind kind = D3dObjectKind::none;
@@ -537,16 +546,16 @@ void D3dBackend::remake_views(IUnknown *const *textures, uint32_t count)
         if (found == count) continue;
         IUnknown *const made = remake_view(kind, object, static_cast<ID3D11Resource *>(textures[(found + 1u) % count]));
         if (made == nullptr) continue;
-        IUnknown *const old = objects_.exchange(id, kind, made);
-        if (old == nullptr) continue;
-        if (remade_ < max_remade) {
-            remade_old_[remade_] = old;
-            remade_new_[remade_++] = made;
-        } else {
-            old->Release();
+        remade = remade_.reserve(remade_.size() + 1u);
+        if (remade != Status::ok) {
+            made->Release();
+            continue;
         }
+        IUnknown *const old = objects_.exchange(id, kind, made);
+        static_cast<void>(remade_.append(Remade{old, made}));
     }
     rebind_remade();
+    return remade;
 }
 
 /* What was bound of a remade view is bound as its replacement, here on the
@@ -584,8 +593,8 @@ void D3dBackend::rebind_remade()
     if (targets || depth) context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, rtvs, dsv);
     release_all(reinterpret_cast<IUnknown **>(rtvs), D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT);
     release_all(reinterpret_cast<IUnknown **>(&dsv), 1u);
-    for (uint32_t index = 0u; index < remade_; index++) remade_old_[index]->Release();
-    remade_ = 0u;
+    for (const Remade &one : remade_) one.old_->Release();
+    remade_.truncate(0u);
 }
 
 /* Each bound remade view in `bound` becomes its replacement, the reference
@@ -596,10 +605,10 @@ bool D3dBackend::swap_remade(IUnknown **bound, uint32_t count) const
     bool swapped = false;
     for (uint32_t slot = 0u; slot < count; slot++) {
         if (bound[slot] == nullptr) continue;
-        for (uint32_t index = 0u; index < remade_; index++) {
-            if (bound[slot] != remade_old_[index]) continue;
+        for (const Remade &one : remade_) {
+            if (bound[slot] != one.old_) continue;
             bound[slot]->Release();
-            bound[slot] = remade_new_[index];
+            bound[slot] = one.made_;
             bound[slot]->AddRef();
             swapped = true;
             break;
@@ -769,7 +778,7 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
      * next Finish, as a real driver's out-of-memory would be; the id then names
      * nothing and every command naming it is refused. */
     if (FAILED(result) || made == nullptr) return true;
-    if (!objects_.keep(id, D3dObjectKind::resource, made)) return false;
+    if (objects_.keep(id, D3dObjectKind::resource, made) != Status::ok) return false;
     /* The surface a present of it publishes on (SharedSurfaces). */
     ID3D11DeviceChild *child = nullptr;
     if (shared_key != 0u &&
@@ -857,7 +866,7 @@ bool D3dBackend::on_OpenResource(uint32_t id, uint64_t shared_key, uint32_t &fou
         desc.misc_flags = buffer.MiscFlags;
         desc.structure_stride = buffer.StructureByteStride;
     }
-    if (!objects_.keep(id, D3dObjectKind::resource, resource)) return false;
+    if (objects_.keep(id, D3dObjectKind::resource, resource) != Status::ok) return false;
     found = 1u;
     return true;
 }
@@ -878,7 +887,7 @@ bool D3dBackend::on_CreateShaderResourceView(uint32_t id, const d3dproto::ViewDe
     if (desc.dimension > D3D11_SRV_DIMENSION_BUFFEREX) return false;
     ID3D11ShaderResourceView *made = nullptr;
     if (FAILED(device11_->device()->CreateShaderResourceView(resource, &view, &made))) return true;
-    return objects_.keep(id, D3dObjectKind::shader_resource_view, made);
+    return objects_.keep(id, D3dObjectKind::shader_resource_view, made) == Status::ok;
 }
 
 bool D3dBackend::on_CreateRenderTargetView(uint32_t id, const d3dproto::ViewDesc &desc)
@@ -893,7 +902,7 @@ bool D3dBackend::on_CreateRenderTargetView(uint32_t id, const d3dproto::ViewDesc
     __builtin_memcpy(&view.Buffer, desc.args, sizeof(uint32_t) * 3u);
     ID3D11RenderTargetView *made = nullptr;
     if (FAILED(device11_->device()->CreateRenderTargetView(resource, &view, &made))) return true;
-    return objects_.keep(id, D3dObjectKind::render_target_view, made);
+    return objects_.keep(id, D3dObjectKind::render_target_view, made) == Status::ok;
 }
 
 bool D3dBackend::on_CreateDepthStencilView(uint32_t id, const d3dproto::ViewDesc &desc)
@@ -909,7 +918,7 @@ bool D3dBackend::on_CreateDepthStencilView(uint32_t id, const d3dproto::ViewDesc
     __builtin_memcpy(&view.Texture1D, desc.args, sizeof(uint32_t) * 3u);
     ID3D11DepthStencilView *made = nullptr;
     if (FAILED(device11_->device()->CreateDepthStencilView(resource, &view, &made))) return true;
-    return objects_.keep(id, D3dObjectKind::depth_stencil_view, made);
+    return objects_.keep(id, D3dObjectKind::depth_stencil_view, made) == Status::ok;
 }
 
 bool D3dBackend::on_CreateUnorderedAccessView(uint32_t id, const d3dproto::ViewDesc &desc)
@@ -925,7 +934,7 @@ bool D3dBackend::on_CreateUnorderedAccessView(uint32_t id, const d3dproto::ViewD
     if (view.ViewDimension == D3D11_UAV_DIMENSION_BUFFER) view.Buffer.Flags = desc.flags;
     ID3D11UnorderedAccessView *made = nullptr;
     if (FAILED(device11_->device()->CreateUnorderedAccessView(resource, &view, &made))) return true;
-    return objects_.keep(id, D3dObjectKind::unordered_access_view, made);
+    return objects_.keep(id, D3dObjectKind::unordered_access_view, made) == Status::ok;
 }
 
 bool D3dBackend::on_CreateShader(uint32_t id, uint32_t stage, uint32_t input_count,
@@ -1020,7 +1029,7 @@ bool D3dBackend::on_CreateShader(uint32_t id, uint32_t stage, uint32_t input_cou
     }
     }
     if (FAILED(result) || made == nullptr) return true;
-    return objects_.keep(id, kind, made);
+    return objects_.keep(id, kind, made) == Status::ok;
 }
 
 bool D3dBackend::on_CreateInputLayout(uint32_t id, uint32_t element_count, const d3dproto::InputElement *elements)
@@ -1052,7 +1061,7 @@ bool D3dBackend::on_CreateInputLayout(uint32_t id, uint32_t element_count, const
     if (size == 0u) return false;
     ID3D11InputLayout *made = nullptr;
     if (FAILED(device11_->device()->CreateInputLayout(descs, element_count, storage, size, &made))) return true;
-    return objects_.keep(id, D3dObjectKind::input_layout, made);
+    return objects_.keep(id, D3dObjectKind::input_layout, made) == Status::ok;
 }
 
 bool D3dBackend::on_CreateBlendState(uint32_t id, const d3dproto::BlendDesc &desc)
@@ -1078,7 +1087,7 @@ bool D3dBackend::on_CreateBlendState(uint32_t id, const d3dproto::BlendDesc &des
     }
     ID3D11BlendState1 *made = nullptr;
     if (FAILED(device11_->device()->CreateBlendState1(&blend, &made))) return true;
-    return objects_.keep(id, D3dObjectKind::blend_state, made);
+    return objects_.keep(id, D3dObjectKind::blend_state, made) == Status::ok;
 }
 
 bool D3dBackend::on_CreateDepthStencilState(uint32_t id, const d3dproto::DepthStencilDesc &desc)
@@ -1102,7 +1111,7 @@ bool D3dBackend::on_CreateDepthStencilState(uint32_t id, const d3dproto::DepthSt
     }
     ID3D11DepthStencilState *made = nullptr;
     if (FAILED(device11_->device()->CreateDepthStencilState(&state, &made))) return true;
-    return objects_.keep(id, D3dObjectKind::depth_stencil_state, made);
+    return objects_.keep(id, D3dObjectKind::depth_stencil_state, made) == Status::ok;
 }
 
 bool D3dBackend::on_CreateRasterizerState(uint32_t id, const d3dproto::RasterizerDesc &desc)
@@ -1124,7 +1133,7 @@ bool D3dBackend::on_CreateRasterizerState(uint32_t id, const d3dproto::Rasterize
     state.ConservativeRaster = static_cast<D3D11_CONSERVATIVE_RASTERIZATION_MODE>(desc.conservative);
     ID3D11RasterizerState2 *made = nullptr;
     if (FAILED(device11_->device()->CreateRasterizerState2(&state, &made))) return true;
-    return objects_.keep(id, D3dObjectKind::rasterizer_state, made);
+    return objects_.keep(id, D3dObjectKind::rasterizer_state, made) == Status::ok;
 }
 
 bool D3dBackend::on_CreateSampler(uint32_t id, const d3dproto::SamplerDesc &desc)
@@ -1144,7 +1153,7 @@ bool D3dBackend::on_CreateSampler(uint32_t id, const d3dproto::SamplerDesc &desc
     sampler.MaxLOD = desc.max_lod;
     ID3D11SamplerState *made = nullptr;
     if (FAILED(device11_->device()->CreateSamplerState(&sampler, &made))) return true;
-    return objects_.keep(id, D3dObjectKind::sampler, made);
+    return objects_.keep(id, D3dObjectKind::sampler, made) == Status::ok;
 }
 
 bool D3dBackend::on_CreateQuery(uint32_t id, uint32_t type, uint32_t misc_flags)
@@ -1154,7 +1163,7 @@ bool D3dBackend::on_CreateQuery(uint32_t id, uint32_t type, uint32_t misc_flags)
     const D3D11_QUERY_DESC query = {static_cast<D3D11_QUERY>(type), misc_flags & D3D11_QUERY_MISC_PREDICATEHINT};
     ID3D11Query *made = nullptr;
     if (FAILED(device11_->device()->CreateQuery(&query, &made))) return true;
-    return objects_.keep(id, D3dObjectKind::query, made);
+    return objects_.keep(id, D3dObjectKind::query, made) == Status::ok;
 }
 
 /* ---------------------------------------------------------------- binding */
@@ -1196,7 +1205,8 @@ bool D3dBackend::on_SetConstantBuffers(uint32_t stage, uint32_t start, uint32_t 
     }
     uint32_t ids[D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT] = {};
     for (uint32_t index = 0u; index < count; index++) ids[index] = buffers[index].buffer;
-    constants_.bind(states_.selected_id(), stage, start, count, ids, bound, first, counts);
+    if (constants_.bind(states_.selected_id(), stage, start, count, ids, bound, first, counts) != Status::ok)
+        return false;
     ID3D11DeviceContext4 *const context = device11_->context();
     switch (stage) {
     case stage_vertex: context->VSSetConstantBuffers1(start, count, bound, first, counts); break;
@@ -1780,7 +1790,7 @@ void D3dBackend::release_slice_storage()
 {
     AV_SCOPE("D3dBackend::release_slice_storage");
     if (!slice_storage_.made()) return;
-    for (uint32_t slot = objects_.next_used(0u); slot < D3dObjectTable::capacity; slot = objects_.next_used(slot + 1u)) {
+    for (uint32_t slot = objects_.next_used(0u); slot != D3dObjectTable::no_slot; slot = objects_.next_used(slot + 1u)) {
         uint32_t      id = 0u;
         D3dObjectKind kind = D3dObjectKind::none;
         static_cast<void>(objects_.at(slot, id, kind));
@@ -1924,7 +1934,7 @@ bool D3dBackend::on_EndQuery(uint32_t query)
     const bool         usable = ready() && found != nullptr;
     if (usable) device11_->context()->End(found);
     /* Counted whether or not it ran: the guest counted it when it sent it. */
-    published_.ended(query, usable ? found : nullptr);
+    if (published_.ended(query, usable ? found : nullptr) != Status::ok) return false;
     return usable;
 }
 

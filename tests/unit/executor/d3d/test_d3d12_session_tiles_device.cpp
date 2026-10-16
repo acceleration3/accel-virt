@@ -25,6 +25,8 @@
 #include "harness/executor/d3d_loopback.hpp"
 #include "harness/executor/local_import.hpp"
 #include "executor/wake_signal.hpp"
+#include "executor/d3d/watched_blocks.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "proto/resources/host_memory_request.hpp"
@@ -489,7 +491,9 @@ namespace {
 /* The session alone, its handlers called as the decoder would call them: in
  * static storage, as test_d3d12_session.cpp keeps it. */
 av::ObjectStorage<av::D3d12Session> session_storage;
-av::D3dObjectTable                  objects;
+av::HostHeap                        session_heap;
+av::WatchedBlocks                   session_blocks(session_heap);
+av::D3dObjectTable                  objects(session_blocks);
 av::WakeSignal tenant;
 alignas(64) std::uint8_t guest[4096];
 TileRegion one_tile_regions[av::D3d12TileUpdate::most + 1u];
@@ -511,7 +515,7 @@ TEST(d3d12_session_tiles_device, more_regions_than_one_command_carries_map_none)
     av::ImportedMemories imported;
     CHECK(region.adopt(import.blob()));
     objects.clear();
-    CHECK_STATUS(session_storage.construct(region, imported, objects, tenant), av::Status::ok);
+    CHECK_STATUS(session_storage.construct(region, imported, objects, tenant, session_blocks), av::Status::ok);
     av::D3d12Session &session = session_storage.object();
     session.initialize(device12);
     CHECK(session.on_CreateCommandQueue12(queue, 0u, 0u, 0u));

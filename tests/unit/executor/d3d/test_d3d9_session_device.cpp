@@ -15,7 +15,9 @@
 #include "executor/d3d/shared_surfaces.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "harness/executor/d3d_loopback.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 
 #include <cstdint>
@@ -23,6 +25,18 @@
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
+
+namespace av {
+
+struct D3dBackendProbe {
+    static WatchedBlocks &blocks(D3dBackend &backend) { return backend.blocks_; }
+};
+
+struct WatchedBlocksProbe {
+    static void draw_from(WatchedBlocks &blocks, BlockSource &source) { blocks.blocks_ = &source; }
+};
+
+}  // namespace av
 
 namespace {
 
@@ -428,7 +442,8 @@ TEST(d3d9_session_device, a_present_point_stages_the_frame_the_commands_before_i
     if (!host_devices(apis, device11, device9)) return;
     constexpr std::uint64_t key = 0x9150u;
     constexpr std::uint32_t format_r5g6b5 = 23u;
-    av::SharedSurfaces      surfaces;
+    av::HostHeap            surfaces_heap;
+    av::SharedSurfaces      surfaces(surfaces_heap);
     av::D3dBackend          backend;
     av::SessionShares unshared;
     CHECK(backend.initialize(unshared, device11, nullptr, &surfaces, device9));
@@ -491,7 +506,8 @@ TEST(d3d9_session_device, a_present_point_of_nothing_is_refused)
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d9HostDevice  *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
-    av::SharedSurfaces surfaces;
+    av::HostHeap       surfaces_heap;
+    av::SharedSurfaces surfaces(surfaces_heap);
     av::D3dBackend     backend;
     av::SessionShares unshared;
     CHECK(backend.initialize(unshared, device11, nullptr, &surfaces, device9));
@@ -519,7 +535,8 @@ TEST(d3d9_session_device, a_flipped_primary_is_shared_under_its_key_as_it_was_dr
     av::HostShares *const shares = apis.shares(0u);
     constexpr std::uint64_t key = 0x9160u, other_key = 0x9161u;
     constexpr std::uint32_t domain = 1u, format_r5g6b5 = 23u;
-    av::SharedSurfaces surfaces;
+    av::HostHeap       surfaces_heap;
+    av::SharedSurfaces surfaces(surfaces_heap);
     av::D3dBackend     backend;
     av::SessionShares  session;
     session.bind(*shares, domain, backend);
@@ -577,7 +594,8 @@ TEST(d3d9_session_device, a_flip_with_no_compositor_crosses_through_the_cpu)
     constexpr std::uint64_t key = 0x9170u;
     constexpr std::uint32_t domain = 1u;
     {
-        av::SharedSurfaces surfaces;
+        av::HostHeap       surfaces_heap;
+        av::SharedSurfaces surfaces(surfaces_heap);
         av::D3dBackend     backend;
         av::SessionShares  session;
         session.bind(*shares, domain, backend);
@@ -601,4 +619,65 @@ TEST(d3d9_session_device, a_flip_with_no_compositor_crosses_through_the_cpu)
     }
     shares->release(domain, 0u);
     device11->use_compositor(compositor);
+}
+
+/* Every device that flips has a lane to the compositor of its own, however
+ * many devices there are - the session once had four, and a device past them
+ * flipped on the CPU - and gives it back when it goes, so a device made
+ * later at the same address never finds a lane connected to the one before.
+ * A lane the host has no memory for, in the table or for the lane itself,
+ * leaves its device flipping on the CPU: the frame still arrives. */
+TEST(d3d9_session_device, each_flipping_device_has_a_lane_of_its_own_and_gives_it_back)
+{
+    av::LoaderHostApis   apis;
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d9HostDevice  *device9 = nullptr;
+    if (!host_devices(apis, device11, device9)) return;
+    av::HostShares *const shares = apis.shares(0u);
+    constexpr std::uint32_t domain = 1u, devices = 8u;
+    av::MockPlatform platform;
+    {
+        av::HostHeap       surfaces_heap;
+        av::SharedSurfaces surfaces(surfaces_heap);
+        av::D3dBackend     backend;
+        av::WatchedBlocksProbe::draw_from(av::D3dBackendProbe::blocks(backend), platform);
+        av::SessionShares session;
+        session.bind(*shares, domain, backend);
+        CHECK(backend.initialize(session, device11, nullptr, &surfaces, device9));
+        av::D3dLoopback wire(backend);
+        std::uint32_t   hresult = 1u;
+        std::uint32_t   shown[size * size] = {};
+        const auto      shows = [&](std::uint32_t made, std::uint32_t drawn, std::uint64_t key, bool starved) {
+            CHECK(av_d3d9_CreateDevice9(wire, made, 0u, &hresult));
+            CHECK_EQ(hresult, 0u);
+            CHECK(av_d3d9_CreateSurface9(wire, drawn, kind_render_target, size, size, format_a8r8g8b8, 0u, 0u, 0u));
+            CHECK(av_d3d9_SetRenderTarget9(wire, 0u, drawn, 0u));
+            CHECK(av_d3d9_Clear9(wire, 0u, nullptr, clear_target, blue, 1.0f, 0u));
+            if (starved) platform.fail_allocation_at(1u);
+            bool arrived = false;
+            for (std::uint32_t flip = 0u; flip < 4u && !arrived; flip++) {
+                CHECK(av_d3d9_PresentPoint9(wire, drawn, 0u, key, 0u));
+                CHECK(av_d3d9_Finish9(wire, &hresult));
+                arrived = device11->read_image(domain, key, shown, size * 4u, size, size) &&
+                          (shown[size * size / 2u] & 0x00ffffffu) == (blue & 0x00ffffffu);
+            }
+            platform.fail_allocation_at(0u);
+            return arrived;
+        };
+        /* The lane table cannot grow: the first device flips on the CPU. */
+        CHECK(shows(1u, 2u, 0x9180u, true));
+        CHECK(av_d3d9_Destroy9(wire, 2u));
+        CHECK(av_d3d9_Destroy9(wire, 1u));
+        /* Its lane went with it, and the pool's memory too: the next lane
+         * cannot be had, and that device flips on the CPU as well. */
+        CHECK(shows(1u, 2u, 0x9181u, true));
+        CHECK(av_d3d9_Destroy9(wire, 2u));
+        CHECK(av_d3d9_Destroy9(wire, 1u));
+        for (std::uint32_t index = 0u; index < devices; index++)
+            CHECK(shows(10u + 2u * index, 11u + 2u * index, 0x9190u + index, false));
+        CHECK_EQ(wire.refused(), 0u);
+        CHECK(backend.invariants_hold());
+        backend.shut_down();
+    }
+    shares->release(domain, 0u);
 }

@@ -27,6 +27,7 @@
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/d3d_loopback.hpp"
 #include "harness/executor/local_import.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "proto/resources/host_memory_request.hpp"
@@ -791,7 +792,9 @@ TEST(d3d12_session_device, a_buffer_placed_inside_a_spanning_buffer_is_taken_and
  * refusal removes it - each says why in QEMU's log (what a refusal in a game
  * a thousand resources in needs): a buffer running past its heap, a texture
  * in a heap that denies textures (the host's CreatePlacedResource refuses
- * it), and an id already in use (made, then let go). */
+ * it), and an id already in use (made, then let go) - a texture's, and a
+ * buffer's with an address of its own, which is refused before its range is
+ * registered, so the range under the id stays the first buffer's. */
 TEST(d3d12_session_device, a_placed_resource_past_its_heap_of_a_denied_kind_or_an_id_in_use_is_refused)
 {
     av::LoaderHostApis apis;
@@ -810,7 +813,7 @@ TEST(d3d12_session_device, a_placed_resource_past_its_heap_of_a_denied_kind_or_a
     texture.mip_levels = 1u;
     texture.format = format_b8g8r8a8;
     texture.sample_count = 1u;
-    for (std::uint32_t refusal = 0u; refusal < 3u; refusal++) {
+    for (std::uint32_t refusal = 0u; refusal < 4u; refusal++) {
         av::D3dBackend backend;
         av::SessionShares session;
         CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12));
@@ -829,8 +832,11 @@ TEST(d3d12_session_device, a_placed_resource_past_its_heap_of_a_denied_kind_or_a
                                                    ClearValue{}, base + heap_size - piece));
         else if (refusal == 1u)
             CHECK(av_d3d12_CreatePlacedResource12(wire, 3u, heap, piece, texture, 0u, ClearValue{}, 0u));
-        else
+        else if (refusal == 2u)
             CHECK(av_d3d12_CreatePlacedResource12(wire, first, heap, piece, texture, 0u, ClearValue{}, 0u));
+        else
+            CHECK(av_d3d12_CreatePlacedResource12(wire, first, heap, piece, buffer_of(piece), 0u, ClearValue{},
+                                                   base + piece));
         CHECK(av_d3d12_Finish12(wire, &removed));
         CHECK_EQ(removed, driver_internal_error);
         CHECK(backend.invariants_hold());
@@ -977,7 +983,8 @@ TEST(d3d12_session_device, a_buffer_a_blt_read_is_staged_at_each_present_in_its_
     av::HostShares      *shares = nullptr;
     av::HostMemorySource *source = nullptr;
     if (!host_devices(apis, device11, device12, shares, source)) return;
-    av::SharedSurfaces surfaces;
+    av::HostHeap       surfaces_heap;
+    av::SharedSurfaces surfaces(surfaces_heap);
     av::D3dBackend     backend;
     av::SessionShares session;
     CHECK(backend.initialize(*shared_as(session, shares, backend), device11, device12, &surfaces));

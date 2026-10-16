@@ -12,7 +12,10 @@
  * surface: the compositor reads a flip-model buffer itself and never asks, so
  * flips cost nothing. The first blt to ask for such a surface finds its point
  * passed and nothing staged; that is what teaches this table, and that frame
- * is not shown.
+ * is not shown. Every surface that presented is remembered until the guest
+ * lets go of it, however many there are: one forgotten for room would lose
+ * a frame each time a blt taught the table again. One that cannot be
+ * remembered for want of memory stages every present.
  *
  * A frame a writer was told to stage is pending from the report until it is
  * kept or abandoned: a blt asking for it in between waits for it. A frame
@@ -26,6 +29,7 @@
 #ifndef AV_SHARED_SURFACES_HPP
 #define AV_SHARED_SURFACES_HPP
 
+#include "core/support/keyed_slots.hpp"
 #include "device/abi/av_executor.h"
 #include "proto/resources/surface_point.hpp"
 
@@ -34,18 +38,17 @@
 
 namespace av {
 
+class BlockSource;
 class StagedFrame;
 
 class SharedSurfaces {
 public:
-    /* Surfaces that have presented, remembered for whether a blt reads them:
-     * past this the one presented longest ago is forgotten, and learns again. */
-    static constexpr uint32_t max_surfaces = 64u;
-    /* Frames staged and not yet given back: more than the presents the engine
-     * holds outstanding at once. */
+    /* Frames staged and not yet given back: twice the presents the engine
+     * holds outstanding at once (PresentEngine::depth), past which the
+     * oldest not being read is evicted. */
     static constexpr uint32_t max_frames = 32u;
 
-    SharedSurfaces();
+    explicit SharedSurfaces(BlockSource &blocks);
     ~SharedSurfaces();
     SharedSurfaces(const SharedSurfaces &) = delete;
     SharedSurfaces &operator=(const SharedSurfaces &) = delete;
@@ -84,13 +87,11 @@ public:
 
 private:
     struct Surface {
-        uint64_t id_;
         uint32_t point_;
         /* The point its writer was told to stage and has not yet kept, so a
          * look between the two waits for it rather than refusing it. */
         uint32_t pending_;
         bool     blt_read_;
-        uint64_t presented_;
     };
     struct Slot {
         SurfacePoint frame_;
@@ -102,9 +103,9 @@ private:
 
     /* Under the lock: the row of `surface`, or null. */
     Surface *known(uint64_t surface);
-    /* Under the lock: the row of `surface`, made if there is none - over the
-     * one presented longest ago when every row is taken. */
-    Surface &row(uint64_t surface);
+    /* Under the lock: the row of `surface`, made if there is none; null when
+     * none can be made. */
+    Surface *row(uint64_t surface);
     Slot    *slot(const SurfacePoint &frame);
     /* Under the lock: where a frame goes, the oldest one not being read when
      * none is free; null when every one is. What it held is `evicted`. */
@@ -121,7 +122,7 @@ private:
     void     unlock() const;
 
     mutable pthread_mutex_t mutex_;
-    Surface                 surfaces_[max_surfaces];
+    KeyedSlots<uint64_t, Surface> surfaces_;
     Slot                    slots_[max_frames];
     uint64_t                clock_;
 };

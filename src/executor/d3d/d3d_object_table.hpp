@@ -5,29 +5,29 @@
  * table is keyed by the guest's number and the host accepts a number only
  * where it made an object of the kind the command wants. An id naming
  * nothing, or naming a sampler where a view belongs, is a refused command,
- * never a pointer handed to DXVK.
+ * never a pointer handed to DXVK. Each entry holds one reference to its
+ * object.
  *
- * Open addressing over a fixed table: a desktop compositor holds a few
- * thousand objects, and a guest that wants more than this is refused rather
- * than served. Each entry holds one reference to its object.
- *
- * Resident Evil 4 held 24576 objects - the old table's three quarters - a
- * minute into loading its first area, and every create after that was
- * refused. The table is mapped at its first insert and its pages are given
- * back when it is cleared, so a session holding a few objects costs the few
- * pages they touched, not the eight megabytes of a full table; the executor
- * keeps one per session. */
+ * There is no count past which an object is refused: Resident Evil 4 held
+ * 196608 a minute into its first area. The entries are KeyedSlots, so an
+ * object keeps its slot for as long as it is kept - what a swap chain's
+ * rotation lists the views by, and remembers what each view sees by - and
+ * the views are listed apart, so a rotation walks those alone. The table
+ * holds memory for what it holds, and a clear gives it all back. */
 #ifndef AV_D3D_OBJECT_TABLE_HPP
 #define AV_D3D_OBJECT_TABLE_HPP
 
+#include "core/support/growable_array.hpp"
+#include "core/support/keyed_slots.hpp"
+#include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
 
-#include <stddef.h>
 #include <stdint.h>
 
 struct IUnknown;
 
 namespace av {
+class BlockSource;
 struct D3dObjectTableProbe;
 }  // namespace av
 
@@ -80,10 +80,11 @@ enum class D3dObjectKind : uint8_t {
 
 class D3dObjectTable {
 public:
-    static constexpr uint32_t capacity = 262144u;
+    /* What a slot query answers for no slot. */
+    static constexpr uint32_t no_slot = 0xFFFFFFFFu;
 
-    D3dObjectTable();
-    /* Gives the mapping back. The objects are not released: a session clears
+    explicit D3dObjectTable(BlockSource &blocks);
+    /* Gives the memory back. The objects are not released: a session clears
      * its table while its device is alive. */
     ~D3dObjectTable();
     D3dObjectTable(const D3dObjectTable &) = delete;
@@ -91,15 +92,15 @@ public:
     D3dObjectTable(D3dObjectTable &&) = delete;
     D3dObjectTable &operator=(D3dObjectTable &&) = delete;
 
-    /* Takes the caller's reference to `object` under `id`. False, with the
-     * reference still the caller's, for id 0, an id in use, a full table and
-     * a table no memory could be mapped for. */
-    [[nodiscard]] bool insert(uint32_t id, D3dObjectKind kind, IUnknown *object);
+    /* Takes the caller's reference to `object` under `id`: invalid_parameter
+     * for id 0, a kind of none or no object, conflict for an id in use,
+     * no_memory when the table cannot grow. The reference stays the caller's
+     * unless ok. */
+    [[nodiscard]] Status insert(uint32_t id, D3dObjectKind kind, IUnknown *object);
     /* `made`, just made, kept under `id`: the reference it came with is the
-     * table's, or released when it cannot be kept - an id already taken, a
-     * full table. False then, and for a null `made`, which a refused create
-     * leaves. */
-    [[nodiscard]] bool keep(uint32_t id, D3dObjectKind kind, IUnknown *made);
+     * table's, or released when it cannot be kept, with insert's answer.
+     * invalid_parameter for a null `made`, which a refused create leaves. */
+    [[nodiscard]] Status keep(uint32_t id, D3dObjectKind kind, IUnknown *made);
     /* The object `id` names if it is of `kind`; null otherwise. No reference
      * is taken: the table's lasts until the id is removed. */
     IUnknown          *find(uint32_t id, D3dObjectKind kind) const;
@@ -115,15 +116,17 @@ public:
      * `kind`, and hands the old reference back; null, with `object` still the
      * caller's, otherwise. */
     IUnknown          *exchange(uint32_t id, D3dObjectKind kind, IUnknown *object);
-    /* The object in `slot` and its id and kind; null for an empty slot. */
-    /* The first slot at or after `from` holding an object; capacity for none. */
+    /* The first slot at or after `from` holding an object; no_slot for none. */
     uint32_t           next_used(uint32_t from) const;
     /* The slots holding views, so a swap chain's rotation looks at those alone. */
     uint32_t           views() const;
+    /* The `index`th view's slot; no_slot past the last. */
     uint32_t           view_slot(uint32_t index) const;
-    /* The resource a view slot was last noted to see; null until noted. */
+    /* The resource a view slot was last noted to see; null until noted, and
+     * for a slot holding nothing. */
     IUnknown          *viewed(uint32_t slot) const;
     void               note_viewed(uint32_t slot, IUnknown *resource);
+    /* The object in `slot` and its id and kind; null for a slot holding nothing. */
     IUnknown          *at(uint32_t slot, uint32_t &id, D3dObjectKind &kind) const;
     /* Removes `id` and gives its reference back; nothing for an unknown id. */
     void               remove(uint32_t id);
@@ -132,37 +135,28 @@ public:
     void               remove_kinds(D3dObjectKind first, D3dObjectKind last);
     /* How many objects of a kind from `first` to `last` are kept. */
     uint32_t           count_kinds(D3dObjectKind first, D3dObjectKind last) const;
-    /* Every reference back, and the table's pages to the system. */
+    /* Every reference back, and the table's memory to the system. */
     void               clear();
     uint32_t           count() const;
 
     bool invariants_hold() const;
 
 private:
-    static constexpr size_t table_bytes =
-        size_t{capacity} * (2u * sizeof(IUnknown *) + 3u * sizeof(uint32_t) + sizeof(D3dObjectKind) + sizeof(bool));
+    struct Entry {
+        IUnknown     *object_;
+        /* What a view sees, once asked: a view holds its resource, so the
+         * pointer lives as long as the view. Cleared when the entry changes. */
+        IUnknown     *viewed_;
+        /* Where a view's slot is in views_. */
+        uint32_t      view_at_;
+        D3dObjectKind kind_;
+    };
 
-    uint32_t slot_of(uint32_t id) const;
-    uint32_t home_of(uint32_t id) const;
-    void     set(uint32_t slot, uint32_t id, D3dObjectKind kind, bool tombstone, IUnknown *object);
-    /* The table's memory, mapped once: false when none could be. */
-    bool     reserve();
+    /* The slot's entry gone from the views, if it was one, and from the table. */
+    void forget(uint32_t slot, const Entry &entry);
 
-    void          *table_;
-    /* One slot across the arrays: the guest's id, what it names, whether a
-     * removal left the slot (so a probe carries on past it), and the object;
-     * null until the table is mapped. */
-    IUnknown     **objects_;
-    /* What a view slot's view sees, once asked: a view holds its resource,
-     * so the pointer lives as long as the view. Cleared when the slot changes. */
-    IUnknown     **viewed_;
-    uint32_t      *ids_;
-    uint32_t      *view_slots_;
-    uint32_t      *view_at_;
-    D3dObjectKind *kinds_;
-    bool          *tombstones_;
-    uint32_t       views_;
-    uint32_t       count_;
+    KeyedSlots<uint32_t, Entry> objects_;
+    GrowableArray<uint32_t>     views_;
 
     friend struct D3dObjectTableProbe;
 };

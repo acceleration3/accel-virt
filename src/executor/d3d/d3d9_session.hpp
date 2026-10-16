@@ -43,26 +43,21 @@ class SharedSurfaces;
 class SessionShares;
 class D3d11HostDevice;
 class GuestRegion;
+class WatchedBlocks;
 class WireArena;
 class WireReader;
 class WireWriter;
 
 class D3d9Session final : public d3d9proto::ServerDispatch {
 public:
-    /* Devices one process keeps at once; a create past this is answered with
-     * an error rather than made. */
-    /* d3d9.dll makes a device for each DirectDraw object it opens - to
-     * enumerate, to validate a create, to create, to ask multisample levels -
-     * and a process may hold several at once. */
-    static constexpr uint32_t max_devices = 16u;
     /* The largest surface edge any Direct3D 9 device makes. */
     static constexpr uint32_t max_dimension = 16384u;
 
     /* `region` is the session's blob arena, which D3dBackend adopts, and
      * `objects` the session's object table: the guest names every object of
-     * a session from one id space, so Direct3D 9's share Direct3D 11's table
-     * (and a table is a megabyte). */
-    D3d9Session(GuestRegion &region, D3dObjectTable &objects);
+     * a session from one id space, so Direct3D 9's share Direct3D 11's table.
+     * `blocks` is what the session's tables grow in. */
+    D3d9Session(GuestRegion &region, D3dObjectTable &objects, WatchedBlocks &blocks);
     ~D3d9Session();
     D3d9Session(const D3d9Session &) = delete;
     D3d9Session &operator=(const D3d9Session &) = delete;
@@ -204,7 +199,11 @@ private:
     SharedSurfaces *surfaces_;
     D3d9FlipShares  flips_;
     D3dObjectTable &objects_;
-    GuestDevices<IDirect3DDevice9, max_devices> devices_;
+    WatchedBlocks  &blocks_;
+    /* d3d9.dll makes a device for each DirectDraw object it opens - to
+     * enumerate, to validate a create, to create, to ask multisample levels -
+     * and a process may hold any number at once. */
+    GuestDevices<IDirect3DDevice9> devices_;
     /* QEMU's stderr, where the host log is read when a guest's command fails. */
     StdioLog        sink_;
     DriverLog       lines_;

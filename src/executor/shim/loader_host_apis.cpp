@@ -11,11 +11,12 @@ namespace av {
 
 LoaderHostApis::LoaderHostApis()
     : instance_(nullptr), uuids_{}, sub_apis_{}, opencl_devices_{},
-      gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, d3d9_devices_{}, surfaces_{}, heap_(), share_sink_(stderr),
+      gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, d3d9_devices_{}, heap_(), surfaces_{}, share_sink_(stderr),
       share_lines_(share_sink_, "virtio-gpu-av: shares: "), shares_{}, count_(0u), opened_(false)
 {
     AV_SCOPE("LoaderHostApis::LoaderHostApis");
     for (ObjectStorage<HostShares> &shares : shares_) static_cast<void>(shares.construct(heap_, share_lines_));
+    for (ObjectStorage<SharedSurfaces> &surfaces : surfaces_) static_cast<void>(surfaces.construct(heap_));
     for (uint32_t i = 0u; i < HostGpuSet::max_gpus; i++)
         static_cast<void>(exporters_[i].construct(compositors_[i]));
 }
@@ -24,6 +25,7 @@ LoaderHostApis::~LoaderHostApis()
 {
     AV_SCOPE("LoaderHostApis::~LoaderHostApis");
     close();
+    for (ObjectStorage<SharedSurfaces> &surfaces : surfaces_) surfaces.destroy();
     for (ObjectStorage<HostShares> &shares : shares_) shares.destroy();
     for (ObjectStorage<CompositorMemory> &exporter : exporters_) exporter.destroy();
 }
@@ -185,7 +187,7 @@ D3d12HostDevice *LoaderHostApis::d3d12_device(uint32_t index)
 SharedSurfaces *LoaderHostApis::surfaces(uint32_t index)
 {
     AV_SCOPE("LoaderHostApis::surfaces");
-    return index < count_ ? &surfaces_[index] : nullptr;
+    return index < count_ ? &surfaces_[index].object() : nullptr;
 }
 
 HostShares *LoaderHostApis::shares(uint32_t index)

@@ -83,10 +83,11 @@ private:
     ObjectStorage<HostMemorySource> sources_[HostGpuSet::max_gpus];
     D3d12HostDevice d3d12_devices_[HostGpuSet::max_gpus];
     D3d9HostDevice  d3d9_devices_[HostGpuSet::max_gpus];
-    SharedSurfaces  surfaces_[HostGpuSet::max_gpus];
-    /* What every GPU's shares are kept in, and the shares, before the
-     * devices whose textures they hold are closed and after they are made. */
+    /* What every GPU's shares and surfaces are kept in, and the shares,
+     * before the devices whose textures they hold are closed and after they
+     * are made. */
     HostHeap                   heap_;
+    ObjectStorage<SharedSurfaces> surfaces_[HostGpuSet::max_gpus];
     /* QEMU's stderr, where what the shares see is written. */
     StdioLog                   share_sink_;
     DriverLog                  share_lines_;

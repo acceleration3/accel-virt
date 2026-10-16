@@ -12,13 +12,16 @@
 #include "fixtures/d3d/triangle_vs.hpp"
 #include "core/support/object_storage.hpp"
 #include "executor/d3d/d3d_backend.hpp"
+#include "executor/host_memory_source.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/d3d_loopback.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "icd/d3d/passthrough_geometry_shader.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/resources/surface_point.hpp"
@@ -48,6 +51,11 @@ namespace av {
 
 struct D3dBackendProbe {
     static D3dObjectTable &objects(D3dBackend &backend) { return backend.objects_; }
+    static WatchedBlocks  &blocks(D3dBackend &backend) { return backend.blocks_; }
+};
+
+struct WatchedBlocksProbe {
+    static void draw_from(WatchedBlocks &blocks, BlockSource &source) { blocks.blocks_ = &source; }
 };
 
 }  // namespace av
@@ -490,7 +498,8 @@ TEST(d3d_backend_device, a_present_point_stages_the_frame_the_commands_before_it
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
     constexpr std::uint64_t shown = 0x5150u;
-    av::SharedSurfaces      surfaces;
+    av::HostHeap            surfaces_heap;
+    av::SharedSurfaces      surfaces(surfaces_heap);
     HeldBackend             held(first_backend);
     av::D3dBackend         &backend = held.backend();
     av::SessionShares unshared;
@@ -588,4 +597,106 @@ TEST(d3d_backend_device, a_flip_of_a_shared_target_is_shown_through_its_copy)
     backend.shut_down();
     shares.release(1u, key);
     device->retire_shares();
+}
+
+/* The session's tables grow in a source that runs out: what the host has no
+ * memory for is told to the guest as E_OUTOFMEMORY - a device create
+ * answers it, and a command refused for it removes its device for it, not
+ * for an internal error - while the next command, with memory, is refused
+ * for what it did, as before. Each table the backend grows is met at its
+ * first growth: the object table's, a device's constant bindings, a
+ * rotation's remade views and the pending queries. */
+TEST(d3d_backend_device, what_the_host_has_no_memory_for_is_out_of_memory_to_the_guest)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    av::HostMemorySource *source = nullptr;
+    for (std::uint32_t index = 0u; index < apis.gpu_count(); index++)
+        if (apis.d3d11_device(index) == device) source = apis.memory_source(index);
+    constexpr std::uint32_t out_of_memory = 0x8007000Eu;
+    av::MockPlatform platform;
+    {
+        HeldBackend     held(first_backend);
+        av::D3dBackend &backend = held.backend();
+        av::WatchedBlocksProbe::draw_from(av::D3dBackendProbe::blocks(backend), platform);
+        av::SessionShares unshared;
+        CHECK(backend.initialize(unshared, device));
+        constexpr std::size_t region_bytes = 16u * 4096u;
+        av::D3dLoopback wire(backend, source, source != nullptr ? region_bytes : 0u);
+
+        std::uint32_t hresult = 0u, level = 0u, removed = 0u;
+        platform.fail_allocation_at(1u);
+        CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+        CHECK_EQ(hresult, out_of_memory);
+        CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+        CHECK_EQ(hresult, 0u);
+        make_triangle(wire);
+        CHECK_EQ(wire.refused(), 0u);
+
+        /* An object the table cannot grow for. */
+        CHECK(av_d3d_CreateDevice11(wire, 2u, 0u, 0u, &hresult, &level));
+        platform.fail_allocation_at(1u);
+        ResourceDesc buffer = {};
+        buffer.dimension = 1u;
+        buffer.width = 64u;
+        buffer.bind_flags = bind_vertex;
+        for (std::uint32_t id = 100u; id < 200u && removed == 0u; id++) {
+            CHECK(av_d3d_CreateResource(wire, id, buffer, 0u));
+            CHECK(av_d3d_Finish11(wire, &removed));
+        }
+        CHECK_EQ(removed, out_of_memory);
+
+        /* A device's first constant binding, with nowhere to keep it. */
+        CHECK(av_d3d_CreateDevice11(wire, 3u, 0u, 0u, &hresult, &level));
+        platform.fail_allocation_at(1u);
+        const ConstantBufferBinding constants = {4u, 0u, 0u};
+        CHECK(av_d3d_SetConstantBuffers(wire, 4u, 0u, 1u, &constants));
+        CHECK(av_d3d_Finish11(wire, &removed));
+        CHECK_EQ(removed, out_of_memory);
+
+        /* A rotation whose remade view has nowhere to wait to be rebound. */
+        CHECK(av_d3d_CreateDevice11(wire, 4u, 0u, 0u, &hresult, &level));
+        ResourceDesc target = {};
+        target.dimension = 3u;
+        target.width = size;
+        target.height = size;
+        target.depth_or_array = 1u;
+        target.mip_levels = 1u;
+        target.format = format_b8g8r8a8;
+        target.sample_count = 1u;
+        target.bind_flags = bind_render_target;
+        CHECK(av_d3d_CreateResource(wire, 30u, target, 0u));
+        CHECK(av_d3d_Finish11(wire, &removed));
+        CHECK_EQ(removed, 0u);
+        platform.fail_allocation_at(1u);
+        const std::uint32_t rotated[2] = {1u, 30u};
+        CHECK(av_d3d_RotateResources11(wire, 2u, rotated));
+        CHECK(av_d3d_Finish11(wire, &removed));
+        CHECK_EQ(removed, out_of_memory);
+
+        /* With memory, a command refused for what it named is an internal
+         * error, as ever: the flag is the command's alone. */
+        CHECK(av_d3d_CreateDevice11(wire, 5u, 0u, 0u, &hresult, &level));
+        CHECK(av_d3d_SetShader(wire, 4u, 99u));
+        CHECK(av_d3d_Finish11(wire, &removed));
+        CHECK_EQ(removed, driver_internal_error);
+
+        /* A query ended with its results bound, and nowhere to keep it pending. */
+        if (source != nullptr) {
+            CHECK(av_d3d_CreateDevice11(wire, 6u, 0u, 0u, &hresult, &level));
+            constexpr std::uint32_t query_event = 0u;
+            CHECK(av_d3d_CreateQuery(wire, 40u, query_event, 0u));
+            CHECK(av_d3d_BindQueryResults(wire, 0u, 4u));
+            CHECK(av_d3d_Finish11(wire, &removed));
+            CHECK_EQ(removed, 0u);
+            platform.fail_allocation_at(1u);
+            CHECK(av_d3d_EndQuery(wire, 40u));
+            CHECK(av_d3d_Finish11(wire, &removed));
+            CHECK_EQ(removed, out_of_memory);
+        }
+        CHECK_EQ(wire.refused(), 0u);
+        CHECK(backend.invariants_hold());
+        backend.shut_down();
+    }
 }

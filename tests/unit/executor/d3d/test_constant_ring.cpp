@@ -8,6 +8,7 @@
 #include "executor/d3d/constant_ring.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/d3d_runtime.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <vulkan/vulkan.h>
@@ -67,6 +68,7 @@ struct Seen {
     std::uint32_t released_contents;
     std::uint32_t forgotten_left_alone;
     std::uint32_t closed_left_alone;
+    std::uint32_t many_devices_on_ring;
 };
 
 ID3D11Buffer *constant_buffer(ID3D11Device5 *device, std::uint32_t bytes, D3D11_USAGE usage)
@@ -123,7 +125,8 @@ void run_ring(Seen &seen)
     ID3D11Buffer *const larger = constant_buffer(device, 512u, D3D11_USAGE_DYNAMIC);
     ID3D11Buffer *const fixed = constant_buffer(device, 256u, D3D11_USAGE_DEFAULT);
     if (small == nullptr || larger == nullptr || fixed == nullptr) return;
-    static ConstantRing ring;
+    static av::HostHeap heap;
+    static ConstantRing ring(heap);
     std::uint8_t data[512];
     std::memset(data, 0x5A, sizeof data);
     seen.ran = 1u;
@@ -137,11 +140,24 @@ void run_ring(Seen &seen)
     ID3D11Buffer *buffers[2] = {small, larger};
     std::uint32_t first[2] = {0u, 0u};
     std::uint32_t counts[2] = {0u, 0u};
-    ring.bind(device_id, 0u, 0u, 2u, ids, buffers, first, counts);
+    if (ring.bind(device_id, 0u, 0u, 2u, ids, buffers, first, counts) != av::Status::ok) return;
     seen.bound_to_ring = buffers[0] != small ? 1u : 0u;
     seen.first = first[0];
     seen.count = counts[0];
     seen.unknown_left_alone = buffers[1] == larger && first[1] == 0u ? 1u : 0u;
+    /* The ring once tracked 64 devices and left the rest bound to stale
+     * storage: every one of many more is bound to the ring. */
+    constexpr std::uint32_t many_devices = 200u;
+    for (std::uint32_t other = 100u; other < 100u + many_devices; other++) {
+        std::uint32_t other_ids[1] = {10u};
+        ID3D11Buffer *other_buffers[1] = {small};
+        std::uint32_t other_first[1] = {0u};
+        std::uint32_t other_counts[1] = {0u};
+        if (ring.bind(other, 1u, 0u, 1u, other_ids, other_buffers, other_first, other_counts) != av::Status::ok)
+            return;
+        seen.many_devices_on_ring += other_buffers[0] != small ? 1u : 0u;
+    }
+    for (std::uint32_t other = 100u; other < 100u + many_devices; other++) ring.forget_device(other);
     context->VSSetConstantBuffers1(0u, 1u, buffers, first, counts);
 
     /* A second buffer goes after the first, in whole 256-byte windows. */
@@ -150,7 +166,7 @@ void run_ring(Seen &seen)
     ID3D11Buffer *second_buffers[1] = {larger};
     std::uint32_t second_first[1] = {0u};
     std::uint32_t second_counts[1] = {0u};
-    ring.bind(device_id, 4u, 0u, 1u, second_ids, second_buffers, second_first, second_counts);
+    if (ring.bind(device_id, 4u, 0u, 1u, second_ids, second_buffers, second_first, second_counts) != av::Status::ok) return;
     seen.second_first = second_first[0];
     seen.second_count = second_counts[0];
 
@@ -174,7 +190,7 @@ void run_ring(Seen &seen)
 
     ring.forget(11u);
     second_buffers[0] = larger;
-    ring.bind(device_id, 4u, 0u, 1u, second_ids, second_buffers, second_first, second_counts);
+    if (ring.bind(device_id, 4u, 0u, 1u, second_ids, second_buffers, second_first, second_counts) != av::Status::ok) return;
     seen.forgotten_left_alone = second_buffers[0] == larger ? 1u : 0u;
 
     ring.selected(context, device_id);
@@ -185,7 +201,7 @@ void run_ring(Seen &seen)
     ID3D11Buffer *again_buffers[1] = {small};
     std::uint32_t again_first[1] = {0u};
     std::uint32_t again_counts[1] = {0u};
-    ring.bind(device_id, 0u, 0u, 1u, again, again_buffers, again_first, again_counts);
+    if (ring.bind(device_id, 0u, 0u, 1u, again, again_buffers, again_first, again_counts) != av::Status::ok) return;
     seen.closed_left_alone = again_buffers[0] == small ? 1u : 0u;
 }
 
@@ -225,4 +241,5 @@ TEST(constant_ring, keeps_dynamic_constant_buffers_in_one_ring_and_gives_them_ba
   CHECK_EQ(seen.released_back_to_own, 1u);
   CHECK_EQ(seen.released_contents, 0x33u);
   CHECK_EQ(seen.forgotten_left_alone, 1u);
-  CHECK_EQ(seen.closed_left_alone, 1u); }
+  CHECK_EQ(seen.closed_left_alone, 1u);
+  CHECK_EQ(seen.many_devices_on_ring, 200u); }

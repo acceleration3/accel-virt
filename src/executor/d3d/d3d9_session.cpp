@@ -1,6 +1,7 @@
 #include "executor/d3d/d3d9_session.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/d3d/watched_blocks.hpp"
 #include "executor/guest_region.hpp"
 #include "executor/shim/d3d9_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
@@ -19,8 +20,9 @@ constexpr uint64_t format_answer_bytes = 2u * sizeof(uint32_t);
 
 }  // namespace
 
-D3d9Session::D3d9Session(GuestRegion &region, D3dObjectTable &objects)
-    : region_(region), host_(nullptr), surfaces_(nullptr), objects_(objects), devices_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d9: "), refusal_(lines_), arena_(nullptr), lost_(false)
+D3d9Session::D3d9Session(GuestRegion &region, D3dObjectTable &objects, WatchedBlocks &blocks)
+    : region_(region), host_(nullptr), surfaces_(nullptr), flips_(blocks), objects_(objects), blocks_(blocks),
+      devices_(blocks), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d9: "), refusal_(lines_), arena_(nullptr), lost_(false)
 {
     AV_SCOPE("D3d9Session::D3d9Session");
 }
@@ -71,7 +73,7 @@ bool D3d9Session::run(uint32_t command_id, WireReader &payload, WireWriter &repl
     }
     if (ran) return true;
     return devices_.refuse(refusal_, d3d9proto::command_name(command_id),
-                           static_cast<uint32_t>(D3DERR_DRIVERINTERNALERROR));
+                           blocks_.refusal(static_cast<uint32_t>(D3DERR_DRIVERINTERNALERROR)));
 }
 
 const uint8_t *D3d9Session::guest_bytes(uint64_t offset, uint64_t size)
@@ -102,8 +104,8 @@ bool D3d9Session::on_CreateDevice9(uint32_t device, uint32_t, uint32_t &hresult)
     D3dObjectKind taken = D3dObjectKind::none;
     hresult = static_cast<uint32_t>(D3DERR_INVALIDCALL);
     if (device == 0u || devices_.find(device) != nullptr || objects_.find_any(device, taken) != nullptr) return true;
-    hresult = static_cast<uint32_t>(D3DERR_OUTOFVIDEOMEMORY);
-    if (devices_.count() == max_devices) return true;
+    hresult = static_cast<uint32_t>(E_OUTOFMEMORY);
+    if (devices_.make_room() != Status::ok) return true;
     hresult = static_cast<uint32_t>(D3DERR_NOTAVAILABLE);
     if (host_ == nullptr) return true;
     IDirect3DDevice9 *made = nullptr;
@@ -199,6 +201,7 @@ bool D3d9Session::on_Destroy9(uint32_t object)
     AV_SCOPE("D3d9Session::on_Destroy9");
     IDirect3DDevice9 *const device = devices_.remove(object);
     if (device != nullptr) {
+        flips_.forget_device(device);
         device->Release();
         return true;
     }
@@ -218,7 +221,7 @@ bool D3d9Session::keep(uint32_t id, D3dObjectKind kind, IUnknown *made)
         made->Release();
         return false;
     }
-    return objects_.keep(id, kind, made);
+    return objects_.keep(id, kind, made) == Status::ok;
 }
 
 /* Each kind asks its own interface which device made it: every Direct3D 9

@@ -11,7 +11,10 @@
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/guest_region.hpp"
 #include "harness/executor/local_import.hpp"
+#include "executor/d3d/watched_blocks.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "proto/generated/d3d9/d3d9_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -23,12 +26,22 @@ using av::D3d9Session;
 using av::GuestRegion;
 using namespace av::d3d9proto;
 
+namespace av {
+
+struct WatchedBlocksProbe {
+    static void draw_from(WatchedBlocks &blocks, BlockSource &source) { blocks.blocks_ = &source; }
+};
+
+}  // namespace av
+
 namespace {
 
 constexpr std::uint32_t nobody = 77u;
 constexpr std::uint32_t not_available = 0x8876086au;   /* D3DERR_NOTAVAILABLE */
 constexpr std::uint32_t invalid_call = 0x8876086cu;    /* D3DERR_INVALIDCALL */
 
+av::HostHeap                          heap;
+av::WatchedBlocks                     blocks(heap);
 av::ObjectStorage<av::D3dObjectTable> table_storage;
 av::ObjectStorage<D3d9Session> session_storage;
 alignas(64) std::uint8_t guest[4096];
@@ -51,8 +64,8 @@ public:
     FreshSession() : import_(guest, sizeof guest)
     {
         CHECK(region_.adopt(import_.blob()));
-        CHECK_STATUS(table_storage.construct(), av::Status::ok);
-        CHECK_STATUS(session_storage.construct(region_, table_storage.object()), av::Status::ok);
+        CHECK_STATUS(table_storage.construct(blocks), av::Status::ok);
+        CHECK_STATUS(session_storage.construct(region_, table_storage.object(), blocks), av::Status::ok);
         session_storage.object().initialize(nullptr, nullptr, nullptr, nullptr);
     }
     ~FreshSession()
@@ -127,6 +140,26 @@ TEST(d3d9_session_on_CreateDevice9, a_gpu_with_no_d3d9_makes_no_device)
     std::uint64_t       support_size = 1u;
     CHECK(!session.on_QueryFormats9(1u, formats, support, sizeof support, support_size));
     CHECK_EQ(support_size, 0u);
+}
+
+/* A device the session has no room to keep is not made, and the guest is
+ * told why: E_OUTOFMEMORY, asked before the host device would be made. */
+TEST(d3d9_session_on_CreateDevice9, a_device_there_is_no_memory_to_keep_is_out_of_memory)
+{
+    av::MockPlatform platform;
+    av::WatchedBlocksProbe::draw_from(blocks, platform);
+    {
+        FreshSession fresh;
+        D3d9Session &session = fresh.session();
+        std::uint32_t hresult = 0u;
+        platform.fail_allocation_at(1u);
+        CHECK(session.on_CreateDevice9(1u, 0u, hresult));
+        CHECK_EQ(hresult, static_cast<std::uint32_t>(E_OUTOFMEMORY));
+        CHECK(session.on_CreateDevice9(1u, 0u, hresult));
+        CHECK_EQ(hresult, not_available);
+        CHECK(session.invariants_hold());
+    }
+    av::WatchedBlocksProbe::draw_from(blocks, heap);
 }
 
 /* With no device selected every command that would draw or make something is
@@ -239,8 +272,8 @@ TEST(d3d9_session_shut_down, lets_go_of_direct3d_9_objects_and_keeps_the_rest)
 {
     FreshSession fresh;
     Counted      eleven, nine;
-    CHECK(fresh.table().insert(5u, av::D3dObjectKind::resource, &eleven));
-    CHECK(fresh.table().insert(6u, av::D3dObjectKind::texture9, &nine));
+    CHECK_STATUS(fresh.table().insert(5u, av::D3dObjectKind::resource, &eleven), av::Status::ok);
+    CHECK_STATUS(fresh.table().insert(6u, av::D3dObjectKind::texture9, &nine), av::Status::ok);
     fresh.session().shut_down();
     CHECK_EQ(nine.references, 0u);
     CHECK_EQ(eleven.references, 1u);
@@ -257,8 +290,8 @@ TEST(d3d9_session_on_Destroy9, removes_only_direct3d_9_objects)
 {
     FreshSession fresh;
     Counted      eleven, nine;
-    CHECK(fresh.table().insert(31u, av::D3dObjectKind::resource, &eleven));
-    CHECK(fresh.table().insert(32u, av::D3dObjectKind::surface9, &nine));
+    CHECK_STATUS(fresh.table().insert(31u, av::D3dObjectKind::resource, &eleven), av::Status::ok);
+    CHECK_STATUS(fresh.table().insert(32u, av::D3dObjectKind::surface9, &nine), av::Status::ok);
     CHECK(!fresh.session().on_Destroy9(31u));
     CHECK(fresh.table().find(31u, av::D3dObjectKind::resource) == &eleven);
     CHECK(fresh.session().on_Destroy9(32u));

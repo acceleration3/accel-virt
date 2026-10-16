@@ -34,13 +34,10 @@ D3D11_TEXTURE2D_DESC1 shared_texture_desc(uint32_t width, uint32_t height, uint3
 
 }  // namespace
 
-D3d9FlipShares::D3d9FlipShares() : device11_(nullptr), shares_(nullptr), flips_(0u)
+D3d9FlipShares::D3d9FlipShares(BlockSource &blocks)
+    : device11_(nullptr), shares_(nullptr), lanes_(blocks), lane_of_(blocks, Pool::paged), flips_(0u)
 {
     AV_SCOPE("D3d9FlipShares::D3d9FlipShares");
-    for (Lane &lane : lanes_) {
-        lane.value_ = 0u;
-        lane.refused_ = false;
-    }
     for (Primary &primary : primaries_) {
         primary.texture_ = nullptr;
         primary.lane_ = nullptr;
@@ -157,16 +154,24 @@ D3d9FlipShares::Copy *D3d9FlipShares::free_copy(Primary &primary)
 D3d9FlipShares::Lane *D3d9FlipShares::lane_for(IDirect3DDevice9 *device)
 {
     AV_SCOPE("D3d9FlipShares::lane_for");
-    Lane *spare = nullptr;
-    for (Lane &lane : lanes_) {
-        if (lane.vulkan_.device() == device) return lane.refused_ ? nullptr : &lane;
-        if (spare == nullptr && lane.vulkan_.device() == nullptr && !lane.refused_) spare = &lane;
-    }
+    const uint64_t key = reinterpret_cast<uintptr_t>(device);
+    Lane *const   *known = lane_of_.find(key);
+    if (known != nullptr) return (*known)->refused_ ? nullptr : *known;
     CompositorDevice *const compositor = device11_->compositor();
-    if (spare == nullptr || compositor == nullptr || !compositor->opened()) return nullptr;
-    Lane &lane = *spare;
-    int   for_d3d9 = -1, for_d3d11 = -1;
-    bool  connected = lane.vulkan_.connect(device) && lane.timeline_.make_exportable(compositor->table()) &&
+    if (compositor == nullptr || !compositor->opened() || lane_of_.reserve(lane_of_.count() + 1u) != Status::ok)
+        return nullptr;
+    Lane *made = nullptr;
+    if (lanes_.create(made) != Status::ok) return nullptr;
+    uint32_t slot = 0u;
+    static_cast<void>(lane_of_.insert(key, made, slot));
+    return connect(device, *made, *compositor);
+}
+
+D3d9FlipShares::Lane *D3d9FlipShares::connect(IDirect3DDevice9 *device, Lane &lane, CompositorDevice &compositor)
+{
+    AV_SCOPE("D3d9FlipShares::connect");
+    int  for_d3d9 = -1, for_d3d11 = -1;
+    bool connected = lane.vulkan_.connect(device) && lane.timeline_.make_exportable(compositor.table()) &&
                      lane.timeline_.export_fd(for_d3d9) && lane.signalled_.import_fd(lane.vulkan_.table(), for_d3d9) &&
                      lane.timeline_.export_fd(for_d3d11);
     if (connected) {
@@ -180,6 +185,8 @@ D3d9FlipShares::Lane *D3d9FlipShares::lane_for(IDirect3DDevice9 *device)
     return nullptr;
 }
 
+/* A device's lane is connected once: a device DXVK gives no interop, or a GPU
+ * with no compositor, is asked no more and flips on the CPU. */
 void D3d9FlipShares::close_lane(Lane &lane)
 {
     AV_SCOPE("D3d9FlipShares::close_lane");
@@ -290,15 +297,26 @@ void D3d9FlipShares::forget(Primary &primary)
     primary.width_ = primary.height_ = primary.format_ = 0u;
 }
 
+void D3d9FlipShares::forget_device(IDirect3DDevice9 *device)
+{
+    AV_SCOPE("D3d9FlipShares::forget_device");
+    if (device11_ == nullptr) return;
+    for (Primary &primary : primaries_)
+        if (primary.device_ == device) forget(primary);
+    Lane *going = nullptr;
+    if (!lane_of_.take(reinterpret_cast<uintptr_t>(device), going)) return;
+    close_lane(*going);
+    static_cast<void>(lanes_.destroy(going));
+}
+
 void D3d9FlipShares::release()
 {
     AV_SCOPE("D3d9FlipShares::release");
     if (device11_ == nullptr) return;
     for (Primary &primary : primaries_) forget(primary);
-    for (Lane &lane : lanes_) {
-        close_lane(lane);
-        lane.refused_ = false;
-    }
+    lane_of_.for_each([this](uint64_t, Lane *lane) { close_lane(*lane); });
+    lane_of_.clear();
+    lanes_.destroy_all();
 }
 
 }  // namespace av

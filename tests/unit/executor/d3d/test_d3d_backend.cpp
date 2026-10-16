@@ -420,9 +420,9 @@ TEST(d3d_backend_on_DestroyObject, removes_only_direct3d_11_objects)
   D3dBackend &backend = fresh.backend();
   av::D3dObjectTable &objects = av::D3dBackendProbe::objects(backend);
   Counted eleven, twelve, nine;
-  CHECK(objects.insert(51u, av::D3dObjectKind::resource, &eleven));
-  CHECK(objects.insert(52u, av::D3dObjectKind::heap12, &twelve));
-  CHECK(objects.insert(53u, av::D3dObjectKind::surface9, &nine));
+  CHECK_STATUS(objects.insert(51u, av::D3dObjectKind::resource, &eleven), av::Status::ok);
+  CHECK_STATUS(objects.insert(52u, av::D3dObjectKind::heap12, &twelve), av::Status::ok);
+  CHECK_STATUS(objects.insert(53u, av::D3dObjectKind::surface9, &nine), av::Status::ok);
   CHECK(!backend.on_DestroyObject(52u));
   CHECK(!backend.on_DestroyObject(53u));
   CHECK_EQ(twelve.references, 1u);

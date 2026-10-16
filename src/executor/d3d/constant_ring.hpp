@@ -8,9 +8,18 @@
  * tracked per guest device, whose pipeline states the host swaps between; a
  * device's stale windows are rebound when it is selected again. A buffer is
  * written back to its own storage, from a shadow of its last contents, before
- * anything else reads it. */
+ * anything else reads it.
+ *
+ * The buffers kept are bounded by the ring: a wrap writes every one of them
+ * again from its start, so no more are kept than fit it, and one past that
+ * is written the ordinary way. The devices are not bounded: a process makes
+ * any number, and a device whose bindings went untracked would read a kept
+ * buffer's stale storage. */
 #ifndef AV_CONSTANT_RING_HPP
 #define AV_CONSTANT_RING_HPP
+
+#include "core/support/keyed_slots.hpp"
+#include "core/support/status.hpp"
 
 #include <stdint.h>
 
@@ -20,6 +29,8 @@ struct ID3D11DeviceContext4;
 
 namespace av {
 
+class BlockSource;
+
 class ConstantRing {
 public:
     static constexpr uint32_t stage_count = 6u;
@@ -27,7 +38,7 @@ public:
     /* The largest buffer kept here: a draw's constants, not a scene's. */
     static constexpr uint32_t largest = 4096u;
 
-    ConstantRing();
+    explicit ConstantRing(BlockSource &blocks);
     ~ConstantRing();
     ConstantRing(const ConstantRing &) = delete;
     ConstantRing &operator=(const ConstantRing &) = delete;
@@ -37,9 +48,11 @@ public:
     [[nodiscard]] bool update(ID3D11Device5 *device, ID3D11DeviceContext4 *context, uint32_t device_id,
                               uint32_t id, ID3D11Buffer *buffer, const uint8_t *data, uint32_t bytes);
     /* A bind about to be made on `device_id`: remembered, and a buffer kept
-     * here swapped for its window of the ring in `buffers`/`first`/`counts`. */
-    void bind(uint32_t device_id, uint32_t stage, uint32_t start, uint32_t count, const uint32_t *ids,
-              ID3D11Buffer **buffers, uint32_t *first, uint32_t *counts);
+     * here swapped for its window of the ring in `buffers`/`first`/`counts`.
+     * no_memory, with nothing swapped, when the device's bindings cannot be
+     * made: the bind is then not to be made. */
+    [[nodiscard]] Status bind(uint32_t device_id, uint32_t stage, uint32_t start, uint32_t count,
+                              const uint32_t *ids, ID3D11Buffer **buffers, uint32_t *first, uint32_t *counts);
     /* `device_id` is selected again: its windows onto buffers written since
      * are moved to where the buffers are now. */
     void selected(ID3D11DeviceContext4 *context, uint32_t device_id);
@@ -59,8 +72,8 @@ private:
     static constexpr uint32_t ring_bytes = 1u << 20u;
     static constexpr uint32_t window_bytes = 256u;
     static constexpr uint32_t bytes_per_constant = 16u;
-    static constexpr uint32_t max_buffers = 256u;
-    static constexpr uint32_t max_devices = 64u;
+    /* Every kept buffer at its largest fits the ring once. */
+    static constexpr uint32_t max_buffers = ring_bytes / largest;
     static constexpr uint32_t none = ~0u;
 
     struct Kept {
@@ -78,12 +91,11 @@ private:
         ID3D11Buffer *buffer_;
     };
     struct DeviceBindings {
-        uint32_t device_;
-        Binding  slots_[stage_count][slot_count];
+        Binding slots_[stage_count][slot_count];
     };
 
     uint32_t        kept_index(uint32_t id) const;
-    DeviceBindings *bindings_of(uint32_t device_id, bool make);
+    DeviceBindings *bindings_of(uint32_t device_id);
     [[nodiscard]] bool write(ID3D11Device5 *device, ID3D11DeviceContext4 *context, Kept &kept);
     void            rebind(ID3D11DeviceContext4 *context, DeviceBindings &device);
     void            set_one(ID3D11DeviceContext4 *context, uint32_t stage, uint32_t slot, ID3D11Buffer *buffer,
@@ -96,8 +108,7 @@ private:
     bool            wrapped_;
     Kept            kept_[max_buffers];
     uint32_t        kept_count_;
-    DeviceBindings  devices_[max_devices];
-    uint32_t        device_count_;
+    KeyedSlots<uint32_t, DeviceBindings> devices_;
 };
 
 }  // namespace av

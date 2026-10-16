@@ -8,6 +8,7 @@
 #include "executor/d3d/d3d12_view_writer.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
 #include "executor/shim/d3d_headers.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>
@@ -146,13 +147,15 @@ public:
 /* Most of a megabyte each: kept out of the stack. */
 D3dObjectTable &session_objects()
 {
-    static D3dObjectTable table;
+    static av::HostHeap   heap;
+    static D3dObjectTable table(heap);
     return table;
 }
 
 D3d12AddressMap &session_addresses()
 {
-    static D3d12AddressMap map;
+    static av::HostHeap    heap;
+    static D3d12AddressMap map(heap);
     return map;
 }
 

@@ -12,6 +12,8 @@
 #ifndef AV_D3D12_QUEUE_PROGRESS_HPP
 #define AV_D3D12_QUEUE_PROGRESS_HPP
 
+#include "core/support/growable_array.hpp"
+
 #include <stdint.h>
 
 struct ID3D12CommandQueue;
@@ -20,6 +22,7 @@ struct ID3D12Fence;
 
 namespace av {
 
+class BlockSource;
 class DriverLog;
 
 class D3d12FenceWake;
@@ -27,17 +30,14 @@ struct D3d12QueueProgressProbe;
 
 class D3d12QueueProgress {
 public:
-    /* More queues than an application makes; past it an execute is refused. */
-    static constexpr uint32_t capacity = 16u;
-
-    explicit D3d12QueueProgress(D3d12FenceWake &wake);
+    D3d12QueueProgress(D3d12FenceWake &wake, BlockSource &blocks);
     D3d12QueueProgress(const D3d12QueueProgress &) = delete;
     D3d12QueueProgress &operator=(const D3d12QueueProgress &) = delete;
 
     /* After an execute on `queue`, the guest's `id`: the queue signals its own
      * fence, made on `device` the first time, with the next mark, and the wake
      * watches for it. False when the fence cannot be made, signalled or
-     * watched, or the table is full. */
+     * watched, or the list of queues cannot grow. */
     [[nodiscard]] bool executed(uint32_t id, ID3D12CommandQueue *queue, ID3D12Device *device);
     /* Before an execute on `queue`, the guest's `id`: it waits on the GPU for
      * what every other queue was given. An application's Queue::Wait is
@@ -69,16 +69,20 @@ public:
     bool invariants_hold() const;
 
 private:
-    uint32_t slot_of(uint32_t id) const;
+    struct Queue {
+        uint32_t            id_;
+        /* The session's, which it releases only after forget(). */
+        ID3D12CommandQueue *queue_;
+        ID3D12Fence        *fence_;
+        uint64_t            signalled_;
+    };
 
-    D3d12FenceWake &wake_;
-    uint32_t            ids_[capacity];
-    /* The session's queues, which it releases only after forget(). */
-    ID3D12CommandQueue *queues_[capacity];
-    ID3D12Fence        *fences_[capacity];
-    uint64_t     signalled_[capacity];
-    uint32_t     count_;
-    uint64_t     marked_;
+    /* The index of `id`'s queue; size() for none. */
+    uint32_t index_of(uint32_t id) const;
+
+    D3d12FenceWake      &wake_;
+    GrowableArray<Queue> queues_;
+    uint64_t             marked_;
 
     friend struct D3d12QueueProgressProbe;
 };

@@ -5,6 +5,7 @@
 #include "executor/d3d/d3d12_pipeline_builder.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/wire/wire_arena.hpp"
 
@@ -18,7 +19,8 @@ using namespace av::d3d12proto;
 namespace {
 
 /* Most of a megabyte: kept out of the stack. */
-av::D3dObjectTable objects;
+av::HostHeap       objects_heap;
+av::D3dObjectTable objects(objects_heap);
 std::uint8_t       scratch_block[65536];
 
 }  // namespace

@@ -5,7 +5,8 @@
 
 namespace av {
 
-ConstantRing::ConstantRing() : ring_(nullptr), used_(0u), wrapped_(false), kept_{}, kept_count_(0u), devices_{}, device_count_(0u)
+ConstantRing::ConstantRing(BlockSource &blocks)
+    : ring_(nullptr), used_(0u), wrapped_(false), kept_{}, kept_count_(0u), devices_(blocks, Pool::paged)
 {
     AV_SCOPE("ConstantRing::ConstantRing");
 }
@@ -23,7 +24,7 @@ void ConstantRing::close()
     ring_ = nullptr;
     used_ = 0u;
     kept_count_ = 0u;
-    device_count_ = 0u;
+    devices_.clear();
 }
 
 uint32_t ConstantRing::kept_index(uint32_t id) const
@@ -34,17 +35,10 @@ uint32_t ConstantRing::kept_index(uint32_t id) const
     return none;
 }
 
-ConstantRing::DeviceBindings *ConstantRing::bindings_of(uint32_t device_id, bool make)
+ConstantRing::DeviceBindings *ConstantRing::bindings_of(uint32_t device_id)
 {
     AV_SCOPE("ConstantRing::bindings_of");
-    for (uint32_t index = 0u; index < device_count_; index++)
-        if (devices_[index].device_ == device_id) return &devices_[index];
-    if (!make || device_count_ == max_devices) return nullptr;
-    DeviceBindings &made = devices_[device_count_++];
-    made.device_ = device_id;
-    for (auto &stage : made.slots_)
-        for (Binding &slot : stage) slot = Binding{0u, none, 0u, 0u, nullptr};
-    return &made;
+    return devices_.find(device_id);
 }
 
 /* The window a binding sees of a kept buffer: the guest's own window of it,
@@ -124,7 +118,7 @@ bool ConstantRing::update(ID3D11Device5 *device, ID3D11DeviceContext4 *context, 
         kept_[index] = kept_[--kept_count_];
         return false;
     }
-    DeviceBindings *const current = bindings_of(device_id, false);
+    DeviceBindings *const current = bindings_of(device_id);
     if (current == nullptr) return true;
     if (wrapped_) {
         rebind(context, *current);
@@ -145,12 +139,21 @@ bool ConstantRing::update(ID3D11Device5 *device, ID3D11DeviceContext4 *context, 
     return true;
 }
 
-void ConstantRing::bind(uint32_t device_id, uint32_t stage, uint32_t start, uint32_t count, const uint32_t *ids,
-                        ID3D11Buffer **buffers, uint32_t *first, uint32_t *counts)
+Status ConstantRing::bind(uint32_t device_id, uint32_t stage, uint32_t start, uint32_t count, const uint32_t *ids,
+                          ID3D11Buffer **buffers, uint32_t *first, uint32_t *counts)
 {
     AV_SCOPE("ConstantRing::bind");
-    DeviceBindings *const device = bindings_of(device_id, true);
-    if (device == nullptr || stage >= stage_count) return;
+    if (stage >= stage_count) return Status::ok;
+    DeviceBindings *device = bindings_of(device_id);
+    if (device == nullptr) {
+        DeviceBindings made = {};
+        for (auto &row : made.slots_)
+            for (Binding &slot : row) slot = Binding{0u, none, 0u, 0u, nullptr};
+        uint32_t     at = 0u;
+        const Status kept = devices_.insert(device_id, made, at);
+        if (kept != Status::ok) return kept;
+        device = devices_.at(at);
+    }
     for (uint32_t index = 0u; index < count && start + index < slot_count; index++) {
         Binding &slot = device->slots_[stage][start + index];
         slot = Binding{ids[index], none, first[index], counts[index], buffers[index]};
@@ -160,6 +163,7 @@ void ConstantRing::bind(uint32_t device_id, uint32_t stage, uint32_t start, uint
         buffers[index] = ring_;
         slot.offset_ = kept_[kept].offset_;
     }
+    return Status::ok;
 }
 
 /* Every slot of `device` whose window is not where its buffer is now: onto
@@ -204,14 +208,14 @@ void ConstantRing::set_one(ID3D11DeviceContext4 *context, uint32_t stage, uint32
 void ConstantRing::selected(ID3D11DeviceContext4 *context, uint32_t device_id)
 {
     AV_SCOPE("ConstantRing::selected");
-    DeviceBindings *const device = bindings_of(device_id, false);
+    DeviceBindings *const device = bindings_of(device_id);
     if (device != nullptr) rebind(context, *device);
 }
 
 void ConstantRing::cleared(uint32_t device_id)
 {
     AV_SCOPE("ConstantRing::cleared");
-    DeviceBindings *const device = bindings_of(device_id, false);
+    DeviceBindings *const device = bindings_of(device_id);
     if (device == nullptr) return;
     for (auto &stage : device->slots_)
         for (Binding &slot : stage) slot = Binding{0u, none, 0u, 0u, nullptr};
@@ -228,7 +232,7 @@ void ConstantRing::release(ID3D11DeviceContext4 *context, uint32_t device_id, ui
         context->Unmap(buffer, 0u);
     }
     kept_[index] = kept_[--kept_count_];
-    DeviceBindings *const current = bindings_of(device_id, false);
+    DeviceBindings *const current = bindings_of(device_id);
     if (current != nullptr) rebind(context, *current);
 }
 
@@ -237,20 +241,17 @@ void ConstantRing::forget(uint32_t id)
     AV_SCOPE("ConstantRing::forget");
     const uint32_t index = kept_index(id);
     if (index != none) kept_[index] = kept_[--kept_count_];
-    for (uint32_t device = 0u; device < device_count_; device++)
-        for (auto &stage : devices_[device].slots_)
+    devices_.for_each([id](uint32_t, DeviceBindings &device) {
+        for (auto &stage : device.slots_)
             for (Binding &slot : stage)
                 if (slot.id_ == id) slot = Binding{0u, none, 0u, 0u, nullptr};
+    });
 }
 
 void ConstantRing::forget_device(uint32_t device_id)
 {
     AV_SCOPE("ConstantRing::forget_device");
-    for (uint32_t index = 0u; index < device_count_; index++) {
-        if (devices_[index].device_ != device_id) continue;
-        devices_[index] = devices_[--device_count_];
-        return;
-    }
+    static_cast<void>(devices_.erase(device_id));
 }
 
 }  // namespace av

@@ -14,6 +14,8 @@
 #include "executor/shim/d3d_headers.hpp"
 #include "harness/executor/local_import.hpp"
 #include "executor/wake_signal.hpp"
+#include "executor/d3d/watched_blocks.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -46,7 +48,9 @@ constexpr std::uint32_t dxgi_error_unsupported = 0x887A0004u;
 /* The session and the session's object table, a megabyte: in static storage,
  * made fresh for each test over a region of guest memory. */
 av::ObjectStorage<D3d12Session> session_storage;
-av::D3dObjectTable              objects;
+av::HostHeap                    session_heap;
+av::WatchedBlocks               blocks(session_heap);
+av::D3dObjectTable              objects(blocks);
 av::WakeSignal tenant;
 alignas(64) std::uint8_t guest[8192];
 
@@ -56,7 +60,7 @@ public:
     {
         CHECK(region_.adopt(import_.blob()));
         objects.clear();
-        CHECK_STATUS(session_storage.construct(region_, imported_, objects, tenant), av::Status::ok);
+        CHECK_STATUS(session_storage.construct(region_, imported_, objects, tenant, blocks), av::Status::ok);
         session_storage.object().initialize(nullptr);
     }
     ~FreshSession()
@@ -275,14 +279,14 @@ TEST(d3d12_session_objects, are_its_own_kinds_in_the_shared_table)
 { Counted eleven, twelve;
   { FreshSession fresh;
     D3d12Session &session = fresh.session();
-    CHECK(objects.insert(41u, av::D3dObjectKind::resource, &eleven));
+    CHECK_STATUS(objects.insert(41u, av::D3dObjectKind::resource, &eleven), av::Status::ok);
     CHECK(session.invariants_hold());
     CHECK(!session.on_Destroy12(41u));
-    CHECK(objects.insert(42u, av::D3dObjectKind::query_heap12, &twelve));
+    CHECK_STATUS(objects.insert(42u, av::D3dObjectKind::query_heap12, &twelve), av::Status::ok);
     CHECK(!session.invariants_hold());
     CHECK(session.on_Destroy12(42u));
     CHECK_EQ(twelve.references, 0u);
-    CHECK(objects.insert(43u, av::D3dObjectKind::query9, &twelve));
+    CHECK_STATUS(objects.insert(43u, av::D3dObjectKind::query9, &twelve), av::Status::ok);
     CHECK(!session.on_Destroy12(43u));
     objects.remove(43u); }
   /* The session went; the Direct3D 11 object is still the table's. */

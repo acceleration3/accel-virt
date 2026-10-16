@@ -45,6 +45,7 @@ namespace av {
 class D3d11HostDevice;
 class SessionShares;
 class SharedSurfaces;
+class WatchedBlocks;
 class D3d12HostDevice;
 class WakeSignal;
 class GuestRegion;
@@ -60,7 +61,9 @@ public:
      * CPU-visible heap is one of them (docs/host-memory.md). */
     /* `tenant` is what wakes the session's worker should the GPU's Direct3D
      * 12 device, which it joins as it opens it, be lost (DeviceTenants). */
-    D3d12Session(GuestRegion &region, ImportedMemories &imported, D3dObjectTable &objects, WakeSignal &tenant);
+    /* `blocks` is what the session's tables grow in. */
+    D3d12Session(GuestRegion &region, ImportedMemories &imported, D3dObjectTable &objects, WakeSignal &tenant,
+                 WatchedBlocks &blocks);
 
     /* Binds the session to its GPU's device, which must outlive it; null is a
      * GPU with none, on which every command is refused. Swap chain buffers are
@@ -207,6 +210,7 @@ private:
     bool                   joined_;
     SharedSurfaces        *surfaces_;
     D3dObjectTable        &objects_;
+    WatchedBlocks         &blocks_;
     D3d12AddressMap        addresses_;
     D3d12FencePublisher    fences_;
     D3d12FenceWake         wake_;

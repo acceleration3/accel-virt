@@ -5,8 +5,8 @@
 
 namespace av {
 
-QueryResultPublisher::QueryResultPublisher()
-    : results_(nullptr), slots_(0u), ends_(0u), unflushed_(false), pending_{}, count_(0u)
+QueryResultPublisher::QueryResultPublisher(BlockSource &blocks)
+    : results_(nullptr), slots_(0u), ends_(0u), unflushed_(false), pending_(blocks, Pool::paged)
 {
     AV_SCOPE("QueryResultPublisher::QueryResultPublisher");
 }
@@ -34,35 +34,31 @@ void QueryResultPublisher::unbind()
 }
 
 /* A query ended again before its last end was published supersedes it: D3D11
- * reads only the latest. One that finds the list full goes unpublished, and
- * the guest, seeing its slot never catch up, asks the host instead. */
-void QueryResultPublisher::ended(uint32_t id, ID3D11Query *query)
+ * reads only the latest. */
+Status QueryResultPublisher::ended(uint32_t id, ID3D11Query *query)
 {
     AV_SCOPE("QueryResultPublisher::ended");
     ends_++;
-    if (results_ == nullptr || query == nullptr) return;
+    if (results_ == nullptr || query == nullptr) return Status::ok;
     unflushed_ = true;
-    query->AddRef();
-    for (uint32_t i = 0u; i < count_; i++) {
-        if (pending_[i].id_ != id) continue;
-        pending_[i].query_->Release();
-        pending_[i].query_ = query;
-        pending_[i].end_ = ends_;
-        return;
+    Pending *const superseded = pending_.find(id);
+    if (superseded != nullptr) {
+        query->AddRef();
+        superseded->query_->Release();
+        *superseded = Pending{query, ends_};
+        return Status::ok;
     }
-    if (count_ < pending_capacity) pending_[count_++] = Pending{id, query, ends_};
-    else query->Release();
+    uint32_t     slot = 0u;
+    const Status kept = pending_.insert(id, Pending{query, ends_}, slot);
+    if (kept == Status::ok) query->AddRef();
+    return kept;
 }
 
 void QueryResultPublisher::forget(uint32_t id)
 {
     AV_SCOPE("QueryResultPublisher::forget");
-    for (uint32_t i = 0u; i < count_; i++) {
-        if (pending_[i].id_ != id) continue;
-        pending_[i].query_->Release();
-        pending_[i] = pending_[--count_];
-        return;
-    }
+    Pending dropped = {};
+    if (pending_.take(id, dropped)) dropped.query_->Release();
 }
 
 /* The references a pending result held, given back: its queries may be the
@@ -70,8 +66,8 @@ void QueryResultPublisher::forget(uint32_t id)
 void QueryResultPublisher::release_all()
 {
     AV_SCOPE("QueryResultPublisher::release_all");
-    for (uint32_t i = 0u; i < count_; i++) pending_[i].query_->Release();
-    count_ = 0u;
+    pending_.for_each([](uint32_t, Pending &pending) { pending.query_->Release(); });
+    pending_.clear();
 }
 
 bool QueryResultPublisher::needs_flush() const
@@ -89,27 +85,24 @@ void QueryResultPublisher::flushed()
 bool QueryResultPublisher::publish(ID3D11DeviceContext4 *context)
 {
     AV_SCOPE("QueryResultPublisher::publish");
-    uint8_t data[slot_bytes - data_at] = {};
-    for (uint32_t i = 0u; i < count_;) {
-        const Pending pending = pending_[i];
-        const UINT    size = pending.query_->GetDataSize();
+    static_cast<void>(pending_.erase_if([this, context](uint32_t id, Pending &pending) {
+        uint8_t    data[slot_bytes - data_at] = {};
+        const UINT size = pending.query_->GetDataSize();
         if (size > sizeof data ||
             context->GetData(pending.query_, size == 0u ? nullptr : data, size, D3D11_ASYNC_GETDATA_DONOTFLUSH) !=
-                S_OK) {
-            i++;
-            continue;
-        }
-        write(pending.id_, data, size, pending.end_);
+                S_OK)
+            return false;
+        write(id, data, size, pending.end_);
         pending.query_->Release();
-        pending_[i] = pending_[--count_];
-    }
-    return count_ != 0u;
+        return true;
+    }));
+    return pending_.count() != 0u;
 }
 
 bool QueryResultPublisher::pending() const
 {
     AV_SCOPE("QueryResultPublisher::pending");
-    return count_ != 0u;
+    return pending_.count() != 0u;
 }
 
 /* The count last, after a store fence: the guest takes the data as soon as it

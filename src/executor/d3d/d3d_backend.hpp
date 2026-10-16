@@ -20,8 +20,10 @@
 #include "executor/d3d/d3d9_session.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
 #include "executor/d3d/guest_devices.hpp"
+#include "executor/d3d/watched_blocks.hpp"
 #include "executor/guest_region.hpp"
 #include "executor/imported_memories.hpp"
+#include "executor/shim/host_heap.hpp"
 #include "executor/shim/vulkan_buffer.hpp"
 #include "executor/d3d/constant_ring.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
@@ -226,7 +228,9 @@ private:
     /* The session made a device: what creating an object, flushing and
      * finishing need, none of which touch pipeline state. */
     bool                     has_device() const;
-    void                     remake_views(IUnknown *const *textures, uint32_t count);
+    /* Every view of one of `textures` remade on the next; no_memory, with
+     * the views not yet remade left as they were, when one cannot be kept. */
+    [[nodiscard]] Status     remake_views(IUnknown *const *textures, uint32_t count);
     void rebind_remade();
     bool swap_remade(IUnknown **bound, uint32_t count) const;
     void release_all(IUnknown **held, uint32_t count) const;
@@ -259,16 +263,19 @@ private:
     bool                    admitted_;
     /* The device lock, taken at a batch's first command and held to its end. */
     bool                    held_;
-    /* The most devices one process runs at once. */
-    static constexpr uint32_t max_devices = 64u;
-    /* The views a rotation remade, the old ones held until what bound them is rebound. */
-    static constexpr uint32_t max_remade = 64u;
-    IUnknown               *remade_old_[max_remade];
-    IUnknown               *remade_new_[max_remade];
-    uint32_t                remade_;
+    /* What every table of the session grows in, and how a command refused
+     * for want of it is told apart (WatchedBlocks). */
+    HostHeap                heap_;
+    WatchedBlocks           blocks_;
+    /* A view a rotation remade, the old one held until what bound it is rebound. */
+    struct Remade {
+        IUnknown *old_;
+        IUnknown *made_;
+    };
+    GrowableArray<Remade>   remade_;
     /* Each device's pipeline state, by the guest's id, and the selected
      * one, which commands run on. */
-    GuestDevices<ID3DDeviceContextState, max_devices> states_;
+    GuestDevices<ID3DDeviceContextState> states_;
     /* QEMU's stderr, where the host log is read when a guest's command fails. */
     StdioLog                sink_;
     DriverLog               lines_;

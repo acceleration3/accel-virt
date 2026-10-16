@@ -2,7 +2,7 @@
 
 namespace av {
 
-MockHostApis::MockHostApis() : gpus_{}, count_(0u), questions_(0u), d3d11_(), d3d11_index_(max_gpus), surfaces_(), heap_(),
+MockHostApis::MockHostApis() : gpus_{}, count_(0u), questions_(0u), d3d11_(), d3d11_index_(max_gpus), heap_(), surfaces_(heap_),
       log_(), lines_(log_, "shares: "), shares_(heap_, lines_), exporter_(), source_(exporter_, heap_),
       memory_withheld_(false) {}
 

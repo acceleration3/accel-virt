@@ -7,6 +7,7 @@
 
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
+#include "executor/d3d/watched_blocks.hpp"
 #include "executor/d3d/d3d12_indirect_signature.hpp"
 #include "executor/d3d/d3d12_root_layout.hpp"
 #include "executor/guest_region.hpp"
@@ -111,9 +112,10 @@ const D3D12_CLEAR_VALUE *host_clear(const d3d12proto::ClearValue &clear, D3D12_C
 }  // namespace
 
 D3d12Session::D3d12Session(GuestRegion &region, ImportedMemories &imported, D3dObjectTable &objects,
-                           WakeSignal &tenant)
+                           WakeSignal &tenant, WatchedBlocks &blocks)
     : region_(region), imported_(imported), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
-      joined_(false), surfaces_(nullptr), objects_(objects), addresses_(), fences_(region), wake_(), progress_(wake_), views_(objects_, addresses_),
+      joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks), fences_(region),
+      wake_(), progress_(wake_, blocks), views_(objects_, addresses_),
       pipelines_(objects_), presentation_(), tile_update_(), arena_(nullptr), removed_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "), refusal_(lines_)
 {
     AV_SCOPE("D3d12Session::D3d12Session");
@@ -173,7 +175,7 @@ bool D3d12Session::run(uint32_t command_id, WireReader &payload, WireWriter &rep
     arena_ = nullptr;
     if (ran) return true;
     if (!refusal_.removes(d3d12proto::command_name(command_id), only_device, removed_ != 0u)) return false;
-    removed_ = static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR);
+    if (removed_ == 0u) removed_ = blocks_.refusal(static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR));
     return true;
 }
 
@@ -259,24 +261,32 @@ bool D3d12Session::place(uint32_t id, IUnknown *made, uint64_t address, uint64_t
     ID3D12Resource *const resource = static_cast<ID3D12Resource *>(static_cast<void *>(made));
     const uint64_t        host = resource->GetGPUVirtualAddress();
     const bool            within = address != 0u && addresses_.translate(address, width) == host;
-    if (address != 0u && !within && !addresses_.insert(address, width, host, id)) {
-        LogLine(lines_).text("a buffer's address kept nowhere: ").number(addresses_.count()).text(" of ")
-            .number(D3d12AddressMap::capacity).text(" ranges held").write();
+    const bool            registering = address != 0u && !within;
+    /* An id in use would be refused by the keep below; asked first, so the
+     * range removed after a refused keep can only be this buffer's. */
+    D3dObjectKind  taken = D3dObjectKind::none;
+    const Status   registered = objects_.find_any(id, taken) != nullptr ? Status::conflict
+                                : registering ? addresses_.insert(address, width, host, id)
+                                              : Status::ok;
+    if (registered != Status::ok) {
+        LogLine(lines_).text("a buffer's address kept nowhere, status ").number(static_cast<uint32_t>(registered))
+            .text(", ").number(addresses_.count()).text(" ranges held").write();
         made->Release();
         return false;
     }
     if (kept(id, D3dObjectKind::resource12, made)) return true;
-    addresses_.remove(id);
+    if (registering) addresses_.remove(id);
     return false;
 }
 
 bool D3d12Session::kept(uint32_t id, D3dObjectKind kind, IUnknown *made)
 {
     AV_SCOPE("D3d12Session::kept");
-    if (objects_.keep(id, kind, made)) return true;
+    const Status kept = objects_.keep(id, kind, made);
+    if (kept == Status::ok) return true;
     if (made != nullptr)
-        LogLine(lines_).text("an object kept nowhere: id ").number(id).text(", ").number(objects_.count()).text(" of ")
-            .number(D3dObjectTable::capacity).text(" objects held").write();
+        LogLine(lines_).text("an object kept nowhere: id ").number(id).text(", status ")
+            .number(static_cast<uint32_t>(kept)).text(", ").number(objects_.count()).text(" objects held").write();
     return false;
 }
 

@@ -69,8 +69,8 @@ private:
     uint32_t        questions_;
     D3d11HostDevice d3d11_;
     uint32_t        d3d11_index_;
-    SharedSurfaces  surfaces_;
     HostHeap        heap_;
+    SharedSurfaces  surfaces_;
     RecordingLog    log_;
     DriverLog       lines_;
     HostShares      shares_;
