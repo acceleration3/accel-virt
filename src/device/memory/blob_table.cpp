@@ -7,7 +7,8 @@
 
 namespace av {
 
-BlobTable::BlobTable(Host &host) : host_(host), lock_(nullptr), slots_{}, retiring_{}
+BlobTable::BlobTable(Host &host)
+    : host_(host), lock_(nullptr), blobs_(host), ids_(host, Pool::paged)
 {
     AV_SCOPE("BlobTable::BlobTable");
 }
@@ -27,12 +28,10 @@ Status BlobTable::initialize()
     return host_.create_mutex(lock_) == Status::ok ? Status::ok : Status::no_memory;
 }
 
-ObjectStorage<BlobResource> *BlobTable::slot_of(uint32_t id)
+BlobTable::Entry *BlobTable::entry_of(uint32_t id)
 {
-    AV_SCOPE("BlobTable::slot_of");
-    for (ObjectStorage<BlobResource> &slot : slots_)
-        if (slot.constructed() && slot.object().id() == id) return &slot;
-    return nullptr;
+    AV_SCOPE("BlobTable::entry_of");
+    return ids_.find(id);
 }
 
 Status BlobTable::create_guest(uint32_t id, uint64_t size, ControlRequest &request, size_t offset, uint32_t entries)
@@ -43,25 +42,27 @@ Status BlobTable::create_guest(uint32_t id, uint64_t size, ControlRequest &reque
     host_.lock_mutex(lock_);
     ScopeExit unlock([this] { host_.unlock_mutex(lock_); });
     sweep_retired();
-    if (slot_of(id) != nullptr) return Status::conflict;
-    for (ObjectStorage<BlobResource> &slot : slots_) {
-        if (slot.construct(host_, id) != Status::ok) continue;   /* occupied */
-        const Status status = slot.object().back_with_guest(request, offset, entries, size);
-        if (status != Status::ok) slot.destroy();
-        return status;
-    }
-    return Status::no_space;
+    if (entry_of(id) != nullptr) return Status::conflict;
+    if (ids_.reserve(ids_.count() + 1u) != Status::ok) return Status::no_memory;
+    BlobResource *blob = nullptr;
+    if (blobs_.create(blob, host_, id) != Status::ok) return Status::no_memory;
+    const Status backed = blob->back_with_guest(request, offset, entries, size);
+    uint32_t     slot = 0u;
+    /* Room was made above, so the insert cannot fail. */
+    if (backed == Status::ok) return ids_.insert(id, Entry{blob, false}, slot);
+    static_cast<void>(blobs_.destroy(blob));
+    return backed;
 }
 
 Status BlobTable::pin(uint32_t id, uint64_t minimum_size)
 {
     AV_SCOPE("BlobTable::pin");
     host_.require_main_loop("BlobTable::pin");
-    ObjectStorage<BlobResource> *const slot = slot_of(id);
-    if (slot == nullptr) return Status::not_found;
-    if (slot->object().size() < minimum_size) return Status::invalid_parameter;
-    if (retiring(*slot)) return Status::invalid_state;
-    slot->object().pin();
+    Entry *const entry = entry_of(id);
+    if (entry == nullptr) return Status::not_found;
+    if (entry->blob_->size() < minimum_size) return Status::invalid_parameter;
+    if (entry->retiring_) return Status::invalid_state;
+    entry->blob_->pin();
     return Status::ok;
 }
 
@@ -69,9 +70,9 @@ Status BlobTable::backing(uint32_t id, BlobWindow &pages)
 {
     AV_SCOPE("BlobTable::backing");
     host_.require_main_loop("BlobTable::backing");
-    ObjectStorage<BlobResource> *const slot = slot_of(id);
-    if (slot == nullptr) return Status::not_found;
-    pages = slot->object().window();
+    const Entry *const entry = entry_of(id);
+    if (entry == nullptr) return Status::not_found;
+    pages = entry->blob_->window();
     return Status::ok;
 }
 
@@ -79,10 +80,10 @@ Status BlobTable::window(uint32_t id, BlobWindow &window)
 {
     AV_SCOPE("BlobTable::window");
     host_.require_main_loop("BlobTable::window");
-    ObjectStorage<BlobResource> *const slot = slot_of(id);
-    if (slot == nullptr) return Status::not_found;
-    if (!slot->object().pinned()) return Status::invalid_state;
-    window = slot->object().window();
+    const Entry *const entry = entry_of(id);
+    if (entry == nullptr) return Status::not_found;
+    if (!entry->blob_->pinned()) return Status::invalid_state;
+    window = entry->blob_->window();
     return Status::ok;
 }
 
@@ -91,20 +92,20 @@ Status BlobTable::view(uint32_t id, const uint8_t *&base)
     AV_SCOPE("BlobTable::view");
     host_.require_main_loop("BlobTable::view");
     base = nullptr;
-    ObjectStorage<BlobResource> *const slot = slot_of(id);
-    if (slot == nullptr) return Status::not_found;
-    if (!slot->object().pinned()) return Status::invalid_state;
-    return slot->object().view(base);
+    const Entry *const entry = entry_of(id);
+    if (entry == nullptr) return Status::not_found;
+    if (!entry->blob_->pinned()) return Status::invalid_state;
+    return entry->blob_->view(base);
 }
 
 void BlobTable::unpin(uint32_t id)
 {
     AV_SCOPE("BlobTable::unpin");
     host_.require_main_loop("BlobTable::unpin");
-    ObjectStorage<BlobResource> *const slot = slot_of(id);
-    if (slot == nullptr) return;
-    slot->object().unpin();
-    if (!retiring(*slot)) return;
+    Entry *const entry = entry_of(id);
+    if (entry == nullptr) return;
+    entry->blob_->unpin();
+    if (!entry->retiring_) return;
     host_.lock_mutex(lock_);
     sweep_retired();
     host_.unlock_mutex(lock_);
@@ -114,13 +115,13 @@ Status BlobTable::release(uint32_t id)
 {
     AV_SCOPE("BlobTable::release");
     host_.require_main_loop("BlobTable::release");
-    ObjectStorage<BlobResource> *const slot = slot_of(id);
-    if (slot == nullptr) return Status::not_found;
+    Entry *const entry = entry_of(id);
+    if (entry == nullptr) return Status::not_found;
     host_.lock_mutex(lock_);
     ScopeExit    unlock([this] { host_.unlock_mutex(lock_); });
-    if (slot->object().pinned()) return Status::invalid_state;
-    slot->destroy();
-    retiring_[slot - slots_] = false;
+    if (entry->blob_->pinned()) return Status::invalid_state;
+    static_cast<void>(blobs_.destroy(entry->blob_));
+    ids_.erase(id);
     return Status::ok;
 }
 
@@ -128,31 +129,23 @@ Status BlobTable::retire(uint32_t id)
 {
     AV_SCOPE("BlobTable::retire");
     host_.require_main_loop("BlobTable::retire");
-    ObjectStorage<BlobResource> *const slot = slot_of(id);
-    if (slot == nullptr) return Status::not_found;
+    Entry *const entry = entry_of(id);
+    if (entry == nullptr) return Status::not_found;
     host_.lock_mutex(lock_);
-    retiring_[slot - slots_] = true;
+    entry->retiring_ = true;
     sweep_retired();
     host_.unlock_mutex(lock_);
     return Status::ok;
 }
 
-bool BlobTable::retiring(const ObjectStorage<BlobResource> &slot) const
-{
-    AV_SCOPE("BlobTable::retiring");
-    return retiring_[&slot - slots_];
-}
-
 void BlobTable::sweep_retired()
 {
     AV_SCOPE("BlobTable::sweep_retired");
-    for (uint32_t index = 0u; index < max_blobs; index++) {
-        if (!retiring_[index]) continue;
-        const BlobResource &blob = slots_[index].object();
-        if (blob.pinned()) continue;
-        slots_[index].destroy();
-        retiring_[index] = false;
-    }
+    ids_.erase_if([this](uint32_t, Entry &entry) {
+        if (!entry.retiring_ || entry.blob_->pinned()) return false;
+        static_cast<void>(blobs_.destroy(entry.blob_));
+        return true;
+    });
 }
 
 void BlobTable::release_all()
@@ -161,8 +154,8 @@ void BlobTable::release_all()
     host_.require_main_loop("BlobTable::release_all");
     if (lock_ == nullptr) return;
     host_.lock_mutex(lock_);
-    for (ObjectStorage<BlobResource> &slot : slots_) slot.destroy();
-    for (bool &retiring : retiring_) retiring = false;
+    blobs_.destroy_all();
+    ids_.clear();
     host_.unlock_mutex(lock_);
 }
 
@@ -170,45 +163,37 @@ bool BlobTable::contains(uint32_t id)
 {
     AV_SCOPE("BlobTable::contains");
     host_.require_main_loop("BlobTable::contains");
-    return slot_of(id) != nullptr;
+    return entry_of(id) != nullptr;
 }
 
 Status BlobTable::size(uint32_t id, uint64_t &size)
 {
     AV_SCOPE("BlobTable::size");
     host_.require_main_loop("BlobTable::size");
-    const ObjectStorage<BlobResource> *const slot = slot_of(id);
-    if (slot == nullptr) return Status::not_found;
-    size = slot->object().size();
+    const Entry *const entry = entry_of(id);
+    if (entry == nullptr) return Status::not_found;
+    size = entry->blob_->size();
     return Status::ok;
 }
 
 uint32_t BlobTable::live() const
 {
     AV_SCOPE("BlobTable::live");
-    uint32_t count = 0u;
-    for (const ObjectStorage<BlobResource> &slot : slots_) count += slot.constructed() ? 1u : 0u;
-    return count;
+    return ids_.count();
 }
 
-/* Ids are unique, no blob lives that a worker's read could not be held apart
- * from, and only a live blob is retiring: a sweep reads the blob a retiring
- * mark names. */
+/* No blob lives that a worker's read could not be held apart from, and each
+ * id names a live blob of that id and no other id the same one. */
 bool BlobTable::invariants_hold() const
 {
     AV_SCOPE("BlobTable::invariants_hold");
     if (lock_ == nullptr && live() != 0u) return false;
-    for (uint32_t first = 0u; first < max_blobs; first++) {
-        if (retiring_[first] && !slots_[first].constructed()) return false;
-        if (!slots_[first].constructed()) continue;
-        const BlobResource &blob = slots_[first].object();
-        for (uint32_t second = first + 1u; second < max_blobs; second++) {
-            if (!slots_[second].constructed()) continue;
-            const BlobResource &other = slots_[second].object();
-            if (other.id() == blob.id()) return false;
-        }
-    }
-    return true;
+    if (!ids_.invariants_hold() || !blobs_.invariants_hold() || blobs_.live() != ids_.count()) return false;
+    bool named = true;
+    ids_.for_each([this, &named](uint32_t id, const Entry &entry) {
+        named = named && blobs_.find(entry.blob_) == entry.blob_ && entry.blob_->id() == id;
+    });
+    return named;
 }
 
 }  // namespace av

@@ -1,13 +1,14 @@
 /* A device's guest blobs, by the resource ids the guest gives them: guest
  * pages the device reads and writes itself (host GPU memory is the host blob
- * table's, docs/host-memory.md). The table keeps ids unique; the protocol
- * rules in front of it are BlobCommands'. Main loop, except that a worker
- * reads a pinned blob's pages: one lock holds a creation or a release apart
- * from that. */
+ * table's, docs/host-memory.md). The table keeps ids unique and holds as
+ * many blobs as the guest makes; the protocol rules in front of it are
+ * BlobCommands'. Main loop, except that a worker reads a pinned blob's pages:
+ * one lock holds a creation or a release apart from that. */
 #ifndef AV_BLOB_TABLE_HPP
 #define AV_BLOB_TABLE_HPP
 
-#include "core/support/object_storage.hpp"
+#include "core/support/keyed_slots.hpp"
+#include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "device/memory/blob_resource.hpp"
 
@@ -23,8 +24,6 @@ struct BlobTableProbe;
 
 class BlobTable {
 public:
-    static constexpr uint32_t max_blobs = 1024u;
-
     explicit BlobTable(Host &host);
     ~BlobTable();
     BlobTable(const BlobTable &) = delete;
@@ -33,8 +32,8 @@ public:
     /* Main loop. no_memory when the host has no lock to give; invalid_state
      * once done. */
     [[nodiscard]] Status initialize();
-    /* invalid_state before initialize; conflict for a live id, no_space when
-     * full, or the backing's failure, leaving no blob behind. */
+    /* invalid_state before initialize; conflict for a live id, no_memory when
+     * the table cannot grow, or the backing's failure, leaving no blob behind. */
     [[nodiscard]] Status create_guest(uint32_t id, uint64_t size, ControlRequest &request, size_t offset,
                                       uint32_t entries);
     /* not_found for an unknown id; invalid_parameter for a blob smaller than
@@ -70,15 +69,20 @@ public:
     bool invariants_hold() const;
 
 private:
-    ObjectStorage<BlobResource> *slot_of(uint32_t id);
-    bool                         retiring(const ObjectStorage<BlobResource> &slot) const;
-    /* Under the lock, on the main loop: every retiring blob nothing holds. */
-    void                         sweep_retired();
+    struct Entry {
+        BlobResource *blob_;
+        /* Released while pinned: no new pin, and gone with the last. */
+        bool          retiring_;
+    };
 
-    Host                       &host_;
-    void                       *lock_;
-    ObjectStorage<BlobResource> slots_[max_blobs];
-    bool                        retiring_[max_blobs];
+    Entry *entry_of(uint32_t id);
+    /* Under the lock, on the main loop: every retiring blob nothing holds. */
+    void   sweep_retired();
+
+    Host                        &host_;
+    void                        *lock_;
+    ObjectPool<BlobResource>     blobs_;
+    KeyedSlots<uint32_t, Entry>  ids_;
 
     friend struct BlobTableProbe;
 };

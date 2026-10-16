@@ -8,6 +8,7 @@
 #ifndef AV_RENDERER_CONTEXT_PLANE_HPP
 #define AV_RENDERER_CONTEXT_PLANE_HPP
 
+#include "core/support/growable_array.hpp"
 #include "core/support/object_storage.hpp"
 #include "device/context/context_plane.hpp"
 #include "device/isolation/remote_context.hpp"
@@ -126,8 +127,8 @@ private:
      * imports an image once per descriptor, so the same one is handed back
      * until the renderer sends another. */
     int              images_[ExportedImageMessage::slots];
-    uint32_t         mirrored_[BlobTable::max_blobs];
-    uint32_t         mirrored_count_;
+    /* Every guest blob the renderer is given, sent again at each launch. */
+    GrowableArray<uint32_t> mirrored_;
     ObjectStorage<RemoteContext> slots_[max_contexts];
     RendererExtent   extents_[GuestBlobMessage::max_extents];
     uint8_t          body_[RendererMessageHeader::max_body_length];

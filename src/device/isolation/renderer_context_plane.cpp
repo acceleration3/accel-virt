@@ -24,7 +24,7 @@ namespace av {
 RendererContextPlane::RendererContextPlane(Host &host, BlobTable &blobs, FenceInterrupts &interrupts)
     : host_(host), blobs_(blobs), interrupts_(interrupts), link_(host), renderer_{}, executor_{},
       executor_length_(0u), gpu_uuid_(), capset_{}, capset_length_(0u), ready_(), configured_(false), alive_(false),
-      interrupts_on_(false), epoch_(0u), losses_{}, loss_count_(0u), images_{}, mirrored_{}, mirrored_count_(0u), slots_{},
+      interrupts_on_(false), epoch_(0u), losses_{}, loss_count_(0u), images_{}, mirrored_(host, Pool::paged), slots_{},
       extents_{}, body_{}
 {
     AV_SCOPE("RendererContextPlane::RendererContextPlane");
@@ -91,8 +91,8 @@ Status RendererContextPlane::launch()
     status = hello.encode(body_, sizeof body_);
     if (status == Status::ok) status = link_.greet(body_, static_cast<uint32_t>(hello.encoded_length()), ready_);
     if (status == Status::ok) status = send_regions();
-    for (uint32_t index = 0u; index < mirrored_count_ && status == Status::ok; index++) {
-        status = mirror(mirrored_[index]);
+    for (uint32_t index = 0u; index < mirrored_.size() && status == Status::ok; index++) {
+        status = mirror(mirrored_.at(index));
         if (status == Status::invalid_parameter || status == Status::not_supported) status = Status::ok;
     }
     if (status == Status::ok && interrupts_on_) status = send_interrupt_lines();
@@ -251,7 +251,7 @@ void RendererContextPlane::destroy_all()
     AV_SCOPE("RendererContextPlane::destroy_all");
     for (ObjectStorage<RemoteContext> &slot : slots_)
         if (slot.constructed()) static_cast<void>(destroy(slot.object().id()));
-    while (mirrored_count_ != 0u) blob_released(mirrored_[mirrored_count_ - 1u]);
+    while (mirrored_.size() != 0u) blob_released(mirrored_.at(mirrored_.size() - 1u));
 }
 
 bool RendererContextPlane::holds(uint32_t id)
@@ -307,8 +307,12 @@ uint32_t RendererContextPlane::live() const
 void RendererContextPlane::blob_created(uint32_t id)
 {
     AV_SCOPE("RendererContextPlane::blob_created");
-    if (mirrored_count_ == BlobTable::max_blobs) return;
-    mirrored_[mirrored_count_++] = id;
+    /* A blob the renderer cannot be remembered to have is left out, as one
+     * outside its memory is: every context that names it is refused. */
+    if (mirrored_.append(id) != Status::ok) {
+        host_.log("virtio-gpu-av: no memory to give a blob to the renderer");
+        return;
+    }
     if (!alive_) return;
     const Status status = mirror(id);
     if (status == Status::ok) return;
@@ -316,7 +320,7 @@ void RendererContextPlane::blob_created(uint32_t id)
      * sent it - is left out: every context that names it is refused, and the
      * renderer is not ended over it, which a relaunch would only repeat. */
     if (status == Status::invalid_parameter || status == Status::not_supported) {
-        mirrored_count_--;
+        mirrored_.truncate(mirrored_.size() - 1u);
         host_.log("virtio-gpu-av: a blob outside the renderer's memory is not given to it");
         return;
     }
@@ -326,9 +330,9 @@ void RendererContextPlane::blob_created(uint32_t id)
 void RendererContextPlane::blob_released(uint32_t id)
 {
     AV_SCOPE("RendererContextPlane::blob_released");
-    for (uint32_t index = 0u; index < mirrored_count_; index++) {
-        if (mirrored_[index] != id) continue;
-        mirrored_[index] = mirrored_[--mirrored_count_];
+    for (uint32_t index = 0u; index < mirrored_.size(); index++) {
+        if (mirrored_.at(index) != id) continue;
+        mirrored_.remove_swap(index);
         uint8_t body[BlobRetiredMessage::encoded_size] = {};
         if (alive_ && (BlobRetiredMessage(id).encode(body, sizeof body) != Status::ok ||
                        link_.post(RendererMessageHeader::Kind::blob_retired, body, BlobRetiredMessage::encoded_size,
@@ -583,7 +587,7 @@ void RendererContextPlane::report(StateWriter &writer)
     writer.flag("alive", alive_);
     writer.number("epoch", epoch_);
     writer.number("losses", loss_count_);
-    writer.number("blobs", mirrored_count_);
+    writer.number("blobs", mirrored_.size());
     writer.number("contexts", live());
     writer.close();
 }
@@ -591,7 +595,7 @@ void RendererContextPlane::report(StateWriter &writer)
 bool RendererContextPlane::invariants_hold() const
 {
     AV_SCOPE("RendererContextPlane::invariants_hold");
-    if (mirrored_count_ > BlobTable::max_blobs || loss_count_ > max_losses || (alive_ && !configured_)) return false;
+    if (!mirrored_.invariants_hold() || loss_count_ > max_losses || (alive_ && !configured_)) return false;
     for (const ObjectStorage<RemoteContext> &slot : slots_)
         if (slot.constructed() && !slot.object().invariants_hold()) return false;
     return true;
