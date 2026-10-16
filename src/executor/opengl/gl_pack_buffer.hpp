@@ -8,6 +8,8 @@
 #ifndef AV_GL_PACK_BUFFER_HPP
 #define AV_GL_PACK_BUFFER_HPP
 
+#include "executor/owned_fd.hpp"
+
 #include <stdint.h>
 
 namespace av::glproto {
@@ -27,9 +29,10 @@ public:
     GlPackBuffer(const GlPackBuffer &) = delete;
     GlPackBuffer &operator=(const GlPackBuffer &) = delete;
 
-    /* The region, `size` bytes, as the dma-buf `fd`, which is this buffer's
-     * from now on; -1 for a region that is no dma-buf. */
-    void adopt(int fd, uint64_t size);
+    /* The region, `size` bytes, as the dma-buf `descriptor`, which is this
+     * buffer's from now on; one holding nothing for a region that is no
+     * dma-buf. */
+    void adopt(OwnedFd &descriptor, uint64_t size);
     /* The region gone: the buffer is let go the next time the context is
      * current here. */
     void abandon();
@@ -49,7 +52,7 @@ private:
 
     const glproto::RealGl &gl_;
     GlSharedBuffer        &buffers_;
-    int      fd_;
+    OwnedFd   fd_;
     uint64_t size_;
     uint32_t memory_;
     uint32_t buffer_;

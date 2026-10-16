@@ -1,6 +1,7 @@
 #include "executor/shim/d3d12_host_device.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/d3d_runtime.hpp"
 #include "core/log/log_line.hpp"
@@ -179,11 +180,13 @@ bool D3d12HostDevice::export_image(ID3D12Resource *resource, Vkd3dImageExport &i
     return runtime_ != nullptr && SUCCEEDED(runtime_->export_image(resource, image));
 }
 
-bool D3d12HostDevice::export_fence(ID3D12Fence *fence, int &fd) const
+bool D3d12HostDevice::export_fence(ID3D12Fence *fence, OwnedFd &descriptor) const
 {
     AV_SCOPE("D3d12HostDevice::export_fence");
-    fd = -1;
-    return runtime_ != nullptr && SUCCEEDED(runtime_->export_fence(fence, fd));
+    int        fd = -1;
+    const bool exported = runtime_ != nullptr && SUCCEEDED(runtime_->export_fence(fence, fd));
+    descriptor.hold(exported ? fd : -1);
+    return exported;
 }
 
 ID3D12RootSignature *D3d12HostDevice::root_signature(const void *desc) const

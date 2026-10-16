@@ -10,6 +10,7 @@
 
 namespace av {
 
+class OwnedFd;
 class VulkanDeviceTable;
 
 class VulkanBuffer {
@@ -19,18 +20,19 @@ public:
     VulkanBuffer(const VulkanBuffer &) = delete;
     VulkanBuffer &operator=(const VulkanBuffer &) = delete;
 
-    /* The dma-buf `fd` - memory of the GPU's memory source - as a buffer
-     * of DXVK's to be drawn from in place (D3d11HostDevice::bind_storage):
-     * every use a buffer has, and the device address DXVK takes of every
-     * buffer. The fd is this one's whatever happens: closed where the import
-     * does not take it. */
-    [[nodiscard]] bool import_dma_buf_to_draw(const VulkanDeviceTable &table, int fd, VkDeviceSize size);
+    /* The dma-buf `descriptor` - memory of the GPU's memory source - as a
+     * buffer of DXVK's to be drawn from in place
+     * (D3d11HostDevice::bind_storage): every use a buffer has, and the device
+     * address DXVK takes of every buffer. The descriptor is the memory's once
+     * it is made, and stays held otherwise. */
+    [[nodiscard]] bool import_dma_buf_to_draw(const VulkanDeviceTable &table, OwnedFd &descriptor, VkDeviceSize size);
     void               release();
     bool               made() const;
     VkBuffer           buffer() const;
 
 private:
-    [[nodiscard]] bool import(const VulkanDeviceTable &table, int fd, VkDeviceSize size, VkBufferUsageFlags usage);
+    [[nodiscard]] bool import(const VulkanDeviceTable &table, OwnedFd &descriptor, VkDeviceSize size,
+                              VkBufferUsageFlags usage);
 
     const VulkanDeviceTable *table_;
     VkBuffer                 buffer_;

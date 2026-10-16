@@ -11,6 +11,7 @@
 
 namespace av {
 
+class OwnedFd;
 class VulkanDeviceTable;
 
 class VulkanTimeline {
@@ -22,10 +23,11 @@ public:
 
     /* At 0 on `table`'s device, exportable as an OPAQUE_FD. */
     [[nodiscard]] bool make_exportable(const VulkanDeviceTable &table);
-    /* Over the OPAQUE_FD `fd`, which is this timeline's whatever happens. */
-    [[nodiscard]] bool import_fd(const VulkanDeviceTable &table, int fd);
-    /* An fd another device imports, the caller's to close. */
-    [[nodiscard]] bool export_fd(int &fd) const;
+    /* Over the OPAQUE_FD `descriptor`, which is the timeline's once it is
+     * made and stays held otherwise. */
+    [[nodiscard]] bool import_fd(const VulkanDeviceTable &table, OwnedFd &descriptor);
+    /* An fd another device imports, held in `descriptor`. */
+    [[nodiscard]] bool export_fd(OwnedFd &descriptor) const;
     /* Waits until the counter reaches `value`, at most `nanoseconds`. */
     [[nodiscard]] bool wait(uint64_t value, uint64_t nanoseconds) const;
     /* Let go of; nothing may still wait on or signal it. */

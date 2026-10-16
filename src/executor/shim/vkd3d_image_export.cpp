@@ -1,8 +1,8 @@
 #include "executor/shim/vkd3d_image_export.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/owned_fd.hpp"
 
-#include <unistd.h>
 
 namespace av {
 
@@ -13,18 +13,19 @@ Vkd3dImageExport::Vkd3dImageExport()
     AV_SCOPE("Vkd3dImageExport::Vkd3dImageExport");
 }
 
+/* fd_ is a member vkd3d-proton writes, so it cannot be a OwnedFd itself. */
 Vkd3dImageExport::~Vkd3dImageExport()
 {
     AV_SCOPE("Vkd3dImageExport::~Vkd3dImageExport");
-    if (fd_ >= 0) close(fd_);
+    OwnedFd left;
+    take(left);
 }
 
-int Vkd3dImageExport::take_fd()
+void Vkd3dImageExport::take(OwnedFd &memory)
 {
-    AV_SCOPE("Vkd3dImageExport::take_fd");
-    const int taken = fd_;
+    AV_SCOPE("Vkd3dImageExport::take");
+    memory.hold(fd_);
     fd_ = -1;
-    return taken;
 }
 
 uint32_t Vkd3dImageExport::memory_type() const

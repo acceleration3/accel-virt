@@ -44,6 +44,7 @@ struct ID3D11Buffer;
 
 namespace av {
 
+class OwnedFd;
 class SharedImageShape;
 
 struct D3dBackendProbe;
@@ -96,7 +97,7 @@ public:
     /* A shared texture's memory, which other APIs import (feature 053);
      * Direct3D imports nothing, as it opens what it shares by id. */
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
-                                     int &fd) override;
+                                     OwnedFd &descriptor) override;
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
                                      const SharedImageShape &shape,
                                      uint64_t &wire_handle, uint64_t &detail) override;

@@ -4,7 +4,6 @@
 #include "executor/shim/gl_shared_buffer.hpp"
 #include "proto/generated/opengl/gl_real_dispatch.h"
 
-#include <unistd.h>
 
 namespace av {
 
@@ -19,7 +18,7 @@ constexpr GLuint64 most_wait_nanoseconds = 1000000000u;
 }  // namespace
 
 GlPackBuffer::GlPackBuffer(const glproto::RealGl &gl, GlSharedBuffer &buffers)
-    : gl_(gl), buffers_(buffers), fd_(-1), size_(0u), memory_(0u), buffer_(0u), refused_(false), stale_(false)
+    : gl_(gl), buffers_(buffers), fd_(), size_(0u), memory_(0u), buffer_(0u), refused_(false), stale_(false)
 {
     AV_SCOPE("GlPackBuffer::GlPackBuffer");
 }
@@ -27,23 +26,21 @@ GlPackBuffer::GlPackBuffer(const glproto::RealGl &gl, GlSharedBuffer &buffers)
 GlPackBuffer::~GlPackBuffer()
 {
     AV_SCOPE("GlPackBuffer::~GlPackBuffer");
-    if (fd_ >= 0) close(fd_);
 }
 
-void GlPackBuffer::adopt(int fd, uint64_t size)
+void GlPackBuffer::adopt(OwnedFd &descriptor, uint64_t size)
 {
     AV_SCOPE("GlPackBuffer::adopt");
     abandon();
-    fd_ = fd;
-    size_ = fd_ >= 0 ? size : 0u;
+    fd_.hold(descriptor.take());
+    size_ = fd_.held() ? size : 0u;
     refused_ = false;
 }
 
 void GlPackBuffer::abandon()
 {
     AV_SCOPE("GlPackBuffer::abandon");
-    if (fd_ >= 0) close(fd_);
-    fd_ = -1;
+    fd_.close();
     size_ = 0u;
     stale_ = stale_ || buffer_ != 0u || memory_ != 0u;
 }
@@ -53,7 +50,7 @@ bool GlPackBuffer::bind(uint64_t at, uint64_t bytes, void *&offset)
     AV_SCOPE("GlPackBuffer::bind");
     offset = nullptr;
     if (stale_) release();
-    if (fd_ < 0 || bytes == 0u || at > size_ || bytes > size_ - at) return false;
+    if (!fd_.held() || bytes == 0u || at > size_ || bytes > size_ - at) return false;
     if (buffer_ == 0u && (refused_ || !make())) return false;
     gl_.glBindBuffer(pixel_pack_buffer, buffer_);
     offset = reinterpret_cast<void *>(static_cast<uintptr_t>(at));
@@ -92,7 +89,7 @@ bool GlPackBuffer::make()
 {
     AV_SCOPE("GlPackBuffer::make");
     refused_ = gl_.glBindBuffer == nullptr || gl_.glFenceSync == nullptr || gl_.glClientWaitSync == nullptr ||
-               gl_.glDeleteSync == nullptr || !buffers_.make(fd_, size_, memory_, buffer_);
+               gl_.glDeleteSync == nullptr || !buffers_.make(fd_.fd(), size_, memory_, buffer_);
     return !refused_;
 }
 

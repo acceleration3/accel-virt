@@ -39,6 +39,7 @@
 
 namespace av {
 
+class OwnedFd;
 class SharedImageShape;
 
 class OpenGlBackend;
@@ -112,7 +113,7 @@ public:
      * one to export is refused by the device with a status rather than handed
      * an object nothing made. Importing is another matter - see below. */
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
-                                     int &fd) override;
+                                     OwnedFd &descriptor) override;
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
                                      const SharedImageShape &shape,
                                      uint64_t &wire_handle, uint64_t &detail) override;

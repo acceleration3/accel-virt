@@ -66,7 +66,7 @@ bool CompositorDevice::open(const uint8_t *uuid)
         close();
         return false;
     }
-    if (table_.load(instance_, physical, device_)) return true;
+    if (table_.load(instance_, physical, device_) && table_.interoperates()) return true;
     close();
     return false;
 }

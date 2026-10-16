@@ -2,11 +2,10 @@
 
 #include "core/trace/function_scope.hpp"
 #include "executor/exported_memory.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/shim/compositor_device.hpp"
 
-#include <fcntl.h>
 #include <sys/mman.h>
-#include <unistd.h>
 #include <vulkan/vulkan.h>
 
 namespace av {
@@ -58,15 +57,15 @@ Status CompositorMemory::allocate(uint32_t type, uint64_t size, ExportedMemory &
     const VulkanDeviceTable &table = device_.table();
     VkDeviceMemory           made = VK_NULL_HANDLE;
     if (!device_.opened() || !table.allocate_exportable(size, type, made)) return Status::no_memory;
-    int   fd = -1;
-    void *pointer = nullptr;
-    if (!table.memory_fd(made, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd) ||
-        !table.map_memory(made, pointer)) {
-        if (fd >= 0) close(fd);
+    int     fd = -1;
+    void   *pointer = nullptr;
+    const bool exported = table.memory_fd(made, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd);
+    OwnedFd descriptor(fd);
+    if (!exported || !table.map_memory(made, pointer)) {
         table.free_memory(made);
         return Status::no_memory;
     }
-    memory = ExportedMemory(reinterpret_cast<uint64_t>(made), fd, static_cast<uint8_t *>(pointer), size);
+    memory = ExportedMemory(reinterpret_cast<uint64_t>(made), descriptor.take(), static_cast<uint8_t *>(pointer), size);
     return Status::ok;
 }
 
@@ -75,14 +74,8 @@ void CompositorMemory::free(const ExportedMemory &memory)
 {
     AV_SCOPE("CompositorMemory::free");
     if (!memory.made()) return;
-    if (memory.fd() >= 0) close(memory.fd());
+    OwnedFd exported(memory.fd());
     device_.table().free_memory(reinterpret_cast<VkDeviceMemory>(memory.handle()));
-}
-
-int CompositorMemory::share(const ExportedMemory &memory)
-{
-    AV_SCOPE("CompositorMemory::share");
-    return memory.fd() >= 0 ? fcntl(memory.fd(), F_DUPFD_CLOEXEC, 0) : -1;
 }
 
 }  // namespace av

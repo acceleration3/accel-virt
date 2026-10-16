@@ -5,10 +5,10 @@
 #include "executor/sharing/session_shares.hpp"
 
 #include <stdio.h>
-#include <unistd.h>
 
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/source_memory.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/d3d/dxbc_container.hpp"
@@ -337,11 +337,10 @@ ID3D11Texture2D *D3dBackend::shareable(const D3D11_TEXTURE2D_DESC &texture, uint
 /* A shared texture's memory, as the dma-buf OpenGL and Vulkan import. The
  * Direct3D 11 lock a batch holds is held across this command too; one that
  * arrives on its own takes it. */
-bool D3dBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind, int &fd)
+bool D3dBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind, OwnedFd &descriptor)
 {
     AV_SCOPE("D3dBackend::export_object");
     handle_kind = 0u;
-    fd = -1;
     if (device11_ == nullptr || kind != AV_SHARED_MEMORY || wire_handle == 0u || wire_handle > UINT32_MAX)
         return false;
     ID3D11Resource *const resource = objects_.find_as<ID3D11Resource>(static_cast<uint32_t>(wire_handle), D3dObjectKind::resource);
@@ -351,7 +350,7 @@ bool D3dBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &ha
         return false;
     const bool locked = !held_;
     if (locked) device11_->lock(nullptr);
-    const bool exported = device11_->export_memory(texture, fd);
+    const bool exported = device11_->export_memory(texture, descriptor);
     if (locked) device11_->unlock();
     texture->Release();
     if (exported) handle_kind = AV_SHARED_HANDLE_DMA_BUF;
@@ -1787,7 +1786,8 @@ bool D3dBackend::slice_storage_for(const SourceMemory &store)
     AV_SCOPE("D3dBackend::slice_storage_for");
     if (slice_memory_ == &store) return true;
     if (slice_memory_ != nullptr || slice_storage_refused_ || !device11_->slices()) return false;
-    if (device11_->import_to_draw(store.share(), store.size(), slice_storage_)) {
+    OwnedFd descriptor;
+    if (store.share(descriptor) && device11_->import_to_draw(descriptor, store.size(), slice_storage_)) {
         slice_memory_ = &store;
         return true;
     }

@@ -29,7 +29,6 @@ public:
     bool     imports_host_visible(uint32_t type) override;
     [[nodiscard]] Status allocate(uint32_t type, uint64_t size, ExportedMemory &memory) override;
     void     free(const ExportedMemory &memory) override;
-    int      share(const ExportedMemory &memory) override;
 
 private:
     static constexpr uint64_t probe_bytes = 0x10000u;

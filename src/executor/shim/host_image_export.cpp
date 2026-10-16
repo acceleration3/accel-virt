@@ -3,9 +3,9 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/dxvk_vulkan_device.hpp"
+#include "executor/shim/exported_image_layout.hpp"
 #include "proto/d3d/dxgi_format.hpp"
 
-#include <unistd.h>
 
 namespace av {
 
@@ -20,7 +20,6 @@ HostImageExport::HostImageExport(DxvkVulkanDevice &vulkan)
     : vulkan_(vulkan), images_{}, width_(0u), height_(0u), format_(0u), next_(0u), unavailable_(false)
 {
     AV_SCOPE("HostImageExport::HostImageExport");
-    for (Image &image : images_) image.fd_ = -1;
 }
 
 HostImageExport::~HostImageExport()
@@ -53,17 +52,8 @@ bool HostImageExport::make_image(ID3D11Device5 *device, Image &image)
     created.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
     created.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     created.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    if (!vulkan_.table().create_image(created, image.image_)) return false;
-    const VkMemoryRequirements needs = vulkan_.table().requirements(image.image_);
-    const uint32_t             type = vulkan_.table().memory_type(needs.memoryTypeBits);
-    if (type == VK_MAX_MEMORY_TYPES) return false;
-    const VkExportMemoryAllocateInfo exported = {VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO, nullptr,
-                                                 VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
-    if (!vulkan_.table().bind_dedicated(image.image_, &exported, needs.size, type, image.memory_)) return false;
-    if (!vulkan_.table().memory_fd(image.memory_, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, image.fd_)) return false;
-    const VkSubresourceLayout laid = vulkan_.table().row_layout(image.image_);
-    image.stride_ = static_cast<uint32_t>(laid.rowPitch);
-    image.offset_ = static_cast<uint32_t>(laid.offset);
+    if (!image.image_.make_exportable(vulkan_.table(), created) || !image.image_.export_dma_buf(image.fd_))
+        return false;
     D3D11_TEXTURE2D_DESC1 described = {};
     described.Width = width_;
     described.Height = height_;
@@ -72,7 +62,7 @@ bool HostImageExport::make_image(ID3D11Device5 *device, Image &image)
     described.Format = static_cast<DXGI_FORMAT>(format_);
     described.SampleDesc = {1u, 0u};
     described.Usage = D3D11_USAGE_DEFAULT;
-    if (!vulkan_.wrap(described, image.image_, image.texture_)) return false;
+    if (!vulkan_.wrap(described, image.image_.image(), image.texture_)) return false;
     const D3D11_QUERY_DESC query = {D3D11_QUERY_EVENT, 0u};
     return SUCCEEDED(device->CreateQuery(&query, &image.done_));
 }
@@ -121,19 +111,13 @@ bool HostImageExport::copied(ID3D11DeviceContext4 *context, uint32_t slot) const
     return context->GetData(images_[slot].done_, &done, sizeof done, D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK && done;
 }
 
-void HostImageExport::describe(uint32_t slot, AvExportedImage &image) const
+bool HostImageExport::describe(uint32_t slot, AvExportedImage &image) const
 {
     AV_SCOPE("HostImageExport::describe");
     const Image &shown = images_[slot];
-    image.fd = shown.fd_;
     image.slot = slot;
-    image.width = width_;
-    image.height = height_;
-    image.stride = shown.stride_;
-    image.offset = shown.offset_;
-    image.fourcc = DxgiFormat(format_).drm_fourcc();
-    image.reserved = 0u;
-    image.modifier = 0u;   /* DRM_FORMAT_MOD_LINEAR */
+    return ExportedImageLayout(shown.image_, width_, height_, format_, drm_format_mod_linear)
+        .describe(shown.fd_.fd(), image);
 }
 
 void HostImageExport::drop(Image &image)
@@ -141,10 +125,10 @@ void HostImageExport::drop(Image &image)
     AV_SCOPE("HostImageExport::drop");
     if (image.done_ != nullptr) image.done_->Release();
     if (image.texture_ != nullptr) image.texture_->Release();
-    if (image.fd_ >= 0) close(image.fd_);
-    vulkan_.table().destroy_image(image.image_);
-    vulkan_.table().free_memory(image.memory_);
-    image = Image{VK_NULL_HANDLE, VK_NULL_HANDLE, nullptr, nullptr, -1, 0u, 0u};
+    image.done_ = nullptr;
+    image.texture_ = nullptr;
+    image.fd_.close();
+    image.image_.release();
 }
 
 void HostImageExport::release()

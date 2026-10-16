@@ -16,6 +16,7 @@
 
 namespace av {
 
+class OwnedFd;
 class D3d11HostDevice;
 
 class ComposeOrder {
@@ -24,10 +25,10 @@ public:
     ComposeOrder(const ComposeOrder &) = delete;
     ComposeOrder &operator=(const ComposeOrder &) = delete;
 
-    /* The timeline over the OPAQUE_FD `fd` the producer signals, imported
-     * onto `device11`'s DXVK device; the fd is the timeline's whatever
-     * happens. False where DXVK will not take it. */
-    [[nodiscard]] bool connect(D3d11HostDevice &device11, int fd);
+    /* The timeline over the OPAQUE_FD `descriptor` the producer signals,
+     * imported onto `device11`'s DXVK device; the descriptor is the
+     * timeline's once it is made. False where DXVK will not take it. */
+    [[nodiscard]] bool connect(D3d11HostDevice &device11, OwnedFd &descriptor);
     bool               connected() const;
     /* The value the producer's next present signals. */
     uint64_t           next() const;

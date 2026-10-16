@@ -16,6 +16,8 @@
 
 namespace av {
 
+class OwnedFd;
+
 class Vkd3dImageExport {
 public:
     static constexpr uint32_t max_view_formats = 16u;
@@ -26,8 +28,8 @@ public:
     Vkd3dImageExport(const Vkd3dImageExport &) = delete;
     Vkd3dImageExport &operator=(const Vkd3dImageExport &) = delete;
 
-    /* The fd, which is the caller's from now on; -1 once taken. */
-    int                      take_fd();
+    /* The fd held in `memory` from now on, and none here. */
+    void                     take(OwnedFd &memory);
     uint32_t                 memory_type() const;
     VkDeviceSize             size() const;
     /* The image as vkd3d-proton made it, chained to the view formats and the

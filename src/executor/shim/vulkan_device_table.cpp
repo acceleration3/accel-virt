@@ -1,6 +1,7 @@
 #include "executor/shim/vulkan_device_table.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/owned_fd.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -75,14 +76,22 @@ bool VulkanDeviceTable::load(VkInstance instance, VkPhysicalDevice physical, VkD
     submit_ = reinterpret_cast<PFN_vkQueueSubmit>(entry("vkQueueSubmit"));
     queue_idle_ = reinterpret_cast<PFN_vkQueueWaitIdle>(entry("vkQueueWaitIdle"));
     lose_ = reinterpret_cast<void (*)(VkDevice)>(entry("vkAvLoseDeviceAV"));
-    if (memory_fd_ == nullptr || import_semaphore_ == nullptr || semaphore_fd_ == nullptr ||
-        wait_semaphores_ == nullptr || create_image_ == nullptr || submit_ == nullptr || create_buffer_ == nullptr) {
-        forget();
-        return false;
-    }
     physical_ = physical;
     device_ = device;
     return true;
+}
+
+bool VulkanDeviceTable::interoperates() const
+{
+    AV_SCOPE("VulkanDeviceTable::interoperates");
+    return loaded() && memory_fd_ != nullptr && import_semaphore_ != nullptr && semaphore_fd_ != nullptr &&
+           wait_semaphores_ != nullptr;
+}
+
+bool VulkanDeviceTable::imports_dma_bufs() const
+{
+    AV_SCOPE("VulkanDeviceTable::imports_dma_bufs");
+    return loaded() && fd_properties_ != nullptr;
 }
 
 void VulkanDeviceTable::forget()
@@ -276,6 +285,39 @@ bool VulkanDeviceTable::allocate_exportable(VkDeviceSize size, uint32_t type, Vk
     return false;
 }
 
+bool VulkanDeviceTable::allocate_exportable(VkImage image, VkDeviceSize size, uint32_t type,
+                                            VkDeviceMemory &memory) const
+{
+    AV_SCOPE("VulkanDeviceTable::allocate_exportable");
+    memory = VK_NULL_HANDLE;
+    if (!loaded() || type == VK_MAX_MEMORY_TYPES) return false;
+    const VkExportMemoryAllocateInfo    exported = {VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO, nullptr,
+                                                    VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
+    const VkMemoryDedicatedAllocateInfo dedicated = {VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO, &exported, image,
+                                                     VK_NULL_HANDLE};
+    const VkMemoryAllocateInfo          info = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &dedicated, size, type};
+    if (allocate_(device_, &info, nullptr, &memory) == VK_SUCCESS) return true;
+    memory = VK_NULL_HANDLE;
+    return false;
+}
+
+bool VulkanDeviceTable::import_memory(OwnedFd &descriptor, VkExternalMemoryHandleTypeFlagBits handle,
+                                      VkDeviceSize size, uint32_t type, const void *next, VkDeviceMemory &memory) const
+{
+    AV_SCOPE("VulkanDeviceTable::import_memory");
+    memory = VK_NULL_HANDLE;
+    if (!loaded() || !descriptor.held() || type == VK_MAX_MEMORY_TYPES) return false;
+    const VkImportMemoryFdInfoKHR imported = {VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR, next, handle,
+                                              descriptor.fd()};
+    const VkMemoryAllocateInfo    info = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &imported, size, type};
+    if (allocate_(device_, &info, nullptr, &memory) != VK_SUCCESS) {
+        memory = VK_NULL_HANDLE;
+        return false;
+    }
+    static_cast<void>(descriptor.take());
+    return true;
+}
+
 bool VulkanDeviceTable::map_memory(VkDeviceMemory memory, void *&pointer) const
 {
     AV_SCOPE("VulkanDeviceTable::map_memory");
@@ -310,20 +352,11 @@ VkMemoryRequirements VulkanDeviceTable::requirements(VkImage image) const
     return needs;
 }
 
-bool VulkanDeviceTable::bind_dedicated(VkImage image, const void *chain, VkDeviceSize size, uint32_t type,
-                                       VkDeviceMemory &memory) const
+bool VulkanDeviceTable::bind_image(VkImage image, VkDeviceMemory memory) const
 {
-    AV_SCOPE("VulkanDeviceTable::bind_dedicated");
-    memory = VK_NULL_HANDLE;
-    if (!loaded() || type == VK_MAX_MEMORY_TYPES) return false;
-    const VkMemoryDedicatedAllocateInfo dedicated = {VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO, chain, image,
-                                                     VK_NULL_HANDLE};
-    const VkMemoryAllocateInfo          allocation = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &dedicated, size, type};
-    if (allocate_(device_, &allocation, nullptr, &memory) != VK_SUCCESS) {
-        memory = VK_NULL_HANDLE;
-        return false;
-    }
-    return bind_(device_, image, memory, 0u) == VK_SUCCESS;
+    AV_SCOPE("VulkanDeviceTable::bind_image");
+    return loaded() && image != VK_NULL_HANDLE && memory != VK_NULL_HANDLE &&
+           bind_(device_, image, memory, 0u) == VK_SUCCESS;
 }
 
 bool VulkanDeviceTable::create_buffer(const VkBufferCreateInfo &info, VkBuffer &buffer) const
@@ -360,20 +393,11 @@ uint32_t VulkanDeviceTable::dma_buf_types(int fd) const
     return properties.memoryTypeBits;
 }
 
-bool VulkanDeviceTable::bind_buffer(VkBuffer buffer, const void *chain, VkDeviceSize size, uint32_t type,
-                                    VkDeviceMemory &memory) const
+bool VulkanDeviceTable::bind_buffer(VkBuffer buffer, VkDeviceMemory memory) const
 {
     AV_SCOPE("VulkanDeviceTable::bind_buffer");
-    memory = VK_NULL_HANDLE;
-    if (!loaded() || type == VK_MAX_MEMORY_TYPES) return false;
-    const VkMemoryDedicatedAllocateInfo dedicated = {VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO, chain,
-                                                     VK_NULL_HANDLE, buffer};
-    const VkMemoryAllocateInfo          allocation = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, &dedicated, size, type};
-    if (allocate_(device_, &allocation, nullptr, &memory) != VK_SUCCESS) {
-        memory = VK_NULL_HANDLE;
-        return false;
-    }
-    return bind_buffer_(device_, buffer, memory, 0u) == VK_SUCCESS;
+    return loaded() && buffer != VK_NULL_HANDLE && memory != VK_NULL_HANDLE &&
+           bind_buffer_(device_, buffer, memory, 0u) == VK_SUCCESS;
 }
 
 void VulkanDeviceTable::free_memory(VkDeviceMemory memory) const
@@ -386,7 +410,7 @@ bool VulkanDeviceTable::memory_fd(VkDeviceMemory memory, VkExternalMemoryHandleT
 {
     AV_SCOPE("VulkanDeviceTable::memory_fd");
     fd = -1;
-    if (!loaded() || memory == VK_NULL_HANDLE) return false;
+    if (!loaded() || memory_fd_ == nullptr || memory == VK_NULL_HANDLE) return false;
     const VkMemoryGetFdInfoKHR asked = {VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR, nullptr, memory, type};
     if (memory_fd_(device_, &asked, &fd) == VK_SUCCESS) return true;
     fd = -1;
@@ -425,7 +449,7 @@ bool VulkanDeviceTable::import_semaphore_fd(VkSemaphore semaphore, VkExternalSem
                                             int fd) const
 {
     AV_SCOPE("VulkanDeviceTable::import_semaphore_fd");
-    if (!loaded()) return false;
+    if (!loaded() || import_semaphore_ == nullptr) return false;
     const VkImportSemaphoreFdInfoKHR imported = {VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR, nullptr, semaphore,
                                                  0u, type, fd};
     return import_semaphore_(device_, &imported) == VK_SUCCESS;
@@ -436,7 +460,7 @@ bool VulkanDeviceTable::semaphore_fd(VkSemaphore semaphore, VkExternalSemaphoreH
 {
     AV_SCOPE("VulkanDeviceTable::semaphore_fd");
     fd = -1;
-    if (!loaded()) return false;
+    if (!loaded() || semaphore_fd_ == nullptr) return false;
     const VkSemaphoreGetFdInfoKHR asked = {VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR, nullptr, semaphore, type};
     if (semaphore_fd_(device_, &asked, &fd) == VK_SUCCESS) return true;
     fd = -1;
@@ -446,7 +470,7 @@ bool VulkanDeviceTable::semaphore_fd(VkSemaphore semaphore, VkExternalSemaphoreH
 bool VulkanDeviceTable::wait_semaphore(VkSemaphore semaphore, uint64_t value, uint64_t nanoseconds) const
 {
     AV_SCOPE("VulkanDeviceTable::wait_semaphore");
-    if (!loaded()) return false;
+    if (!loaded() || wait_semaphores_ == nullptr) return false;
     const VkSemaphoreWaitInfo wait = {VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, nullptr, 0u, 1u, &semaphore, &value};
     return wait_semaphores_(device_, &wait, nanoseconds) == VK_SUCCESS;
 }

@@ -4,6 +4,7 @@
 
 #include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
+#include "executor/owned_fd.hpp"
 #include "device/host/stdio_log.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
@@ -87,8 +88,8 @@ bool D3d12Presentation::connect()
     if (FAILED(device12_->device()->CreateFence(0u, D3D12_FENCE_FLAG_SHARED, __uuidof(ID3D12Fence),
                                                 reinterpret_cast<void **>(&made))))
         return false;
-    int fd = -1;
-    if (!device12_->export_fence(made, fd) || !order_.connect(*device11_, fd)) {
+    OwnedFd timeline;
+    if (!device12_->export_fence(made, timeline) || !order_.connect(*device11_, timeline)) {
         made->Release();
         StdioLog sink(stderr);
         DriverLog(sink, "virtio-gpu-av: d3d12: ").write("no timeline shared with DXVK; presents cannot be shown");

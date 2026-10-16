@@ -4,10 +4,10 @@
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/session_backend.hpp"
 #include "executor/shim/d3d_headers.hpp"
 
-#include <unistd.h>
 
 namespace av {
 
@@ -86,13 +86,12 @@ Status HostShares::publish(uint32_t domain, uint64_t id, uint32_t kind, uint64_t
         Status answer = mine ? Status::ok : Status::conflict;
         if (mine && !exported) {
             uint32_t handle_kind = 0u;
-            int      fd = -1;
-            if (!session.export_object(kind, handle, handle_kind, fd)) {
+            OwnedFd  descriptor;
+            if (!session.export_object(kind, handle, handle_kind, descriptor)) {
                 answer = Status::not_supported;
             } else {
                 const Lock locked(mutex_);
-                if (known->descriptor() < 0) known->keep_descriptor(handle_kind, fd);
-                else ::close(fd);
+                if (known->descriptor() < 0) known->keep_descriptor(handle_kind, descriptor);
             }
         }
         settle(*known);
@@ -100,16 +99,13 @@ Status HostShares::publish(uint32_t domain, uint64_t id, uint32_t kind, uint64_t
     }
 
     uint32_t handle_kind = 0u;
-    int      fd = -1;
-    if (!session.export_object(kind, handle, handle_kind, fd)) return Status::not_supported;
+    OwnedFd  descriptor;
+    if (!session.export_object(kind, handle, handle_kind, descriptor)) return Status::not_supported;
     const Lock   locked(mutex_);
     Share *const share = make(domain, id, kind, size, ShareOrigin::object);
-    if (share == nullptr) {
-        ::close(fd);
-        /* Shared by another session between the export and this lock. */
-        return index_.find(domain, id) != nullptr ? Status::conflict : Status::no_memory;
-    }
-    share->keep_descriptor(handle_kind, fd);
+    /* Shared by another session between the export and this lock. */
+    if (share == nullptr) return index_.find(domain, id) != nullptr ? Status::conflict : Status::no_memory;
+    share->keep_descriptor(handle_kind, descriptor);
     share->publish_by(&session);
     return Status::ok;
 }
@@ -520,8 +516,7 @@ void HostShares::forget(Share &share)
     AV_SCOPE("HostShares::forget");
     if (share.indexed()) index_.remove(share.domain(), share.id());
     share.unindex();
-    const int fd = share.take_descriptor();
-    if (fd >= 0) ::close(fd);
+    share.drop_descriptor();
     IUnknown *objects[3];
     for (uint32_t index = 0u, given = share.give_up_objects(objects); index < given; index++) retire(objects[index]);
 }

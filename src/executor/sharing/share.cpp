@@ -8,7 +8,7 @@ namespace av {
 Share::Share(uint32_t domain, uint64_t id, uint32_t kind, uint64_t size, ShareOrigin origin)
     : id_(id), size_(size), writes_(0u), opens_(0u), resource_(nullptr), view_(nullptr), shown_(nullptr),
       holders_(nullptr), publisher_(nullptr), domain_(domain), kind_(kind), handle_kind_(0u), pins_(0u),
-      descriptor_(-1), origin_(origin), guest_holds_(true), indexed_(true)
+      descriptor_(), origin_(origin), guest_holds_(true), indexed_(true)
 {
     AV_SCOPE("Share::Share");
 }
@@ -150,7 +150,7 @@ void Share::unhold(ShareHolder &holder)
 int Share::descriptor() const
 {
     AV_SCOPE("Share::descriptor");
-    return descriptor_;
+    return descriptor_.fd();
 }
 
 uint32_t Share::handle_kind() const
@@ -159,19 +159,17 @@ uint32_t Share::handle_kind() const
     return handle_kind_;
 }
 
-void Share::keep_descriptor(uint32_t handle_kind, int descriptor)
+void Share::keep_descriptor(uint32_t handle_kind, OwnedFd &descriptor)
 {
     AV_SCOPE("Share::keep_descriptor");
     handle_kind_ = handle_kind;
-    descriptor_ = descriptor;
+    descriptor_.hold(descriptor.take());
 }
 
-int Share::take_descriptor()
+void Share::drop_descriptor()
 {
-    AV_SCOPE("Share::take_descriptor");
-    const int taken = descriptor_;
-    descriptor_ = -1;
-    return taken;
+    AV_SCOPE("Share::drop_descriptor");
+    descriptor_.close();
 }
 
 IUnknown *Share::resource() const

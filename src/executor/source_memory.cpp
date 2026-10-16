@@ -1,9 +1,9 @@
 #include "executor/source_memory.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/owned_fd.hpp"
 #include "proto/wire/guest_bytes.hpp"
 
-#include <fcntl.h>
 
 namespace av {
 
@@ -69,10 +69,10 @@ const ExportedMemory &SourceMemory::exported() const
     return memory_;
 }
 
-int SourceMemory::share() const
+bool SourceMemory::share(OwnedFd &into) const
 {
     AV_SCOPE("SourceMemory::share");
-    return memory_.fd() >= 0 ? fcntl(memory_.fd(), F_DUPFD_CLOEXEC, 0) : -1;
+    return into.hold_copy(memory_.fd());
 }
 
 void SourceMemory::detach()

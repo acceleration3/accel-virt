@@ -1,26 +1,39 @@
 #include "executor/shim/exportable_image.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "executor/shim/dxvk_vulkan_device.hpp"
 
 namespace av {
 
-ExportableImage::ExportableImage(ExportableImages &owner, VkImage image, VkDeviceMemory memory, uint64_t modifier)
-    : TextureHold(owner), image_(image), memory_(memory), modifier_(modifier)
+namespace {
+
+/* From drm_fourcc.h. */
+constexpr uint64_t drm_format_mod_linear = 0u;
+constexpr uint64_t drm_format_mod_invalid = 0x00ffffffffffffffull;
+
+}  // namespace
+
+ExportableImage::ExportableImage(ExportableImages &owner)
+    : TextureHold(owner), image_(), modifier_(drm_format_mod_invalid)
 {
     AV_SCOPE("ExportableImage::ExportableImage");
 }
 
-VkImage ExportableImage::image() const
+VulkanImage &ExportableImage::image()
 {
     AV_SCOPE("ExportableImage::image");
     return image_;
 }
 
-VkDeviceMemory ExportableImage::memory() const
+const VulkanImage &ExportableImage::image() const
 {
-    AV_SCOPE("ExportableImage::memory");
-    return memory_;
+    AV_SCOPE("ExportableImage::image");
+    return image_;
+}
+
+void ExportableImage::laid_out_by(uint64_t modifier)
+{
+    AV_SCOPE("ExportableImage::laid_out_by");
+    modifier_ = modifier;
 }
 
 uint64_t ExportableImage::modifier() const
@@ -32,17 +45,13 @@ uint64_t ExportableImage::modifier() const
 bool ExportableImage::rows() const
 {
     AV_SCOPE("ExportableImage::rows");
-    constexpr uint64_t drm_format_mod_linear = 0u;
     return modifier_ == drm_format_mod_linear;
 }
 
-void ExportableImage::free(const DxvkVulkanDevice &vulkan)
+void ExportableImage::free()
 {
     AV_SCOPE("ExportableImage::free");
-    vulkan.table().destroy_image(image_);
-    vulkan.table().free_memory(memory_);
-    image_ = VK_NULL_HANDLE;
-    memory_ = VK_NULL_HANDLE;
+    image_.release();
 }
 
 }  // namespace av

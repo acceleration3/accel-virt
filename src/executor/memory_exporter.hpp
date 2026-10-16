@@ -38,8 +38,6 @@ public:
     [[nodiscard]] virtual Status allocate(uint32_t type, uint64_t size, ExportedMemory &memory) = 0;
     /* What allocate made, gone: its mapping, its descriptor and its memory. */
     virtual void                 free(const ExportedMemory &memory) = 0;
-    /* A new descriptor of `memory`'s dma-buf, the caller's: -1 when none. */
-    virtual int                  share(const ExportedMemory &memory) = 0;
 
 protected:
     MemoryExporter() = default;

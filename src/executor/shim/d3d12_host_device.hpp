@@ -39,6 +39,7 @@ struct ID3D12RootSignature;
 
 namespace av {
 
+class OwnedFd;
 class D3d11HostDevice;
 class D3dRuntime;
 class WakeSignal;
@@ -95,7 +96,7 @@ public:
      * as (tools/vkd3d-proton-patches); false where vkd3d-proton cannot say. */
     [[nodiscard]] bool         export_image(ID3D12Resource *resource, Vkd3dImageExport &image) const;
     /* A shared fence's timeline semaphore as an fd the caller owns. */
-    [[nodiscard]] bool         export_fence(ID3D12Fence *fence, int &fd) const;
+    [[nodiscard]] bool         export_fence(ID3D12Fence *fence, OwnedFd &descriptor) const;
     /* `source` staged for the present engine on `queue`, in that queue's
      * order (D3d12FramePool::stage); null when it is not. */
     StagedFrame               *stage_frame(ID3D12CommandQueue *queue, ID3D12Resource *source);

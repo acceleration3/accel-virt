@@ -1,6 +1,7 @@
 #include "executor/shim/compose_order.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 
 namespace av {
@@ -10,10 +11,10 @@ ComposeOrder::ComposeOrder() : device11_(nullptr), waited_(), value_(0u)
     AV_SCOPE("ComposeOrder::ComposeOrder");
 }
 
-bool ComposeOrder::connect(D3d11HostDevice &device11, int fd)
+bool ComposeOrder::connect(D3d11HostDevice &device11, OwnedFd &descriptor)
 {
     AV_SCOPE("ComposeOrder::connect");
-    if (!device11.vulkan().import_timeline(fd, waited_)) return false;
+    if (!device11.vulkan().import_timeline(descriptor, waited_)) return false;
     device11_ = &device11;
     value_ = 0u;
     return true;

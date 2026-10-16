@@ -1,10 +1,10 @@
 #include "executor/shim/gl_host_import.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/shim/gl_context.hpp"
 
 #include <string.h>
-#include <unistd.h>
 
 namespace av {
 
@@ -97,9 +97,8 @@ bool GlHostImport::imports_memory() const
 bool GlHostImport::import_memory(int fd, uint64_t size, uint32_t &name)
 {
     AV_SCOPE("GlHostImport::import_memory");
-    if (!memory_ || current() == nullptr) return false;
-    const int taken = dup(fd);
-    if (taken < 0) return false;
+    OwnedFd taken;
+    if (!memory_ || current() == nullptr || !taken.hold_copy(fd)) return false;
     GLuint made = 0u;
     create_memory_objects_(1, &made);
     static_cast<void>(errors_.clear());
@@ -110,14 +109,14 @@ bool GlHostImport::import_memory(int fd, uint64_t size, uint32_t &name)
      * (test_d3d_gl_interop_device). */
     const GLint dedicated = 1;
     memory_parameter_(made, dedicated_memory_object, &dedicated);
-    import_memory_fd_(made, static_cast<GLuint64>(size), handle_type_opaque_fd, taken);
+    import_memory_fd_(made, static_cast<GLuint64>(size), handle_type_opaque_fd, taken.fd());
     if (!errors_.clear()) {
         delete_memory_objects_(1, &made);
         static_cast<void>(errors_.clear());
-        close(taken);
         return false;
     }
     /* A successful glImportMemoryFdEXT owns the descriptor and GL closes it. */
+    static_cast<void>(taken.take());
     name = made;
     return true;
 }
@@ -125,19 +124,19 @@ bool GlHostImport::import_memory(int fd, uint64_t size, uint32_t &name)
 bool GlHostImport::import_semaphore(int fd, uint32_t &name)
 {
     AV_SCOPE("GlHostImport::import_semaphore");
-    if (!fences_ || current() == nullptr) return false;
-    const int taken = dup(fd);
-    if (taken < 0) return false;
+    OwnedFd taken;
+    if (!fences_ || current() == nullptr || !taken.hold_copy(fd)) return false;
     GLuint made = 0u;
     gen_semaphores_(1, &made);
     static_cast<void>(errors_.clear());
-    import_semaphore_fd_(made, handle_type_opaque_fd, taken);
+    import_semaphore_fd_(made, handle_type_opaque_fd, taken.fd());
     if (!errors_.clear()) {
         delete_semaphores_(1, &made);
         static_cast<void>(errors_.clear());
-        close(taken);
         return false;
     }
+    /* A successful glImportSemaphoreFdEXT owns the descriptor. */
+    static_cast<void>(taken.take());
     name = made;
     return true;
 }

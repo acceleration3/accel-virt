@@ -8,6 +8,7 @@
 #include "device/abi/av_executor.h"
 #include "executor/host_gpu.hpp"
 #include "executor/import_table.hpp"
+#include "executor/owned_fd.hpp"
 #include "proto/vulkan/descriptor_template_layout.hpp"
 #include "proto/generated/vulkan/vk_command_names.h"
 #include "proto/generated/vulkan/vk_dispatch_server.h"
@@ -15,7 +16,6 @@
 #include "proto/wire/wire_writer.hpp"
 
 #include <string.h>
-#include <unistd.h>
 
 namespace av {
 
@@ -59,9 +59,9 @@ VulkanBackend::VulkanBackend() : VulkanBackend(heap_)
 /* heap_ is constructed before blocks_ is bound to it, whichever constructor
  * runs: it is declared first. */
 VulkanBackend::VulkanBackend(BlockSource &blocks)
-    : heap_(), blocks_(blocks), gpu_(nullptr), source_(nullptr), listed_(), extensions_(blocks, Pool::paged),
+    : heap_(), blocks_(blocks), fds_(blocks), gpu_(nullptr), source_(nullptr), listed_(), extensions_(blocks, Pool::paged),
       application_(), device_(VK_NULL_HANDLE), physical_(VK_NULL_HANDLE),
-      memory_import_(false), handles_(blocks), imports_(nullptr), import_(), types_(), types_learnt_(false), parent_(0u),
+      memory_import_(false), handles_(blocks), imports_(nullptr), table_(), import_(table_), types_(), types_learnt_(false), parent_(0u),
       ran_(0u)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
@@ -355,7 +355,8 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
         physical_ = physicalDevice;
         /* Asked of the device rather than of the list: whichever create made
          * it, the loader answers the entry point only when it was enabled. */
-        memory_import_ = import_.imports(device_);
+        const auto instance = reinterpret_cast<VkInstance>(handles_.parent_of(reinterpret_cast<uint64_t>(physicalDevice)));
+        memory_import_ = table_.load(instance, physicalDevice, device_) && import_.imports();
         learn_types(physicalDevice);
     }
     return result;
@@ -639,7 +640,10 @@ void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallba
     AV_SCOPE("VulkanBackend::on_vkDestroyDevice");
     timing_.forget(device);
     fds_.forget_device(device);
-    if (device == device_) device_ = VK_NULL_HANDLE;
+    if (device == device_) {
+        device_ = VK_NULL_HANDLE;
+        table_.forget();
+    }
     RealVulkanDispatch::on_vkDestroyDevice(device, nullptr);
 }
 
@@ -690,12 +694,12 @@ VkResult VulkanBackend::remembered(VkDevice device, VkResult answered, int *fd)
     /* A driver that answered VK_SUCCESS answered an fd with it, and the
      * generated server always has somewhere to put one. */
     if (answered != VK_SUCCESS) return answered;
-    if (fds_.keep(device, *fd)) return VK_SUCCESS;
+    OwnedFd exported(*fd);
+    if (fds_.keep(device, exported) == Status::ok) return VK_SUCCESS;
     /* Nowhere to remember it, so nothing could ever name it: closed here
      * rather than answered as a handle no import would be allowed to use. */
-    static_cast<void>(::close(*fd));
     *fd = -1;
-    return VK_ERROR_TOO_MANY_OBJECTS;
+    return VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
 VkResult VulkanBackend::on_vkAllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
@@ -749,18 +753,12 @@ bool VulkanBackend::adopt(const SourceMemory &memory, uint64_t &handle)
     AV_SCOPE("VulkanBackend::adopt");
     handle = 0u;
     if (device_ == VK_NULL_HANDLE || !memory_import_) return false;
-    const int fd = memory.share();
-    uint64_t  made = 0u;
-    if (!import_.import_dmabuf(device_, fd, memory.size(), memory.memory_type(), made)) {
-        if (fd >= 0) close(fd);
+    OwnedFd  descriptor;
+    uint64_t made = 0u;
+    if (!memory.share(descriptor) || !import_.import_dmabuf(descriptor, memory.size(), memory.memory_type(), made))
         return false;
-    }
-    /* Made through the device, so destroying the device ends it as the driver
-     * does. A registry with no room refuses the import rather than losing the
-     * device, as a command's handle would: the guest is copied through
-     * instead, and nothing it already has breaks. */
-    if (handles_.remember(made, VulkanObjectKind::other, reinterpret_cast<uint64_t>(device_), 0u) != Status::ok) {
-        import_.release(device_, made);
+    if (!kept_on_device(made)) {
+        import_.release(made);
         return false;
     }
     /* A non-dispatchable handle on the wire is the driver's own number, so the
@@ -777,15 +775,14 @@ uint32_t VulkanBackend::first_memory_type(uint32_t mask) const
     return max_memory_types;
 }
 
-bool VulkanBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind, int &fd)
+bool VulkanBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind, OwnedFd &descriptor)
 {
     AV_SCOPE("VulkanBackend::export_object");
     handle_kind = 0u;
-    fd = -1;
     if (device_ == VK_NULL_HANDLE || wire_handle == 0u) return false;
     if (!handles_.holds(wire_handle)) return false;
     if (kind == AV_SHARED_MONITORED_FENCE || kind == AV_SHARED_NATIVE_FENCE) {
-        if (!import_.export_semaphore(device_, wire_handle, fd)) return false;
+        if (!import_.export_semaphore(wire_handle, descriptor)) return false;
         handle_kind = AV_SHARED_HANDLE_OPAQUE_FD;
         return true;
     }
@@ -796,8 +793,7 @@ bool VulkanBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t 
      * exporting guest's device, and nothing on this side of the wire has it.
      * A GPU that imports the host pointer therefore shares no memory at all,
      * and the guest is refused rather than handed something it cannot bind. */
-    if (!import_.export_memory(device_, wire_handle, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd))
-        return false;
+    if (!import_.export_memory(wire_handle, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, descriptor)) return false;
     handle_kind = AV_SHARED_HANDLE_DMA_BUF;
     return true;
 }
@@ -813,26 +809,50 @@ bool VulkanBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
     if (device_ == VK_NULL_HANDLE || fd < 0) return false;
     if (kind == AV_SHARED_MONITORED_FENCE || kind == AV_SHARED_NATIVE_FENCE) {
         if (handle_kind != AV_SHARED_HANDLE_OPAQUE_FD) return false;
-        if (!import_.import_shared_semaphore(device_, fd, wire_handle)) return false;
-        made(wire_handle);
-        return true;
+        if (!import_.import_shared_semaphore(fd, wire_handle)) return false;
+        if (kept_on_device(wire_handle)) return true;
+        import_.destroy_semaphore(wire_handle);
+        wire_handle = 0u;
+        return false;
     }
     if (kind != AV_SHARED_MEMORY || size == 0u) return false;
     if (handle_kind != AV_SHARED_HANDLE_DMA_BUF) return false;
-    const uint32_t memory_type =
-        first_memory_type(import_.dmabuf_types(device_, fd));
+    const uint32_t memory_type = first_memory_type(import_.dmabuf_types(fd));
     if (memory_type == max_memory_types) return false;
-    const bool imported =
-        import_.import_shared_memory(device_, fd, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, size,
-                                     memory_type, wire_handle);
+    const bool imported = import_.import_shared_memory(fd, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, size,
+                                                       memory_type, wire_handle);
     /* The host driver declining an import the backend asked for correctly.
      * No driver reachable from a test on this machine ever does: radv is the
      * only one here that takes a dma-buf at all, and it takes one of the wrong
      * size, one whose device never enabled the extension, and a descriptor
      * number that names nothing (research.md §19). */
     if (!imported) { AV_UNTESTABLE("no host driver here refuses an import"); return false; }
-    made(wire_handle);
-    return true;
+    if (kept_on_device(wire_handle)) return true;
+    import_.release(wire_handle);
+    wire_handle = 0u;
+    return false;
+}
+
+/* Made through the device, so destroying the device ends it as the driver
+ * does. A registry with no room refuses the import rather than losing the
+ * device, as a command's handle would: the guest is copied through instead,
+ * and nothing it already has breaks. */
+bool VulkanBackend::kept_on_device(uint64_t made)
+{
+    AV_SCOPE("VulkanBackend::kept_on_device");
+    return handles_.remember(made, VulkanObjectKind::other, reinterpret_cast<uint64_t>(device_), 0u) == Status::ok;
+}
+
+/* What an import made is the device's it was made on: one the guest has since
+ * replaced with another is not this table's to free - it goes with its own
+ * device - and one already gone with its device is not freed twice. */
+bool VulkanBackend::forgot_on_device(uint64_t made)
+{
+    AV_SCOPE("VulkanBackend::forgot_on_device");
+    if (!handles_.holds(made)) return false;
+    const bool current = device_ != VK_NULL_HANDLE && handles_.parent_of(made) == reinterpret_cast<uint64_t>(device_);
+    handles_.forget(made);
+    return current;
 }
 
 /* The guest may have freed the memory itself, with the commands it frees any
@@ -840,13 +860,12 @@ bool VulkanBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
 void VulkanBackend::release_object(uint32_t kind, uint64_t wire_handle, uint64_t)
 {
     AV_SCOPE("VulkanBackend::release_object");
-    if (device_ == VK_NULL_HANDLE || !handles_.holds(wire_handle)) return;
-    handles_.forget(wire_handle);
+    if (!forgot_on_device(wire_handle)) return;
     if (kind == AV_SHARED_MEMORY) {
-        import_.release(device_, wire_handle);
+        import_.release(wire_handle);
         return;
     }
-    import_.destroy_semaphore(device_, wire_handle);
+    import_.destroy_semaphore(wire_handle);
 }
 
 /* The memory itself is the source's and stays mapped; what this made of it
@@ -854,9 +873,7 @@ void VulkanBackend::release_object(uint32_t kind, uint64_t wire_handle, uint64_t
 void VulkanBackend::abandon(const SourceMemory &, uint64_t handle)
 {
     AV_SCOPE("VulkanBackend::abandon");
-    if (device_ == VK_NULL_HANDLE) return;
-    handles_.forget(handle);
-    import_.release(device_, handle);
+    if (forgot_on_device(handle)) import_.release(handle);
 }
 
 bool VulkanBackend::poll()
@@ -885,11 +902,7 @@ void VulkanBackend::end_batch()
 bool VulkanBackend::lose_device()
 {
     AV_SCOPE("VulkanBackend::lose_device");
-    if (device_ == VK_NULL_HANDLE) return false;
-    const auto lose = reinterpret_cast<void (*)(VkDevice)>(::vkGetDeviceProcAddr(device_, "vkAvLoseDeviceAV"));
-    if (lose == nullptr) return false;
-    lose(device_);
-    return true;
+    return table_.lose();
 }
 
 /* A Vulkan device's loss reaches the guest from the driver itself, as

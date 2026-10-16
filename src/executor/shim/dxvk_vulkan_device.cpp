@@ -1,6 +1,7 @@
 #include "executor/shim/dxvk_vulkan_device.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/dxvk_interop.hpp"
 #include "executor/shim/vulkan_buffer.hpp"
@@ -37,7 +38,7 @@ bool DxvkVulkanDevice::connect(ID3D11Device5 *device)
     interop->GetVulkanHandles(&instance, &physical, &vulkan);
     interop_ = interop;
     queue_.borrow(interop);
-    if (table_.load(instance, physical, vulkan) && work_.open(table_, queue_)) return true;
+    if (table_.load(instance, physical, vulkan) && table_.interoperates() && work_.open(table_, queue_)) return true;
     release();
     return false;
 }
@@ -77,10 +78,10 @@ bool DxvkVulkanDevice::wrap(const D3D11_TEXTURE2D_DESC1 &desc, VkImage image, ID
     return interop_ != nullptr && SUCCEEDED(interop_->CreateTexture2DFromVkImage(&desc, image, &texture));
 }
 
-bool DxvkVulkanDevice::import_timeline(int fd, VulkanTimeline &timeline) const
+bool DxvkVulkanDevice::import_timeline(OwnedFd &descriptor, VulkanTimeline &timeline) const
 {
     AV_SCOPE("DxvkVulkanDevice::import_timeline");
-    return timeline.import_fd(table_, fd);
+    return timeline.import_fd(table_, descriptor);
 }
 
 bool DxvkVulkanDevice::wait(const VulkanTimeline &timeline, uint64_t value)

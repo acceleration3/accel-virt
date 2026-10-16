@@ -19,6 +19,7 @@
 #include "executor/shim/host_heap.hpp"
 #include "executor/vulkan/vulkan_submit_timing.hpp"
 #include "executor/shim/physical_device_list.hpp"
+#include "executor/shim/vulkan_device_table.hpp"
 #include "executor/shim/vulkan_memory_import.hpp"
 #include "proto/generated/vulkan/vk_real_dispatch.h"
 
@@ -26,6 +27,7 @@
 
 namespace av {
 
+class OwnedFd;
 class SharedImageShape;
 
 class HostGpu;
@@ -203,7 +205,7 @@ public:
      * guest names that this backend never made is refused, since the guest
      * would otherwise name any number and have the driver read it. */
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
-                                     int &fd) override;
+                                     OwnedFd &descriptor) override;
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
                                      const SharedImageShape &shape,
                                      uint64_t &wire_handle, uint64_t &detail) override;
@@ -283,6 +285,12 @@ private:
     void keep(uint64_t raw, VulkanObjectKind kind, uint64_t bytes);
     /* A device or an instance the guest never destroyed, destroyed. */
     void let_go(uint64_t raw, VulkanObjectKind kind);
+    /* `made`, which an import just made on device_, held as made through it;
+     * false when it cannot be, and the caller lets it go. */
+    [[nodiscard]] bool kept_on_device(uint64_t made);
+    /* `made` forgotten; true when it is device_'s, and so this backend's to
+     * free. */
+    [[nodiscard]] bool forgot_on_device(uint64_t made);
 
     /* Where the tables below grow from: first, as they are destroyed after it. */
     HostHeap          heap_;
@@ -294,8 +302,9 @@ private:
     [[nodiscard]] bool exported(const void *next, int &fd);
     /* `answered`, with an fd the driver took forgotten. */
     VkResult           imported(VkResult answered, int fd);
-    /* An fd the driver answered, kept as this context's; VK_ERROR_TOO_MANY_OBJECTS
-     * when the table is full, with the fd closed since nothing can name it. */
+    /* An fd the driver answered, kept as this context's;
+     * VK_ERROR_OUT_OF_HOST_MEMORY when the table cannot grow, with the fd
+     * closed since nothing can name it. */
     VkResult           remembered(VkDevice device, VkResult answered, int *fd);
     /* Whether something made on `device` with the chain at `next` gets
      * `types` added as a structure of type `external`: only on the device
@@ -358,6 +367,8 @@ private:
     /* The session's imports: a VkDeviceMemory one names is the import's to
      * release, not the guest's free. Null between sessions. */
     ImportTable     *imports_;
+    /* device_'s entry points, which every import onto it goes through. */
+    VulkanDeviceTable  table_;
     VulkanMemoryImport import_;
     GuestMemoryTypes types_;
     bool             types_learnt_;

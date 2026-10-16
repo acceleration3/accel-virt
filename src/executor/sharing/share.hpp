@@ -15,6 +15,7 @@
 #ifndef AV_SHARE_HPP
 #define AV_SHARE_HPP
 
+#include "executor/owned_fd.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 
 #include <stdint.h>
@@ -82,9 +83,10 @@ public:
      * kind it is; -1 when none was made. */
     int      descriptor() const;
     uint32_t handle_kind() const;
-    void     keep_descriptor(uint32_t handle_kind, int descriptor);
-    /* The descriptor, now the caller's to close. */
-    int      take_descriptor();
+    /* `descriptor` kept as the share's from now on. */
+    void     keep_descriptor(uint32_t handle_kind, OwnedFd &descriptor);
+    /* The descriptor closed: nothing imports through it any more. */
+    void     drop_descriptor();
 
     /* The resource as it was published, with the share's reference. */
     IUnknown *resource() const;
@@ -134,7 +136,7 @@ private:
     uint32_t     kind_;
     uint32_t     handle_kind_;
     uint32_t     pins_;
-    int          descriptor_;
+    OwnedFd      descriptor_;
     ShareOrigin  origin_;
     bool         guest_holds_;
     bool         indexed_;

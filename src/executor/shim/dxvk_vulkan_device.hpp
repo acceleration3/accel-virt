@@ -26,6 +26,7 @@ struct D3D11_TEXTURE2D_DESC1;
 
 namespace av {
 
+class OwnedFd;
 class DxvkVulkanDevice {
 public:
     DxvkVulkanDevice();
@@ -43,9 +44,9 @@ public:
     /* `image` as a texture of DXVK's, described as `desc`; the caller owns the
      * reference, and keeps the image alive as long as the texture is. */
     [[nodiscard]] bool wrap(const D3D11_TEXTURE2D_DESC1 &desc, VkImage image, ID3D11Texture2D *&texture) const;
-    /* `timeline` made over the OPAQUE_FD `fd` on DXVK's device; the fd is the
-     * timeline's whatever happens. */
-    [[nodiscard]] bool import_timeline(int fd, VulkanTimeline &timeline) const;
+    /* `timeline` made over the OPAQUE_FD `descriptor` on DXVK's device; the
+     * descriptor is the timeline's once it is made. */
+    [[nodiscard]] bool import_timeline(OwnedFd &descriptor, VulkanTimeline &timeline) const;
     /* DXVK's queue waits for `timeline` to reach `value` before running what
      * is submitted to it after. */
     [[nodiscard]] bool wait(const VulkanTimeline &timeline, uint64_t value);

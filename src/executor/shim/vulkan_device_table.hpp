@@ -1,9 +1,11 @@
 /* One Vulkan device's entry points and memory types, whoever made the device:
- * the compositor's own (CompositorDevice), or one DXVK made and lends through
- * its interop - Direct3D 11's (DxvkVulkanDevice) or a Direct3D 9 device's
- * (D3d9VulkanLane). Every image, timeline and copy the executor adds to a
- * device goes through the table its device was loaded into
- * (VulkanImage, VulkanTimeline, QueueWork). */
+ * the compositor's own (CompositorDevice), one DXVK made and lends through its
+ * interop - Direct3D 11's (DxvkVulkanDevice) or a Direct3D 9 device's
+ * (D3d9VulkanLane) - or a guest's (VulkanBackend, through VulkanMemoryImport).
+ * Every image, buffer, import, timeline and copy the executor adds to a device
+ * goes through the table its device was loaded into (VulkanImage,
+ * VulkanBuffer, VulkanTimeline, QueueWork), and every memory import through
+ * one primitive, import_memory. */
 #ifndef AV_VULKAN_DEVICE_TABLE_HPP
 #define AV_VULKAN_DEVICE_TABLE_HPP
 
@@ -12,18 +14,27 @@
 
 namespace av {
 
+class OwnedFd;
+
 class VulkanDeviceTable {
 public:
     VulkanDeviceTable();
     VulkanDeviceTable(const VulkanDeviceTable &) = delete;
     VulkanDeviceTable &operator=(const VulkanDeviceTable &) = delete;
 
-    /* `device`, on `physical` of `instance`, with the external-memory and
-     * timeline entry points this needs; false where it lacks them. The device
-     * is not this table's to destroy. */
+    /* `device`, on `physical` of `instance`, with every entry point it
+     * answers; false for a null handle. What a device was made without is
+     * asked of with interoperates and imports_dma_bufs. The device is not
+     * this table's to destroy. */
     [[nodiscard]] bool load(VkInstance instance, VkPhysicalDevice physical, VkDevice device);
     void               forget();
     bool               loaded() const;
+    /* Whether the device shares memory and timelines with other devices:
+     * exports a dma-buf, and imports, exports and waits on a timeline's fd -
+     * what the compositor and DXVK's devices are refused without. */
+    bool               interoperates() const;
+    /* Whether it imports a dma-buf, and says as which types. */
+    bool               imports_dma_bufs() const;
     VkDevice           device() const;
     /* For tests: the device made lost, as a GPU fault would lose it, through
      * the layer that loses one on request (tests/gpu_fault). False where that
@@ -57,17 +68,24 @@ public:
     /* `size` bytes of `type`, exportable as a dma-buf and dedicated to
      * nothing (docs/host-memory.md). */
     [[nodiscard]] bool    allocate_exportable(VkDeviceSize size, uint32_t type, VkDeviceMemory &memory) const;
+    /* The same, dedicated to `image`, which is not bound to it. */
+    [[nodiscard]] bool    allocate_exportable(VkImage image, VkDeviceSize size, uint32_t type,
+                                              VkDeviceMemory &memory) const;
+    /* `size` bytes of `type` imported from `descriptor` as `handle`, with
+     * `next` chained after the import - the image or buffer the memory is
+     * dedicated to, a device address - into `memory`. The driver owns the
+     * descriptor only where it made the memory, and only then is it taken
+     * from `descriptor`: a refused import leaves it held. */
+    [[nodiscard]] bool    import_memory(OwnedFd &descriptor, VkExternalMemoryHandleTypeFlagBits handle,
+                                        VkDeviceSize size, uint32_t type, const void *next,
+                                        VkDeviceMemory &memory) const;
     /* `memory`, host-visible, mapped whole into this process. */
     [[nodiscard]] bool    map_memory(VkDeviceMemory memory, void *&pointer) const;
 
     [[nodiscard]] bool   create_image(const VkImageCreateInfo &info, VkImage &image) const;
     void                 destroy_image(VkImage image) const;
     VkMemoryRequirements requirements(VkImage image) const;
-    /* Memory for `image` alone, `size` bytes of `type`, made or imported as
-     * `chain` says, and bound to it. An imported fd is the memory's once the
-     * allocation succeeds, even should the bind then fail. */
-    [[nodiscard]] bool   bind_dedicated(VkImage image, const void *chain, VkDeviceSize size, uint32_t type,
-                                        VkDeviceMemory &memory) const;
+    [[nodiscard]] bool   bind_image(VkImage image, VkDeviceMemory memory) const;
     void                 free_memory(VkDeviceMemory memory) const;
     [[nodiscard]] bool   memory_fd(VkDeviceMemory memory, VkExternalMemoryHandleTypeFlagBits type, int &fd) const;
     /* The first row of the only memory plane of an image laid out by a
@@ -79,9 +97,7 @@ public:
     VkMemoryRequirements buffer_requirements(VkBuffer buffer) const;
     /* The memory types a dma-buf `fd` may be imported as; 0 for none. */
     uint32_t           dma_buf_types(int fd) const;
-    /* Memory for `buffer` alone, as bind_dedicated makes it for an image. */
-    [[nodiscard]] bool bind_buffer(VkBuffer buffer, const void *chain, VkDeviceSize size, uint32_t type,
-                                   VkDeviceMemory &memory) const;
+    [[nodiscard]] bool bind_buffer(VkBuffer buffer, VkDeviceMemory memory) const;
     [[nodiscard]] bool create_semaphore(const void *chain, VkSemaphore &semaphore) const;
     void               destroy_semaphore(VkSemaphore semaphore) const;
     [[nodiscard]] bool import_semaphore_fd(VkSemaphore semaphore, VkExternalSemaphoreHandleTypeFlagBits type,

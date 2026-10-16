@@ -27,6 +27,7 @@
 
 namespace av {
 
+class OwnedFd;
 class SharedImageShape;
 
 class GlDisplay;
@@ -71,7 +72,7 @@ public:
      * guest sharing through this API is refused by the device with a status
      * rather than handed an object nothing made. */
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
-                                     int &fd) override;
+                                     OwnedFd &descriptor) override;
     /* It does import one, as a memory object or a semaphore of this context,
      * answered as the GL name the guest names it by from then on. Only a
      * dma-buf: what Vulkan exports as an opaque fd is a handle private to that

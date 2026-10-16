@@ -4,13 +4,13 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "executor/shim/d3d_headers.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/shim/dxvk_vulkan_device.hpp"
+#include "executor/shim/exported_image_layout.hpp"
 #include "executor/shim/vkd3d_image_export.hpp"
-#include "proto/d3d/dxgi_format.hpp"
 #include "proto/vulkan/exportable_image_info.hpp"
 
 #include <stdio.h>
-#include <unistd.h>
 
 namespace av {
 
@@ -52,12 +52,15 @@ ID3D11Texture2D *ExportableImages::import(Vkd3dImageExport &image, const D3D11_T
         refuse(!image.whole() ? "the export is part of an allocation" : "DXVK's Vulkan device is not reached");
         return nullptr;
     }
-    VkImage made = VK_NULL_HANDLE;
-    if (!vulkan_.table().create_image(image.image(), made)) {
+    ExportableImage *const made = record();
+    if (made == nullptr) return nullptr;
+    VulkanImage &made_image = made->image();
+    if (!made_image.create(vulkan_.table(), image.image())) {
         refuse("vkCreateImage refused vkd3d-proton's description");
+        discard(*made);
         return nullptr;
     }
-    const VkMemoryRequirements needs = vulkan_.table().requirements(made);
+    const VkMemoryRequirements needs = made_image.requirements();
     if (needs.size > image.size() || (needs.memoryTypeBits & (1u << image.memory_type())) == 0u) {
         LogLine(lines_)
             .text("an image cannot be imported: it needs ")
@@ -69,69 +72,54 @@ ID3D11Texture2D *ExportableImages::import(Vkd3dImageExport &image, const D3D11_T
             .text(" of type ")
             .number(image.memory_type())
             .write();
-        vulkan_.table().destroy_image(made);
+        discard(*made);
         return nullptr;
     }
-    const int fd = image.take_fd();
-    const VkImportMemoryFdInfoKHR imported = {VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR, nullptr,
-                                              VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT, fd};
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    if (!vulkan_.table().bind_dedicated(made, &imported, image.size(), image.memory_type(), memory)) {
-        refuse(memory == VK_NULL_HANDLE ? "the memory's fd was not imported" : "the imported memory was not bound");
-        /* An import that failed never took the fd. */
-        if (memory == VK_NULL_HANDLE) close(fd);
-        vulkan_.table().free_memory(memory);
-        vulkan_.table().destroy_image(made);
+    OwnedFd memory;
+    image.take(memory);
+    if (!made_image.bind_imported(memory, VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT, image.size(),
+                                  image.memory_type())) {
+        refuse(memory.held() ? "the memory's fd was not imported" : "the imported memory was not bound");
+        discard(*made);
         return nullptr;
     }
-    return wrap(made, memory, drm_format_mod_invalid, desc);
+    return wrap(*made, drm_format_mod_invalid, desc);
 }
 
 /* The same description the compositor made the image from, so both devices
  * read one layout from the memory; dedicated, as the compositor's is. */
-ID3D11Texture2D *ExportableImages::adopt(int fd, const D3D11_TEXTURE2D_DESC1 &desc)
+ID3D11Texture2D *ExportableImages::adopt(OwnedFd &descriptor, const D3D11_TEXTURE2D_DESC1 &desc)
 {
     AV_SCOPE("ExportableImages::adopt");
     const ExportableImageInfo described(desc.Width, desc.Height, desc.MipLevels, desc.ArraySize,
                                         desc.SampleDesc.Count, static_cast<uint32_t>(desc.Format), desc.BindFlags);
-    return adopt_laid_out(fd, described, drm_format_mod_linear, desc);
+    return adopt_laid_out(descriptor, described, drm_format_mod_linear, desc);
 }
 
-ID3D11Texture2D *ExportableImages::adopt(int fd, const D3D11_TEXTURE2D_DESC1 &desc, uint64_t modifier,
+ID3D11Texture2D *ExportableImages::adopt(OwnedFd &descriptor, const D3D11_TEXTURE2D_DESC1 &desc, uint64_t modifier,
                                          uint64_t offset, uint64_t pitch)
 {
     AV_SCOPE("ExportableImages::adopt");
     const ExportableImageInfo described(desc.Width, desc.Height, desc.MipLevels, desc.ArraySize,
                                         desc.SampleDesc.Count, static_cast<uint32_t>(desc.Format), desc.BindFlags,
                                         modifier, offset, pitch);
-    return adopt_laid_out(fd, described, modifier, desc);
+    return adopt_laid_out(descriptor, described, modifier, desc);
 }
 
-ID3D11Texture2D *ExportableImages::adopt_laid_out(int fd, const ExportableImageInfo &described, uint64_t modifier,
-                                                  const D3D11_TEXTURE2D_DESC1 &desc)
+ID3D11Texture2D *ExportableImages::adopt_laid_out(OwnedFd &descriptor, const ExportableImageInfo &described,
+                                                  uint64_t modifier, const D3D11_TEXTURE2D_DESC1 &desc)
 {
     AV_SCOPE("ExportableImages::adopt_laid_out");
-    if (fd < 0) return nullptr;
-    VkImage made = VK_NULL_HANDLE;
-    if (!described.supported() || !vulkan_.connected() || !vulkan_.table().create_image(described.info(), made)) {
-        close(fd);
-        return nullptr;
-    }
+    if (!descriptor.held() || !described.supported() || !vulkan_.connected()) return nullptr;
     collect();
-    const VkMemoryRequirements    needs = vulkan_.table().requirements(made);
-    const uint32_t                type = vulkan_.table().memory_type(needs.memoryTypeBits);
-    const VkImportMemoryFdInfoKHR imported = {VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR, nullptr,
-                                              VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd};
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    if (type == VK_MAX_MEMORY_TYPES || !vulkan_.table().bind_dedicated(made, &imported, needs.size, type, memory)) {
+    ExportableImage *const made = record();
+    if (made == nullptr) return nullptr;
+    if (!made->image().import_dma_buf(vulkan_.table(), described.info(), descriptor)) {
         lines_.name("an image cannot be imported:", "the dma-buf was not imported");
-        /* Memory that was allocated took the fd; otherwise it is still ours. */
-        if (memory == VK_NULL_HANDLE) close(fd);
-        vulkan_.table().free_memory(memory);
-        vulkan_.table().destroy_image(made);
+        discard(*made);
         return nullptr;
     }
-    return wrap(made, memory, modifier, desc);
+    return wrap(*made, modifier, desc);
 }
 
 /* Rows, over memory whose bytes are kept as they are: an OpenCL that names no
@@ -144,14 +132,18 @@ ID3D11Texture2D *ExportableImages::make_rows(const D3D11_TEXTURE2D_DESC1 &desc)
     AV_SCOPE("ExportableImages::make_rows");
     const ExportableImageInfo described(desc.Width, desc.Height, desc.MipLevels, desc.ArraySize,
                                         desc.SampleDesc.Count, static_cast<uint32_t>(desc.Format), desc.BindFlags);
-    if (!described.supported() || !vulkan_.connected() || !vulkan_.table().supports_exportable(described.info())) return nullptr;
+    if (!described.supported() || !vulkan_.connected() || !vulkan_.table().supports_exportable(described.info()))
+        return nullptr;
     collect();
-    VkImage made = VK_NULL_HANDLE;
-    if (!vulkan_.table().create_image(described.info(), made)) return nullptr;
-    const uint32_t type = vulkan_.table().raw_memory_type(vulkan_.table().requirements(made).memoryTypeBits);
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    if (!bind_exported(made, type, memory)) return nullptr;
-    return wrap(made, memory, drm_format_mod_linear, desc);
+    ExportableImage *const made = record();
+    if (made == nullptr) return nullptr;
+    VulkanImage &image = made->image();
+    if (!image.create(vulkan_.table(), described.info()) ||
+        !image.bind_exportable(vulkan_.table().raw_memory_type(image.requirements().memoryTypeBits))) {
+        discard(*made);
+        return nullptr;
+    }
+    return wrap(*made, drm_format_mod_linear, desc);
 }
 
 /* Laid out by a tiling the driver picks among the GPU's own, over memory of
@@ -174,35 +166,16 @@ ID3D11Texture2D *ExportableImages::make_tiled(const D3D11_TEXTURE2D_DESC1 &desc)
                                         desc.SampleDesc.Count, static_cast<uint32_t>(desc.Format), desc.BindFlags,
                                         tilings, count);
     collect();
-    VkImage made = VK_NULL_HANDLE;
-    if (!vulkan_.table().create_image(described.info(), made)) return make_rows(desc);
-    const uint32_t type = vulkan_.table().memory_type(vulkan_.table().requirements(made).memoryTypeBits);
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    if (!bind_exported(made, type, memory)) return make_rows(desc);
-    const uint64_t modifier = vulkan_.table().modifier_of(made);
+    ExportableImage *const made = record();
+    if (made == nullptr) return nullptr;
+    VulkanImage &image = made->image();
+    const bool   bound = image.make_exportable(vulkan_.table(), described.info());
+    const uint64_t modifier = bound ? image.modifier() : drm_format_mod_invalid;
     if (modifier == drm_format_mod_invalid) {
-        vulkan_.table().free_memory(memory);
-        vulkan_.table().destroy_image(made);
+        discard(*made);
         return make_rows(desc);
     }
-    return wrap(made, memory, modifier, desc);
-}
-
-/* Memory of `type` for `image` alone, exportable as a dma-buf; on failure
- * the image is destroyed with whatever was allocated. */
-bool ExportableImages::bind_exported(VkImage image, uint32_t type, VkDeviceMemory &memory)
-{
-    AV_SCOPE("ExportableImages::bind_exported");
-    memory = VK_NULL_HANDLE;
-    const VkExportMemoryAllocateInfo exported = {VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO, nullptr,
-                                                 VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
-    if (type != VK_MAX_MEMORY_TYPES &&
-        vulkan_.table().bind_dedicated(image, &exported, vulkan_.table().requirements(image).size, type, memory))
-        return true;
-    vulkan_.table().free_memory(memory);
-    vulkan_.table().destroy_image(image);
-    memory = VK_NULL_HANDLE;
-    return false;
+    return wrap(*made, modifier, desc);
 }
 
 bool ExportableImages::row_pitch(ID3D11Texture2D *texture, uint32_t &pitch)
@@ -211,37 +184,34 @@ bool ExportableImages::row_pitch(ID3D11Texture2D *texture, uint32_t &pitch)
     pitch = 0u;
     const ExportableImage *const made = image_of(texture);
     if (made == nullptr || !made->rows()) return false;
-    pitch = static_cast<uint32_t>(vulkan_.table().row_layout(made->image()).rowPitch);
+    pitch = static_cast<uint32_t>(made->image().row_layout().rowPitch);
     return pitch != 0u;
 }
 
-bool ExportableImages::carry(ID3D11Texture2D *texture, int &fd, uint64_t &modifier, uint64_t &offset, uint64_t &pitch)
+bool ExportableImages::carry(ID3D11Texture2D *texture, OwnedFd &descriptor, uint64_t &modifier, uint64_t &offset,
+                             uint64_t &pitch)
 {
     AV_SCOPE("ExportableImages::carry");
-    fd = -1;
-    const ExportableImage *const image = image_of(texture);
-    if (image == nullptr || image->modifier() == drm_format_mod_invalid ||
-        !vulkan_.table().memory_fd(image->memory(), VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd))
+    descriptor.close();
+    const ExportableImage *const made = image_of(texture);
+    if (made == nullptr || made->modifier() == drm_format_mod_invalid || !made->image().export_dma_buf(descriptor))
         return false;
-    const VkSubresourceLayout laid = vulkan_.table().row_layout(image->image());
-    modifier = image->modifier();
+    const VkSubresourceLayout laid = made->image().row_layout();
+    modifier = made->modifier();
     offset = laid.offset;
     pitch = laid.rowPitch;
     return true;
 }
 
-bool ExportableImages::export_memory(ID3D11Texture2D *texture, int &fd)
+bool ExportableImages::export_memory(ID3D11Texture2D *texture, OwnedFd &descriptor)
 {
     AV_SCOPE("ExportableImages::export_memory");
-    fd = -1;
-    const ExportableImage *const image = image_of(texture);
-    return image != nullptr && image->rows() &&
-           vulkan_.table().memory_fd(image->memory(), VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd);
+    descriptor.close();
+    const ExportableImage *const made = image_of(texture);
+    return made != nullptr && made->rows() && made->image().export_dma_buf(descriptor);
 }
 
-/* The image is laid out by a modifier (ExportableImageInfo), so its one
- * plane's layout is the driver's to report and the importer's to follow,
- * under that modifier. */
+/* The dma-buf is the caller's, as AvExportedImage hands it. */
 bool ExportableImages::export_image(ID3D11Texture2D *texture, AvExportedImage &image)
 {
     AV_SCOPE("ExportableImages::export_image");
@@ -250,18 +220,11 @@ bool ExportableImages::export_image(ID3D11Texture2D *texture, AvExportedImage &i
     if (made == nullptr || made->modifier() == drm_format_mod_invalid) return false;
     D3D11_TEXTURE2D_DESC described = {};
     texture->GetDesc(&described);
-    const uint32_t fourcc = DxgiFormat(static_cast<uint32_t>(described.Format)).drm_fourcc();
-    int            fd = -1;
-    if (fourcc == 0u || !vulkan_.table().memory_fd(made->memory(), VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd))
-        return false;
-    const VkSubresourceLayout laid = vulkan_.table().row_layout(made->image());
-    image.fd = fd;
-    image.width = described.Width;
-    image.height = described.Height;
-    image.stride = static_cast<uint32_t>(laid.rowPitch);
-    image.offset = static_cast<uint32_t>(laid.offset);
-    image.fourcc = fourcc;
-    image.modifier = made->modifier();
+    const ExportedImageLayout layout(made->image(), described.Width, described.Height,
+                                     static_cast<uint32_t>(described.Format), made->modifier());
+    OwnedFd memory;
+    if (!made->image().export_dma_buf(memory) || !layout.describe(memory.fd(), image)) return false;
+    static_cast<void>(memory.take());
     return true;
 }
 
@@ -270,9 +233,9 @@ void ExportableImages::collect()
     AV_SCOPE("ExportableImages::collect");
     if (__atomic_exchange_n(&retired_, 0u, __ATOMIC_ACQ_REL) == 0u) return;
     vulkan_.idle();
-    images_.destroy_if([this](const ExportableImage &image) {
+    images_.destroy_if([](const ExportableImage &image) {
         if (!image.retired()) return false;
-        const_cast<ExportableImage &>(image).free(vulkan_);
+        const_cast<ExportableImage &>(image).free();
         return true;
     });
 }
@@ -282,8 +245,8 @@ void ExportableImages::release()
     AV_SCOPE("ExportableImages::release");
     if (images_.live() == 0u) return;
     vulkan_.idle();
-    images_.destroy_if([this](const ExportableImage &image) {
-        const_cast<ExportableImage &>(image).free(vulkan_);
+    images_.destroy_if([](const ExportableImage &image) {
+        const_cast<ExportableImage &>(image).free();
         return true;
     });
     __atomic_store_n(&retired_, 0u, __ATOMIC_RELEASE);
@@ -324,28 +287,34 @@ ExportableImage *ExportableImages::image_of(ID3D11Texture2D *texture)
     return image != nullptr && !image->retired() ? image : nullptr;
 }
 
-ID3D11Texture2D *ExportableImages::wrap(VkImage image, VkDeviceMemory memory, uint64_t modifier,
-                                        const D3D11_TEXTURE2D_DESC1 &desc)
+ExportableImage *ExportableImages::record()
+{
+    AV_SCOPE("ExportableImages::record");
+    ExportableImage *made = nullptr;
+    if (images_.create(made, *this) == Status::ok) return made;
+    lines_.write("an exportable image cannot be recorded: out of memory");
+    return nullptr;
+}
+
+void ExportableImages::discard(ExportableImage &made)
+{
+    AV_SCOPE("ExportableImages::discard");
+    made.free();
+    static_cast<void>(images_.destroy(&made));
+}
+
+ID3D11Texture2D *ExportableImages::wrap(ExportableImage &made, uint64_t modifier, const D3D11_TEXTURE2D_DESC1 &desc)
 {
     AV_SCOPE("ExportableImages::wrap");
-    ExportableImage *made = nullptr;
-    if (images_.create(made, *this, image, memory, modifier) != Status::ok) {
-        lines_.write("an exportable image cannot be recorded: out of memory");
-        vulkan_.table().free_memory(memory);
-        vulkan_.table().destroy_image(image);
-        return nullptr;
-    }
+    made.laid_out_by(modifier);
     ID3D11Texture2D *texture = nullptr;
-    if (!vulkan_.wrap(desc, image, texture) ||
+    if (!vulkan_.wrap(desc, made.image().image(), texture) ||
         FAILED(texture->SetPrivateDataInterface(image_data,
-                                                reinterpret_cast<IUnknown *>(static_cast<TextureHold *>(made))))) {
+                                                reinterpret_cast<IUnknown *>(static_cast<TextureHold *>(&made))))) {
         lines_.write("DXVK made no texture over an image of its own device");
         if (texture != nullptr) texture->Release();
         /* Collected with the rest when the texture held it; freed here when not. */
-        if (!made->retired()) {
-            made->free(vulkan_);
-            static_cast<void>(images_.destroy(made));
-        }
+        if (!made.retired()) discard(made);
         return nullptr;
     }
     return texture;

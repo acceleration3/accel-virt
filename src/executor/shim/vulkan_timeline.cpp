@@ -1,9 +1,9 @@
 #include "executor/shim/vulkan_timeline.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/shim/vulkan_device_table.hpp"
 
-#include <unistd.h>
 
 namespace av {
 
@@ -31,28 +31,31 @@ bool VulkanTimeline::make_exportable(const VulkanDeviceTable &table)
     return true;
 }
 
-bool VulkanTimeline::import_fd(const VulkanDeviceTable &table, int fd)
+bool VulkanTimeline::import_fd(const VulkanDeviceTable &table, OwnedFd &descriptor)
 {
     AV_SCOPE("VulkanTimeline::import_fd");
-    if (fd < 0) return false;
+    if (!descriptor.held()) return false;
     const VkSemaphoreTypeCreateInfo typed = {VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO, nullptr,
                                              VK_SEMAPHORE_TYPE_TIMELINE, 0u};
-    if (made() || !table.create_semaphore(&typed, semaphore_)) {
-        close(fd);
+    if (made() || !table.create_semaphore(&typed, semaphore_)) return false;
+    table_ = &table;
+    if (!table.import_semaphore_fd(semaphore_, VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT, descriptor.fd())) {
+        release();
         return false;
     }
-    table_ = &table;
-    if (table.import_semaphore_fd(semaphore_, VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT, fd)) return true;
-    close(fd);
-    release();
-    return false;
+    /* A successful import owns the descriptor. */
+    static_cast<void>(descriptor.take());
+    return true;
 }
 
-bool VulkanTimeline::export_fd(int &fd) const
+bool VulkanTimeline::export_fd(OwnedFd &descriptor) const
 {
     AV_SCOPE("VulkanTimeline::export_fd");
-    fd = -1;
-    return table_ != nullptr && table_->semaphore_fd(semaphore_, VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT, fd);
+    int        fd = -1;
+    const bool exported =
+        table_ != nullptr && table_->semaphore_fd(semaphore_, VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT, fd);
+    descriptor.hold(fd);
+    return exported;
 }
 
 bool VulkanTimeline::wait(uint64_t value, uint64_t nanoseconds) const

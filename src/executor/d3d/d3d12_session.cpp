@@ -3,6 +3,7 @@
 #include "executor/sharing/session_shares.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/source_memory.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/import_table.hpp"
 
 #include "core/log/log_line.hpp"
@@ -25,7 +26,6 @@
 
 #include <stdio.h>
 
-#include <unistd.h>
 
 namespace av {
 
@@ -410,9 +410,10 @@ bool D3d12Session::on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperti
             LogLine(lines_).text("a heap of ").number(size).text(" bytes names no memory that holds it").write();
             return false;
         }
-        const int          fd = backing->share();
-        ID3D12Heap *const  made = device_->import_dmabuf_heap(backing->pointer(), fd, backing->size());
-        if (fd >= 0) close(fd);
+        OwnedFd             descriptor;
+        ID3D12Heap *const  made = backing->share(descriptor)
+                                      ? device_->import_dmabuf_heap(backing->pointer(), descriptor.fd(), backing->size())
+                                      : nullptr;
         if (made == nullptr) {
             LogLine(lines_).text("the host did not open a heap over ").number(backing->size()).text(" bytes").write();
             return false;

@@ -62,6 +62,7 @@ struct ID3D11VkExtContext2;
 
 namespace av {
 
+class OwnedFd;
 class VulkanBuffer;
 
 class D3dRuntime;
@@ -193,9 +194,10 @@ public:
     void               use_compositor(CompositorDevice *compositor);
     CompositorDevice  *compositor() const;
     /* Under the lock: a shared texture described as `desc` over the
-     * compositor's dma-buf `fd` (ExportableImages::adopt), with a reference
-     * the caller owns; the fd is taken whatever happens. */
-    ID3D11Texture2D   *adopt_exportable(int fd, const D3D11_TEXTURE2D_DESC1 &desc);
+     * compositor's dma-buf `descriptor` (ExportableImages::adopt), with a
+     * reference the caller owns; the descriptor is the texture's once it is
+     * made. */
+    ID3D11Texture2D   *adopt_exportable(OwnedFd &descriptor, const D3D11_TEXTURE2D_DESC1 &desc);
     /* Under the lock: the row pitch of the linear image make_rows made
      * `texture` over (ExportableImages::row_pitch). */
     [[nodiscard]] bool exportable_pitch(ID3D11Texture2D *texture, uint32_t &pitch);
@@ -207,17 +209,18 @@ public:
     /* Under the lock: the same, laid out by a tiling of the GPU's own
      * (ExportableImages::make_tiled), for Direct3D and an importer told it. */
     ID3D11Texture2D   *make_tiled(const D3D11_TEXTURE2D_DESC1 &desc);
-    /* Under the lock: a dma-buf of the memory make_rows made `texture` over,
-     * which the caller owns; false for any other texture. */
-    [[nodiscard]] bool export_memory(ID3D11Texture2D *texture, int &fd);
+    /* Under the lock: a dma-buf of the memory make_rows made `texture` over;
+     * false for any other texture. */
+    [[nodiscard]] bool export_memory(ID3D11Texture2D *texture, OwnedFd &descriptor);
     /* DXVK's Vulkan device, which a Direct3D 12 session's presents wait on. */
     /* Whether a buffer can be drawn from guest memory in place: DXVK renames
      * buffers to storage imported here (tools/dxvk-patches/0003) and offers
      * Vulkan interop to import it with. */
     bool               slices() const;
-    /* `bytes` of the dma-buf `fd`, which is the call's, imported on DXVK's
-     * device to draw from (VulkanBuffer::import_dma_buf_to_draw). */
-    [[nodiscard]] bool import_to_draw(int fd, uint64_t bytes, VulkanBuffer &buffer);
+    /* `bytes` of the dma-buf `descriptor` imported on DXVK's device to draw
+     * from (VulkanBuffer::import_dma_buf_to_draw); the descriptor is the
+     * memory's once it is made. */
+    [[nodiscard]] bool import_to_draw(OwnedFd &descriptor, uint64_t bytes, VulkanBuffer &buffer);
     /* `buffer` from now on is `bytes` at `offset` of `storage`, which the CPU
      * reaches at `host`: recorded on the immediate context, so what was
      * recorded before reads its storage before. Under the device's lock. */

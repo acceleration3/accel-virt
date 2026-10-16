@@ -32,7 +32,7 @@ bool D3d9VulkanLane::connect(IDirect3DDevice9 *device)
     interop_ = interop;
     device_ = device;
     queue_.borrow(interop);
-    if (table_.load(instance, physical, vulkan) && work_.open(table_, queue_)) return true;
+    if (table_.load(instance, physical, vulkan) && table_.interoperates() && work_.open(table_, queue_)) return true;
     release();
     return false;
 }

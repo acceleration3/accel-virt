@@ -5,13 +5,12 @@
 #include "executor/shim/exportable_images.hpp"
 #include "executor/shim/surface_identity.hpp"
 
-#include <unistd.h>
 
 namespace av {
 
 CarriedShare::CarriedShare(uint32_t domain, uint64_t id)
     : id_(id), domain_(domain), dimension_(Dimension::none), width_(0u), height_(0u), depth_or_array_(0u), mips_(0u),
-      format_(0u), samples_(0u), quality_(0u), bind_(0u), misc_(0u), stride_(0u), fd_(-1), modifier_(0u),
+      format_(0u), samples_(0u), quality_(0u), bind_(0u), misc_(0u), stride_(0u), fd_(), modifier_(0u),
       offset_(0u), pitch_(0u)
 {
     AV_SCOPE("CarriedShare::CarriedShare");
@@ -20,7 +19,6 @@ CarriedShare::CarriedShare(uint32_t domain, uint64_t id)
 CarriedShare::~CarriedShare()
 {
     AV_SCOPE("CarriedShare::~CarriedShare");
-    if (fd_ >= 0) ::close(fd_);
 }
 
 bool CarriedShare::record(IUnknown *resource, ExportableImages &images)
@@ -64,7 +62,7 @@ bool CarriedShare::record(IUnknown *resource, ExportableImages &images)
         quality_ = desc.SampleDesc.Quality;
         bind_ = desc.BindFlags;
         misc_ = desc.MiscFlags;
-        if (!images.carry(texture, fd_, modifier_, offset_, pitch_)) fd_ = -1;
+        if (!images.carry(texture, fd_, modifier_, offset_, pitch_)) fd_.close();
     } else if (kind == D3D11_RESOURCE_DIMENSION_TEXTURE3D) {
         D3D11_TEXTURE3D_DESC desc = {};
         static_cast<ID3D11Texture3D *>(typed)->GetDesc(&desc);
@@ -96,9 +94,9 @@ IUnknown *CarriedShare::remake_texture2d(ID3D11Device5 *device, ExportableImages
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = bind_;
     desc.MiscFlags = misc_;
-    if (fd_ >= 0) {
+    if (fd_.held()) {
         ID3D11Texture2D *const adopted = images.adopt(fd_, desc, modifier_, offset_, pitch_);
-        fd_ = -1;
+        fd_.close();
         if (adopted != nullptr) return adopted;
     }
     const D3D11_TEXTURE2D_DESC plain = {width_, height_, mips_, depth_or_array_, desc.Format, desc.SampleDesc,
@@ -154,7 +152,7 @@ uint64_t CarriedShare::id() const
 bool CarriedShare::invariants_hold() const
 {
     AV_SCOPE("CarriedShare::invariants_hold");
-    return (fd_ < 0 || dimension_ == Dimension::texture2d) && id_ != 0u;
+    return (!fd_.held() || dimension_ == Dimension::texture2d) && id_ != 0u;
 }
 
 }  // namespace av

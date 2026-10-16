@@ -3,7 +3,6 @@
 #include "executor/shim/vulkan_buffer.hpp"
 #include "executor/shim/dxvk_interop.hpp"
 
-#include <unistd.h>
 
 
 #include <stdio.h>
@@ -142,8 +141,7 @@ bool D3d11HostDevice::export_image(uint32_t domain, uint64_t id, AvExportedImage
     if (texture != nullptr) texture->Release();
     unlock();
     if (!staged || !exported(slot)) return false;
-    exports_.describe(slot, image);
-    return true;
+    return exports_.describe(slot, image);
 }
 
 /* An image handed over before its copy is done shows whatever the slot held
@@ -190,8 +188,7 @@ bool D3d11HostDevice::compose_planes(uint32_t domain, const AvScanoutPlane *plan
     const bool staged = composed != nullptr && exports_.stage(device_, context_, composed, slot);
     unlock();
     if (!staged || !exported(slot)) return false;
-    exports_.describe(slot, image);
-    return true;
+    return exports_.describe(slot, image);
 }
 
 bool D3d11HostDevice::export_surface(uint32_t domain, uint64_t surface, AvExportedImage &image)
@@ -648,10 +645,10 @@ bool D3d11HostDevice::exportable_pitch(ID3D11Texture2D *texture, uint32_t &pitch
     return images_.row_pitch(texture, pitch);
 }
 
-ID3D11Texture2D *D3d11HostDevice::adopt_exportable(int fd, const D3D11_TEXTURE2D_DESC1 &desc)
+ID3D11Texture2D *D3d11HostDevice::adopt_exportable(OwnedFd &descriptor, const D3D11_TEXTURE2D_DESC1 &desc)
 {
     AV_SCOPE("D3d11HostDevice::adopt_exportable");
-    return images_.adopt(fd, desc);
+    return images_.adopt(descriptor, desc);
 }
 
 /* A swap chain buffer is one 2D image of one mip; what DWM makes of it is a
@@ -704,10 +701,10 @@ ID3D11Texture2D *D3d11HostDevice::make_tiled(const D3D11_TEXTURE2D_DESC1 &desc)
     return images_.make_tiled(desc);
 }
 
-bool D3d11HostDevice::export_memory(ID3D11Texture2D *texture, int &fd)
+bool D3d11HostDevice::export_memory(ID3D11Texture2D *texture, OwnedFd &descriptor)
 {
     AV_SCOPE("D3d11HostDevice::export_memory");
-    return images_.export_memory(texture, fd);
+    return images_.export_memory(texture, descriptor);
 }
 
 DxvkVulkanDevice &D3d11HostDevice::vulkan()
@@ -728,12 +725,10 @@ bool D3d11HostDevice::slices() const
     return slices_ != nullptr && vulkan_.connected();
 }
 
-bool D3d11HostDevice::import_to_draw(int fd, uint64_t bytes, VulkanBuffer &buffer)
+bool D3d11HostDevice::import_to_draw(OwnedFd &descriptor, uint64_t bytes, VulkanBuffer &buffer)
 {
     AV_SCOPE("D3d11HostDevice::import_to_draw");
-    if (slices()) return buffer.import_dma_buf_to_draw(vulkan_.table(), fd, bytes);
-    if (fd >= 0) ::close(fd);
-    return false;
+    return slices() && buffer.import_dma_buf_to_draw(vulkan_.table(), descriptor, bytes);
 }
 
 bool D3d11HostDevice::bind_storage(ID3D11Buffer *buffer, const VulkanBuffer &storage, uint64_t offset, uint64_t bytes,

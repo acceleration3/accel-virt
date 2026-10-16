@@ -12,6 +12,8 @@
 
 namespace av {
 
+class OwnedFd;
+
 class SourceMemory {
 public:
     SourceMemory(uint32_t domain, uint64_t key, uint32_t memory_type, uint32_t caching, const ExportedMemory &memory);
@@ -35,9 +37,9 @@ public:
      * every number a command names it by came off the wire. */
     uint8_t              *at(uint64_t offset, uint64_t bytes) const;
     const ExportedMemory &exported() const;
-    /* A new descriptor of its dma-buf, the caller's: what a host API imports
-     * it by. -1 when none can be had. */
-    int                   share() const;
+    /* A new descriptor of its dma-buf held in `into`: what a host API imports
+     * it by. False, holding nothing, when none can be had. */
+    [[nodiscard]] bool    share(OwnedFd &into) const;
 
     /* The key let go: the device released its blob. */
     void detach();

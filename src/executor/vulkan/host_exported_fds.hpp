@@ -11,10 +11,15 @@
  *
  * The table also owns what it exported: an fd the guest asked for and never
  * imported is closed with the device, and with the context, because a handle
- * this process holds until it exits is a leak a guest could drive. Per
- * context, on that context's own thread, so it needs no lock. */
+ * this process holds until it exits is a leak a guest could drive. There is
+ * no count past which an export is refused (docs/architecture.md, "Counts
+ * with no fixed bound"). Per context, on that context's own thread, so it
+ * needs no lock. */
 #ifndef AV_HOST_EXPORTED_FDS_HPP
 #define AV_HOST_EXPORTED_FDS_HPP
+
+#include "core/support/keyed_slots.hpp"
+#include "core/support/status.hpp"
 
 #include <stdint.h>
 
@@ -22,58 +27,42 @@
 
 namespace av {
 
+class BlockSource;
+class OwnedFd;
 struct HostExportedFdsProbe;
-
-/* One exported fd and the device it came from. A type of its own so the
- * table's slots are complete (tools/header_scan.py reads a class's members
- * only to its first nested type). */
-struct HostExportedFdSlot {
-    VkDevice device_;
-    /* Negative for an empty slot: 0 is an fd. */
-    int      fd_;
-};
 
 class HostExportedFds {
 public:
-    /* As many as the ICD's own table of exported handles holds
-     * (ExternalObjects::max_objects): a guest that exported more than this
-     * could not have named them. */
-    static constexpr uint32_t max_fds = 64u;
-
-    HostExportedFds();
+    /* As many as the guest exports: the table grows from `blocks`. */
+    explicit HostExportedFds(BlockSource &blocks);
     ~HostExportedFds();
     HostExportedFds(const HostExportedFds &) = delete;
     HostExportedFds &operator=(const HostExportedFds &) = delete;
 
-    /* Remembers `fd` as `device`'s, taking ownership of it. False for no fd,
-     * no device, and a table with no room - in which case the fd is still the
-     * caller's to close, since a table that both refused and closed would be
-     * one no caller could reason about. */
-    [[nodiscard]] bool keep(VkDevice device, int fd);
+    /* `descriptor` remembered as `device`'s, and taken from it.
+     * invalid_parameter for no descriptor or no device, no_memory when the
+     * table cannot grow - the descriptor then stays held there. */
+    [[nodiscard]] Status keep(VkDevice device, OwnedFd &descriptor);
     /* Whether `fd` is one this context exported, which is what an import may
      * name. */
-    bool               holds(int fd) const;
+    bool                 holds(int fd) const;
     /* The same, and forgotten with it: the driver an import succeeded on owns
      * the fd it was given, so this table must not close it after. A refused
      * import leaves the fd here, to be closed with its device. */
-    [[nodiscard]] bool take(int fd);
+    [[nodiscard]] bool   take(int fd);
     /* Every fd `device` exported and nothing imported, closed with it. */
-    void               forget_device(VkDevice device);
+    void                 forget_device(VkDevice device);
     /* Every fd, closed, whichever device exported it: a closing context's,
      * which the next context made in its slot must not be able to name. */
-    void               forget_all();
-    uint32_t           live() const;
+    void                 forget_all();
+    uint32_t             live() const;
 
-    /* A slot is empty or holds one fd of one device, and no fd appears
-     * twice. */
+    /* Every fd held is a descriptor of one device. */
     bool invariants_hold() const;
 
 private:
-    /* The slot holding `fd`, or -1. */
-    int  index_of(int fd) const;
-    void release(HostExportedFdSlot &slot);
-
-    HostExportedFdSlot slots_[max_fds];
+    /* Each fd held, by its number, with the device that exported it. */
+    KeyedSlots<uint32_t, VkDevice> fds_;
 
     friend struct HostExportedFdsProbe;
 };

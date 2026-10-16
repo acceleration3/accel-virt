@@ -8,6 +8,8 @@
 #define AV_HOST_IMAGE_EXPORT_HPP
 
 #include "device/abi/av_executor.h"
+#include "executor/owned_fd.hpp"
+#include "executor/shim/vulkan_image.hpp"
 
 #include <stdint.h>
 #include <vulkan/vulkan.h>
@@ -39,18 +41,17 @@ public:
                              uint32_t &slot);
     /* Under the device's lock: whether the GPU has finished the slot's copy. */
     bool copied(ID3D11DeviceContext4 *context, uint32_t slot) const;
-    void describe(uint32_t slot, AvExportedImage &image) const;
+    /* The slot's image as the display imports it; its dma-buf stays this
+     * one's. False for a format no DRM format names. */
+    [[nodiscard]] bool describe(uint32_t slot, AvExportedImage &image) const;
     void release();
 
 private:
     struct Image {
-        VkImage          image_;
-        VkDeviceMemory   memory_;
+        VulkanImage      image_;
         ID3D11Texture2D *texture_;
         ID3D11Query     *done_;
-        int              fd_;
-        uint32_t         stride_;
-        uint32_t         offset_;
+        OwnedFd          fd_;
     };
 
     [[nodiscard]] bool make(ID3D11Device5 *device, uint32_t width, uint32_t height, uint32_t format);

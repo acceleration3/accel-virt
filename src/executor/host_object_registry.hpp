@@ -80,6 +80,9 @@ public:
      * can be. */
     [[nodiscard]] Status remember(Key key, Kind kind, Key parent, const Detail &detail);
     bool                 holds(Key key) const;
+    /* What `key` was made through; 0 for a key not held, or made through
+     * nothing. */
+    Key                  parent_of(Key key) const;
     /* What `key` is held with if it is held as `kind`; null otherwise - for
      * 0, a key never held, and one held as another kind. */
     Detail              *find(Key key, Kind kind);
@@ -174,6 +177,14 @@ bool HostObjectRegistry<Key, Kind, Detail>::holds(Key key) const
 {
     AV_SCOPE("HostObjectRegistry::holds");
     return key != Key(0) && entries_.find(key) != nullptr;
+}
+
+template <typename Key, typename Kind, typename Detail>
+Key HostObjectRegistry<Key, Kind, Detail>::parent_of(Key key) const
+{
+    AV_SCOPE("HostObjectRegistry::parent_of");
+    const Entry *const entry = key != Key(0) ? entries_.find(key) : nullptr;
+    return entry != nullptr && entry->parent_ != no_slot ? entries_.key_at(entry->parent_) : Key(0);
 }
 
 template <typename Key, typename Kind, typename Detail>

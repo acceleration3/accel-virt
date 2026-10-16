@@ -39,6 +39,7 @@ struct D3D11_TEXTURE2D_DESC1;
 
 namespace av {
 
+class OwnedFd;
 class DxvkVulkanDevice;
 class ExportableImageInfo;
 class StateWriter;
@@ -64,23 +65,23 @@ public:
      * told the modifier (export_image) reads; as rows where the GPU exports
      * no tiling. */
     ID3D11Texture2D *make_tiled(const D3D11_TEXTURE2D_DESC1 &desc);
-    /* A texture described as `desc` over the dma-buf `fd` - an image the
-     * compositor made as rows as ExportableImageInfo describes them
-     * (CompositorDevice) - with a reference the caller owns. The fd is taken
-     * whatever happens: kept by the texture's memory, or closed. */
-    ID3D11Texture2D *adopt(int fd, const D3D11_TEXTURE2D_DESC1 &desc);
+    /* A texture described as `desc` over the dma-buf `descriptor` - an image
+     * the compositor made as rows as ExportableImageInfo describes them
+     * (CompositorDevice) - with a reference the caller owns. The descriptor
+     * is the texture's memory's once it is made, and stays held otherwise. */
+    ID3D11Texture2D *adopt(OwnedFd &descriptor, const D3D11_TEXTURE2D_DESC1 &desc);
     /* The same over memory laid out by `modifier`, its one plane at `offset`
      * with rows `pitch` apart: what carry() said of a texture made here. */
-    ID3D11Texture2D *adopt(int fd, const D3D11_TEXTURE2D_DESC1 &desc, uint64_t modifier, uint64_t offset,
-                           uint64_t pitch);
+    ID3D11Texture2D *adopt(OwnedFd &descriptor, const D3D11_TEXTURE2D_DESC1 &desc, uint64_t modifier,
+                           uint64_t offset, uint64_t pitch);
     /* A dma-buf of the memory of `texture`, made here, and how it is laid
      * out, for the same GPU to adopt again (CarriedShare); false for any
      * other texture. */
-    [[nodiscard]] bool carry(ID3D11Texture2D *texture, int &fd, uint64_t &modifier, uint64_t &offset,
+    [[nodiscard]] bool carry(ID3D11Texture2D *texture, OwnedFd &descriptor, uint64_t &modifier, uint64_t &offset,
                              uint64_t &pitch);
-    /* A dma-buf of `texture`'s memory, for an API that reads it as rows,
-     * which the caller owns; false for a texture not made here as rows. */
-    [[nodiscard]] bool export_memory(ID3D11Texture2D *texture, int &fd);
+    /* A dma-buf of `texture`'s memory, for an API that reads it as rows;
+     * false for a texture not made here as rows. */
+    [[nodiscard]] bool export_memory(ID3D11Texture2D *texture, OwnedFd &descriptor);
     /* The bytes between `texture`'s rows, as its linear image is laid out
      * (ExportableImageInfo); false for a texture not made here as rows. */
     [[nodiscard]] bool row_pitch(ID3D11Texture2D *texture, uint32_t &pitch);
@@ -104,15 +105,19 @@ private:
     /* The image `texture` was made over, when it was made here; null for any
      * other texture. */
     ExportableImage *image_of(ID3D11Texture2D *texture);
-    [[nodiscard]] bool bind_exported(VkImage image, uint32_t type, VkDeviceMemory &memory);
-    /* A texture described as `desc` over the dma-buf `fd`, as `described`
-     * lays it out by `modifier`; the fd is taken whatever happens. */
-    ID3D11Texture2D *adopt_laid_out(int fd, const ExportableImageInfo &described, uint64_t modifier,
+    /* A record for an image about to be made; null, said in the log, when
+     * none can be had. */
+    ExportableImage *record();
+    /* A record whose image was not made, given back. */
+    void             discard(ExportableImage &made);
+    /* A texture described as `desc` over the dma-buf `descriptor`, as
+     * `described` lays it out by `modifier`. */
+    ID3D11Texture2D *adopt_laid_out(OwnedFd &descriptor, const ExportableImageInfo &described, uint64_t modifier,
                                     const D3D11_TEXTURE2D_DESC1 &desc);
-    /* A texture described as `desc` over `image` and `memory`, laid out by
-     * `modifier`; null, with both freed, when DXVK would not wrap it or no
-     * image can be recorded. */
-    ID3D11Texture2D *wrap(VkImage image, VkDeviceMemory memory, uint64_t modifier, const D3D11_TEXTURE2D_DESC1 &desc);
+    /* `made`'s image, made and bound, as a texture described as `desc` and
+     * laid out by `modifier`; null, with the record given back, when DXVK
+     * would not wrap it. */
+    ID3D11Texture2D *wrap(ExportableImage &made, uint64_t modifier, const D3D11_TEXTURE2D_DESC1 &desc);
 
     DxvkVulkanDevice           &vulkan_;
     HostHeap                    heap_;

@@ -12,6 +12,8 @@
 #ifndef AV_CARRIED_SHARE_HPP
 #define AV_CARRIED_SHARE_HPP
 
+#include "executor/owned_fd.hpp"
+
 #include <stdint.h>
 
 struct ID3D11Device5;
@@ -59,9 +61,9 @@ private:
     uint32_t  bind_;
     uint32_t  misc_;
     uint32_t  stride_;
-    /* The memory it was made over, where ExportableImages made it; -1 for
-     * none. Taken by remake, closed otherwise. */
-    int       fd_;
+    /* The memory it was made over, where ExportableImages made it; nothing
+     * for none. Taken by a remake over it. */
+    OwnedFd   fd_;
     /* How that memory is laid out: the modifier, and its one plane's start
      * and pitch. */
     uint64_t  modifier_;

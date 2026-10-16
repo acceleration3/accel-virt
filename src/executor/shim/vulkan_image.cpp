@@ -1,9 +1,8 @@
 #include "executor/shim/vulkan_image.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/shim/vulkan_device_table.hpp"
-
-#include <unistd.h>
 
 namespace av {
 
@@ -18,48 +17,92 @@ VulkanImage::~VulkanImage()
     release();
 }
 
-bool VulkanImage::make_exportable(const VulkanDeviceTable &table, const VkImageCreateInfo &info)
+bool VulkanImage::create(const VulkanDeviceTable &table, const VkImageCreateInfo &info)
 {
-    AV_SCOPE("VulkanImage::make_exportable");
-    const VkExportMemoryAllocateInfo exported = {VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO, nullptr,
-                                                 VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
-    bool took = false;
-    return bind(table, info, &exported, took);
-}
-
-bool VulkanImage::import_dma_buf(const VulkanDeviceTable &table, const VkImageCreateInfo &info, int fd)
-{
-    AV_SCOPE("VulkanImage::import_dma_buf");
-    if (fd < 0) return false;
-    const VkImportMemoryFdInfoKHR imported = {VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR, nullptr,
-                                              VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd};
-    bool took = false;
-    if (bind(table, info, &imported, took)) return true;
-    if (!took) close(fd);
-    return false;
-}
-
-bool VulkanImage::bind(const VulkanDeviceTable &table, const VkImageCreateInfo &info, const void *chain, bool &took)
-{
-    AV_SCOPE("VulkanImage::bind");
-    took = false;
+    AV_SCOPE("VulkanImage::create");
     if (made() || !table.create_image(info, image_)) return false;
     table_ = &table;
-    const VkMemoryRequirements needs = table.requirements(image_);
-    if (!table.bind_dedicated(image_, chain, needs.size, table.memory_type(needs.memoryTypeBits), memory_)) {
-        took = memory_ != VK_NULL_HANDLE;
-        release();
-        return false;
-    }
-    size_ = needs.size;
     return true;
 }
 
-bool VulkanImage::export_dma_buf(int &fd) const
+VkMemoryRequirements VulkanImage::requirements() const
+{
+    AV_SCOPE("VulkanImage::requirements");
+    return table_ != nullptr ? table_->requirements(image_) : VkMemoryRequirements{};
+}
+
+bool VulkanImage::bind_exportable(uint32_t type)
+{
+    AV_SCOPE("VulkanImage::bind_exportable");
+    const VkDeviceSize size = requirements().size;
+    if (table_ == nullptr || memory_ != VK_NULL_HANDLE || !table_->allocate_exportable(image_, size, type, memory_)) {
+        release();
+        return false;
+    }
+    return bound(size);
+}
+
+bool VulkanImage::bind_imported(OwnedFd &descriptor, VkExternalMemoryHandleTypeFlagBits handle, VkDeviceSize size,
+                                uint32_t type)
+{
+    AV_SCOPE("VulkanImage::bind_imported");
+    const VkMemoryDedicatedAllocateInfo dedicated = {VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO, nullptr, image_,
+                                                     VK_NULL_HANDLE};
+    if (table_ == nullptr || memory_ != VK_NULL_HANDLE ||
+        !table_->import_memory(descriptor, handle, size, type, &dedicated, memory_)) {
+        release();
+        return false;
+    }
+    return bound(size);
+}
+
+bool VulkanImage::bound(VkDeviceSize size)
+{
+    AV_SCOPE("VulkanImage::bound");
+    if (!table_->bind_image(image_, memory_)) {
+        release();
+        return false;
+    }
+    size_ = size;
+    return true;
+}
+
+bool VulkanImage::make_exportable(const VulkanDeviceTable &table, const VkImageCreateInfo &info)
+{
+    AV_SCOPE("VulkanImage::make_exportable");
+    return create(table, info) && bind_exportable(table.memory_type(requirements().memoryTypeBits));
+}
+
+bool VulkanImage::import_dma_buf(const VulkanDeviceTable &table, const VkImageCreateInfo &info, OwnedFd &descriptor)
+{
+    AV_SCOPE("VulkanImage::import_dma_buf");
+    if (!create(table, info)) return false;
+    const VkMemoryRequirements needs = requirements();
+    return bind_imported(descriptor, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, needs.size,
+                         table.memory_type(needs.memoryTypeBits));
+}
+
+bool VulkanImage::export_dma_buf(OwnedFd &descriptor) const
 {
     AV_SCOPE("VulkanImage::export_dma_buf");
-    fd = -1;
-    return table_ != nullptr && table_->memory_fd(memory_, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd);
+    int fd = -1;
+    const bool exported =
+        table_ != nullptr && table_->memory_fd(memory_, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd);
+    descriptor.hold(fd);
+    return exported;
+}
+
+uint64_t VulkanImage::modifier() const
+{
+    AV_SCOPE("VulkanImage::modifier");
+    constexpr uint64_t drm_format_mod_invalid = 0x00ffffffffffffffull;
+    return table_ != nullptr ? table_->modifier_of(image_) : drm_format_mod_invalid;
+}
+
+VkSubresourceLayout VulkanImage::row_layout() const
+{
+    AV_SCOPE("VulkanImage::row_layout");
+    return table_ != nullptr ? table_->row_layout(image_) : VkSubresourceLayout{};
 }
 
 void VulkanImage::release()

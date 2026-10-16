@@ -2,6 +2,7 @@
 
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/sharing/share.hpp"
 #include "executor/shim/compositor_device.hpp"
@@ -171,10 +172,11 @@ D3d9FlipShares::Lane *D3d9FlipShares::lane_for(IDirect3DDevice9 *device)
 D3d9FlipShares::Lane *D3d9FlipShares::connect(IDirect3DDevice9 *device, Lane &lane, CompositorDevice &compositor)
 {
     AV_SCOPE("D3d9FlipShares::connect");
-    int  for_d3d9 = -1, for_d3d11 = -1;
-    bool connected = lane.vulkan_.connect(device) && lane.timeline_.make_exportable(compositor.table()) &&
-                     lane.timeline_.export_fd(for_d3d9) && lane.signalled_.import_fd(lane.vulkan_.table(), for_d3d9) &&
-                     lane.timeline_.export_fd(for_d3d11);
+    OwnedFd for_d3d9;
+    OwnedFd for_d3d11;
+    bool    connected = lane.vulkan_.connect(device) && lane.timeline_.make_exportable(compositor.table()) &&
+                        lane.timeline_.export_fd(for_d3d9) &&
+                        lane.signalled_.import_fd(lane.vulkan_.table(), for_d3d9) && lane.timeline_.export_fd(for_d3d11);
     if (connected) connected = lane.order_.connect(*device11_, for_d3d11);
     if (connected) return &lane;
     close_lane(lane);
@@ -233,7 +235,8 @@ bool D3d9FlipShares::make_on_gpu(Primary &made, Lane &lane)
     const D3D11_TEXTURE2D_DESC1 desc = shared_texture_desc(made.width_, made.height_, made.format_);
     const ExportableImageInfo   info(desc.Width, desc.Height, 1u, 1u, 1u, static_cast<uint32_t>(desc.Format),
                                      desc.BindFlags);
-    int for_d3d9 = -1, for_d3d11 = -1;
+    OwnedFd for_d3d9;
+    OwnedFd for_d3d11;
     if (!info.supported() || !made.image_.make_exportable(compositor->table(), info.info()) ||
         !made.image_.export_dma_buf(for_d3d9) || !made.adopted_.import_dma_buf(lane.vulkan_.table(), info.info(), for_d3d9) ||
         !made.image_.export_dma_buf(for_d3d11))

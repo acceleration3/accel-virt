@@ -5,8 +5,8 @@
 #include "core/trace/state_writer.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/memory_exporter.hpp"
+#include "executor/owned_fd.hpp"
 
-#include <unistd.h>
 
 namespace av {
 
@@ -139,18 +139,17 @@ Status HostMemorySource::allocate(uint32_t domain, uint64_t key, uint64_t size, 
     for (uint32_t choice = 0u; choice < count && type == HostMemoryRequest::memory_types; choice++)
         if (exporter_.allocate(types[choice], size, exported) == Status::ok) type = types[choice];
     if (type == HostMemoryRequest::memory_types) return Status::no_memory;
-    const int shared = exporter_.share(exported);
+    OwnedFd       shared;
     SourceMemory *made = nullptr;
     const uint32_t caching = (host_.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) != 0u
                                  ? AV_MEMORY_WRITE_BACK
                                  : AV_MEMORY_WRITE_COMBINED;
-    if (shared < 0 || memories_.create(made, domain, key, type, caching, exported) != Status::ok) {
-        /* The descriptor shared for the caller is nobody's if the memory is. */
-        if (shared >= 0) close(shared);
+    if (!shared.hold_copy(exported.fd()) ||
+        memories_.create(made, domain, key, type, caching, exported) != Status::ok) {
         exporter_.free(exported);
         return Status::no_memory;
     }
-    memory.fd = shared;
+    memory.fd = shared.take();
     memory.caching = caching;
     memory.size = exported.size();
     return Status::ok;

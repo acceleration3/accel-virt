@@ -1,13 +1,12 @@
 #include "executor/opengl/opengl_backend.hpp"
 
-#include <unistd.h>
 #include "executor/sharing/shared_image_shape.hpp"
 
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/opengl/gl_context_attributes.hpp"
-#include "executor/source_memory.hpp"
 #include "proto/generated/opengl/gl_command_names.h"
 #include "proto/generated/opengl/gl_dispatch_server.h"
 #include "proto/submission/published_slot_layout.hpp"
@@ -264,7 +263,9 @@ bool OpenGlBackend::adopt(const SourceMemory &memory, uint64_t &handle)
     AV_SCOPE("OpenGlBackend::adopt");
     if (region_.held()) return lend(memory, handle);
     if (!region_.adopt(memory, handle)) return false;
-    pack_.adopt(memory.share(), memory.size());
+    OwnedFd packed;
+    static_cast<void>(memory.share(packed));
+    pack_.adopt(packed, memory.size());
     return true;
 }
 
@@ -272,11 +273,10 @@ bool OpenGlBackend::lend(const SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("OpenGlBackend::lend");
     handle = 0u;
-    const int fd = memory.share();
-    if (fd < 0) return false;
-    uint32_t     name = 0u;
-    const bool   imported = import_.imports_memory() && import_.import_memory(fd, memory.size(), name);
-    close(fd);
+    OwnedFd lent;
+    if (!memory.share(lent)) return false;
+    uint32_t   name = 0u;
+    const bool imported = import_.imports_memory() && import_.import_memory(lent.fd(), memory.size(), name);
     if (!imported) {
         LogLine(lines_).text("no memory object over ").number(memory.size()).text(" lent bytes").write();
         return false;
@@ -366,11 +366,10 @@ uint64_t OpenGlBackend::ran() const
     return ran_;
 }
 
-bool OpenGlBackend::export_object(uint32_t, uint64_t, uint32_t &handle_kind, int &fd)
+bool OpenGlBackend::export_object(uint32_t, uint64_t, uint32_t &handle_kind, OwnedFd &)
 {
     AV_SCOPE("OpenGlBackend::export_object");
     handle_kind = 0u;
-    fd = -1;
     return false;
 }
 
