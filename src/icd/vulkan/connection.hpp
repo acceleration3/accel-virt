@@ -18,7 +18,6 @@
 #include "core/support/status.hpp"
 #include "guest/kmt/adapter_search.hpp"
 #include "guest/transport/guest_connection.hpp"
-#include "guest/transport/host_allocation.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/adapter_facts.hpp"
 #include "icd/common/host_channel.hpp"
@@ -94,18 +93,9 @@ public:
      * (HostChannel::send_command), only while open. */
     [[nodiscard]] TransportResult send_command(uint32_t command_id, WireWriter &writer);
 
-    /* `bytes` of the host memory `memory` names, opened on this connection's
-     * context and imported, under the lock (HostChannel::open_memory).
-     * invalid_state while not open or faulted, with nothing asked of the Kmt;
-     * otherwise the channel's answer. */
-    [[nodiscard]] Status open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made);
-    /* The application's own pages lent the same way (HostChannel::adopt_memory). */
-    [[nodiscard]] Status adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made);
-    /* What open_memory made, released under the lock - abandoned on a faulted
-     * connection, whose context frees it on the host. */
-    [[nodiscard]] Status close_memory(HostAllocation &allocation);
-    /* The allocation the host named `handle`, or null. */
-    HostAllocation      *find_memory(uint64_t handle);
+    /* The channel the connection's host memory is opened on and kept by,
+     * for each device of its instance (HostChannel::open_memory). */
+    HostChannel         &channel();
 
     /* Its fields on the line `writer` has open: whether open and faulted, and
      * the adapter, LUID, device and context it sends through. */

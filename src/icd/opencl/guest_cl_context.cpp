@@ -148,7 +148,8 @@ Status GuestClContext::lend(void *address, uint64_t bytes, HostAllocation *&made
     AV_SCOPE("GuestClContext::lend");
     made = nullptr;
     if (state_ != State::made || channel_.arena_view() == nullptr) return Status::invalid_state;
-    return channel_.adopt_memory(address, bytes, HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u), made);
+    return channel_.adopt_memory(address, bytes, HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u), this,
+                                 made);
 }
 
 void GuestClContext::give_back_lent(HostAllocation &lent)

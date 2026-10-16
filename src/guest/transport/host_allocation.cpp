@@ -80,6 +80,14 @@ uint8_t *HostAllocation::view() const
     return const_cast<uint8_t *>(chunk_.view());
 }
 
+uint8_t *HostAllocation::view_at(uint64_t offset, uint64_t bytes) const
+{
+    AV_SCOPE("HostAllocation::view_at");
+    const uint64_t whole = this->bytes();
+    if (bytes == 0u || offset > whole || bytes > whole - offset) return nullptr;
+    return view() + offset;
+}
+
 uint64_t HostAllocation::handle() const
 {
     AV_SCOPE("HostAllocation::handle");

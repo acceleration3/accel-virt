@@ -37,8 +37,9 @@ Status PinnedBuffers::pin(const void *address, uint64_t bytes, HostAllocation *&
     const uintptr_t at = reinterpret_cast<uintptr_t>(address);
     const uintptr_t first = at & ~uintptr_t{page_bytes - 1u};
     const uintptr_t end = (at + bytes + page_bytes - 1u) & ~uintptr_t{page_bytes - 1u};
-    const Status    lent_status = channel_.adopt_memory(reinterpret_cast<void *>(first), end - first,
-                                                        HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u), lent);
+    const Status    lent_status =
+        channel_.adopt_memory(reinterpret_cast<void *>(first), end - first,
+                              HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u), this, lent);
     if (lent_status != Status::ok) return lent_status;
     uint32_t slot = 0u;
     static_cast<void>(pinned_.insert(bound_, lent, slot));

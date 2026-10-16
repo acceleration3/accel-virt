@@ -22,7 +22,7 @@ HostChannel::HostChannel(BlockSource &memory, LogSink &log, const char *prefix, 
     : memory_(memory), lines_(log, prefix), lock_(lock), sub_api_(shape.sub_api_), ring_order_(shape.ring_order_),
       reply_bytes_(shape.reply_bytes_), staging_bytes_(shape.staging_bytes_), batch_bytes_(shape.batch_bytes_),
       arena_bytes_(shape.arena_bytes_), staging_(nullptr), batch_block_(nullptr), transport_(), locked_(), arena_(),
-      device_(nullptr), memories_(memory), retired_(memory, Pool::paged)
+      device_(nullptr), memories_(memory), handles_(memory, Pool::paged), retired_(memory, Pool::paged)
 {
     AV_SCOPE("HostChannel::HostChannel");
 }
@@ -106,58 +106,92 @@ void HostChannel::close(bool lost)
     staging_ = nullptr;
 }
 
-Status HostChannel::open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made)
+Status HostChannel::open_memory(uint64_t bytes, HostMemoryRequest memory, const void *owner, HostAllocation *&made)
 {
     AV_SCOPE("HostChannel::open_memory");
     made = nullptr;
-    const ThreadLockHold           release(lock_);
-    ObjectStorage<HostAllocation> *kept = nullptr;
-    const Status                   room = keep(kept);
+    const ThreadLockHold release(lock_);
+    Kept                *kept = nullptr;
+    const Status         room = keep(owner, kept);
     if (room != Status::ok) return room;
-    return settle(kept, kept->object().open(bytes, memory), made);
+    return settle(kept, kept->allocation_.object().open(bytes, memory), made);
 }
 
-Status HostChannel::adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made)
+Status HostChannel::adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory, const void *owner,
+                                 HostAllocation *&made)
 {
     AV_SCOPE("HostChannel::adopt_memory");
     made = nullptr;
-    const ThreadLockHold           release(lock_);
-    ObjectStorage<HostAllocation> *kept = nullptr;
-    const Status                   room = keep(kept);
+    const ThreadLockHold release(lock_);
+    Kept                *kept = nullptr;
+    const Status         room = keep(owner, kept);
     if (room != Status::ok) return room;
-    return settle(kept, kept->object().adopt(address, bytes, memory), made);
+    return settle(kept, kept->allocation_.object().adopt(address, bytes, memory), made);
 }
 
-Status HostChannel::keep(ObjectStorage<HostAllocation> *&kept)
+/* The index has room before the host is asked, so an allocation the host
+ * made is never one this cannot keep. */
+Status HostChannel::keep(const void *owner, Kept *&kept)
 {
     AV_SCOPE("HostChannel::keep");
     if (!opened() || faulted()) return Status::invalid_state;
+    if (handles_.reserve(handles_.count() + 1u) != Status::ok) return Status::no_memory;
     if (memories_.create(kept) != Status::ok) return Status::no_memory;
-    static_cast<void>(kept->construct(*device_, transport_.object()));   /* a fresh slot */
+    static_cast<void>(kept->allocation_.construct(*device_, transport_.object()));   /* a fresh slot */
+    kept->owner_ = owner;
     return Status::ok;
 }
 
-Status HostChannel::settle(ObjectStorage<HostAllocation> *kept, Status taken, HostAllocation *&made)
+Status HostChannel::settle(Kept *kept, Status taken, HostAllocation *&made)
 {
     AV_SCOPE("HostChannel::settle");
     if (taken != Status::ok) {
         static_cast<void>(memories_.destroy(kept));
         return taken;
     }
-    made = &kept->object();
+    uint32_t slot = 0u;
+    if (handles_.insert(kept->allocation_.object().handle(), kept, slot) != Status::ok) {
+        lines_.write("the host named two allocations by one handle; the second is released");
+        static_cast<void>(close_kept(kept, false));
+        return Status::malformed;
+    }
+    made = &kept->allocation_.object();
     return Status::ok;
+}
+
+Status HostChannel::close_kept(Kept *kept, bool lost)
+{
+    AV_SCOPE("HostChannel::close_kept");
+    HostAllocation &allocation = kept->allocation_.object();
+    const Status    released = lost ? allocation.abandon() : allocation.close();
+    static_cast<void>(memories_.destroy(kept));
+    return released;
 }
 
 Status HostChannel::close_memory(HostAllocation &allocation)
 {
     AV_SCOPE("HostChannel::close_memory");
     const ThreadLockHold release(lock_);
-    ObjectStorage<HostAllocation> *const kept = memories_.find_if(
-        [&allocation](const ObjectStorage<HostAllocation> &held) { return &held.object() == &allocation; });
-    if (kept == nullptr) return Status::invalid_parameter;
-    const Status released = faulted() ? allocation.abandon() : allocation.close();
-    static_cast<void>(memories_.destroy(kept));
-    return released;
+    Kept *const *const   found = handles_.find(allocation.handle());
+    if (found == nullptr || &(*found)->allocation_.object() != &allocation) return Status::invalid_parameter;
+    Kept *const kept = *found;
+    static_cast<void>(handles_.erase(allocation.handle()));
+    return close_kept(kept, faulted());
+}
+
+Status HostChannel::close_owned(const void *owner)
+{
+    AV_SCOPE("HostChannel::close_owned");
+    const ThreadLockHold release(lock_);
+    const bool           lost = faulted();
+    Status               first = Status::ok;
+    static_cast<void>(handles_.erase_if([this, owner, lost, &first](uint64_t, Kept *&kept) {
+        if (kept->owner_ != owner) return false;
+        const Status released = close_kept(kept, lost);
+        if (first == Status::ok) first = released;
+        return true;
+    }));
+    return first;
 }
 
 void HostChannel::retire_memory(HostAllocation &allocation)
@@ -186,14 +220,13 @@ void HostChannel::reclaim_retired()
     }
 }
 
-HostAllocation *HostChannel::find_memory(uint64_t handle)
+HostAllocation *HostChannel::find_memory(uint64_t handle, const void *owner)
 {
     AV_SCOPE("HostChannel::find_memory");
     if (handle == 0u) return nullptr;
     const ThreadLockHold release(lock_);
-    ObjectStorage<HostAllocation> *const kept = memories_.find_if(
-        [handle](const ObjectStorage<HostAllocation> &held) { return held.object().handle() == handle; });
-    return kept != nullptr ? &kept->object() : nullptr;
+    Kept *const *const   found = handles_.find(handle);
+    return found != nullptr && (*found)->owner_ == owner ? &(*found)->allocation_.object() : nullptr;
 }
 
 uint32_t HostChannel::memories() const
@@ -205,12 +238,10 @@ uint32_t HostChannel::memories() const
 void HostChannel::close_memories(bool lost)
 {
     AV_SCOPE("HostChannel::close_memories");
-    for (ObjectStorage<HostAllocation> *kept = nullptr;
-         (kept = memories_.find_if([](const ObjectStorage<HostAllocation> &) { return true; })) != nullptr;) {
-        const Status released = lost ? kept->object().abandon() : kept->object().close();
-        if (released != Status::ok) lines_.write("host memory did not close whole");
-        static_cast<void>(memories_.destroy(kept));
-    }
+    static_cast<void>(handles_.erase_if([this, lost](uint64_t, Kept *&kept) {
+        if (close_kept(kept, lost) != Status::ok) lines_.write("host memory did not close whole");
+        return true;
+    }));
 }
 
 bool HostChannel::opened() const
@@ -309,7 +340,7 @@ bool HostChannel::invariants_hold() const
     if (staging_ == nullptr || !locked_.constructed() || (batch_bytes_ != 0u) != (batch_block_ != nullptr))
         return false;
     if (transport_.object().holding_capacity() != (batch_block_ != nullptr ? batch_bytes_ : 0u)) return false;
-    return transport_.object().invariants_hold();
+    return handles_.count() == memories_.live() && transport_.object().invariants_hold();
 }
 
 }  // namespace av::icd

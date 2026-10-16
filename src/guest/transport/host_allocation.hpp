@@ -50,6 +50,10 @@ public:
     uint64_t bytes() const;
     /* The process's view; null unless held. */
     uint8_t *view() const;
+    /* The process's view of `bytes` at `offset`, what a map hands out: null
+     * unless held, for no bytes, and for a range past the end - checked so
+     * the sum cannot wrap. */
+    uint8_t *view_at(uint64_t offset, uint64_t bytes) const;
     /* What the host named the import by; 0 unless held. */
     uint64_t handle() const;
     /* The status of the host's last refusal of an import (BlobImportAnswer). */

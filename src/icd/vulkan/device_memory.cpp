@@ -10,9 +10,8 @@
 
 namespace av::icd {
 
-DeviceMemory::DeviceMemory(Kmt &kmt, Connection &connection, LogSink &log, BlockSource &blocks)
-    : connection_(connection), log_(log), lines_(log, "avvk: "), types_(kmt, connection.adapter()), learnt_(false),
-      held_(blocks, Pool::paged)
+DeviceMemory::DeviceMemory(Kmt &kmt, Connection &connection, LogSink &log)
+    : connection_(connection), log_(log), lines_(log, "avvk: "), types_(kmt, connection.adapter()), learnt_(false)
 {
     AV_SCOPE("DeviceMemory::DeviceMemory");
 }
@@ -51,31 +50,14 @@ VkResult DeviceMemory::allocate(VkPhysicalDevice physical, VkDevice device, cons
         return vkproto::av_vkAllocateMemory(connection_.transport(), device, &info, allocator, &memory);
     }
     if (info.allocationSize == 0u) return refusal();
-    if (!room()) return VK_ERROR_OUT_OF_HOST_MEMORY;
     HostAllocation *made = nullptr;
-    const Status    opened = connection_.open_memory(
-        info.allocationSize, HostMemoryRequest(HostMemoryRequest::Kind::vulkan, info.memoryTypeIndex), made);
+    const Status    opened = connection_.channel().open_memory(
+        info.allocationSize, HostMemoryRequest(HostMemoryRequest::Kind::vulkan, info.memoryTypeIndex), this, made);
     if (opened != Status::ok) {
         lines_.note("vkAllocateMemory: no host-visible memory, status", static_cast<uint64_t>(opened));
-        return refusal();
+        return refusal(opened);
     }
-    return hold(*made, memory);
-}
-
-bool DeviceMemory::room()
-{
-    AV_SCOPE("DeviceMemory::room");
-    return held_.reserve(held_.count() + 1u) == Status::ok;
-}
-
-/* The room was made before the host opened it, and the host answers each
- * allocation a handle of its own. */
-VkResult DeviceMemory::hold(HostAllocation &made, VkDeviceMemory &memory)
-{
-    AV_SCOPE("DeviceMemory::hold");
-    uint32_t slot = 0u;
-    static_cast<void>(held_.insert(made.handle(), &made, slot));
-    memory = HandleBits(made.handle()).as<VkDeviceMemory>();
+    memory = HandleBits(made->handle()).as<VkDeviceMemory>();
     return VK_SUCCESS;
 }
 
@@ -93,16 +75,17 @@ VkResult DeviceMemory::lend(const VkMemoryAllocateInfo &info, const VkImportMemo
         info.allocationSize % host_pointer_alignment != 0u || info.memoryTypeIndex >= 32u ||
         (types_.lendable_types() & (1u << info.memoryTypeIndex)) == 0u)
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-    if (!room()) return VK_ERROR_OUT_OF_HOST_MEMORY;
     HostAllocation *made = nullptr;
-    const Status    lent = connection_.adopt_memory(
+    const Status    lent = connection_.channel().adopt_memory(
         import.pHostPointer, info.allocationSize, HostMemoryRequest(HostMemoryRequest::Kind::vulkan, info.memoryTypeIndex),
-        made);
+        this, made);
+    if (lent == Status::no_memory) return VK_ERROR_OUT_OF_HOST_MEMORY;
     if (lent != Status::ok) {
         lines_.note("vkAllocateMemory: the device took no host pointer's pages, status", static_cast<uint64_t>(lent));
         return connection_.faulted() ? VK_ERROR_DEVICE_LOST : VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
-    return hold(*made, memory);
+    memory = HandleBits(made->handle()).as<VkDeviceMemory>();
+    return VK_SUCCESS;
 }
 
 VkResult DeviceMemory::host_pointer_types(VkPhysicalDevice physical, VkExternalMemoryHandleTypeFlagBits type,
@@ -124,23 +107,28 @@ VkResult DeviceMemory::refusal() const
     return connection_.faulted() ? VK_ERROR_DEVICE_LOST : VK_ERROR_OUT_OF_DEVICE_MEMORY;
 }
 
+VkResult DeviceMemory::refusal(Status refused) const
+{
+    AV_SCOPE("DeviceMemory::refusal");
+    return refused == Status::no_memory ? VK_ERROR_OUT_OF_HOST_MEMORY : refusal();
+}
+
 HostAllocation *DeviceMemory::find(VkDeviceMemory memory) const
 {
     AV_SCOPE("DeviceMemory::find");
-    HostAllocation *const *const held = held_.find(HandleBits(memory).value());
-    return held != nullptr ? *held : nullptr;
+    return connection_.channel().find_memory(HandleBits(memory).value(), this);
 }
 
 void DeviceMemory::free(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *allocator)
 {
     AV_SCOPE("DeviceMemory::free");
     if (memory == VK_NULL_HANDLE) return;
-    HostAllocation *held = nullptr;
-    if (!held_.take(HandleBits(memory).value(), held)) {
+    HostAllocation *const held = find(memory);
+    if (held == nullptr) {
         vkproto::av_vkFreeMemory(connection_.transport(), device, memory, allocator);
         return;
     }
-    const Status released = connection_.close_memory(*held);
+    const Status released = connection_.channel().close_memory(*held);
     if (released != Status::ok)
         lines_.note("vkFreeMemory: the host refused to release the memory, status", static_cast<uint64_t>(released));
 }
@@ -150,42 +138,29 @@ VkResult DeviceMemory::map(VkDeviceMemory memory, VkDeviceSize offset, VkDeviceS
 {
     AV_SCOPE("DeviceMemory::map");
     const HostAllocation *const held = find(memory);
-    if (held == nullptr || flags != 0u || size == 0u) return VK_ERROR_MEMORY_MAP_FAILED;
-    const uint64_t bytes = held->bytes();
-    if (offset >= bytes || (size != VK_WHOLE_SIZE && size > bytes - offset)) return VK_ERROR_MEMORY_MAP_FAILED;
-    data = held->view() + offset;
+    if (held == nullptr || flags != 0u || offset >= held->bytes()) return VK_ERROR_MEMORY_MAP_FAILED;
+    uint8_t *const view = held->view_at(offset, size == VK_WHOLE_SIZE ? held->bytes() - offset : size);
+    if (view == nullptr) return VK_ERROR_MEMORY_MAP_FAILED;
+    data = view;
     return VK_SUCCESS;
 }
 
 Status DeviceMemory::release_all()
 {
     AV_SCOPE("DeviceMemory::release_all");
-    Status first = Status::ok;
-    held_.for_each([this, &first](uint64_t, HostAllocation *const &held) {
-        const Status released = connection_.close_memory(*held);
-        if (first == Status::ok) first = released;
-    });
-    held_.clear();
-    return first;
+    return connection_.channel().close_owned(this);
 }
 
 void DeviceMemory::report(StateWriter &writer) const
 {
     AV_SCOPE("DeviceMemory::report");
     writer.flag("types_learnt", learnt_);
-    writer.number("host_allocations", held_.count());
 }
 
-/* Every host allocation held is one the host imported, and none is held
- * before the types that say which are host visible were learnt. */
 bool DeviceMemory::invariants_hold() const
 {
     AV_SCOPE("DeviceMemory::invariants_hold");
-    bool holds = held_.invariants_hold() && (learnt_ || held_.count() == 0u);
-    held_.for_each([&holds](uint64_t handle, HostAllocation *const &memory) {
-        holds = holds && memory != nullptr && memory->held() && memory->handle() == handle;
-    });
-    return holds;
+    return types_.invariants_hold();
 }
 
 }  // namespace av::icd

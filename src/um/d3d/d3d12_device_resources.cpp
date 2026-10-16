@@ -490,8 +490,8 @@ HRESULT D3d12Device::map_heap(D3D12DDI_HHEAP handle, void **data)
     *data = nullptr;
     const HeapRecord &heap = *static_cast<const HeapRecord *>(handle.pDrvPrivate);
     if (heap.memory == nullptr) return E_INVALIDARG;
-    *data = heap.memory->view();
-    return S_OK;
+    *data = heap.memory->view_at(0u, heap.size);
+    return *data != nullptr ? S_OK : E_INVALIDARG;
 }
 
 VOID D3d12Device::unmap_heap(D3D12DDI_HHEAP)

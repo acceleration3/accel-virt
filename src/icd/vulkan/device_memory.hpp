@@ -5,12 +5,13 @@
  * of it with no round trip. Any other type is the host's to allocate, and
  * cannot be mapped. The types are learnt from the host the first time the
  * device allocates, since a device that never allocates never needs them.
+ * Its host allocations are kept by the instance's channel, which one
+ * connection's devices share, for this device (HostChannel::open_memory).
  * Callers serialize it: IcdRoot holds its memory lock around every call. */
 #ifndef AV_ICD_DEVICE_MEMORY_HPP
 #define AV_ICD_DEVICE_MEMORY_HPP
 
 #include "core/log/driver_log.hpp"
-#include "core/support/keyed_slots.hpp"
 #include "core/support/status.hpp"
 #include "icd/vulkan/memory_type_table.hpp"
 
@@ -19,7 +20,6 @@
 #include <vulkan/vulkan_core.h>
 
 namespace av {
-class BlockSource;
 class HostAllocation;
 class Kmt;
 class LogSink;
@@ -33,9 +33,7 @@ struct DeviceMemoryProbe;
 
 class DeviceMemory {
 public:
-    /* Its allocations are kept in what grows from `blocks`: as many as the
-     * application makes. */
-    DeviceMemory(Kmt &kmt, Connection &connection, LogSink &log, BlockSource &blocks);
+    DeviceMemory(Kmt &kmt, Connection &connection, LogSink &log);
     DeviceMemory(const DeviceMemory &) = delete;
     DeviceMemory &operator=(const DeviceMemory &) = delete;
 
@@ -63,8 +61,7 @@ public:
      * refusal. */
     [[nodiscard]] Status release_all();
 
-    /* Whether the host's memory types were learnt, and the host allocations
-     * held: plain counters, read as they stand. */
+    /* Whether the host's memory types were learnt. */
     void report(StateWriter &writer) const;
 
     bool invariants_hold() const;
@@ -78,13 +75,11 @@ private:
      * memory"). */
     VkResult           lend(const VkMemoryAllocateInfo &info, const VkImportMemoryHostPointerInfoEXT &import,
                             VkDeviceMemory &memory);
-    /* Keeps `made`, in the room made for it, and answers its handle. */
-    VkResult           hold(HostAllocation &made, VkDeviceMemory &memory);
-    /* Room to keep one more: what is asked before the host opens any. */
-    [[nodiscard]] bool room();
+    /* The answer to an allocation the channel refused with `refused`. */
+    VkResult           refusal(Status refused) const;
     [[nodiscard]] bool learn(VkPhysicalDevice physical);
     VkResult           refusal() const;
-    /* The host allocation the guest names `memory`, or null. */
+    /* This device's host allocation the guest names `memory`, or null. */
     HostAllocation    *find(VkDeviceMemory memory) const;
 
     Connection     &connection_;
@@ -92,10 +87,6 @@ private:
     DriverLog       lines_;
     MemoryTypeTable types_;
     bool            learnt_;
-    /* This device's host allocations, by the handle the host answered, which
-     * the connection's channel keeps: one channel serves every device of an
-     * instance. */
-    KeyedSlots<uint64_t, HostAllocation *> held_;
 
     friend struct DeviceMemoryProbe;
 };

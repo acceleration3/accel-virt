@@ -147,7 +147,7 @@ One `ContextSession` per guest context runs its API's commands on the host GPU.
 | `guest/suite/` | avtest's scenarios, and the step and report framework the probes use too |
 | `guest/probe/` | the probe programs' portable halves: Vulkan, GL, CL and D3D work, the `*_entry` seams, shaders |
 | `guest/inspect/` | avinspect, over its `InspectHost` seam |
-| `icd/common/` | what two or more user-mode drivers share: transports and the host channel over them (`HostChannel`, which keeps every host allocation it opened and owns the channel's send lock and its publish barrier), waits, locks, handle tables, connections, window seams |
+| `icd/common/` | what two or more user-mode drivers share: transports and the host channel over them (`HostChannel`, which keeps every host allocation it opened - by its handle, for its owner, a Vulkan device or a session - and owns the channel's send lock and its publish barrier), waits, locks, handle tables, connections, window seams |
 | `icd/vulkan/`, `icd/opengl/`, `icd/opencl/` | each ICD's logic |
 | `icd/d3d/` | the Direct3D user-mode driver's portable logic; `ddi/` mirrors the runtimes' structures |
 | `icd/vendor/` | the ADL and NVAPI libraries' portable logic (docs/vendor-libraries.md); `ddi/` mirrors their structures |

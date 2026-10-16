@@ -122,28 +122,10 @@ TransportResult Connection::send_command(uint32_t command_id, WireWriter &writer
     return channel_.send_command(command_id, writer);
 }
 
-Status Connection::open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made)
+HostChannel &Connection::channel()
 {
-    AV_SCOPE("Connection::open_memory");
-    return channel_.open_memory(bytes, memory, made);
-}
-
-Status Connection::adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made)
-{
-    AV_SCOPE("Connection::adopt_memory");
-    return channel_.adopt_memory(address, bytes, memory, made);
-}
-
-Status Connection::close_memory(HostAllocation &allocation)
-{
-    AV_SCOPE("Connection::close_memory");
-    return channel_.close_memory(allocation);
-}
-
-HostAllocation *Connection::find_memory(uint64_t handle)
-{
-    AV_SCOPE("Connection::find_memory");
-    return channel_.find_memory(handle);
+    AV_SCOPE("Connection::channel");
+    return channel_;
 }
 
 bool Connection::invariants_hold() const

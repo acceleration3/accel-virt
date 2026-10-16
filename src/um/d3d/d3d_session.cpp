@@ -116,7 +116,7 @@ void D3dSession::open_slices()
 {
     AV_SCOPE("D3dSession::open_slices");
     HostAllocation *store = nullptr;
-    if (channel_.open_memory(slice_store_bytes_, HostMemoryRequest(HostMemoryRequest::Kind::upload, 0u), store) !=
+    if (channel_.open_memory(slice_store_bytes_, HostMemoryRequest(HostMemoryRequest::Kind::upload, 0u), this, store) !=
         Status::ok) {
         log_.write("avumd: no host memory for the slice store; mapped buffers are copied");
         return;
@@ -144,13 +144,13 @@ uint8_t *D3dSession::slice_view() const
 Status D3dSession::open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made)
 {
     AV_SCOPE("D3dSession::open_memory");
-    return channel_.open_memory(bytes, memory, made);
+    return channel_.open_memory(bytes, memory, this, made);
 }
 
 Status D3dSession::adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made)
 {
     AV_SCOPE("D3dSession::adopt_memory");
-    return channel_.adopt_memory(address, bytes, memory, made);
+    return channel_.adopt_memory(address, bytes, memory, this, made);
 }
 
 void D3dSession::close_memory(HostAllocation &allocation)
