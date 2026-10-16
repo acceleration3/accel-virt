@@ -1,26 +1,25 @@
-/* Every Direct3D object one session made, by the id the guest named it with.
+/* Every Direct3D object one session made, by the id the guest named it with,
+ * as COM objects: the session's HostObjectRegistry, each entry holding one
+ * reference to its object.
  *
  * The guest chooses the ids - a user-mode driver has to name an object in the
  * same batch that creates it, long before any answer could come back - so the
- * table is keyed by the guest's number and the host accepts a number only
- * where it made an object of the kind the command wants. An id naming
- * nothing, or naming a sampler where a view belongs, is a refused command,
- * never a pointer handed to DXVK. Each entry holds one reference to its
- * object.
+ * host accepts a number only where it made an object of the kind the command
+ * wants. An id naming nothing, or naming a sampler where a view belongs, is a
+ * refused command, never a pointer handed to DXVK.
  *
  * There is no count past which an object is refused: Resident Evil 4 held
- * 196608 a minute into its first area. The entries are KeyedSlots, so an
- * object keeps its slot for as long as it is kept - what a swap chain's
- * rotation lists the views by, and remembers what each view sees by - and
- * the views are listed apart, so a rotation walks those alone. The table
- * holds memory for what it holds, and a clear gives it all back. */
+ * 196608 a minute into its first area. An object keeps its slot for as long
+ * as it is kept - what a swap chain's rotation lists the views by, and
+ * remembers what each view sees by - and the views are listed apart, so a
+ * rotation walks those alone. */
 #ifndef AV_D3D_OBJECT_TABLE_HPP
 #define AV_D3D_OBJECT_TABLE_HPP
 
 #include "core/support/growable_array.hpp"
-#include "core/support/keyed_slots.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
+#include "executor/host_object_registry.hpp"
 
 #include <stdint.h>
 
@@ -134,28 +133,29 @@ public:
     void               remove_kinds(D3dObjectKind first, D3dObjectKind last);
     /* How many objects of a kind from `first` to `last` are kept. */
     uint32_t           count_kinds(D3dObjectKind first, D3dObjectKind last) const;
-    /* Every reference back, and the table's memory to the system. */
-    void               clear();
+    /* Every reference back, and the table's memory to the system: what the
+     * guest never destroyed, as its session ends. */
+    void               release_all();
     uint32_t           count() const;
 
     bool invariants_hold() const;
 
 private:
     struct Entry {
-        IUnknown     *object_;
+        IUnknown *object_;
         /* What a view sees, once asked: a view holds its resource, so the
          * pointer lives as long as the view. Cleared when the entry changes. */
-        IUnknown     *viewed_;
+        IUnknown *viewed_;
         /* Where a view's slot is in views_. */
-        uint32_t      view_at_;
-        D3dObjectKind kind_;
+        uint32_t  view_at_;
     };
 
-    /* The slot's entry gone from the views, if it was one, and from the table. */
-    void forget(uint32_t slot, const Entry &entry);
+    /* An entry of `kind` gone from the views, if it is a view; its object
+     * released. */
+    void let_go(D3dObjectKind kind, const Entry &entry);
 
-    KeyedSlots<uint32_t, Entry> objects_;
-    GrowableArray<uint32_t>     views_;
+    HostObjectRegistry<uint32_t, D3dObjectKind, Entry> objects_;
+    GrowableArray<uint32_t>                            views_;
 
     friend struct D3dObjectTableProbe;
 };

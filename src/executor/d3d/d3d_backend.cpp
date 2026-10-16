@@ -158,7 +158,7 @@ void D3dBackend::shut_down()
         device11_->lock(nullptr);
         published_.unbind();
         constants_.close();
-        objects_.clear();
+        objects_.release_all();
         release_slice_storage();
         progress11_.release();
         device11_->unlock();

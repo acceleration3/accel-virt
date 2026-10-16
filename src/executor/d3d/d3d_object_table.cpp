@@ -5,8 +5,6 @@
 
 namespace av {
 
-static_assert(D3dObjectTable::no_slot == KeyedSlots<uint32_t, uint32_t>::no_slot, "one sentinel for no slot");
-
 namespace {
 
 bool view_kind(D3dObjectKind kind)
@@ -18,9 +16,10 @@ bool view_kind(D3dObjectKind kind)
 
 }  // namespace
 
-D3dObjectTable::D3dObjectTable(BlockSource &blocks) : objects_(blocks, Pool::paged), views_(blocks, Pool::paged)
+D3dObjectTable::D3dObjectTable(BlockSource &blocks) : objects_(blocks), views_(blocks, Pool::paged)
 {
     AV_SCOPE("D3dObjectTable::D3dObjectTable");
+    static_assert(no_slot == HostObjectRegistry<uint32_t, D3dObjectKind, Entry>::no_slot, "one sentinel for no slot");
 }
 
 D3dObjectTable::~D3dObjectTable()
@@ -28,22 +27,21 @@ D3dObjectTable::~D3dObjectTable()
     AV_SCOPE("D3dObjectTable::~D3dObjectTable");
 }
 
-/* A view's place in views_ is made first, so the insert that follows is the
+/* A view's place in views_ is made first, so the remember that follows is the
  * last thing that can fail and nothing has to be undone. */
 Status D3dObjectTable::insert(uint32_t id, D3dObjectKind kind, IUnknown *object)
 {
     AV_SCOPE("D3dObjectTable::insert");
     if (id == 0u || kind == D3dObjectKind::none || object == nullptr) return Status::invalid_parameter;
-    if (objects_.slot_of(id) != no_slot) return Status::conflict;
+    if (objects_.holds(id)) return Status::conflict;
     const bool view = view_kind(kind);
     if (view) {
         const Status room = views_.reserve(views_.size() + 1u);
         if (room != Status::ok) return room;
     }
-    uint32_t     slot = no_slot;
-    const Status kept = objects_.insert(id, Entry{object, nullptr, views_.size(), kind}, slot);
+    const Status kept = objects_.remember(id, kind, 0u, Entry{object, nullptr, views_.size()});
     if (kept != Status::ok || !view) return kept;
-    return views_.append(slot);
+    return views_.append(objects_.slot_of(id));
 }
 
 Status D3dObjectTable::keep(uint32_t id, D3dObjectKind kind, IUnknown *made)
@@ -58,30 +56,31 @@ Status D3dObjectTable::keep(uint32_t id, D3dObjectKind kind, IUnknown *made)
 IUnknown *D3dObjectTable::find(uint32_t id, D3dObjectKind kind) const
 {
     AV_SCOPE("D3dObjectTable::find");
-    const Entry *const entry = id == 0u ? nullptr : objects_.find(id);
-    return entry == nullptr || entry->kind_ != kind ? nullptr : entry->object_;
+    const Entry *const entry = objects_.find(id, kind);
+    return entry != nullptr ? entry->object_ : nullptr;
 }
 
 IUnknown *D3dObjectTable::find_any(uint32_t id, D3dObjectKind &kind) const
 {
     AV_SCOPE("D3dObjectTable::find_any");
-    const Entry *const entry = id == 0u ? nullptr : objects_.find(id);
-    kind = entry == nullptr ? D3dObjectKind::none : entry->kind_;
-    return entry == nullptr ? nullptr : entry->object_;
+    kind = D3dObjectKind::none;
+    const Entry *const entry = objects_.find_any(id, kind);
+    return entry != nullptr ? entry->object_ : nullptr;
 }
 
 IUnknown *D3dObjectTable::find_view(uint32_t id) const
 {
     AV_SCOPE("D3dObjectTable::find_view");
-    const Entry *const entry = id == 0u ? nullptr : objects_.find(id);
-    return entry == nullptr || !view_kind(entry->kind_) ? nullptr : entry->object_;
+    D3dObjectKind      kind = D3dObjectKind::none;
+    const Entry *const entry = objects_.find_any(id, kind);
+    return entry != nullptr && view_kind(kind) ? entry->object_ : nullptr;
 }
 
 IUnknown *D3dObjectTable::exchange(uint32_t id, D3dObjectKind kind, IUnknown *object)
 {
     AV_SCOPE("D3dObjectTable::exchange");
-    Entry *const entry = id == 0u || object == nullptr ? nullptr : objects_.find(id);
-    if (entry == nullptr || entry->kind_ != kind) return nullptr;
+    Entry *const entry = object != nullptr ? objects_.find(id, kind) : nullptr;
+    if (entry == nullptr) return nullptr;
     IUnknown *const old = entry->object_;
     entry->object_ = object;
     entry->viewed_ = nullptr;
@@ -91,7 +90,7 @@ IUnknown *D3dObjectTable::exchange(uint32_t id, D3dObjectKind kind, IUnknown *ob
 uint32_t D3dObjectTable::next_used(uint32_t from) const
 {
     AV_SCOPE("D3dObjectTable::next_used");
-    return objects_.next_live(from);
+    return objects_.next_held(from);
 }
 
 uint32_t D3dObjectTable::views() const
@@ -109,73 +108,72 @@ uint32_t D3dObjectTable::view_slot(uint32_t index) const
 IUnknown *D3dObjectTable::viewed(uint32_t slot) const
 {
     AV_SCOPE("D3dObjectTable::viewed");
-    const Entry *const entry = objects_.at(slot);
+    uint32_t           id = 0u;
+    D3dObjectKind      kind = D3dObjectKind::none;
+    const Entry *const entry = objects_.at(slot, id, kind);
     return entry != nullptr ? entry->viewed_ : nullptr;
 }
 
 void D3dObjectTable::note_viewed(uint32_t slot, IUnknown *resource)
 {
     AV_SCOPE("D3dObjectTable::note_viewed");
-    Entry *const entry = objects_.at(slot);
+    uint32_t      id = 0u;
+    D3dObjectKind kind = D3dObjectKind::none;
+    Entry *const  entry = objects_.at(slot, id, kind);
     if (entry != nullptr) entry->viewed_ = resource;
 }
 
 IUnknown *D3dObjectTable::at(uint32_t slot, uint32_t &id, D3dObjectKind &kind) const
 {
     AV_SCOPE("D3dObjectTable::at");
-    const Entry *const entry = objects_.at(slot);
-    id = entry != nullptr ? objects_.key_at(slot) : 0u;
-    kind = entry != nullptr ? entry->kind_ : D3dObjectKind::none;
+    kind = D3dObjectKind::none;
+    const Entry *const entry = objects_.at(slot, id, kind);
     return entry != nullptr ? entry->object_ : nullptr;
 }
 
-void D3dObjectTable::forget(uint32_t slot, const Entry &entry)
+void D3dObjectTable::let_go(D3dObjectKind kind, const Entry &entry)
 {
-    AV_SCOPE("D3dObjectTable::forget");
-    if (view_kind(entry.kind_)) {
-        const uint32_t moved = views_.at(views_.size() - 1u);
-        views_.remove_swap(entry.view_at_);
-        if (moved != slot) objects_.at(moved)->view_at_ = entry.view_at_;
-    }
-    objects_.erase_slot(slot);
+    AV_SCOPE("D3dObjectTable::let_go");
+    entry.object_->Release();
+    if (!view_kind(kind)) return;
+    const uint32_t moved = views_.at(views_.size() - 1u);
+    views_.remove_swap(entry.view_at_);
+    uint32_t      id = 0u;
+    D3dObjectKind moved_kind = D3dObjectKind::none;
+    Entry *const  listed = objects_.at(moved, id, moved_kind);
+    if (listed != &entry) listed->view_at_ = entry.view_at_;
 }
 
 void D3dObjectTable::remove(uint32_t id)
 {
     AV_SCOPE("D3dObjectTable::remove");
-    const uint32_t slot = id == 0u ? no_slot : objects_.slot_of(id);
-    if (slot == no_slot) return;
-    const Entry entry = *objects_.at(slot);
-    entry.object_->Release();
-    forget(slot, entry);
+    D3dObjectKind      kind = D3dObjectKind::none;
+    const Entry *const entry = objects_.find_any(id, kind);
+    if (entry == nullptr) return;
+    let_go(kind, *entry);
+    objects_.forget(id);
 }
 
 void D3dObjectTable::remove_kinds(D3dObjectKind first, D3dObjectKind last)
 {
     AV_SCOPE("D3dObjectTable::remove_kinds");
-    for (uint32_t slot = next_used(0u); slot != no_slot; slot = next_used(slot + 1u)) {
-        const Entry entry = *objects_.at(slot);
-        if (entry.kind_ < first || entry.kind_ > last) continue;
-        entry.object_->Release();
-        forget(slot, entry);
-    }
+    objects_.release_kinds(first, last,
+                           [this](uint32_t, D3dObjectKind kind, Entry &entry, uint32_t) { let_go(kind, entry); });
 }
 
 uint32_t D3dObjectTable::count_kinds(D3dObjectKind first, D3dObjectKind last) const
 {
     AV_SCOPE("D3dObjectTable::count_kinds");
-    uint32_t kept = 0u;
-    objects_.for_each([&kept, first, last](uint32_t, const Entry &entry) {
-        if (entry.kind_ >= first && entry.kind_ <= last) kept++;
-    });
-    return kept;
+    return objects_.count_kinds(first, last);
 }
 
-void D3dObjectTable::clear()
+/* COM counts what holds an object, so the order they go in is not this
+ * table's to choose: a view holds its resource. */
+void D3dObjectTable::release_all()
 {
-    AV_SCOPE("D3dObjectTable::clear");
-    objects_.for_each([](uint32_t, Entry &entry) { entry.object_->Release(); });
-    objects_.clear();
+    AV_SCOPE("D3dObjectTable::release_all");
+    remove_kinds(D3dObjectKind::resource, D3dObjectKind::query9);
+    objects_.forget_all();
     views_.clear();
 }
 
@@ -192,14 +190,16 @@ bool D3dObjectTable::invariants_hold() const
     AV_SCOPE("D3dObjectTable::invariants_hold");
     if (!objects_.invariants_hold() || !views_.invariants_hold()) return false;
     uint32_t listed = 0u;
-    bool     holds = true;
-    objects_.for_each([&](uint32_t id, const Entry &entry) {
-        holds = holds && id != 0u && entry.object_ != nullptr && entry.kind_ != D3dObjectKind::none;
-        if (!view_kind(entry.kind_)) return;
+    for (uint32_t slot = objects_.next_held(0u); slot != no_slot; slot = objects_.next_held(slot + 1u)) {
+        uint32_t           id = 0u;
+        D3dObjectKind      kind = D3dObjectKind::none;
+        const Entry *const entry = objects_.at(slot, id, kind);
+        if (entry->object_ == nullptr || kind == D3dObjectKind::none) return false;
+        if (!view_kind(kind)) continue;
         listed++;
-        holds = holds && entry.view_at_ < views_.size() && views_.at(entry.view_at_) == objects_.slot_of(id);
-    });
-    return holds && listed == views_.size();
+        if (entry->view_at_ >= views_.size() || views_.at(entry->view_at_) != slot) return false;
+    }
+    return listed == views_.size();
 }
 
 }  // namespace av
