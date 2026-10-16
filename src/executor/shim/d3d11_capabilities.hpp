@@ -6,7 +6,7 @@
 #ifndef AV_D3D11_CAPABILITIES_HPP
 #define AV_D3D11_CAPABILITIES_HPP
 
-#include "proto/d3d/dxgi_format.hpp"
+#include "executor/d3d/format_caps_rows.hpp"
 #include "proto/generated/d3d/d3d_wire_types.h"
 
 #include <stdint.h>
@@ -21,15 +21,15 @@ public:
 
     void measure(ID3D11Device5 &device, uint32_t feature_level);
 
-    const d3dproto::Caps11     &caps() const;
-    const d3dproto::FormatCaps *formats() const;
+    const d3dproto::Caps11 &caps() const;
+    const FormatCapsRows   &formats() const;
 
 private:
     void measure_options(ID3D11Device5 &device);
     void measure_formats(ID3D11Device5 &device);
 
-    d3dproto::Caps11     caps_;
-    d3dproto::FormatCaps formats_[DxgiFormat::count];
+    d3dproto::Caps11 caps_;
+    FormatCapsRows   formats_;
 };
 
 }  // namespace av

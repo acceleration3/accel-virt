@@ -15,14 +15,16 @@ namespace av::d3d12proto {
 
 // The session's Direct3D 12 device: the host's shared device for this GPU. One per session; a second
 // open answers the same device. hresult is not S_OK when this GPU has none.
-[[nodiscard]] bool av_d3d12_OpenDevice12(::av::ClientTransport& t, uint32_t flags, uint32_t* hresult, Caps12* caps);
-// D3D12_FEATURE_DATA_FORMAT_SUPPORT and the multisample quality levels at `samples` for one format.
-[[nodiscard]] bool av_d3d12_QueryFormat12(::av::ClientTransport& t, uint32_t format, uint32_t samples, uint32_t* support1, uint32_t* support2, uint32_t* quality_levels);
+[[nodiscard]] bool av_d3d12_OpenDevice12(::av::ClientTransport& t, uint32_t flags, uint32_t* hresult);
 // Any object made by these commands, by id. The host keeps what the GPU still uses alive until it is done.
 [[nodiscard]] bool av_d3d12_Destroy12(::av::ClientTransport& t, uint32_t object);
 // Waits until every queue of the session has finished what was executed on it. hresult is the device's
 // removed reason: S_OK while it is not removed.
 [[nodiscard]] bool av_d3d12_Finish12(::av::ClientTransport& t, uint32_t* hresult);
+// What this GPU's Direct3D 12 device can do, asked once per adapter and without opening it: Caps12,
+// and d3d.toml's FormatCaps for every DXGI_FORMAT from 0 up, as many as fit. hresult is not S_OK when this GPU
+// has no device, and then nothing else is answered.
+[[nodiscard]] bool av_d3d12_QueryCaps12(::av::ClientTransport& t, uint32_t* hresult, Caps12* caps, void* formats, uint64_t formats_capacity, uint64_t* formats_size);
 // A heap of `size` bytes. A heap of a CPU-visible type (upload, readback, or custom with a CPU page)
 // is the host memory the guest opened for it and imported, named by the handle IMPORT_BLOB answered as `memory`,
 // which must hold `size` bytes, and can hold only buffers (docs/host-memory.md); any other heap is the host GPU's

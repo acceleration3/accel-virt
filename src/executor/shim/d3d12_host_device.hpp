@@ -22,10 +22,10 @@
 #include "device/host/stdio_log.hpp"
 #include "executor/host_device_renewal.hpp"
 #include "executor/renewable_device.hpp"
+#include "executor/shim/d3d12_capabilities.hpp"
 #include "executor/shim/d3d12_frame_pool.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "proto/context/device_uuid.hpp"
-#include "proto/generated/d3d12/d3d12_wire_types.h"
 
 #include <stdint.h>
 
@@ -81,8 +81,8 @@ public:
      * would lose it, and the loss declared. False where the host cannot. */
     [[nodiscard]] bool lose();
 
-    ID3D12Device              *device() const;
-    const d3d12proto::Caps12 &caps() const;
+    ID3D12Device            *device() const;
+    const D3d12Capabilities &capabilities() const;
     /* Host memory of the GPU's memory source, the dma-buf `fd` (the caller
      * keeps it) mapped here at `address`, as a heap buffers can be placed in,
      * with a reference the caller owns; null where the runtime cannot import
@@ -101,7 +101,6 @@ public:
     StagedFrame               *stage_frame(ID3D12CommandQueue *queue, ID3D12Resource *source);
 
 private:
-    void measure();
     /* vkd3d-proton's device made on the GPU open found. */
     [[nodiscard]] bool make();
     /* RenewableDevice: the device, what vkd3d-proton says of it, and the
@@ -121,7 +120,7 @@ private:
     HostDeviceRenewal  renewal_;
     D3d11HostDevice   *shown_by_;
     ID3D12Device      *device_;
-    d3d12proto::Caps12 caps_;
+    D3d12Capabilities  capabilities_;
     D3d12FramePool     frames_;
 };
 

@@ -88,8 +88,9 @@ public:
     bool               lost() const;
 
 
-    bool on_OpenDevice12(uint32_t flags, uint32_t& hresult, d3d12proto::Caps12& caps) override;
-    bool on_QueryFormat12(uint32_t format, uint32_t samples, uint32_t& support1, uint32_t& support2, uint32_t& quality_levels) override;
+    bool on_OpenDevice12(uint32_t flags, uint32_t& hresult) override;
+    bool on_QueryCaps12(uint32_t& hresult, d3d12proto::Caps12& caps, uint8_t* formats, uint64_t formats_capacity,
+                        uint64_t& formats_size) override;
     bool on_Destroy12(uint32_t object) override;
     bool on_Finish12(uint32_t& hresult) override;
     bool on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t arena_offset) override;

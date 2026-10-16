@@ -1,6 +1,7 @@
 #include "icd/d3d/dxgi_format_table.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/generated/d3d/d3d_wire_types.h"
 
 namespace av::d3d {
 
@@ -60,20 +61,18 @@ DxgiFormatTable::DxgiFormatTable() : support_{}, support2_{}, levels_{}, family_
     AV_SCOPE("DxgiFormatTable::DxgiFormatTable");
 }
 
-void DxgiFormatTable::record(uint32_t format, uint32_t support, uint32_t support2)
+void DxgiFormatTable::learn(const d3dproto::FormatCaps *rows, uint32_t count)
 {
-    AV_SCOPE("DxgiFormatTable::record");
-    if (format >= DxgiFormat::count) return;
-    support_[format] = support;
-    support2_[format] = support2;
-}
-
-void DxgiFormatTable::record_samples(uint32_t format, uint32_t samples, uint32_t levels)
-{
-    AV_SCOPE("DxgiFormatTable::record_samples");
-    const uint32_t step = step_of(samples);
-    if (format >= DxgiFormat::count || step == sample_steps) return;
-    levels_[format][step] = levels;
+    AV_SCOPE("DxgiFormatTable::learn");
+    static_assert(sizeof(d3dproto::FormatCaps::quality_levels) / sizeof(uint32_t) == sample_steps - 1u,
+                  "a row's level counts are the counts past one sample");
+    for (uint32_t format = 0u; format < DxgiFormat::count; format++) {
+        const d3dproto::FormatCaps row = format < count ? rows[format] : d3dproto::FormatCaps{};
+        support_[format] = row.support;
+        support2_[format] = row.support2;
+        for (uint32_t step = 1u; step < sample_steps; step++) levels_[format][step] = row.quality_levels[step - 1u];
+    }
+    settle();
 }
 
 void DxgiFormatTable::settle()
@@ -242,12 +241,6 @@ uint32_t DxgiFormatTable::quality_levels(uint32_t format, uint32_t samples) cons
     if (step == 0u) return 1u;
     if (!DxgiFormat(format).family_head() && !multisamples(format)) return 0u;
     return family_levels_[DxgiFormat(format).family()][step];
-}
-
-bool DxgiFormatTable::multisample_candidate(uint32_t format) const
-{
-    AV_SCOPE("DxgiFormatTable::multisample_candidate");
-    return format < DxgiFormat::count && (carried(format) & ddi_multisample_render_target) != 0u;
 }
 
 uint32_t DxgiFormatTable::step_of(uint32_t samples) const

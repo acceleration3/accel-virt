@@ -6,8 +6,8 @@
  * out of order, a shader model list without 5.1 or with gaps, memory that is
  * not IO coherent - each fails the device (d3d12core's
  * CDevice::LLOCompleteLayerConstruction). So this opens a session of its own,
- * asks the host (OpenDevice12, then QueryFormat12 per format), closes it, and
- * answers from what it kept.
+ * asks the host once (QueryCaps12: the device's caps and every format's row),
+ * closes it, and answers from what it kept.
  *
  * What is reported is what this driver implements over what the host has:
  * feature level 11_1 at most, since 12_0 promises tiled resources tier 2,
@@ -54,8 +54,6 @@ public:
     UINT    quality_levels(DXGI_FORMAT format, UINT samples) const;
 
 private:
-    /* The host's level counts past one sample, into the format table. */
-    [[nodiscard]] bool learn_samples(ClientTransport &transport);
     uint32_t pipeline_level() const;
     /* The host's tier of tiled resources, as far as this driver carries it. */
     uint32_t tiled_tier() const;

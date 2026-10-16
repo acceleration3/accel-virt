@@ -27,6 +27,10 @@
 
 #include <stdint.h>
 
+namespace av::d3dproto {
+struct FormatCaps;
+}  // namespace av::d3dproto
+
 namespace av::d3d {
 
 class DxgiFormatTable {
@@ -38,14 +42,12 @@ public:
     DxgiFormatTable(const DxgiFormatTable &) = delete;
     DxgiFormatTable &operator=(const DxgiFormatTable &) = delete;
 
-    /* The host's D3D11_FORMAT_SUPPORT and _SUPPORT2 words for `format`
-     * (D3D12_FORMAT_SUPPORT1 and 2 are the same bits). */
-    void record(uint32_t format, uint32_t support, uint32_t support2);
-    /* The host's quality level count for `format` at `samples`. */
-    void record_samples(uint32_t format, uint32_t samples, uint32_t levels);
-    /* Every answer recorded: each family's counts, and the members that keep
-     * multisampling, are settled. */
-    void settle();
+    /* The host's answer in one: a row per format from DXGI_FORMAT 0 up,
+     * `count` of them (QueryCaps11's and QueryCaps12's), a format past them
+     * supported nowhere. Each family's counts, and the members that keep
+     * multisampling, are settled from them; whatever was learned before is
+     * replaced. */
+    void learn(const d3dproto::FormatCaps *rows, uint32_t count);
 
     /* D3D10_DDI_FORMAT_SUPPORT_* bits, which D3D12DDI_FORMAT_SUPPORT_* repeat,
      * and level counts: each family one story. */
@@ -54,9 +56,6 @@ public:
      * does not: a driver that carries tiled resources adds it. */
     uint32_t tiled_support(uint32_t format) const;
     uint32_t quality_levels(uint32_t format, uint32_t samples) const;
-    /* Whether the host would multisample `format` at all - worth asking its
-     * level counts for. */
-    bool     multisample_candidate(uint32_t format) const;
 
 private:
     /* The support bits before multisampling is judged. */
@@ -66,6 +65,8 @@ private:
     /* Its family multisamples at some count. */
     bool     family_multisamples(uint32_t format) const;
     uint32_t step_of(uint32_t samples) const;
+    /* Each family's counts and who keeps them, from the rows learned. */
+    void     settle();
     /* Settles the family under `head`: its counts and who keeps them. */
     void     settle_family(uint32_t head);
 

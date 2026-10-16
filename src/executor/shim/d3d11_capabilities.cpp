@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d_headers.hpp"
+#include "proto/d3d/dxgi_format.hpp"
 
 namespace av {
 
@@ -12,7 +13,7 @@ constexpr uint32_t sample_count_steps = 6u;
 
 }  // namespace
 
-D3d11Capabilities::D3d11Capabilities() : caps_{}, formats_{}
+D3d11Capabilities::D3d11Capabilities() : caps_{}, formats_()
 {
     AV_SCOPE("D3d11Capabilities::D3d11Capabilities");
 }
@@ -92,33 +93,37 @@ void D3d11Capabilities::measure_options(ID3D11Device5 &device)
 void D3d11Capabilities::measure_formats(ID3D11Device5 &device)
 {
     AV_SCOPE("D3d11Capabilities::measure_formats");
+    constexpr uint32_t multisample_counts = sizeof(d3dproto::FormatCaps::quality_levels) / sizeof(uint32_t);
     for (uint32_t format = 0u; format < DxgiFormat::count; format++) {
-        d3dproto::FormatCaps &row = formats_[format];
-        row = d3dproto::FormatCaps{};
+        d3dproto::FormatCaps row = {};
         UINT support = 0u;
         if (SUCCEEDED(device.CheckFormatSupport(static_cast<DXGI_FORMAT>(format), &support))) row.support = support;
         D3D11_FEATURE_DATA_FORMAT_SUPPORT2 support2 = {};
         support2.InFormat = static_cast<DXGI_FORMAT>(format);
         if (SUCCEEDED(device.CheckFeatureSupport(D3D11_FEATURE_FORMAT_SUPPORT2, &support2, sizeof(support2))))
             row.support2 = support2.OutFormatSupport2;
+        uint32_t counts = 0u, most = 0u;
         for (uint32_t step = 0u; step < sample_count_steps; step++) {
             UINT levels = 0u;
             if (FAILED(device.CheckMultisampleQualityLevels(static_cast<DXGI_FORMAT>(format), 1u << step, &levels)) ||
                 levels == 0u)
                 continue;
-            row.sample_counts |= 1u << step;
-            /* Every count this host renders at offers the same number of
-             * quality levels on every driver measured; the most is kept. */
-            if (levels > row.quality_levels) row.quality_levels = levels;
+            counts |= 1u << step;
+            if (levels > most) most = levels;
         }
+        /* Every count this host renders at offers the same number of quality
+         * levels on every driver measured; the most is kept, at each. */
+        for (uint32_t step = 0u; step < multisample_counts; step++)
+            row.quality_levels[step] = (counts & (2u << step)) != 0u ? most : 0u;
         /* A format DXVK says renders, loads or resolves multisampled but at no
          * count past one - its typeless formats - is one the guest's runtime
          * refuses the whole driver over ("MSAA quality reported to be 0"), so
          * the table says what the counts say. */
-        if ((row.sample_counts & ~1u) == 0u)
+        if ((counts & ~1u) == 0u)
             row.support &= ~static_cast<uint32_t>(D3D11_FORMAT_SUPPORT_MULTISAMPLE_RESOLVE |
                                                   D3D11_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET |
                                                   D3D11_FORMAT_SUPPORT_MULTISAMPLE_LOAD);
+        formats_.answer(format, row);
     }
 }
 
@@ -128,7 +133,7 @@ const d3dproto::Caps11 &D3d11Capabilities::caps() const
     return caps_;
 }
 
-const d3dproto::FormatCaps *D3d11Capabilities::formats() const
+const FormatCapsRows &D3d11Capabilities::formats() const
 {
     AV_SCOPE("D3d11Capabilities::formats");
     return formats_;

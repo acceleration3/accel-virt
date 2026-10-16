@@ -10,9 +10,9 @@ namespace av::d3d12proto {
 inline constexpr uint16_t kApi = 4;
 
 inline constexpr uint32_t kCmd_OpenDevice12 = 0x00041000;
-inline constexpr uint32_t kCmd_QueryFormat12 = 0x00041001;
 inline constexpr uint32_t kCmd_Destroy12 = 0x00041002;
 inline constexpr uint32_t kCmd_Finish12 = 0x00041003;
+inline constexpr uint32_t kCmd_QueryCaps12 = 0x00041004;
 inline constexpr uint32_t kCmd_CreateHeap12 = 0x00041100;
 inline constexpr uint32_t kCmd_CreateCommittedResource12 = 0x00041101;
 inline constexpr uint32_t kCmd_CreatePlacedResource12 = 0x00041102;

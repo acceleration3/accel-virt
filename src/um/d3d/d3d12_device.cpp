@@ -75,9 +75,8 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
         static_cast<void>(follower_.construct(*create.pKTCallbacks, runtime_.handle, session_.transport()));
     if (core_ != nullptr) static_cast<void>(residency_.construct(*core_, runtime_));
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), 0u));
-    uint32_t           hresult = 1u;
-    d3d12proto::Caps12 host = {};
-    if (!d3d12proto::av_d3d12_OpenDevice12(channel_.object(), 0u, &hresult, &host) || hresult != 0u) {
+    uint32_t hresult = 1u;
+    if (!d3d12proto::av_d3d12_OpenDevice12(channel_.object(), 0u, &hresult) || hresult != 0u) {
         log_.write("avumd: the host made no Direct3D 12 device");
         channel_.destroy();
         session_.leave();

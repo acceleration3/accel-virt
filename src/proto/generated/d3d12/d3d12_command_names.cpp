@@ -10,9 +10,9 @@ namespace av::d3d12proto {
 const char* command_name(uint32_t id) {
     switch (id) {
         case kCmd_OpenDevice12: return "OpenDevice12";
-        case kCmd_QueryFormat12: return "QueryFormat12";
         case kCmd_Destroy12: return "Destroy12";
         case kCmd_Finish12: return "Finish12";
+        case kCmd_QueryCaps12: return "QueryCaps12";
         case kCmd_CreateHeap12: return "CreateHeap12";
         case kCmd_CreateCommittedResource12: return "CreateCommittedResource12";
         case kCmd_CreatePlacedResource12: return "CreatePlacedResource12";

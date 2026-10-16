@@ -35,7 +35,7 @@ bool read_bytes(ServerDispatch& s, ::av::WireReader& r, ::av::WireArena& arena, 
     return true;
 }
 
-[[maybe_unused]] bool read_out_bytes(ServerDispatch& s, ::av::WireReader& r, ::av::WireArena& arena, uint8_t*& data,
+bool read_out_bytes(ServerDispatch& s, ::av::WireReader& r, ::av::WireArena& arena, uint8_t*& data,
                     uint64_t& capacity, bool& in_blob) {
     uint8_t tag = 0u;
     if (!r.read_pod(capacity) || !r.read_pod(tag)) return false;
@@ -53,7 +53,7 @@ bool read_bytes(ServerDispatch& s, ::av::WireReader& r, ::av::WireArena& arena, 
     return data != nullptr;
 }
 
-[[maybe_unused]] void write_out_bytes(::av::WireWriter& reply, const uint8_t* data, uint64_t size, uint64_t capacity, bool in_blob) {
+void write_out_bytes(::av::WireWriter& reply, const uint8_t* data, uint64_t size, uint64_t capacity, bool in_blob) {
     const uint64_t answered = size < capacity ? size : capacity;
     reply.write_pod<uint64_t>(answered);
     if (!in_blob && answered != 0u) reply.write(data, static_cast<size_t>(answered));
@@ -75,31 +75,9 @@ static bool decode_OpenDevice12(ServerDispatch& s, ::av::WireReader& r, ::av::Wi
     uint32_t flags{};
     if (!r.read_pod(flags)) return false;
     uint32_t hresult{};
-    Caps12 caps{};
     if (r.remaining() != 0u) return false;
-    if (!s.on_OpenDevice12(flags, hresult, caps)) return false;
+    if (!s.on_OpenDevice12(flags, hresult)) return false;
     reply.write_pod(hresult);
-    reply.write_pod(caps);
-    return true;
-}
-
-static bool decode_QueryFormat12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
-    AV_SCOPE("server:d3d12:QueryFormat12");
-    (void)s;
-    (void)reply;
-    (void)arena;
-    uint32_t format{};
-    if (!r.read_pod(format)) return false;
-    uint32_t samples{};
-    if (!r.read_pod(samples)) return false;
-    uint32_t support1{};
-    uint32_t support2{};
-    uint32_t quality_levels{};
-    if (r.remaining() != 0u) return false;
-    if (!s.on_QueryFormat12(format, samples, support1, support2, quality_levels)) return false;
-    reply.write_pod(support1);
-    reply.write_pod(support2);
-    reply.write_pod(quality_levels);
     return true;
 }
 
@@ -124,6 +102,26 @@ static bool decode_Finish12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWr
     if (r.remaining() != 0u) return false;
     if (!s.on_Finish12(hresult)) return false;
     reply.write_pod(hresult);
+    return true;
+}
+
+static bool decode_QueryCaps12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d12:QueryCaps12");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t hresult{};
+    Caps12 caps{};
+    uint8_t* formats = nullptr;
+    uint64_t formats_capacity = 0u;
+    uint64_t formats_size = 0u;
+    bool formats_in_blob = false;
+    if (!read_out_bytes(s, r, arena, formats, formats_capacity, formats_in_blob)) return false;
+    if (r.remaining() != 0u) return false;
+    if (!s.on_QueryCaps12(hresult, caps, formats, formats_capacity, formats_size)) return false;
+    reply.write_pod(hresult);
+    reply.write_pod(caps);
+    write_out_bytes(reply, formats, formats_size, formats_capacity, formats_in_blob);
     return true;
 }
 
@@ -1372,9 +1370,9 @@ static bool decode_CopyTiles12(ServerDispatch& s, ::av::WireReader& r, ::av::Wir
 bool knows_command(uint32_t cmd_id) {
     switch (cmd_id) {
         case kCmd_OpenDevice12:
-        case kCmd_QueryFormat12:
         case kCmd_Destroy12:
         case kCmd_Finish12:
+        case kCmd_QueryCaps12:
         case kCmd_CreateHeap12:
         case kCmd_CreateCommittedResource12:
         case kCmd_ShareResource12:
@@ -1446,9 +1444,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
                       ::av::WireWriter& reply, ::av::WireArena& arena) {
     switch (cmd_id) {
         case kCmd_OpenDevice12: return decode_OpenDevice12(s, r, reply, arena);
-        case kCmd_QueryFormat12: return decode_QueryFormat12(s, r, reply, arena);
         case kCmd_Destroy12: return decode_Destroy12(s, r, reply, arena);
         case kCmd_Finish12: return decode_Finish12(s, r, reply, arena);
+        case kCmd_QueryCaps12: return decode_QueryCaps12(s, r, reply, arena);
         case kCmd_CreateHeap12: return decode_CreateHeap12(s, r, reply, arena);
         case kCmd_CreateCommittedResource12: return decode_CreateCommittedResource12(s, r, reply, arena);
         case kCmd_ShareResource12: return decode_ShareResource12(s, r, reply, arena);

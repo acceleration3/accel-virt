@@ -27,14 +27,7 @@ bool D3d11HostCaps::learn(ClientTransport &transport, Kmt &kmt, uint32_t adapter
     uint64_t             answered = 0u;
     d3dproto::FormatCaps rows[DxgiFormat::count] = {};
     if (!d3dproto::av_d3d_QueryCaps11(transport, &caps_, rows, sizeof(rows), &answered)) return false;
-    for (uint32_t format = 0u; format < DxgiFormat::count; format++) {
-        formats_.record(format, rows[format].support, rows[format].support2);
-        /* A row's sample counts are a bit per power of two, all at one level count. */
-        for (uint32_t step = 1u; step < d3d::DxgiFormatTable::sample_steps; step++)
-            if ((rows[format].sample_counts & (1u << step)) != 0u)
-                formats_.record_samples(format, 1u << step, rows[format].quality_levels);
-    }
-    formats_.settle();
+    formats_.learn(rows, static_cast<uint32_t>(answered / sizeof(rows[0])));
     /* A miniport that does not answer offers nothing past the capset: its
      * presents keep their read-back. */
     UmdAdapterInfo info;

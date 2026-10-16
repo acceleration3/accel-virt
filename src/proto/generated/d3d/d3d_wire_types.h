@@ -261,10 +261,9 @@ static_assert(__is_trivially_copyable(Caps11), "Caps11 is plain data");
 struct FormatCaps {
     uint32_t support;
     uint32_t support2;
-    uint32_t sample_counts;
-    uint32_t quality_levels;
+    uint32_t quality_levels[4];
 };
-static_assert(sizeof(FormatCaps) == 16, "FormatCaps crosses as 16 bytes");
+static_assert(sizeof(FormatCaps) == 24, "FormatCaps crosses as 24 bytes");
 static_assert(__is_trivially_copyable(FormatCaps), "FormatCaps is plain data");
 
 }  // namespace av::d3dproto

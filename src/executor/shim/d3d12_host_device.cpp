@@ -11,19 +11,10 @@
 
 namespace av {
 
-namespace {
-
-constexpr uint32_t level_12_2 = 0xc200u;
-/* The highest shader model asked about; the answer is the device's highest
- * at or below it. */
-constexpr uint32_t shader_model_6_6 = 0x66u;
-
-}  // namespace
-
 D3d12HostDevice::D3d12HostDevice()
     : runtime_(nullptr), uuid_(), tenant_heap_(), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "),
       renewal_(tenant_heap_, lines_), shown_by_(nullptr),
-      device_(nullptr), caps_{}, frames_()
+      device_(nullptr), capabilities_(), frames_()
 {
     AV_SCOPE("D3d12HostDevice::D3d12HostDevice");
 }
@@ -44,7 +35,7 @@ bool D3d12HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
         runtime_ = nullptr;
         return false;
     }
-    measure();
+    capabilities_.measure(*device_);
     return true;
 }
 
@@ -55,7 +46,6 @@ void D3d12HostDevice::close()
     if (device_ != nullptr) device_->Release();
     device_ = nullptr;
     runtime_ = nullptr;
-    caps_ = d3d12proto::Caps12{};
 }
 
 bool D3d12HostDevice::make()
@@ -159,10 +149,10 @@ ID3D12Device *D3d12HostDevice::device() const
     return device_;
 }
 
-const d3d12proto::Caps12 &D3d12HostDevice::caps() const
+const D3d12Capabilities &D3d12HostDevice::capabilities() const
 {
-    AV_SCOPE("D3d12HostDevice::caps");
-    return caps_;
+    AV_SCOPE("D3d12HostDevice::capabilities");
+    return capabilities_;
 }
 
 ID3D12Heap *D3d12HostDevice::import_dmabuf_heap(void *address, int fd, uint64_t size) const
@@ -202,54 +192,6 @@ ID3D12RootSignature *D3d12HostDevice::root_signature(const void *desc) const
         made = nullptr;
     serialized->Release();
     return made;
-}
-
-void D3d12HostDevice::measure()
-{
-    AV_SCOPE("D3d12HostDevice::measure");
-    /* 12_2 is 0xc200, newer than the native headers' enum. */
-    const D3D_FEATURE_LEVEL asked[] = {static_cast<D3D_FEATURE_LEVEL>(level_12_2), D3D_FEATURE_LEVEL_12_1,
-                                       D3D_FEATURE_LEVEL_12_0, D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
-    D3D12_FEATURE_DATA_FEATURE_LEVELS levels = {};
-    levels.NumFeatureLevels = static_cast<UINT>(sizeof(asked) / sizeof(asked[0]));
-    levels.pFeatureLevelsRequested = asked;
-    if (SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_FEATURE_LEVELS, &levels, sizeof(levels))))
-        caps_.feature_level = static_cast<uint32_t>(levels.MaxSupportedFeatureLevel);
-    D3D12_FEATURE_DATA_SHADER_MODEL model = {};
-    model.HighestShaderModel = static_cast<D3D_SHADER_MODEL>(shader_model_6_6);
-    if (SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &model, sizeof(model))))
-        caps_.shader_model = static_cast<uint32_t>(model.HighestShaderModel);
-    D3D12_FEATURE_DATA_D3D12_OPTIONS options = {};
-    if (SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options)))) {
-        caps_.resource_binding_tier = static_cast<uint32_t>(options.ResourceBindingTier);
-        /* Read as a plain integer: drivers report tier 4, past the last
-         * value the headers' enum names, and loading that through the enum
-         * is undefined. */
-        uint32_t tiled_tier = 0u;
-        __builtin_memcpy(&tiled_tier, &options.TiledResourcesTier, sizeof tiled_tier);
-        caps_.tiled_resources_tier = tiled_tier;
-        caps_.resource_heap_tier = static_cast<uint32_t>(options.ResourceHeapTier);
-        caps_.conservative_rasterization_tier = static_cast<uint32_t>(options.ConservativeRasterizationTier);
-        caps_.typed_uav_load_additional_formats = options.TypedUAVLoadAdditionalFormats ? 1u : 0u;
-        caps_.rovs = options.ROVsSupported ? 1u : 0u;
-        caps_.double_ops = options.DoublePrecisionFloatShaderOps ? 1u : 0u;
-    }
-    D3D12_FEATURE_DATA_D3D12_OPTIONS1 waves = {};
-    if (SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &waves, sizeof(waves)))) {
-        caps_.wave_ops = waves.WaveOps ? 1u : 0u;
-        caps_.wave_lane_min = waves.WaveLaneCountMin;
-        caps_.wave_lane_max = waves.WaveLaneCountMax;
-        caps_.total_lanes = waves.TotalLaneCount;
-        caps_.int64_ops = waves.Int64ShaderOps ? 1u : 0u;
-    }
-    D3D12_FEATURE_DATA_GPU_VIRTUAL_ADDRESS_SUPPORT address = {};
-    if (SUCCEEDED(device_->CheckFeatureSupport(D3D12_FEATURE_GPU_VIRTUAL_ADDRESS_SUPPORT, &address, sizeof(address)))) {
-        caps_.max_gpu_va_bits_per_resource = address.MaxGPUVirtualAddressBitsPerResource;
-        caps_.max_gpu_va_bits_per_process = address.MaxGPUVirtualAddressBitsPerProcess;
-    }
-    for (uint32_t type = 0u; type < 4u; type++)
-        caps_.descriptor_sizes[type] =
-            device_->GetDescriptorHandleIncrementSize(static_cast<D3D12_DESCRIPTOR_HEAP_TYPE>(type));
 }
 
 StagedFrame *D3d12HostDevice::stage_frame(ID3D12CommandQueue *queue, ID3D12Resource *source)

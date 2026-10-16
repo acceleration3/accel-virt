@@ -232,7 +232,7 @@ bool D3d12Session::cpu_handle(const d3d12proto::DescriptorRef &ref, uint32_t typ
     const D3D12_DESCRIPTOR_HEAP_DESC desc = heap->GetDesc();
     if (static_cast<uint32_t>(desc.Type) != type || ref.index >= desc.NumDescriptors) return false;
     handle = heap->GetCPUDescriptorHandleForHeapStart().ptr +
-             static_cast<size_t>(ref.index) * device_->caps().descriptor_sizes[type];
+             static_cast<size_t>(ref.index) * device_->capabilities().caps().descriptor_sizes[type];
     return true;
 }
 
@@ -247,7 +247,7 @@ bool D3d12Session::gpu_handle(const d3d12proto::DescriptorRef &ref, uint64_t &ha
         type >= descriptor_heap_types)
         return false;
     handle = heap->GetGPUDescriptorHandleForHeapStart().ptr +
-             static_cast<uint64_t>(ref.index) * device_->caps().descriptor_sizes[type];
+             static_cast<uint64_t>(ref.index) * device_->capabilities().caps().descriptor_sizes[type];
     return true;
 }
 
@@ -322,10 +322,9 @@ void D3d12Session::drain()
 
 // ---------------------------------------------------------------- device
 
-bool D3d12Session::on_OpenDevice12(uint32_t, uint32_t &hresult, d3d12proto::Caps12 &caps)
+bool D3d12Session::on_OpenDevice12(uint32_t, uint32_t &hresult)
 {
     AV_SCOPE("D3d12Session::on_OpenDevice12");
-    caps = d3d12proto::Caps12{};
     if (device_ == nullptr) {
         hresult = static_cast<uint32_t>(DXGI_ERROR_UNSUPPORTED);
         return true;
@@ -344,28 +343,25 @@ bool D3d12Session::on_OpenDevice12(uint32_t, uint32_t &hresult, d3d12proto::Caps
         presentation_.bind(device_, shown_by_, shares_);
     }
     hresult = static_cast<uint32_t>(S_OK);
-    caps = device_->caps();
     return true;
 }
 
-bool D3d12Session::on_QueryFormat12(uint32_t format, uint32_t samples, uint32_t &support1, uint32_t &support2,
-                                    uint32_t &quality_levels)
+/* Measured when the GPU's device was made, so a session that only asks - the
+ * guest's adapter, before it has any device - neither joins the device nor
+ * waits for one lost to be made again. */
+bool D3d12Session::on_QueryCaps12(uint32_t &hresult, d3d12proto::Caps12 &caps, uint8_t *formats,
+                                  uint64_t formats_capacity, uint64_t &formats_size)
 {
-    AV_SCOPE("D3d12Session::on_QueryFormat12");
-    support1 = support2 = quality_levels = 0u;
-    if (device_ == nullptr || !DxgiFormatLayout(format).known()) return device_ != nullptr;
-    D3D12_FEATURE_DATA_FORMAT_SUPPORT support = {};
-    support.Format = static_cast<DXGI_FORMAT>(format);
-    if (SUCCEEDED(device_->device()->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &support, sizeof(support)))) {
-        support1 = static_cast<uint32_t>(support.Support1);
-        support2 = static_cast<uint32_t>(support.Support2);
+    AV_SCOPE("D3d12Session::on_QueryCaps12");
+    caps = d3d12proto::Caps12{};
+    formats_size = 0u;
+    if (device_ == nullptr) {
+        hresult = static_cast<uint32_t>(DXGI_ERROR_UNSUPPORTED);
+        return true;
     }
-    D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS levels = {};
-    levels.Format = support.Format;
-    levels.SampleCount = samples;
-    if (samples != 0u && SUCCEEDED(device_->device()->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,
-                                                                           &levels, sizeof(levels))))
-        quality_levels = levels.NumQualityLevels;
+    hresult = static_cast<uint32_t>(S_OK);
+    caps = device_->capabilities().caps();
+    formats_size = device_->capabilities().formats().give(formats, formats_capacity);
     return true;
 }
 

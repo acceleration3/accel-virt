@@ -35,7 +35,7 @@ bool put_bytes(::av::ClientTransport& t, ::av::WireWriter& b, const void* data, 
     return b.status() == ::av::Status::ok;
 }
 
-[[maybe_unused]] bool ask_bytes(::av::ClientTransport& t, ::av::WireWriter& b, void* data, uint64_t capacity,
+bool ask_bytes(::av::ClientTransport& t, ::av::WireWriter& b, void* data, uint64_t capacity,
                ::av::ClientBlobLease& lease) {
     if (capacity != 0u && data == nullptr) return false;
     b.write_pod<uint64_t>(capacity);
@@ -59,7 +59,7 @@ bool abandon(::av::ClientTransport& t) {
     return false;
 }
 
-[[maybe_unused]] bool take_bytes(::av::WireReader& r, void* data, uint64_t capacity, const ::av::ClientBlobLease& lease,
+bool take_bytes(::av::WireReader& r, void* data, uint64_t capacity, const ::av::ClientBlobLease& lease,
                 uint64_t* size) {
     uint64_t answered = 0u;
     if (!r.read_pod(answered) || answered > capacity) return false;
@@ -74,7 +74,7 @@ bool abandon(::av::ClientTransport& t) {
 
 }  // namespace
 
-bool av_d3d12_OpenDevice12(::av::ClientTransport& t, uint32_t flags, uint32_t* hresult, Caps12* caps) {
+bool av_d3d12_OpenDevice12(::av::ClientTransport& t, uint32_t flags, uint32_t* hresult) {
     AV_SCOPE("av_d3d12_OpenDevice12");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(flags);
@@ -84,29 +84,6 @@ bool av_d3d12_OpenDevice12(::av::ClientTransport& t, uint32_t flags, uint32_t* h
     { uint32_t value{};
       if (!r.read_pod(value)) return false;
       if (hresult != nullptr) *hresult = value; }
-    { Caps12 value{};
-      if (!r.read_pod(value)) return false;
-      if (caps != nullptr) *caps = value; }
-    return r.remaining() == 0u;
-}
-
-bool av_d3d12_QueryFormat12(::av::ClientTransport& t, uint32_t format, uint32_t samples, uint32_t* support1, uint32_t* support2, uint32_t* quality_levels) {
-    AV_SCOPE("av_d3d12_QueryFormat12");
-    ::av::WireWriter b = t.request_writer();
-    b.write_pod<uint32_t>(format);
-    b.write_pod<uint32_t>(samples);
-    const ::av::SyncCallScope call{t};
-    ::av::WireReader r{nullptr, 0u};
-    if (t.send_sync(kCmd_QueryFormat12, b, r) != ::av::TransportResult::ok) return false;
-    { uint32_t value{};
-      if (!r.read_pod(value)) return false;
-      if (support1 != nullptr) *support1 = value; }
-    { uint32_t value{};
-      if (!r.read_pod(value)) return false;
-      if (support2 != nullptr) *support2 = value; }
-    { uint32_t value{};
-      if (!r.read_pod(value)) return false;
-      if (quality_levels != nullptr) *quality_levels = value; }
     return r.remaining() == 0u;
 }
 
@@ -126,6 +103,24 @@ bool av_d3d12_Finish12(::av::ClientTransport& t, uint32_t* hresult) {
     { uint32_t value{};
       if (!r.read_pod(value)) return false;
       if (hresult != nullptr) *hresult = value; }
+    return r.remaining() == 0u;
+}
+
+bool av_d3d12_QueryCaps12(::av::ClientTransport& t, uint32_t* hresult, Caps12* caps, void* formats, uint64_t formats_capacity, uint64_t* formats_size) {
+    AV_SCOPE("av_d3d12_QueryCaps12");
+    ::av::WireWriter b = t.request_writer();
+    ::av::ClientBlobLease formats_lease;
+    if (!ask_bytes(t, b, formats, formats_capacity, formats_lease)) return abandon(t);
+    const ::av::SyncCallScope call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_QueryCaps12, b, r) != ::av::TransportResult::ok) return false;
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (hresult != nullptr) *hresult = value; }
+    { Caps12 value{};
+      if (!r.read_pod(value)) return false;
+      if (caps != nullptr) *caps = value; }
+    if (!take_bytes(r, formats, formats_capacity, formats_lease, formats_size)) return false;
     return r.remaining() == 0u;
 }
 

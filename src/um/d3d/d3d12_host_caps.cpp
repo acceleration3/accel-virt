@@ -3,13 +3,12 @@
 #include "core/trace/function_scope.hpp"
 #include "icd/d3d/caps_reply.hpp"
 #include "proto/client/client_transport.hpp"
+#include "proto/generated/d3d/d3d_wire_types.h"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 
 namespace av::d3d12 {
 
 namespace {
-
-/* The questions asked; small enough for the stack. */
 
 constexpr uint32_t level_11_0 = 0xb000u;
 constexpr uint32_t level_11_1 = 0xb100u;
@@ -50,33 +49,14 @@ bool D3d12HostCaps::learn(ClientTransport &transport, Kmt &, uint32_t)
 {
     AV_SCOPE("D3d12HostCaps::learn");
     if (learned_) return true;
-    uint32_t hresult = 1u;
-    if (!d3d12proto::av_d3d12_OpenDevice12(transport, 0u, &hresult, &caps_) || hresult != 0u) return false;
-    for (uint32_t format = 1u; format < DxgiFormat::count; format++) {
-        uint32_t support1 = 0u, support2 = 0u, levels = 0u;
-        if (!d3d12proto::av_d3d12_QueryFormat12(transport, format, 1u, &support1, &support2, &levels)) return false;
-        formats_.record(format, support1, support2);
-    }
-    if (!learn_samples(transport)) return false;
+    uint32_t             hresult = 1u;
+    uint64_t             answered = 0u;
+    d3dproto::FormatCaps rows[DxgiFormat::count] = {};
+    if (!d3d12proto::av_d3d12_QueryCaps12(transport, &hresult, &caps_, rows, sizeof(rows), &answered) ||
+        hresult != 0u)
+        return false;
+    formats_.learn(rows, static_cast<uint32_t>(answered / sizeof(rows[0])));
     learned_ = true;
-    return true;
-}
-
-/* Level counts past one sample, asked only of the formats the host would
- * multisample at all: a question each, and there are hundreds. */
-bool D3d12HostCaps::learn_samples(ClientTransport &transport)
-{
-    AV_SCOPE("D3d12HostCaps::learn_samples");
-    for (uint32_t format = 1u; format < DxgiFormat::count; format++) {
-        if (!formats_.multisample_candidate(format)) continue;
-        for (uint32_t step = 1u; step < d3d::DxgiFormatTable::sample_steps; step++) {
-            uint32_t support1 = 0u, support2 = 0u, levels = 0u;
-            if (!d3d12proto::av_d3d12_QueryFormat12(transport, format, 1u << step, &support1, &support2, &levels))
-                return false;
-            formats_.record_samples(format, 1u << step, levels);
-        }
-    }
-    formats_.settle();
     return true;
 }
 

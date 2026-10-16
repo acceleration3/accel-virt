@@ -136,10 +136,12 @@ fields = ["u32 feature_level", "u32 driver_concurrent_creates", "u32 driver_comm
           "u32 unified_memory_architecture", "u32 vp_and_rt_array_index_from_any_shader",
           "u32 extended_nv12_shared_texture", "u32 shared_resource_tier", "u32 reserved[6]"]
 
-# One DXGI_FORMAT's D3D11_FEATURE_DATA_FORMAT_SUPPORT{,2}, and which sample
-# counts it renders at (bit n: 2^n samples) with their quality levels.
+# One DXGI_FORMAT as a host device answers it, for Direct3D 11 (QueryCaps11) and
+# Direct3D 12 (d3d12.toml's QueryCaps12) alike: D3D11_FORMAT_SUPPORT and _SUPPORT2,
+# whose bits D3D12_FORMAT_SUPPORT1 and 2 repeat, and its quality level count at 2,
+# 4, 8 and 16 samples, 0 at a count it does not render at.
 [structs.FormatCaps]
-fields = ["u32 support", "u32 support2", "u32 sample_counts", "u32 quality_levels"]
+fields = ["u32 support", "u32 support2", "u32 quality_levels[4]"]
 
 # ---------------------------------------------------------------- device
 

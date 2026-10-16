@@ -196,14 +196,7 @@ id = 0x1000
 doc = """The session's Direct3D 12 device: the host's shared device for this GPU. One per session; a second
 open answers the same device. hresult is not S_OK when this GPU has none."""
 params = ["u32 flags"]
-reply = ["u32 hresult", "Caps12 caps"]
-
-[[command]]
-name = "QueryFormat12"
-id = 0x1001
-doc = """D3D12_FEATURE_DATA_FORMAT_SUPPORT and the multisample quality levels at `samples` for one format."""
-params = ["u32 format", "u32 samples"]
-reply = ["u32 support1", "u32 support2", "u32 quality_levels"]
+reply = ["u32 hresult"]
 
 [[command]]
 name = "Destroy12"
@@ -218,6 +211,15 @@ doc = """Waits until every queue of the session has finished what was executed o
 removed reason: S_OK while it is not removed."""
 params = []
 reply = ["u32 hresult"]
+
+[[command]]
+name = "QueryCaps12"
+id = 0x1004
+doc = """What this GPU's Direct3D 12 device can do, asked once per adapter and without opening it: Caps12,
+and d3d.toml's FormatCaps for every DXGI_FORMAT from 0 up, as many as fit. hresult is not S_OK when this GPU
+has no device, and then nothing else is answered."""
+params = []
+reply = ["u32 hresult", "Caps12 caps", "out_bytes formats"]
 
 # ---------------------------------------------------------------- memory
 
