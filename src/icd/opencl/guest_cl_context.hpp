@@ -26,6 +26,7 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/context_link.hpp"
 #include "icd/common/host_channel.hpp"
+#include "icd/common/loss_latch.hpp"
 #include "icd/opencl/cl_d3d11_objects.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
 #include "icd/opencl/cl_property_list.hpp"
@@ -42,6 +43,7 @@ namespace av {
 class BlockSource;
 class ClientTransport;
 class HostAllocation;
+class KeyedLog;
 class StateWriter;
 class ThreadLock;
 }  // namespace av
@@ -84,9 +86,10 @@ public:
      * inline, a gapped tile read a row per round trip. */
     static constexpr uint64_t staging_reserve = uint64_t{8} << 20u;
 
-    /* `blocks_lock` is the arena blocks' own (ClArenaBlocks). */
+    /* `blocks_lock` is the arena blocks' own (ClArenaBlocks); `lines` is the
+     * root's, where a loss is said once (icd::LossLatch). */
     GuestClContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock,
-                   ThreadLock &blocks_lock, LogSink &log, icd::SharedHandles &handles);
+                   ThreadLock &blocks_lock, LogSink &log, KeyedLog &lines, icd::SharedHandles &handles);
     ~GuestClContext();
     GuestClContext(const GuestClContext &) = delete;
     GuestClContext &operator=(const GuestClContext &) = delete;
@@ -220,6 +223,8 @@ private:
     BlockSource        &memory_;
     LogSink       &log_;
     icd::ContextLink    link_;
+    /* Why the context was lost. */
+    icd::LossLatch      loss_;
     uint32_t            gl_share_;
     bool                wakes_;
     icd::HostChannel                     channel_;

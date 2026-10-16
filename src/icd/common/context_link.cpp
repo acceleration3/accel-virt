@@ -54,7 +54,7 @@ bool ContextLink::lost(const HostChannel &channel)
 {
     AV_SCOPE("ContextLink::lost");
     if (!held()) return false;
-    if (channel.faulted()) connection_.lose(link_);
+    if (channel.lost()) connection_.lose(link_);
     return connection_.lost(link_);
 }
 

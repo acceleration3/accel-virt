@@ -15,6 +15,7 @@
 
 namespace av {
 class BlockSource;
+class KeyedLog;
 class StateWriter;
 }  // namespace av
 
@@ -29,7 +30,7 @@ struct GlContextTableProbe;
 class GlContextTable {
 public:
     GlContextTable(BlockSource &memory, icd::IcdConnection &connection, ThreadLock &send_lock, LogSink &log,
-                   const GlExtensionPolicy &extensions, icd::SharedHandles &handles);
+                   KeyedLog &lines, const GlExtensionPolicy &extensions, icd::SharedHandles &handles);
     GlContextTable(const GlContextTable &) = delete;
     GlContextTable &operator=(const GlContextTable &) = delete;
 
@@ -55,6 +56,7 @@ private:
     icd::IcdConnection               &connection_;
     ThreadLock                 &send_lock_;
     LogSink               &log_;
+    KeyedLog              &lines_;
     const GlExtensionPolicy    &extensions_;
     icd::SharedHandles         &handles_;
     ObjectPool<GuestGlContext>  pool_;

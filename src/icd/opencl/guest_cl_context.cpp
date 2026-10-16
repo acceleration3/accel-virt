@@ -15,10 +15,10 @@
 namespace av::clicd {
 
 GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memory,
-                               ThreadLock &send_lock, ThreadLock &blocks_lock, LogSink &log,
+                               ThreadLock &send_lock, ThreadLock &blocks_lock, LogSink &log, KeyedLog &lines,
                                icd::SharedHandles &handles)
     : memory_(memory), log_(log),
-      link_(connection), gl_share_(0u), wakes_(false),
+      link_(connection), loss_(lines), gl_share_(0u), wakes_(false),
       channel_(memory, log, "avcl: ", icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes),
                send_lock),
       blocks_(memory, blocks_lock), orphaned_work_(false), staging_(memory, blocks_lock),
@@ -187,7 +187,8 @@ ClientTransport *GuestClContext::wire()
      * goes through (icd::ContextLink). */
     if (link_.lost(channel_)) {
         state_ = State::lost;
-        log_.write("avcl: the context's device faulted; the context is lost");
+        loss_.lose(channel_.fault_code());
+        static_cast<void>(loss_.refuses("an OpenCL call"));
         notify_.say("avcl: the context's device was lost: every call on it now answers CL_OUT_OF_RESOURCES");
         return nullptr;
     }
@@ -357,6 +358,7 @@ void GuestClContext::report(StateWriter &writer) const
     writer.open("context", 0u);
     writer.number("state", static_cast<uint32_t>(state_));
     writer.number("link", link_.link());
+    loss_.report(writer);
     writer.flag("arena", has_arena());
     writer.number("mappings", mappings());
     svm_.report(writer);
@@ -385,6 +387,7 @@ bool GuestClContext::invariants_hold() const
      * together, so one without the other is a make or a teardown that
      * stopped halfway. */
     if (!channel_.invariants_hold()) return false;
+    if (loss_.lost() != (state_ == State::lost) || !loss_.invariants_hold()) return false;
     if (state_ == State::created) {
         /* Nothing is held before a make, and a make that failed held nothing
          * after it either. */

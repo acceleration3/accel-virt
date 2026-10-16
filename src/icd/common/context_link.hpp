@@ -36,8 +36,8 @@ public:
     bool                 held() const;
     /* The device the link names; only while held. */
     GuestConnection     &device() const;
-    /* Whether the device is gone, losing it first when `channel` faulted.
-     * False when not held. */
+    /* Whether the device is gone, losing it first when `channel` is lost
+     * (HostChannel::lost). False when not held. */
     [[nodiscard]] bool   lost(const HostChannel &channel);
     /* The link's number, for a report; IcdConnection::no_link when not held. */
     uint32_t             link() const;

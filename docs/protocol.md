@@ -505,7 +505,14 @@ per device and not by a TDR: the drivers turn the fault into
 `DXGI_ERROR_DEVICE_REMOVED` (Direct3D 9, 11 and 12, through the runtime's
 `pfnSetErrorCb`), `VK_ERROR_DEVICE_LOST`, `GL_CONTEXT_LOST` and
 `CL_OUT_OF_RESOURCES`, and DWM makes its device again as it does after a
-TDR. A TDR is not used: the only fault a miniport can report,
+TDR. Each driver context keeps the first fault code it was lost to
+(`LossLatch`, src/icd/common), read off its fence page - an idle context
+included, which learns it at its next call rather than its next send - and
+says it once per entry point. Where the API has a word for why, it says it: a
+context the host faulted for its own commands (codes 1 to 6) is a Direct3D 11
+present's `DXGI_ERROR_DEVICE_RESET` and a robust OpenGL context's
+`GL_GUILTY_CONTEXT_RESET`; a lost host device, or a loss with no code, is
+`DXGI_ERROR_DEVICE_REMOVED` and `GL_UNKNOWN_CONTEXT_RESET`. A TDR is not used: the only fault a miniport can report,
 `DXGK_INTERRUPT_DMA_FAULTED`, bugchecks a GPU-MMU adapter (docs/kb/
 05-scheduling.md); a forced timeout would reset every engine and every
 context of the adapter, Vulkan, OpenGL and OpenCL ones whose host devices are

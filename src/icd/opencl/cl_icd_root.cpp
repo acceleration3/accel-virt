@@ -226,7 +226,7 @@ Status ClIcdRoot::open_device(ClDevice &device)
      * contexts are its own, made beside this one. */
     GuestClContext *context = nullptr;
     const Status    made =
-        contexts_.create(context, device.connection(), memory_, send_lock_, blocks_lock_, log_, shared_handles_);
+        contexts_.create(context, device.connection(), memory_, send_lock_, blocks_lock_, log_, lines_, shared_handles_);
     if (made != Status::ok) {
         log_.write("avcl: no room for the ICD's own context");
         return made;
@@ -634,7 +634,7 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
     lock_.acquire();
     GuestClContext *context = nullptr;
     Status          made =
-        contexts_.create(context, device->connection(), memory_, send_lock_, blocks_lock_, log_, shared_handles_);
+        contexts_.create(context, device->connection(), memory_, send_lock_, blocks_lock_, log_, lines_, shared_handles_);
     if (made == Status::ok) made = context->make(gl_share, watcher_.wake_handle());
     if (made == Status::ok) context->keep_properties(properties);
     if (made == Status::ok) context->notify_with(notify);

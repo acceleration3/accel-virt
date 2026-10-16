@@ -18,6 +18,7 @@
 #include "icd/common/context_link.hpp"
 #include "icd/common/host_channel.hpp"
 #include "icd/common/icd_connection.hpp"
+#include "icd/common/loss_latch.hpp"
 #include "icd/opengl/reported_gl_errors.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/client_array_state.hpp"
@@ -45,6 +46,7 @@ class LogSink;
 namespace av {
 class BlockSource;
 class ClientTransport;
+class KeyedLog;
 class StateWriter;
 class ThreadLock;
 }  // namespace av
@@ -68,10 +70,14 @@ public:
     enum : uint32_t {
         gl_vendor = 0x1F00u, gl_renderer = 0x1F01u, gl_version = 0x1F02u, gl_shading_language_version = 0x8B8Cu,
     };
-    enum : uint32_t { gl_out_of_memory = 0x0505u, gl_context_lost = 0x0507u, gl_unknown_context_reset = 0x8255u };
+    enum : uint32_t {
+        gl_out_of_memory = 0x0505u, gl_context_lost = 0x0507u, gl_guilty_context_reset = 0x8253u,
+        gl_unknown_context_reset = 0x8255u,
+    };
 
+    /* `lines` is the root's: a loss is said there once (icd::LossLatch). */
     GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock, LogSink &log,
-                   const GlExtensionPolicy &extensions, icd::SharedHandles &handles, int32_t pixel_format,
+                   KeyedLog &lines, const GlExtensionPolicy &extensions, icd::SharedHandles &handles, int32_t pixel_format,
                    const GlContextOptions &options);
     ~GuestGlContext();
     GuestGlContext(const GuestGlContext &) = delete;
@@ -170,8 +176,10 @@ public:
     /* Asked for with both robust access and lose-on-reset. */
     bool        robust() const;
     /* What glGetGraphicsResetStatus answers without the host: for a lost
-     * robust context GL_UNKNOWN_CONTEXT_RESET, every time, since a lost
-     * context's reset never completes; otherwise GL_NO_ERROR. */
+     * robust context GL_GUILTY_CONTEXT_RESET when the host faulted it for
+     * its own commands and GL_UNKNOWN_CONTEXT_RESET for any other cause
+     * (icd::LossLatch), every time, since a lost context's reset never
+     * completes; otherwise GL_NO_ERROR. */
     uint32_t    lost_reset_status() const;
     /* The host's string for `name`, the version capped at 4.6; null for any
      * other name or before make. */
@@ -231,6 +239,8 @@ private:
     uint64_t                       share_target_;
     /* The device link a made or lost context holds; no_link otherwise. */
     icd::ContextLink               link_;
+    /* Why the context was lost. */
+    icd::LossLatch                 loss_;
     bool                           loss_reported_;
     icd::HostChannel               channel_;
     ReportedGlErrors               reported_;

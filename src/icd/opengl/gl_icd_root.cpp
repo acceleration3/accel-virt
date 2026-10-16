@@ -130,7 +130,7 @@ GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock
       query_(formats_), windows_(memory), currents_(slot), connection_(memory, kmt, 0u),
       extensions_(reported_extensions, reported_count, reported_wgl_extensions, reported_wgl_count),
       shared_handles_(kmt, lock, memory),
-      contexts_(memory, connection_, send_lock, log, extensions_, shared_handles_),
+      contexts_(memory, connection_, send_lock, log, lines_, extensions_, shared_handles_),
       manual_(currents_, kmt), callbacks_{}, callback_count_(0u), proc_table_(), pending_(memory, Pool::paged), sync_tokens_()
 {
     AV_SCOPE("GlIcdRoot::GlIcdRoot");

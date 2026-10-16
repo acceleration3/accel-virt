@@ -33,12 +33,12 @@ constexpr uint32_t no_error = 0u;
 }  // namespace
 
 GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock,
-                               LogSink &log, const GlExtensionPolicy &extensions,
+                               LogSink &log, KeyedLog &lines, const GlExtensionPolicy &extensions,
                                icd::SharedHandles &handles, int32_t pixel_format,
                                const GlContextOptions &options)
     : memory_(memory), log_(log), lines_(log, "avgl: "), policy_(extensions),
       pixel_format_(pixel_format),
-      options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_reported_(false),
+      options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_(lines), loss_reported_(false),
       channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), timeline_(channel_), extensions_(memory), framebuffers_(memory, log), shadows_(memory), staging_(), mappings_(memory, shadows_, log), externals_(handles, memory, log), pinned_(memory, channel_),
       strings_{},
       debug_callback_(0u), debug_user_(0u), luid_(0u)
@@ -229,7 +229,8 @@ ClientTransport *GuestGlContext::wire()
     if (state_ != State::made) return nullptr;
     if (link_.lost(channel_)) {
         state_ = State::lost;
-        log_.write("avgl: the context's device faulted; the context is lost");
+        loss_.lose(channel_.fault_code());
+        static_cast<void>(loss_.refuses("an OpenGL call"));
     }
     /* The transport itself, with no lock: WGL lets a context be current on
      * one thread at a time, and it is only ever called on that one. The lock
@@ -384,7 +385,8 @@ bool GuestGlContext::robust() const
 uint32_t GuestGlContext::lost_reset_status() const
 {
     AV_SCOPE("GuestGlContext::lost_reset_status");
-    return state_ == State::lost && robust() ? gl_unknown_context_reset : no_error;
+    if (state_ != State::lost || !robust()) return no_error;
+    return loss_.guilty() ? gl_guilty_context_reset : gl_unknown_context_reset;
 }
 
 void GuestGlContext::report(StateWriter &writer, uint64_t handle) const
@@ -403,6 +405,7 @@ void GuestGlContext::report(StateWriter &writer, uint64_t handle) const
     writer.number("share_target", share_target_);
     writer.number("error", error_);
     writer.number("link", link_.link());
+    loss_.report(writer);
     writer.flag("arena", channel_.arena_view() != nullptr);
     writer.text("renderer", state_ == State::created ? "" : strings_[renderer_row]);
     writer.number("extensions", extensions_.count());
@@ -420,6 +423,7 @@ bool GuestGlContext::invariants_hold() const
     const bool held = state_ != State::created;
     if (held != channel_.opened() || held != link_.held()) return false;
     if (loss_reported_ && state_ != State::lost) return false;
+    if (loss_.lost() != (state_ == State::lost) || !loss_.invariants_hold()) return false;
     if (!held && staging_.name() != 0u) return false;
     for (uint32_t row = 0u; row < strings; row++)
         if (strings_[row][string_bytes - 1u] != '\0') return false;
@@ -473,7 +477,7 @@ bool GuestGlContext::learn()
     cap_version(version_row, latest_minor);
     cap_version(shading_row, latest_language_minor);
     policy_.learn(wire, extensions_);
-    return !channel_.faulted();
+    return !channel_.lost();
 }
 
 /* A host newer than the ICD implements is reported as OpenGL 4.6 and GLSL
@@ -516,6 +520,7 @@ void GuestGlContext::teardown()
     timeline_.forget();
     link_.release();
     loss_reported_ = false;
+    loss_.forget();
     state_ = State::created;
     owner_ = 0u;
     for (auto &row : strings_) row[0] = '\0';
