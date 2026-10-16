@@ -26,10 +26,12 @@
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/resources/surface_point.hpp"
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 
 extern "C" const char *__lsan_default_suppressions(void);
 extern "C" const char *__lsan_default_suppressions(void)
@@ -243,6 +245,54 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
     CHECK_EQ(removed, driver_internal_error);
     CHECK_EQ(wire.refused(), 0u);
     CHECK(backend.invariants_hold());
+    backend.shut_down();
+}
+
+/* A batch's mark is watched by DXVK, which writes the session's eventfd once
+ * the GPU reaches it: the worker is woken for it rather than polling. A
+ * native DXVK whose SetEvent did nothing (tools/dxvk-patches/0009) left the
+ * worker spinning on the fence for up to 100 ms after every batch. */
+namespace {
+
+std::atomic<std::uint32_t> batch_wakes{0u};
+
+void count_batch_wake(void *count)
+{
+    static_cast<std::atomic<std::uint32_t> *>(count)->fetch_add(1u);
+}
+
+}  // namespace
+
+TEST(d3d_backend_device, a_batch_the_gpu_finishes_wakes_the_worker_instead_of_being_polled_for)
+{
+    av::LoaderHostApis apis;
+    av::D3d11HostDevice *const device = host_device(apis);
+    if (device == nullptr) return;
+    HeldBackend     held(first_backend);
+    av::D3dBackend &backend = held.backend();
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, device));
+    batch_wakes = 0u;
+    backend.bind_signal(&count_batch_wake, &batch_wakes);
+    av::D3dLoopback wire(backend);
+    std::uint32_t hresult = 1u, level = 0u;
+    CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
+    make_triangle(wire);
+    bind_triangle(wire);
+    CHECK(av_d3d_Draw(wire, 3u, 0u));
+    CHECK_EQ(wire.refused(), 0u);
+    /* Every batch was marked and watched: nothing is left to poll for. */
+    CHECK(!backend.poll());
+    std::uint64_t marked = 0u, reached = 0u;
+    for (std::uint32_t tries = 0u; tries < 2000u; tries++) {
+        backend.gpu_progress(marked, reached);
+        if (reached == marked && batch_wakes.load() != 0u) break;
+        const timespec pause = {0, 1000000};
+        nanosleep(&pause, nullptr);
+    }
+    CHECK(marked >= 1u);
+    CHECK(reached == marked);
+    CHECK(batch_wakes.load() >= 1u);
     backend.shut_down();
 }
 
