@@ -388,7 +388,12 @@ cl_int ClIcdRoot::free_memory(ClDevice &device, size_t value_bytes, void *value,
      * all of it, as AMD's own driver answers on an idle GPU. */
     const size_t free_kib = static_cast<size_t>((budget > usage ? budget - usage : 0u) / kib);
     const size_t answer[2] = {free_kib, free_kib};
-    return ClInfoRequest(value_bytes, value, size_ret).give(answer, sizeof answer);
+    /* Room for less than both is the total alone, as AMD's driver answers
+     * (and a size asked with no room is one value's): Affinity asks with one
+     * size_t's room. */
+    const ClInfoRequest asked(value_bytes, value, size_ret);
+    if (value_bytes < sizeof answer) return asked.give(answer, sizeof answer[0]);
+    return asked.give(answer, sizeof answer);
 }
 
 cl_int ClIcdRoot::host_device_info(ClientTransport &wire, ClDevice &device, cl_device_info name,

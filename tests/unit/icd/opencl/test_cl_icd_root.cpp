@@ -2193,6 +2193,21 @@ TEST(cl_icd_root, an_amd_adapter_answers_its_free_memory_from_windows)
   CHECK_EQ(answered, sizeof free_kib);
   CHECK_EQ(free_kib[0], 384u * 1024u);
   CHECK_EQ(free_kib[1], 384u * 1024u);
+  /* A room for one value gets the total alone, as from AMD's driver, and so
+   * does a size asked with no room; a room for less than one is refused. */
+  std::size_t total_kib = 0u;
+  CHECK_EQ(rig.loader().device_info(device, av::clicd::ClIcdRoot::free_memory_amd, sizeof total_kib, &total_kib,
+                                    &answered),
+           CL_SUCCESS);
+  CHECK_EQ(answered, sizeof total_kib);
+  CHECK_EQ(total_kib, 384u * 1024u);
+  answered = 0u;
+  CHECK_EQ(rig.loader().device_info(device, av::clicd::ClIcdRoot::free_memory_amd, 0u, nullptr, &answered),
+           CL_SUCCESS);
+  CHECK_EQ(answered, sizeof total_kib);
+  std::uint32_t narrow = 0u;
+  CHECK_EQ(rig.loader().device_info(device, av::clicd::ClIcdRoot::free_memory_amd, sizeof narrow, &narrow, nullptr),
+           CL_INVALID_VALUE);
   /* Using more than the budget is none free, not a wrap. */
   rig.kmt().set_video_memory(av::MemorySegmentGroup::local, 128ull << 20u, 512ull << 20u);
   CHECK_EQ(rig.loader().device_info(device, av::clicd::ClIcdRoot::free_memory_amd, sizeof free_kib, free_kib, nullptr),

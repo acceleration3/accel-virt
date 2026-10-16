@@ -139,7 +139,8 @@ public:
     /* CL_DEVICE_GLOBAL_FREE_MEMORY_AMD (cl_amd_device_attribute_query), which
      * the host's OpenCL does not answer: on an AMD adapter, what Windows says
      * this process may still use of the adapter's own memory, in KiB, as the
-     * total and as the largest block. */
+     * total and as the largest block - or the total alone, into a room for
+     * less than both. */
     static constexpr cl_device_info free_memory_amd = 0x4039u;
 
     /* ---- contexts ------------------------------------------------------- */
