@@ -10,7 +10,7 @@
 #include "executor/opencl/cl_event_signals.hpp"
 /* The generated server defines what OpenCL's headers are included with, so it
  * comes before anything else that includes them. */
-#include "executor/opencl/cl_handle_registry.hpp"
+#include "proto/generated/opencl/cl_dispatch_server.h"
 #include "executor/opencl/cl_argument_retention.hpp"
 #include "executor/opencl/cl_binary_envelope.hpp"
 #include "executor/opencl/cl_program_il.hpp"
@@ -20,6 +20,7 @@
 #include "executor/opencl/copied_gl_sharing.hpp"
 #include "executor/opencl/direct_gl_sharing.hpp"
 #include "executor/guest_region.hpp"
+#include "executor/host_object_registry.hpp"
 #include "executor/imported_memories.hpp"
 #include "executor/opencl/host_svm_ranges.hpp"
 #include "executor/opencl/kernel_pacer.hpp"
@@ -316,6 +317,18 @@ private:
     cl_mem image_over(cl_mem buffer, const SharedImageShape &shape);
     friend struct OpenClBackendProbe;
 
+    /* Holds `object`, which a call just answered, with one reference. One
+     * already held as this kind is unchanged: enumeration answers the same
+     * platform every time without a reference. conflict when the address is
+     * held as another kind - the host could no longer say which object a
+     * guest's number means - and no_memory when no room was made for it and
+     * none can be. Null holds nothing. */
+    [[nodiscard]] Status hold(clproto::HandleKind kind, void *object);
+    /* `times` of the guest's references on `object` given back to the ICD,
+     * as a dying context's are. Platforms are never released: the API has no
+     * call for it. */
+    void                 let_go(clproto::HandleKind kind, void *object, uint32_t times);
+
     /* The program's devices and each one's host binary size, at most
      * max_program_devices; 0 for a program the host will not describe. */
     cl_uint program_binary_sizes(cl_program program, size_t *sizes);
@@ -388,7 +401,11 @@ private:
      * with a cl_mem of the wrong context. */
     void              *context_;
     void              *queue_;
-    ClHandleRegistry handles_;
+    /* What the guest holds, with the references it holds on each: OpenCL
+     * counts them, and the ICD holds at least those, so an object is
+     * forgotten no later than the ICD may free it. Held as its own address,
+     * which is the number the guest names it by. */
+    HostObjectRegistry<uint64_t, clproto::HandleKind, void *> handles_;
     HostSvmRanges    svm_;
     HostSvmRanges    mapped_;
     /* A context's first import: its blob arena. */

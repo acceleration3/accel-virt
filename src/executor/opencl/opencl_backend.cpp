@@ -49,6 +49,20 @@ constexpr cl_device_type defined_types = CL_DEVICE_TYPE_DEFAULT | CL_DEVICE_TYPE
 constexpr const char *gl_sharing = "cl_khr_gl_sharing";
 constexpr const char *external_memory = "cl_khr_external_memory";
 
+/* Dependents before what they depend on, the order an application tearing
+ * down in reverse would use, so the driver is never asked to free a context
+ * it still has queues and buffers on. */
+constexpr clproto::HandleKind release_order[] = {
+    clproto::HandleKind::event,   clproto::HandleKind::kernel,        clproto::HandleKind::program,
+    clproto::HandleKind::sampler, clproto::HandleKind::mem,           clproto::HandleKind::command_queue,
+    clproto::HandleKind::context, clproto::HandleKind::device};
+
+uint64_t number_of(const void *object)
+{
+    AV_SCOPE("number_of");
+    return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(object));
+}
+
 }  // namespace
 
 /* What the host's OpenCL calls when an event completes, on a thread of its
@@ -441,7 +455,8 @@ cl_mem OpenClBackend::on_clCreateBufferWithProperties(cl_context context,
 void *OpenClBackend::handle_for(clproto::HandleKind kind, uint64_t wire) const
 {
     AV_SCOPE("OpenClBackend::handle_for");
-    return handles_.resolve(kind, wire);
+    void *const *const held = handles_.find(wire, kind);
+    return held != nullptr ? *held : nullptr;
 }
 
 bool OpenClBackend::room_for(uint64_t objects)
@@ -458,7 +473,7 @@ void OpenClBackend::made(clproto::HandleKind kind, void *object)
      * as another kind is refused here: the host could no longer say which
      * object the guest's number means, and the device is lost rather than
      * guess. An object remembered nowhere is refused when the guest names it. */
-    if (handles_.remember(kind, object) == Status::conflict) lost_ = true;
+    if (hold(kind, object) == Status::conflict) lost_ = true;
     /* The first context is the one a shared object is opened into: it is the
      * one created naming this backend's GL context, so it is the only one
      * clCreateFromGLBuffer would take (feature 053, T019). */
@@ -468,18 +483,47 @@ void OpenClBackend::made(clproto::HandleKind kind, void *object)
 void OpenClBackend::retained(clproto::HandleKind kind, void *object)
 {
     AV_SCOPE("OpenClBackend::retained");
-    handles_.retain(kind, object);
+    handles_.retain(number_of(object), kind);
 }
 
 void OpenClBackend::released(clproto::HandleKind kind, void *object)
 {
     AV_SCOPE("OpenClBackend::released");
-    handles_.release(kind, object);
+    const bool last = handles_.release(number_of(object), kind);
     /* What was made for a GL object's cl_mem goes with the guest's last
      * reference: the host's OpenCL holds what it imported itself. */
-    if (kind == clproto::HandleKind::mem && gl_ != nullptr &&
-        handles_.resolve(kind, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(object))) == nullptr)
-        gl_->forget(static_cast<cl_mem>(object));
+    if (last && kind == clproto::HandleKind::mem && gl_ != nullptr) gl_->forget(static_cast<cl_mem>(object));
+}
+
+Status OpenClBackend::hold(clproto::HandleKind kind, void *object)
+{
+    AV_SCOPE("OpenClBackend::hold");
+    if (object == nullptr) return Status::ok;
+    clproto::HandleKind held = kind;
+    if (handles_.find_any(number_of(object), held) != nullptr) return held == kind ? Status::ok : Status::conflict;
+    return handles_.remember(number_of(object), kind, 0u, object);
+}
+
+/* What the ICD answers changes nothing: the context is gone either way, and
+ * there is nobody left to tell. */
+void OpenClBackend::let_go(clproto::HandleKind kind, void *object, uint32_t times)
+{
+    AV_SCOPE("OpenClBackend::let_go");
+    for (uint32_t n = 0u; n < times; n++) {
+        switch (kind) {
+        case clproto::HandleKind::event: static_cast<void>(on_clReleaseEvent(static_cast<cl_event>(object))); break;
+        case clproto::HandleKind::kernel: static_cast<void>(on_clReleaseKernel(static_cast<cl_kernel>(object))); break;
+        case clproto::HandleKind::program: static_cast<void>(on_clReleaseProgram(static_cast<cl_program>(object))); break;
+        case clproto::HandleKind::sampler: static_cast<void>(on_clReleaseSampler(static_cast<cl_sampler>(object))); break;
+        case clproto::HandleKind::mem: static_cast<void>(on_clReleaseMemObject(static_cast<cl_mem>(object))); break;
+        case clproto::HandleKind::command_queue:
+            static_cast<void>(on_clReleaseCommandQueue(static_cast<cl_command_queue>(object)));
+            break;
+        case clproto::HandleKind::context: static_cast<void>(on_clReleaseContext(static_cast<cl_context>(object))); break;
+        case clproto::HandleKind::device: static_cast<void>(on_clReleaseDevice(static_cast<cl_device_id>(object))); break;
+        case clproto::HandleKind::platform: return;
+        }
+    }
 }
 
 cl_int OpenClBackend::on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms)
@@ -543,7 +587,10 @@ void OpenClBackend::shut_down()
     /* The module kept is of a program the guest may have released already;
      * its last reference goes with the guest's objects. */
     il_.forget();
-    handles_.release_all(*this);
+    handles_.release_all(release_order, sizeof release_order / sizeof release_order[0],
+                         [this](uint64_t, clproto::HandleKind kind, void *object, uint32_t times) {
+                             let_go(kind, object, times);
+                         });
     /* Before the ranges go: a release may free an allocation, and nothing
      * afterwards may resolve one. */
     svm_.forget_all();
@@ -993,11 +1040,11 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
     /* Named in the guest's commands from now on, as any cl_mem the host made
      * is: one the registry did not hold would resolve to nothing in every
      * enqueue that names it. */
-    if (!taken || handles_.remember(clproto::HandleKind::mem, named) != Status::ok) { AV_UNTESTABLE("the acquire above, and a table that cannot grow");
+    if (!taken || hold(clproto::HandleKind::mem, named) != Status::ok) { AV_UNTESTABLE("the acquire above, and a table that cannot grow");
         /* An image holds the buffer's one reference: letting it go lets both
          * go. */
         cl_mem const held = named != nullptr ? named : shared;
-        handles_.release(clproto::HandleKind::mem, held);
+        static_cast<void>(handles_.release(number_of(held), clproto::HandleKind::mem));
         static_cast<void>(::clReleaseMemObject(held));
         buffers_.destroy(memory, buffer);
         return false;
@@ -1050,7 +1097,7 @@ void OpenClBackend::release_object(uint32_t, uint64_t wire_handle, uint64_t deta
     /* The queue is the import's own and outlives every row it made, so a row
      * to give back is a queue to give it back on. */
     cl_mem const named = reinterpret_cast<cl_mem>(wire_handle);
-    handles_.release(clproto::HandleKind::mem, named);
+    static_cast<void>(handles_.release(number_of(named), clproto::HandleKind::mem));
     /* An image's turn was taken on the buffer under it, which the image
      * holds: the buffer is what is given back, and the image let go first. */
     cl_mem shared = named;
