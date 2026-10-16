@@ -8,6 +8,8 @@
 #ifndef AV_ICD_POLL_PAUSE_HPP
 #define AV_ICD_POLL_PAUSE_HPP
 
+#include "guest/transport/counter_spin.hpp"
+
 #include <stdint.h>
 
 namespace av {
@@ -18,25 +20,24 @@ namespace av::icd {
 
 class PollPause {
 public:
-    /* How long a wait asks back to back: a second's fraction, 1 ms. */
-    static constexpr uint64_t spin_per_second = 1000u;
+    /* How long a wait asks back to back, in microseconds. */
+    static constexpr uint64_t spin_us = 1000u;
 
-    /* A wait starting now. */
+    /* A wait, whose first millisecond is counted from its first pause. */
     explicit PollPause(Kmt &kmt);
     PollPause(const PollPause &) = delete;
     PollPause &operator=(const PollPause &) = delete;
 
     /* Still within the first millisecond, on a counter that measures. */
-    bool spinning() const;
+    bool spinning();
     /* A brief sleep. */
     void rest();
     /* Nothing while spinning, a rest after. */
     void between();
 
 private:
-    Kmt     &kmt_;
-    uint64_t frequency_;
-    uint64_t started_;
+    Kmt        &kmt_;
+    CounterSpin spin_;
 };
 
 }  // namespace av::icd

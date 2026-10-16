@@ -236,6 +236,15 @@ private:
     static constexpr uint32_t dma_index   = 1u;
     /* The NTSTATUS a kernel wait that ran out its bound leaves in last_code(). */
     static constexpr uint32_t wait_timed_out = 0xC00000B5u;
+    /* How long each of the transport's waits spins on the counter before it
+     * gives up or sleeps (CounterSpin), in microseconds; each wait says why.
+     * A GPU wait of a few milliseconds is spun out: a sleep costs a timer
+     * tick. */
+    static constexpr uint64_t reply_spin_us = 1000u;
+    static constexpr uint64_t fence_spin_us = 1000u;
+    static constexpr uint64_t drain_spin_us = 2000u;
+    static constexpr uint64_t ring_spin_us = 50000u;
+    static constexpr uint64_t gpu_spin_us = 20000u;
 
     /* Whether the record can carry `options` for this sub-API and order. */
     bool                 record_carries(const GlContextOptions &options) const;

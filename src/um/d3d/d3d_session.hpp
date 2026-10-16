@@ -92,6 +92,8 @@ public:
     /* What the transport lends bulk data from. */
     ClientBlobArena       &blobs();
     KmtTransport          &transport();
+    /* The Kmt the session was opened through. */
+    Kmt                   &kmt() const;
     /* The deferred contexts of the session's Direct3D 11 devices. */
     ObjectPool<d3d11::D3d11Device> &contexts();
     /* The slices CPU-written buffers live in, when the host draws them in

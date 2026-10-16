@@ -13,16 +13,20 @@
 #ifndef AV_UM_PAGING_QUEUE_HPP
 #define AV_UM_PAGING_QUEUE_HPP
 
-#include "um/common/performance_clock.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 
 #include <stdint.h>
+
+namespace av {
+class Kmt;
+}  // namespace av
 
 namespace av::d3d11 {
 
 class PagingQueue {
 public:
-    PagingQueue(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device);
+    /* Its patience is timed on `kmt`'s counter. */
+    PagingQueue(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device, const Kmt &kmt);
     ~PagingQueue();
     PagingQueue(const PagingQueue &) = delete;
     PagingQueue &operator=(const PagingQueue &) = delete;
@@ -37,7 +41,7 @@ private:
 
     const D3DDDI_DEVICECALLBACKS &kernel_;
     HANDLE                        device_;
-    PerformanceClock              clock_;
+    const Kmt                    &kmt_;
     D3DKMT_HANDLE                 queue_;
     const volatile uint64_t      *fence_;
 };

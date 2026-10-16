@@ -225,6 +225,12 @@ KmtTransport &D3dSession::transport()
     return channel_.transport();
 }
 
+Kmt &D3dSession::kmt() const
+{
+    AV_SCOPE("D3dSession::kmt");
+    return connection_.kmt();
+}
+
 ObjectPool<d3d11::D3d11Device> &D3dSession::contexts()
 {
     AV_SCOPE("D3dSession::contexts");

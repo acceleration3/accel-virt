@@ -56,7 +56,7 @@ D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, LogSink &l
                        d3d::UmdAdapter &adapter, d3d::D3dCallTrace &trace)
     : session_(session), memory_(memory), log_(log), lines_(memory, log, "avumd: "), refused_(lines_), removal_(), caps_(caps), adapter_(adapter), lock_(), channel_(),
       follower_(), resources_(memory), queries_(memory), blocks_(memory), recording_(nullptr), batch_(), shadow_(),
-      callbacks_{}, kernel_(), allocations_(kernel_, lines_), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
+      callbacks_{}, kernel_(), allocations_(kernel_, lines_, session_.kmt()), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
       user_index_bytes_(0u), bound_indices_(0u), vertex_ring_{}, index16_ring_{}, index32_ring_{},
       readback_(nullptr), readback_bytes_(0u), trace_(trace), context_number_(trace.number_context()), clock_(),

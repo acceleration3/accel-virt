@@ -17,8 +17,8 @@ constexpr uint32_t faulted_flag = 1u;
 }  // namespace
 
 HostWatch::HostWatch(Kmt &kmt, const TransportRing &ring)
-    : kmt_(kmt), ring_(ring), page_(nullptr), head_(0u), completed_(0u), progress_(0u), beat_(0u), started_(0u),
-      last_moved_(0u), now_(0u), frequency_(0u), timing_(false)
+    : kmt_(kmt), ring_(ring), page_(nullptr), head_(0u), completed_(0u), progress_(0u), beat_(0u), last_moved_(0u),
+      now_(0u), timing_(false)
 {
     AV_SCOPE("HostWatch::HostWatch");
 }
@@ -94,33 +94,21 @@ bool HostWatch::keeps_waiting()
 {
     AV_SCOPE("HostWatch::keeps_waiting");
     if (faulted()) return false;
-    now_ = kmt_.performance_counter(frequency_);
+    uint64_t frequency = 0u;
+    now_ = kmt_.performance_counter(frequency);
     if (!timing_) {
         timing_ = true;
-        started_ = now_;
         last_moved_ = now_;
     }
     if (moved()) last_moved_ = now_;
-    return now_ - last_moved_ < frequency_ * silence_seconds;
-}
-
-uint64_t HostWatch::elapsed() const
-{
-    AV_SCOPE("HostWatch::elapsed");
-    return now_ - started_;
-}
-
-uint64_t HostWatch::frequency() const
-{
-    AV_SCOPE("HostWatch::frequency");
-    return frequency_;
+    return now_ - last_moved_ < frequency * silence_seconds;
 }
 
 /* Time read from one counter only goes forward. */
 bool HostWatch::invariants_hold() const
 {
     AV_SCOPE("HostWatch::invariants_hold");
-    return started_ <= last_moved_ && last_moved_ <= now_;
+    return last_moved_ <= now_;
 }
 
 }  // namespace av

@@ -51,11 +51,6 @@ public:
     /* Whether the wait goes on: no once the device faulted the context, or
      * once nothing it publishes has moved for silence_seconds. */
     bool     keeps_waiting();
-    /* Performance-counter ticks from the first look to the last, and how many
-     * make a second. */
-    uint64_t elapsed() const;
-    uint64_t frequency() const;
-
     bool invariants_hold() const;
 
 private:
@@ -71,10 +66,8 @@ private:
     uint64_t             completed_;
     uint64_t             progress_;
     uint64_t             beat_;
-    uint64_t             started_;
     uint64_t             last_moved_;
     uint64_t             now_;
-    uint64_t             frequency_;
     /* Whether this wait has read the clock yet. */
     bool                 timing_;
 

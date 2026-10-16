@@ -7,6 +7,7 @@
 #include "proto/escape/wake_event_record.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "guest/kmt/kmt.hpp"
+#include "guest/transport/counter_spin.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/publish_gate.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
@@ -596,11 +597,8 @@ bool KmtTransport::room_for_fence()
     AV_SCOPE("KmtTransport::room_for_fence");
     retire_consumed();
     if (!fences_.full()) return true;
-    constexpr uint64_t spins_per_second = 1000u;
-    uint64_t           frequency = 0u;
-    const uint64_t     started = connection_.kmt().performance_counter(frequency);
-    const uint64_t     budget = frequency / spins_per_second;
-    while (connection_.kmt().performance_counter(frequency) - started < budget) {
+    CounterSpin spin(connection_.kmt(), fence_spin_us);
+    while (spin.lasts()) {
         spin_once();
         retire_consumed();
         if (!fences_.full()) return true;
@@ -831,16 +829,12 @@ void KmtTransport::spin_once() const
 bool KmtTransport::replied_within_spin(uint64_t fence)
 {
     AV_SCOPE("KmtTransport::replied_within_spin");
-    constexpr uint64_t spins_per_second = 1000u;
-    uint64_t           frequency = 0u;
-    const uint64_t     started = connection_.kmt().performance_counter(frequency);
-    const uint64_t     budget = frequency / spins_per_second;
+    CounterSpin spin(connection_.kmt(), reply_spin_us);
     for (;;) {
         WireReader   probe(nullptr, 0u);
         const Status read = reply_.read(fence, probe);
         if (read == Status::ok || read == Status::too_large) return true;
-        uint64_t unused = 0u;
-        if (connection_.kmt().performance_counter(unused) - started >= budget) return false;
+        if (!spin.lasts()) return false;
         spin_once();
     }
 }
@@ -851,14 +845,10 @@ bool KmtTransport::replied_within_spin(uint64_t fence)
 bool KmtTransport::room_within_spin(uint64_t span)
 {
     AV_SCOPE("KmtTransport::room_within_spin");
-    constexpr uint64_t spins_per_second = 20u;
-    uint64_t           frequency = 0u;
-    const uint64_t     started = connection_.kmt().performance_counter(frequency);
-    const uint64_t     budget = frequency / spins_per_second;
+    CounterSpin spin(connection_.kmt(), ring_spin_us);
     for (;;) {
         if (ring_.free_space() >= span) return true;
-        uint64_t unused = 0u;
-        if (connection_.kmt().performance_counter(unused) - started >= budget) return false;
+        if (!spin.lasts()) return false;
         spin_once();
     }
 }
@@ -869,14 +859,12 @@ bool KmtTransport::room_within_spin(uint64_t span)
 template <typename Arrived> bool KmtTransport::arrives_eventually(Arrived arrived)
 {
     AV_SCOPE("KmtTransport::arrives_eventually");
-    /* Spinning, as a GPU wait of a few milliseconds usually is; a sleep
-     * costs a timer tick. */
-    constexpr uint64_t spins_per_second = 50u;
     watch_.start();
+    CounterSpin spin(connection_.kmt(), gpu_spin_us);
     for (;;) {
         if (arrived()) return true;
         if (!watch_.keeps_waiting()) return false;
-        if (watch_.elapsed() < watch_.frequency() / spins_per_second) spin_once();
+        if (spin.lasts()) spin_once();
         else connection_.kmt().sleep_briefly();
     }
 }
@@ -884,14 +872,10 @@ template <typename Arrived> bool KmtTransport::arrives_eventually(Arrived arrive
 bool KmtTransport::consumed_within_spin()
 {
     AV_SCOPE("KmtTransport::consumed_within_spin");
-    constexpr uint64_t spins_per_second = 500u;
-    uint64_t           frequency = 0u;
-    const uint64_t     started = connection_.kmt().performance_counter(frequency);
-    const uint64_t     budget = frequency / spins_per_second;
+    CounterSpin spin(connection_.kmt(), drain_spin_us);
     for (;;) {
         if (ring_.head() == ring_.tail()) return true;
-        uint64_t unused = 0u;
-        if (connection_.kmt().performance_counter(unused) - started >= budget) return false;
+        if (!spin.lasts()) return false;
         spin_once();
     }
 }

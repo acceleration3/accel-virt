@@ -12,6 +12,7 @@
 
 namespace av {
 class KeyedLog;
+class Kmt;
 }  // namespace av
 
 namespace av::d3d {
@@ -21,7 +22,8 @@ class KernelSurface;
 
 class PresentedAllocations {
 public:
-    PresentedAllocations(KernelDevice &kernel, KeyedLog &lines);
+    /* A paging queue's patience is timed on `kmt`'s counter. */
+    PresentedAllocations(KernelDevice &kernel, KeyedLog &lines, const Kmt &kmt);
     ~PresentedAllocations();
     PresentedAllocations(const PresentedAllocations &) = delete;
     PresentedAllocations &operator=(const PresentedAllocations &) = delete;
@@ -39,6 +41,7 @@ public:
 private:
     KernelDevice                      &kernel_;
     KeyedLog                          &lines_;
+    const Kmt                         &kmt_;
     /* Opened at the first allocation, once the kernel device is bound. */
     ObjectStorage<d3d11::PagingQueue> paging_;
 };
