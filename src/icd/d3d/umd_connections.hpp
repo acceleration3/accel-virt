@@ -6,6 +6,7 @@
 #ifndef AV_D3D_UMD_CONNECTIONS_HPP
 #define AV_D3D_UMD_CONNECTIONS_HPP
 
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "icd/d3d/umd_connection.hpp"
@@ -24,7 +25,7 @@ struct UmdConnectionsProbe;
 class UmdConnections {
 public:
     /* As many adapters as the drivers keep sessions for (D3d12Driver). */
-    static constexpr uint32_t max_adapters = 8u;
+    static constexpr uint32_t max_adapters = AvgpuAdapters::max_adapters;
 
     explicit UmdConnections(Kmt &kmt);
     ~UmdConnections();

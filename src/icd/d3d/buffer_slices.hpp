@@ -15,11 +15,12 @@
  * (RangeTable) and given back whole. Retired slices wait in order of their
  * tags, which never decrease, so the oldest is the first to come back.
  *
- * Its bookkeeping - each class's free stack and the retired queue, some
- * 2 MiB - is memory apart from the store, the session arena's: kept in the
- * object, every session avumd can hold carried it in the DLL's image, 48 MiB
- * of it, and kept in the store it would be read through a write-combined
- * mapping, which reads uncached.
+ * Its bookkeeping - each class's free stack and the retired queue - grows
+ * with the slices in use from the process's memory, apart from the store,
+ * which is read through a write-combined mapping that reads uncached. Only
+ * the store's bytes bound how many slices there are. Room in that
+ * bookkeeping is made before a slice is handed out, so neither retiring nor
+ * giving one back can fail.
  *
  * Every device of the session takes slices, from whichever thread the
  * application maps on, so every call is made under the lock this is given.
@@ -29,9 +30,14 @@
 #define AV_D3D_BUFFER_SLICES_HPP
 
 #include "core/support/status.hpp"
+#include "core/support/growable_array.hpp"
 #include "icd/common/range_table.hpp"
 
 #include <stdint.h>
+
+namespace av {
+class BlockSource;
+}  // namespace av
 
 namespace av::icd {
 class ThreadLock;
@@ -57,32 +63,23 @@ public:
     static constexpr uint64_t block_bytes = uint64_t{256} * 1024u;
     /* A large slice is whole 64 KiB pages, which the host imports. */
     static constexpr uint64_t large_alignment = uint64_t{64} * 1024u;
-    /* Slices of one small class that may exist, free or not: a class past it
-     * waits for its own to come back rather than carve more. A game renames
-     * a constant buffer a draw, thousands a frame, while the GPU runs a frame
-     * behind: fewer than that in flight would stall it every frame. */
-    static constexpr uint32_t max_per_class = 16384u;
-    static constexpr uint32_t max_retired = 32768u;
-    /* Large slices and small classes' blocks: 1536 fill 96 MiB at the least. */
-    static constexpr uint32_t max_ranges = 1024u;
-
-    BufferSlices(GpuTimeline &timeline, icd::ThreadLock &lock);
+    BufferSlices(BlockSource &memory, GpuTimeline &timeline, icd::ThreadLock &lock);
     BufferSlices(const BufferSlices &) = delete;
     BufferSlices &operator=(const BufferSlices &) = delete;
 
     /* Takes slices from a store of `bytes`, rounded down to
-     * large_alignment, from now on, forgetting every slice before, with its
-     * bookkeeping the metadata_bytes at `books`. No books, or a store too
-     * small for one large slice, holds no slices. */
-    void                 take(uint8_t *books, uint64_t bytes);
+     * large_alignment, from now on, forgetting every slice before. A store
+     * too small for one large slice holds no slices. */
+    void                 take(uint64_t bytes);
     /* A slice of at least `bytes`, waiting for retired ones to come back when
      * the arena has no room. invalid_parameter for no bytes; no_space when
-     * none fits even with every retired slice back; invalid_state when the
-     * timeline cannot be waited on. */
+     * none fits even with every retired slice back; no_memory when the
+     * bookkeeping cannot grow; invalid_state when the timeline cannot be
+     * waited on. */
     [[nodiscard]] Status take_slice(uint64_t bytes, Slice &slice);
     /* `slice` is no longer what a buffer is, but what is recorded so far may
      * still read it: it is free once the GPU finishes the batch being
-     * recorded. A full queue of retired slices first waits for its oldest. */
+     * recorded. */
     void                 retire(const Slice &slice);
     /* `slice` is free now: nothing was recorded that reads it. */
     void                 give_back(const Slice &slice);
@@ -93,9 +90,9 @@ public:
     uint64_t begin() const;
     uint64_t end() const;
 
-    /* Every free and carved count within its class's bound, the retired
-     * queue within its own and in order of tags, and the arena's ranges
-     * sound. */
+    /* Every free stack within what its class carved and inside the store,
+     * the retired queue in order of tags with room for every slice handed
+     * out, and the arena's ranges sound. */
     bool invariants_hold() const;
 
 private:
@@ -107,21 +104,17 @@ private:
 
     static constexpr uint32_t no_class = ~0u;
 
-public:
-    /* The bookkeeping take() is given, in whole pages. */
-    static constexpr uint64_t metadata_bytes =
-        (uint64_t{small_classes} * max_per_class * sizeof(uint64_t) + uint64_t{max_retired} * sizeof(Retired) +
-         large_alignment - 1u) / large_alignment * large_alignment;
-
-private:
-
     /* The small class of `bytes`, or no_class for a large slice. */
     uint32_t           class_of(uint64_t bytes) const;
     uint64_t           class_bytes(uint32_t which) const;
     [[nodiscard]] Status take_once(uint64_t bytes, Slice &slice);
-    /* Carves a block for class `which`: no_space when the arena has none or
-     * the class is at max_per_class. */
+    /* Carves a block for class `which`: no_space when the arena has none,
+     * no_memory when its free stack cannot grow to hold it. */
     [[nodiscard]] Status carve(uint32_t which);
+    /* Room in the retired queue for every slice handed out and one more. */
+    [[nodiscard]] Status make_retired_room();
+    /* The queue's reclaimed head dropped once it is half of it. */
+    void               compact_retired();
     /* Every retired slice the GPU is done with, free. */
     void               reclaim();
     void               free_slice(uint64_t offset, uint64_t bytes);
@@ -129,17 +122,17 @@ private:
      * there is none or the wait failed. */
     bool               wait_oldest();
 
-    GpuTimeline                  &timeline_;
-    icd::ThreadLock              &lock_;
-    icd::RangeTable<max_ranges>   ranges_;
-    /* Each class's free stack, and the retired queue, in the span's head. */
-    uint64_t                     *free_[small_classes];
-    uint32_t                      free_count_[small_classes];
-    uint32_t                      carved_[small_classes];
-    Retired                      *retired_;
-    uint32_t                      retired_first_;
-    uint32_t                      retired_count_;
-    bool                          lost_;
+    GpuTimeline             &timeline_;
+    icd::ThreadLock         &lock_;
+    icd::RangeTable          ranges_;
+    GrowableArray<uint64_t>  free_[small_classes];
+    uint32_t                 carved_[small_classes];
+    /* Oldest first from retired_first_; those before it are reclaimed. */
+    GrowableArray<Retired>   retired_;
+    uint32_t                 retired_first_;
+    /* Slices handed out and not yet retired or given back. */
+    uint32_t                 outstanding_;
+    bool                     lost_;
 
     friend struct BufferSlicesProbe;
 };

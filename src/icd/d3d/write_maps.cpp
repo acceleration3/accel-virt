@@ -4,86 +4,53 @@
 
 namespace av::d3d {
 
-WriteMaps::WriteMaps() : resources_{}, subresources_{}, flags_{}, count_(0u)
+WriteMaps::WriteMaps(BlockSource &memory) : flags_(memory, Pool::paged)
 {
     AV_SCOPE("WriteMaps::WriteMaps");
 }
 
-uint32_t WriteMaps::row_of(uint32_t resource, uint32_t subresource) const
+uint64_t WriteMaps::key_of(uint32_t resource, uint32_t subresource) const
 {
-    AV_SCOPE("WriteMaps::row_of");
-    for (uint32_t row = 0u; row < count_; row++)
-        if (resources_[row] == resource && subresources_[row] == subresource) return row;
-    return capacity;
+    AV_SCOPE("WriteMaps::key_of");
+    return uint64_t{resource} << 32u | subresource;
 }
 
-bool WriteMaps::open(uint32_t resource, uint32_t subresource, uint32_t flags)
+Status WriteMaps::open(uint32_t resource, uint32_t subresource, uint32_t flags)
 {
     AV_SCOPE("WriteMaps::open");
-    if (resource == 0u) return false;
-    uint32_t row = row_of(resource, subresource);
-    if (row == capacity) {
-        if (count_ == capacity) return false;
-        row = count_++;
-        resources_[row] = resource;
-        subresources_[row] = subresource;
-    }
-    flags_[row] = flags;
-    return true;
-}
-
-void WriteMaps::drop(uint32_t row)
-{
-    AV_SCOPE("WriteMaps::drop");
-    count_--;
-    resources_[row] = resources_[count_];
-    subresources_[row] = subresources_[count_];
-    flags_[row] = flags_[count_];
-    resources_[count_] = 0u;
-    subresources_[count_] = 0u;
-    flags_[count_] = 0u;
+    if (resource == 0u) return Status::invalid_parameter;
+    uint32_t *const open = flags_.find(key_of(resource, subresource));
+    uint32_t        slot = 0u;
+    if (open == nullptr) return flags_.insert(key_of(resource, subresource), flags, slot);
+    *open = flags;
+    return Status::ok;
 }
 
 bool WriteMaps::close(uint32_t resource, uint32_t subresource, uint32_t &flags)
 {
     AV_SCOPE("WriteMaps::close");
     flags = 0u;
-    const uint32_t row = row_of(resource, subresource);
-    if (row == capacity) return false;
-    flags = flags_[row];
-    drop(row);
-    return true;
+    return flags_.take(key_of(resource, subresource), flags);
 }
 
 void WriteMaps::forget(uint32_t resource)
 {
     AV_SCOPE("WriteMaps::forget");
-    for (uint32_t row = 0u; row < count_;) {
-        if (resources_[row] == resource) drop(row);
-        else row++;
-    }
+    flags_.erase_if([resource](uint64_t key, uint32_t &) { return key >> 32u == resource; });
 }
 
 uint32_t WriteMaps::count() const
 {
     AV_SCOPE("WriteMaps::count");
-    return count_;
+    return flags_.count();
 }
 
 bool WriteMaps::invariants_hold() const
 {
     AV_SCOPE("WriteMaps::invariants_hold");
-    if (count_ > capacity) return false;
-    for (uint32_t row = 0u; row < capacity; row++) {
-        if (row >= count_) {
-            if (resources_[row] != 0u || subresources_[row] != 0u || flags_[row] != 0u) return false;
-            continue;
-        }
-        if (resources_[row] == 0u) return false;
-        for (uint32_t earlier = 0u; earlier < row; earlier++)
-            if (resources_[earlier] == resources_[row] && subresources_[earlier] == subresources_[row]) return false;
-    }
-    return true;
+    bool named = true;
+    flags_.for_each([&named](uint64_t key, const uint32_t &) { named = named && key >> 32u != 0u; });
+    return named && flags_.invariants_hold();
 }
 
 }  // namespace av::d3d

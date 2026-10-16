@@ -73,7 +73,8 @@ d3d::Hresult D3d9Driver::build(d3d::UmdAdapter &adapter, void *create, uint32_t 
     if (slot == AdapterSessions<D3d9HostCaps>::none) return d3d::hr_fail;
     auto &arguments = *static_cast<D3DDDIARG_CREATEDEVICE *>(create);
     D3d9Device *device = nullptr;
-    if (devices_.create(device, adapters_.session(slot), memory_, log_, adapters_.caps(slot), adapter) != Status::ok)
+    d3d::D3dSession *const joined = adapters_.session(slot);
+    if (joined == nullptr || devices_.create(device, *joined, memory_, log_, adapters_.caps(slot), adapter) != Status::ok)
         return d3d::hr_out_of_memory;
     const HRESULT opened = device->initialize(kmt_adapter, arguments);
     if (FAILED(opened)) {

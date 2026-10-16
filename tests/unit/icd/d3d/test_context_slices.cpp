@@ -8,6 +8,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/icd/scripted_gpu_timeline.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "icd/d3d/buffer_slices.hpp"
 #include "icd/d3d/context_slices.hpp"
 
@@ -23,15 +24,14 @@ using av::d3d::ContextSlices;
 namespace {
 
 constexpr std::uint64_t page = BufferSlices::large_alignment;
-alignas(4096) std::uint8_t books[BufferSlices::metadata_bytes];
 
 /* A session's slices over a store of 16 pages, an immediate context that owns
  * them and a deferred one that does not. */
 class Rig {
 public:
-    Rig() : lock_(trace_, 'S'), slices_(timeline_, lock_)
+    Rig() : lock_(trace_, 'S'), slices_(platform_, timeline_, lock_)
     {
-        slices_.take(books, 16u * page);
+        slices_.take(16u * page);
         immediate_.own(&slices_);
     }
     BufferSlices        &slices() { return slices_; }
@@ -40,6 +40,7 @@ public:
     ScriptedGpuTimeline &timeline() { return timeline_; }
 
 private:
+    av::MockPlatform    platform_;
     LockTrace           trace_;
     RecordingThreadLock lock_;
     ScriptedGpuTimeline timeline_;

@@ -27,7 +27,7 @@ D3d12Driver::D3d12Driver(BlockSource &memory, Kmt &kmt, LogSink &log)
     AV_SCOPE("D3d12Driver::D3d12Driver");
 }
 
-d3d::D3dSession &D3d12Driver::session(uint32_t slot)
+d3d::D3dSession *D3d12Driver::session(uint32_t slot)
 {
     AV_SCOPE("D3d12Driver::session");
     return adapters_.session(slot);
@@ -55,8 +55,8 @@ d3d::Hresult D3d12Driver::build(d3d::D3d12ddiargCreateDeviceRecord &create, uint
     if (slot == AdapterSessions<D3d12HostCaps>::none) return d3d::hr_fail;
     const auto  &arguments = *reinterpret_cast<const D3D12DDIARG_CREATEDEVICE_0109 *>(&create);
     D3d12Device *device = nullptr;
-    d3d::D3dSession &joined = session(slot);
-    if (devices_.create(device, joined, memory_, log_, adapters_.caps(slot), list_table_) != Status::ok)
+    d3d::D3dSession *const joined = session(slot);
+    if (joined == nullptr || devices_.create(device, *joined, memory_, log_, adapters_.caps(slot), list_table_) != Status::ok)
         return d3d::hr_out_of_memory;
     const HRESULT opened = device->initialize(kmt_adapter, arguments);
     if (FAILED(opened)) {

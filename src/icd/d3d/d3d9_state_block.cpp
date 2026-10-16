@@ -25,12 +25,12 @@ D3d9StateBlock::~D3d9StateBlock()
     if (entries_ != nullptr) memory_.release(entries_);
 }
 
-/* Doubling, up to max_entries: the entries are copied as they are, since an
+/* Doubling, as far as memory and a 32-bit count go: the entries are copied as they are, since an
  * entry is a value with no pointer into the block. */
 bool D3d9StateBlock::grow()
 {
     AV_SCOPE("D3d9StateBlock::grow");
-    if (capacity_ >= max_entries) return false;
+    if (capacity_ > 0x7FFFFFFFu / sizeof(D3d9StateEntry)) return false;
     const uint32_t wanted = capacity_ == 0u ? first_capacity : capacity_ * 2u;
     auto *const    larger = static_cast<D3d9StateEntry *>(memory_.allocate(wanted * sizeof(D3d9StateEntry), Pool::paged));
     if (larger == nullptr) return false;
@@ -82,7 +82,7 @@ const D3d9StateEntry &D3d9StateBlock::at(uint32_t index) const
 bool D3d9StateBlock::invariants_hold() const
 {
     AV_SCOPE("D3d9StateBlock::invariants_hold");
-    if (count_ > capacity_ || capacity_ > max_entries || (capacity_ != 0u) != (entries_ != nullptr)) return false;
+    if (count_ > capacity_ ||  (capacity_ != 0u) != (entries_ != nullptr)) return false;
     for (uint32_t one = 0u; one < count_; one++)
         for (uint32_t other = one + 1u; other < count_; other++)
             if (entries_[one].names(entries_[other])) return false;

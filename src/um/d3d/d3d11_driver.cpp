@@ -51,7 +51,10 @@ d3d::Hresult D3d11Driver::build(d3d::UmdDevice &, d3d::D3d10ddiargCreateDeviceRe
     const auto &arguments = *reinterpret_cast<const D3D10DDIARG_CREATEDEVICE *>(&create);
     if (arguments.Interface != D3DWDDM3_2_DDI_INTERFACE_VERSION) return d3d::hr_no_interface;
     D3d11Device *device = nullptr;
-    if (devices_.create(device, adapters_.session(slot), memory_, log_, adapters_.caps(slot), trace_, rows_) != Status::ok) return d3d::hr_out_of_memory;
+    d3d::D3dSession *const joined = adapters_.session(slot);
+    if (joined == nullptr ||
+        devices_.create(device, *joined, memory_, log_, adapters_.caps(slot), trace_, rows_) != Status::ok)
+        return d3d::hr_out_of_memory;
     const HRESULT opened = device->initialize(kmt_adapter, arguments);
     if (FAILED(opened)) {
         static_cast<void>(devices_.destroy(device));

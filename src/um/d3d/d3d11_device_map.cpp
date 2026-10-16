@@ -59,8 +59,8 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
                                                                      : 0u;
     /* Refused before the application is handed memory: a write the unmap
      * could not find would never reach the host. */
-    if (type != D3D10_DDI_MAP_READ && !maps_.open(resource.id, subresource, flags)) {
-        lines_.once("a map past every subresource a device can hold open for writing");
+    if (type != D3D10_DDI_MAP_READ && maps_.open(resource.id, subresource, flags) != Status::ok) {
+        lines_.once("a map the device had no memory to hold open for writing");
         set_error(E_OUTOFMEMORY);
         return;
     }

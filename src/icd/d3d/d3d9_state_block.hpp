@@ -26,9 +26,6 @@ class D3d9StateShadow;
 
 class D3d9StateBlock {
 public:
-    /* What one block may hold: everything a D3DSBT_ALL block names, twice over. */
-    static constexpr uint32_t max_entries = 8192u;
-
     explicit D3d9StateBlock(BlockSource &memory);
     ~D3d9StateBlock();
     D3d9StateBlock(const D3d9StateBlock &) = delete;

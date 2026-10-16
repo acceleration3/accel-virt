@@ -112,19 +112,17 @@ private:
     static constexpr uint32_t reply_bytes = 64u * 1024u;
     static constexpr size_t   staging_bytes = 512u * 1024u;
     static constexpr size_t   batch_bytes = 1u << 20u;
-    /* What the blob arena is lent: the rest is the slice store's bookkeeping
-     * and the query results. */
-    static constexpr uint64_t lent_bytes = uint64_t{24} << 20u;
 
     HRESULT open(uint32_t adapter);
     void    close();
     /* Whether the host draws buffers in place: asked once, of a Direct3D 11
-     * session whose arena has room for the slices' bookkeeping. */
+     * session with an arena. */
     bool    host_has_slices();
     /* The slice store opened and its slices taken, when the host draws in
      * place. */
     void    open_slices();
 
+    BlockSource                    &memory_;
     LogSink                        &log_;
     SrwLock                              lock_;
     GuestConnection                      connection_;

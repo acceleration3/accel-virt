@@ -54,7 +54,7 @@ private:
     static constexpr uint32_t max_adapters = AdapterSessions<D3d12HostCaps>::max_adapters;
 
     /* The slot's session (AdapterSessions) and the heap arena over it. */
-    d3d::D3dSession &session(uint32_t slot);
+    d3d::D3dSession *session(uint32_t slot);
 
     BlockSource               &memory_;
     LogSink                   &log_;

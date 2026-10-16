@@ -16,7 +16,7 @@ namespace av::d3d {
 
 D3dSession::D3dSession(Kmt &kmt, BlockSource &memory, LogSink &log, uint64_t arena_size, uint64_t slice_store_size,
                        uint32_t select_command, uint32_t flush_command)
-    : log_(log), lock_(), connection_(kmt),
+    : memory_(memory), log_(log), lock_(), connection_(kmt),
       channel_(memory, log, "avumd: ",
                icd::ChannelShape(SubApi::d3d, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_size), lock_),
       stream_(), slices_lock_(), timeline_(), slices_(), slice_store_bytes_(slice_store_size), slice_store_(nullptr), query_results_(), contexts_(memory), members_(0u), next_id_(0u),
@@ -88,7 +88,8 @@ HRESULT D3dSession::open(uint32_t adapter)
     static_cast<void>(stream_.construct(channel_.transport()));
     stream_.object().speak_with(select_command_, flush_command_);
     if (channel_.arena_view() != nullptr)
-        query_results_.reserve(channel_.transport().blobs(), channel_.arena_view(), channel_.arena_bytes(), lent_bytes);
+        query_results_.reserve(channel_.transport().blobs(), channel_.arena_view(), channel_.arena_bytes(),
+                               channel_.arena_bytes());
     if (host_has_slices()) open_slices();
     return S_OK;
 }
@@ -97,8 +98,7 @@ HRESULT D3dSession::open(uint32_t adapter)
 bool D3dSession::host_has_slices()
 {
     AV_SCOPE("D3dSession::host_has_slices");
-    if (slice_store_bytes_ == 0u || select_command_ != d3dproto::kCmd_SelectDevice11 || channel_.arena_view() == nullptr ||
-        query_results_.offset() < lent_bytes + BufferSlices::metadata_bytes)
+    if (slice_store_bytes_ == 0u || select_command_ != d3dproto::kCmd_SelectDevice11 || channel_.arena_view() == nullptr)
         return false;
     uint32_t     supported = 0u;
     const bool   asked = d3dproto::av_d3d_QueryBufferSlices11(stream_.object(), &supported);
@@ -121,8 +121,8 @@ void D3dSession::open_slices()
     }
     slice_store_ = store;
     static_cast<void>(timeline_.construct(stream_.object(), channel_.transport(), lock_));
-    static_cast<void>(slices_.construct(timeline_.object(), slices_lock_));
-    slices_.object().take(channel_.arena_view() + lent_bytes, store->bytes());
+    static_cast<void>(slices_.construct(memory_, timeline_.object(), slices_lock_));
+    slices_.object().take(store->bytes());
     DriverLog lines(log_, "avumd: ");
     LogLine(lines).text("dynamic buffers are drawn in place from ").number(store->bytes() >> 20u).text(" MiB").write();
 }
