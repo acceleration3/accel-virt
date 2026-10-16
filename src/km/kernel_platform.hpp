@@ -35,6 +35,8 @@ public:
     void     unmap_pages(uint8_t *view, void *mapping) override;
     Status   map_to_process(uint64_t physical, uint64_t bytes, PageCaching caching, uint64_t &view,
                             void *&mapping) override;
+    Status   lock_process_pages(uint64_t address, uint64_t bytes, void *&locked) override;
+    void     unlock_process_pages(void *locked) override;
     Status   map_pages_to_process(void *pages, uint64_t &view, void *&mapping) override;
     Status   map_pages_to_process_read_only(void *pages, uint64_t &view, void *&mapping) override;
     void     unmap_from_process(void *mapping) override;

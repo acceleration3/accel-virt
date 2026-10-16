@@ -22,6 +22,11 @@ public:
     static constexpr size_t   entry_size = 16u;
     static constexpr uint32_t memory_guest = 1u;          /* VIRTIO_GPU_BLOB_MEM_GUEST */
     static constexpr uint32_t memory_host3d = 2u;         /* VIRTIO_GPU_BLOB_MEM_HOST3D */
+    /* Host GPU memory over guest pages: the pages a process lent, which the
+     * device makes host memory where they are (docs/host-memory.md,
+     * "Application memory"). Created with no entries; RESOURCE_ATTACH_BACKING
+     * then names the pages, in order, a piece at a time. */
+    static constexpr uint32_t memory_host3d_guest = 3u;   /* VIRTIO_GPU_BLOB_MEM_HOST3D_GUEST */
     static constexpr uint32_t flag_mappable = 1u;         /* VIRTIO_GPU_BLOB_FLAG_USE_MAPPABLE */
     static constexpr uint32_t flag_shareable = 2u;
     static constexpr uint32_t flag_cross_device = 4u;

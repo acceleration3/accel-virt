@@ -11,6 +11,8 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
+#include "harness/host/mock_request.hpp"
+#include "device/control/control_request.hpp"
 #include "harness/memory/host_blob_table_probe.hpp"
 #include "proto/resources/host_blob_id.hpp"
 #include "proto/resources/host_memory_request.hpp"
@@ -378,6 +380,35 @@ TEST(host_blob_table_initialize, nothing_is_made_before_the_lock_exists_and_it_i
     CHECK_STATUS(table.create(first, context, upload(), page), Status::ok);
     CHECK(table.invariants_hold()); }
   CHECK_EQ(host.live_mutexes(), 0u); }
+
+/* A blob over lent pages: write-back memory only, laid a piece at a time,
+ * and only a live blob can be laid. */
+TEST(host_blob_table_adopt, lays_a_live_write_back_blob_over_the_pages_named)
+{ Fixture fixture;
+  fixture.host().add_guest_ram(0x100000u, 0x10000u);
+  const HostMemoryRequest readback(HostMemoryRequest::Kind::readback, 0u);
+  std::uint8_t entries[32u + 16u] = {};
+  const std::uint64_t address = 0x102000u;
+  const std::uint32_t length = 0x1000u;
+  std::memcpy(entries + 32u, &address, sizeof address);
+  std::memcpy(entries + 40u, &length, sizeof length);
+  av::MockRequest     mock(entries, sizeof entries);
+  av::ControlRequest  request(fixture.host(), &mock);
+  CHECK_STATUS(fixture.table().adopt(first, request, 32u, 1u), Status::not_found);
+  CHECK_STATUS(fixture.table().create_over_guest(first, context, readback, page), Status::ok);
+  CHECK_STATUS(fixture.table().adopt(first, request, 32u, 1u), Status::ok);
+  CHECK_EQ(fixture.host().overlaid_bytes(), page);
+  char            bytes[512] = {};
+  av::StateWriter writer(bytes, sizeof bytes);
+  fixture.table().report(writer);
+  CHECK(std::strstr(writer.dump(), "adopted=4096") != nullptr);
+  CHECK_STATUS(fixture.table().release(first), Status::ok);
+  CHECK_EQ(fixture.host().overlaid_bytes(), 0u);
+  /* Memory the library maps write-combined is given back. */
+  fixture.plane().answer_caching(AV_MEMORY_WRITE_COMBINED);
+  CHECK_STATUS(fixture.table().create_over_guest(first, context, readback, page), Status::not_supported);
+  CHECK(!fixture.table().contains(first));
+  CHECK_STATUS(fixture.table().create_over_guest(first - 1u, context, readback, page), Status::not_found); }
 
 TEST(host_blob_table, reports_every_blob_and_where_it_is)
 { Fixture fixture;

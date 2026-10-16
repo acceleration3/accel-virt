@@ -72,6 +72,11 @@ public:
     void     unmap_guest(void *pointer, std::uint64_t length) override;
     Status   reserve_range(std::uint64_t bytes, void *&base) override;
     Status   alias_guest_run(void *run, std::uint64_t bytes, void *at) override;
+    /* As QEMU does: the run's bytes copied into the descriptor's pages, which
+     * are then mapped over the run for real; a run outside every guest
+     * region, or one not whole pages, is refused. Counted until restored. */
+    Status   overlay_guest_run(void *run, std::uint64_t bytes, int fd, std::uint64_t offset) override;
+    Status   restore_guest_run(void *run, std::uint64_t bytes) override;
     void     release_range(void *base, std::uint64_t bytes) override;
     std::uint64_t hostmem_size() override;
     /* Maps the descriptor's pages for real, as QEMU does with MAP_FIXED, so
@@ -221,6 +226,11 @@ public:
     /* The Nth range reservation, or alias of a guest run, from now is refused. */
     void fail_reserve_at(std::uint32_t nth);
     void fail_alias_at(std::uint32_t nth);
+    /* The Nth overlay, or restore, of a guest run from now is refused. */
+    void fail_overlay_at(std::uint32_t nth);
+    void fail_restore_at(std::uint32_t nth);
+    /* Guest pages a dma-buf lies over now. */
+    std::uint64_t overlaid_bytes();
     /* Descriptors the mock handed the device - open_descriptor's, a guest
      * region's duplicate, a renderer's - not yet closed, so a test can say
      * none leaked. A descriptor the device got elsewhere (an executor's
@@ -514,6 +524,9 @@ private:
     Range           ranges_[max_ranges];
     std::uint32_t   fail_reserve_;
     std::uint32_t   fail_alias_;
+    std::uint32_t   fail_overlay_ = 0u;
+    std::uint32_t   fail_restore_ = 0u;
+    std::uint64_t   overlaid_ = 0u;
     int             counted_[max_counted_descriptors];   /* -1 for a free slot */
     RecordingFile   recordings_[max_recordings];
     std::uint32_t   fail_recording_create_;

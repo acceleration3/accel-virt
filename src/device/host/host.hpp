@@ -107,6 +107,16 @@ public:
     [[nodiscard]] virtual Status alias_guest_run(void *run, uint64_t bytes, void *at) = 0;
     /* Any thread. The reserved range and every alias inside it. */
     virtual void                 release_range(void *base, uint64_t bytes) = 0;
+    /* Main loop. The `bytes` of guest RAM at `run` - a direct mapping
+     * map_guest answered, whole pages - become the `bytes` of the dma-buf `fd`
+     * at `offset`, holding what the RAM held, so the guest's pages and the
+     * host GPU's memory are one memory until restored (docs/host-memory.md,
+     * "Application memory"). not_supported for RAM with no file to give it
+     * back from, or a host that cannot map the dma-buf there. */
+    [[nodiscard]] virtual Status overlay_guest_run(void *run, uint64_t bytes, int fd, uint64_t offset) = 0;
+    /* Main loop. The RAM at `run` its file's own pages again, holding what
+     * the overlay held: not_supported when it could not be. */
+    [[nodiscard]] virtual Status restore_guest_run(void *run, uint64_t bytes) = 0;
 
     /* The size of the region host blobs are placed in (the hostmem BAR). */
     virtual uint64_t hostmem_size() = 0;

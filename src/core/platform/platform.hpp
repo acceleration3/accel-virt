@@ -85,6 +85,16 @@ public:
      * `mapping`. no_memory when it cannot be mapped. Passive only. */
     [[nodiscard]] virtual Status map_to_process(uint64_t physical, uint64_t bytes, PageCaching caching,
                                                 uint64_t &view, void *&mapping) = 0;
+    /* The `bytes` (whole pages) of the calling process's memory at `address`
+     * (page-aligned) made resident and locked, so a device may keep their
+     * frames until unlock_process_pages: the pages a process lends the device
+     * (docs/host-memory.md, "Application memory"). Their record, which
+     * read_page_frames reads, in `locked`. invalid_parameter for an empty or
+     * misaligned range, or one the process cannot write; no_memory when the
+     * platform cannot describe it. Passive only. */
+    [[nodiscard]] virtual Status lock_process_pages(uint64_t address, uint64_t bytes, void *&locked) = 0;
+    /* Of a record lock_process_pages answered; from any process. Passive only. */
+    virtual void                 unlock_process_pages(void *locked) = 0;
     /* Every page of `pages`, a record allocate_pages returned, mapped cached
      * into the calling process as map_to_process maps device memory, with the
      * same answers. */

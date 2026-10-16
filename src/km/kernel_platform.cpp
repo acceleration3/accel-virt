@@ -229,6 +229,38 @@ Status KernelPlatform::map_to_process(uint64_t physical, uint64_t bytes, PageCac
  * for as long as the process has the view, whatever the driver has let go of
  * since (see unmap_from_process). A 32-bit process addresses only its low
  * 4 GiB; a zero-bits value past 32 is the mask the view must fit under. */
+/* Probed as the process's own access would be, for writing: a page the
+ * process may not write - or has not got - raises, and is refused, rather
+ * than being locked for a device that will write it. Copy-on-write and
+ * demand-zero pages become the process's own here, so the frames read back
+ * are the ones its view goes on using. */
+Status KernelPlatform::lock_process_pages(uint64_t address, uint64_t bytes, void *&locked)
+{
+    AV_SCOPE("KernelPlatform::lock_process_pages");
+    locked = nullptr;
+    if (address == 0u || bytes == 0u || (address & (PAGE_SIZE - 1u)) != 0u || (bytes & (PAGE_SIZE - 1u)) != 0u ||
+        bytes > MAXULONG - PAGE_SIZE + 1u)
+        return Status::invalid_parameter;
+    PMDL const mdl = IoAllocateMdl(reinterpret_cast<PVOID>(address), static_cast<ULONG>(bytes), FALSE, FALSE, nullptr);
+    if (mdl == nullptr) return Status::no_memory;
+    __try {
+        MmProbeAndLockPages(mdl, UserMode, IoWriteAccess);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        IoFreeMdl(mdl);
+        return Status::invalid_parameter;
+    }
+    locked = mdl;
+    return Status::ok;
+}
+
+void KernelPlatform::unlock_process_pages(void *locked)
+{
+    AV_SCOPE("KernelPlatform::unlock_process_pages");
+    auto *const mdl = static_cast<PMDL>(locked);
+    MmUnlockPages(mdl);
+    IoFreeMdl(mdl);
+}
+
 Status KernelPlatform::map_pages_to_process(void *pages, uint64_t &view, void *&mapping)
 {
     AV_SCOPE("KernelPlatform::map_pages_to_process");

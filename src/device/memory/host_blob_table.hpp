@@ -18,14 +18,17 @@
 #include "device/memory/host_blob.hpp"
 #include "device/memory/host_blob_owners.hpp"
 #include "device/memory/hostmem_space.hpp"
+#include "device/memory/lent_pages.hpp"
 #include "proto/resources/host_blob_id.hpp"
 #include "proto/resources/host_memory_request.hpp"
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace av {
 
 class ContextPlane;
+class ControlRequest;
 class Host;
 class StateWriter;
 struct HostBlobTableProbe;
@@ -49,6 +52,15 @@ public:
      * when the library allocated nothing or the host has no memory to keep
      * the blob in. */
     [[nodiscard]] Status create(uint32_t id, uint32_t context, HostMemoryRequest request, uint64_t size);
+    /* Main loop. create's blob, for laying over guest pages a process lent
+     * (docs/host-memory.md, "Application memory"): the guest's view of those
+     * pages is write-back, so memory the host maps any other way is let go of
+     * again and refused with not_supported. */
+    [[nodiscard]] Status create_over_guest(uint32_t id, uint32_t context, HostMemoryRequest request, uint64_t size);
+    /* Main loop. Blob `id` laid over the next `entries` runs of lent pages
+     * named at `offset` of `request` (HostBlob::adopt); not_found for no blob
+     * `id`. */
+    [[nodiscard]] Status adopt(uint32_t id, ControlRequest &request, size_t offset, uint32_t entries);
     /* Main loop. Placed at `offset` of the hostmem region, and how it is
      * cached there (AV_MEMORY_*) in `caching`. not_found for no blob `id`;
      * invalid_parameter for an offset outside the region, over another
@@ -93,6 +105,8 @@ private:
     Host                            &host_;
     ContextPlane                    *contexts_;
     HostmemSpace                     space_;
+    /* Every guest page a blob lies over, for every blob of the device. */
+    LentPages                        lent_;
     void                            *lock_;
     ObjectPool<HostBlob>             blobs_;
     KeyedSlots<uint32_t, HostBlob *> ids_;

@@ -247,22 +247,72 @@ static void *av_reserve_range(void *opaque, uint64_t size)
     return base == MAP_FAILED ? NULL : base;
 }
 
+/* What the RAM block behind `run` maps from: its file and the offset in it. */
+static int av_ram_file(void *run, uint64_t size, int *fd, off_t *offset)
+{
+    ram_addr_t in_block;
+    RAMBlock *block;
+
+    RCU_READ_LOCK_GUARD();
+    block = qemu_ram_block_from_host(run, false, &in_block);
+    if (!block || (*fd = qemu_ram_get_fd(block)) < 0 || in_block + size > qemu_ram_get_used_length(block)) {
+        return 1;
+    }
+    *offset = (off_t)(qemu_ram_get_fd_offset(block) + in_block);
+    return 0;
+}
+
 /* The same pages again, from the file behind the guest's RAM backend (feature
  * 045, research.md section 7): anonymous RAM has no file to map twice, and a run
  * leaving its block would need a second file. */
 static int av_alias_guest_run(void *opaque, void *run, uint64_t size, void *at)
 {
-    ram_addr_t offset;
-    RAMBlock *block;
     int fd;
+    off_t offset;
 
-    RCU_READ_LOCK_GUARD();
-    block = qemu_ram_block_from_host(run, false, &offset);
-    if (!block || (fd = qemu_ram_get_fd(block)) < 0 || offset + size > qemu_ram_get_used_length(block)) {
+    if (av_ram_file(run, size, &fd, &offset)) {
         return 1;
     }
-    return mmap(at, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd,
-                (off_t)(qemu_ram_get_fd_offset(block) + offset)) == MAP_FAILED;
+    return mmap(at, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, offset) == MAP_FAILED;
+}
+
+/* `size` bytes copied from `run` into a fresh mapping of `fd` at `offset`,
+ * which then replaces the mapping at `run` (MAP_FIXED): KVM follows through
+ * its MMU notifiers, as it does for av_place_in_hostmem. */
+static int av_move_run(void *run, uint64_t size, int fd, off_t offset)
+{
+    void *staging = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, offset);
+
+    if (staging == MAP_FAILED) {
+        return 1;
+    }
+    memcpy(staging, run, size);
+    munmap(staging, size);
+    return mmap(run, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, offset) == MAP_FAILED;
+}
+
+/* RAM with no file behind it could never be given back, so it is refused
+ * before anything moves. */
+static int av_overlay_guest_run(void *opaque, void *run, uint64_t size, int fd, uint64_t offset)
+{
+    int ram_fd;
+    off_t ram_offset;
+
+    if (av_ram_file(run, size, &ram_fd, &ram_offset)) {
+        return 1;
+    }
+    return av_move_run(run, size, fd, (off_t)offset);
+}
+
+static int av_restore_guest_run(void *opaque, void *run, uint64_t size)
+{
+    int ram_fd;
+    off_t ram_offset;
+
+    if (av_ram_file(run, size, &ram_fd, &ram_offset)) {
+        return 1;
+    }
+    return av_move_run(run, size, ram_fd, ram_offset);
 }
 
 static void av_release_range(void *opaque, void *base, uint64_t size)
@@ -1069,6 +1119,8 @@ void virtio_gpu_av_host_init(VirtIOGPUAv *r)
         .reserve_range = av_reserve_range,
         .alias_guest_run = av_alias_guest_run,
         .release_range = av_release_range,
+        .overlay_guest_run = av_overlay_guest_run,
+        .restore_guest_run = av_restore_guest_run,
         .hostmem_size = av_hostmem_size,
         .place_in_hostmem = av_place_in_hostmem,
         .remove_from_hostmem = av_remove_from_hostmem,

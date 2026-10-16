@@ -117,6 +117,15 @@ typedef struct AvHostOps {
     int (*alias_guest_run)(void *opaque, void *run, uint64_t size, void *at);
     /* Any thread. Unmaps the reservation and every alias inside it. */
     void (*release_range)(void *opaque, void *base, uint64_t size);
+    /* Main loop. The `size` bytes of guest RAM at `run` (a direct map_guest
+     * mapping, whole pages) become the `size` bytes of the dma-buf `fd` at
+     * `offset`, holding what the RAM held (docs/host-memory.md, "Application
+     * memory"): nonzero when the RAM has no file to give it back from later,
+     * or a mapping fails. The descriptor stays the caller's. */
+    int (*overlay_guest_run)(void *opaque, void *run, uint64_t size, int fd, uint64_t offset);
+    /* Main loop. The RAM at `run` its own file's again, holding what the
+     * overlay held: nonzero when it could not be. */
+    int (*restore_guest_run)(void *opaque, void *run, uint64_t size);
     uint64_t (*hostmem_size)(void *opaque);
     /* The `size` bytes of the dma-buf `fd` - host GPU memory the executor
      * allocated (docs/host-memory.md) - mapped at `offset` of the hostmem

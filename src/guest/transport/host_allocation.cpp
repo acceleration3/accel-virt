@@ -24,6 +24,21 @@ Status HostAllocation::open(uint64_t bytes, HostMemoryRequest memory)
     if (chunk_.resource_id() != 0u) return Status::invalid_state;
     const Status opened = chunk_.open(bytes, memory);
     if (opened != Status::ok) return opened;
+    return import_taken();
+}
+
+Status HostAllocation::adopt(void *address, uint64_t bytes, HostMemoryRequest memory)
+{
+    AV_SCOPE("HostAllocation::adopt");
+    if (chunk_.resource_id() != 0u) return Status::invalid_state;
+    const Status lent = chunk_.adopt(address, bytes, memory);
+    if (lent != Status::ok) return lent;
+    return import_taken();
+}
+
+Status HostAllocation::import_taken()
+{
+    AV_SCOPE("HostAllocation::import_taken");
     ScopeExit    undo([this] { static_cast<void>(chunk_.release()); });
     const Status imported = import_.import(chunk_.resource_id());
     if (imported != Status::ok) return imported;

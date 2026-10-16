@@ -36,6 +36,9 @@ bool BlobCommands::answer(ControlRequest &request, uint32_t type)
     case resource_unref:
         if (!unref(request, response)) return false;
         break;
+    case resource_attach_backing:
+        if (!attach(request, response)) return false;
+        break;
     case resource_create_2d:
         if (!blobs_.contains(named_resource(request)) && !host_blobs_.contains(named_resource(request))) return false;
         response.set(GpuResponse::err_invalid_resource_id);
@@ -88,6 +91,7 @@ uint32_t BlobCommands::create(ControlRequest &request)
     if (id == 0u || host_.resource_exists(id) || blobs_.contains(id) || host_blobs_.contains(id))
         return GpuResponse::err_invalid_resource_id;
     if (create.memory() == CreateBlobRequest::memory_host3d) return create_host(create);
+    if (create.memory() == CreateBlobRequest::memory_host3d_guest) return create_adopted(create);
     if (create.blob_id() != no_context_object) return GpuResponse::err_invalid_parameter;
     if (create.memory() == CreateBlobRequest::memory_guest)
         return create_guest(request, id, create.entries(), create.size());
@@ -122,6 +126,45 @@ uint32_t BlobCommands::create_host(const CreateBlobRequest &create)
     }
     recorder_.record_blob(create.context_id(), BlobAction::created, 0u, create.resource_id(), 0u, create.size());
     return GpuResponse::ok_nodata;
+}
+
+/* Like a host blob, but never mapped - the guest sees it through the pages it
+ * lies over - and with the pages to come. */
+uint32_t BlobCommands::create_adopted(const CreateBlobRequest &create)
+{
+    AV_SCOPE("BlobCommands::create_adopted");
+    if (create.flags() != 0u || create.entries() != 0u || (create.blob_id() & ~request_mask) != 0u)
+        return GpuResponse::err_invalid_parameter;
+    if (!contexts_.holds(create.context_id())) return GpuResponse::err_invalid_context_id;
+    const HostMemoryRequest memory(static_cast<uint32_t>(create.blob_id()));
+    switch (host_blobs_.create_over_guest(create.resource_id(), create.context_id(), memory, create.size())) {
+    case Status::ok: break;
+    case Status::not_found: return GpuResponse::err_invalid_resource_id;
+    case Status::no_memory: return GpuResponse::err_out_of_memory;
+    default: return GpuResponse::err_invalid_parameter;
+    }
+    recorder_.record_blob(create.context_id(), BlobAction::created, 0u, create.resource_id(), 0u, create.size());
+    return GpuResponse::ok_nodata;
+}
+
+/* Anything but a host blob is the base class's: a 2D resource's backing. */
+bool BlobCommands::attach(ControlRequest &request, GpuResponse &response)
+{
+    AV_SCOPE("BlobCommands::attach");
+    uint8_t    bytes[attach_header_size] = {};
+    const bool whole = request.read(0u, bytes, sizeof bytes) == sizeof bytes;
+    WireReader reader(bytes, sizeof bytes);
+    reader.skip(attach_header_size - 8u);
+    const uint32_t resource = reader.read_u32();
+    const uint32_t entries = reader.read_u32();
+    if (!whole || !host_blobs_.contains(resource)) return false;
+    switch (host_blobs_.adopt(resource, request, attach_header_size, entries)) {
+    case Status::ok: response.set(GpuResponse::ok_nodata); break;
+    case Status::no_memory: response.set(GpuResponse::err_out_of_memory); break;
+    case Status::not_supported: response.set(GpuResponse::err_unspec); break;
+    default: response.set(GpuResponse::err_invalid_parameter); break;
+    }
+    return true;
 }
 
 uint32_t BlobCommands::create_answer(Status status) const

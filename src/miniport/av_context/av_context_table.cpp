@@ -275,6 +275,7 @@ Status AvContextTable::window_chunk(void *context, HostWindowRecord &record, Vir
         slot = slot_of(context);
         if (slot == no_slot || !live_[slot] || lost(slot)) return Status::invalid_parameter;
     }
+    if (record.adopts()) return adopt_pages(slot, record, device);
     if (!record.opens()) return close_window(slot, record.resource_id(), device);
     return open_window(slot, record, device);
 }
@@ -385,6 +386,48 @@ Status AvContextTable::place_in_window(uint32_t slot, uint32_t resource, HostWin
     return Status::ok;
 }
 
+/* The pages are locked before anything else and let go of last: a blob the
+ * device made over them is released first, which gives the guest's own pages
+ * back their contents (docs/host-memory.md, "Application memory"). */
+Status AvContextTable::adopt_pages(uint32_t slot, HostWindowRecord &record, VirtioGpuDevice &device)
+{
+    AV_SCOPE("AvContextTable::adopt_pages");
+    if (record.bytes() > max_adopted_bytes) return Status::no_space;
+    void        *locked = nullptr;
+    const Status lock = platform_.lock_process_pages(record.address(), record.bytes(), locked);
+    if (lock != Status::ok) return lock;
+    const Status adopted = adopt_locked(slot, locked, record, device);
+    if (adopted != Status::ok) platform_.unlock_process_pages(locked);
+    return adopted;
+}
+
+Status AvContextTable::adopt_locked(uint32_t slot, void *locked, HostWindowRecord &record, VirtioGpuDevice &device)
+{
+    AV_SCOPE("AvContextTable::adopt_locked");
+    uint32_t resource = 0u;
+    const Status taken = ids_.take(resource);
+    if (taken != Status::ok) return taken;
+    bool            keep_id = false;
+    HostVisibleBlob blob(platform_);
+    ScopeExit       unwind([this, &blob, &device, &keep_id, resource] {
+        if (blob.created()) static_cast<void>(blob.destroy(device));
+        keep_id = blob.created();
+        if (!keep_id) ids_.give_back(resource);
+    });
+    const uint32_t context = bindings_[slot].object().context_id();
+    Status status = blob.create_over(device, context, resource, record.memory(), locked, record.bytes());
+    ContextChunk *chunk = nullptr;
+    if (status == Status::ok && chunks_.create(chunk, slot, resource, locked) != Status::ok) status = Status::no_memory;
+    if (status != Status::ok) return status;
+    unwind.dismiss();
+    {
+        SpinLockGuard guard(lock_);
+        held_chunks_[slot]++;
+    }
+    record = record.answered(resource, record.bytes(), record.address());
+    return Status::ok;
+}
+
 Status AvContextTable::close_window(uint32_t slot, uint32_t resource_id, VirtioGpuDevice &device)
 {
     AV_SCOPE("AvContextTable::close_window");
@@ -402,13 +445,18 @@ Status AvContextTable::close_window(uint32_t slot, uint32_t resource_id, VirtioG
 void AvContextTable::take_down(ContextChunk &chunk, VirtioGpuDevice *device, bool host_let_go)
 {
     AV_SCOPE("AvContextTable::take_down");
-    platform_.unmap_from_process(chunk.mapping());
+    if (chunk.locked() == nullptr) platform_.unmap_from_process(chunk.mapping());
     HostVisibleBlob placed(platform_, chunk.resource_id(), uint64_t{chunk.first_page()} * HostWindow::page_bytes);
-    const bool      released = device != nullptr ? placed.destroy(*device) == Status::ok : host_let_go;
+    HostVisibleBlob lent(platform_, chunk.resource_id());
+    HostVisibleBlob &blob = chunk.locked() == nullptr ? placed : lent;
+    const bool       released = device != nullptr ? blob.destroy(*device) == Status::ok : host_let_go;
     if (released) {
-        window_.give_back(chunk.first_page(), chunk.pages());
+        if (chunk.locked() == nullptr) window_.give_back(chunk.first_page(), chunk.pages());
         ids_.give_back(chunk.resource_id());
     }
+    /* Whatever the device answered: a process may not end holding locked
+     * pages, and one the device kept is still memory to the guest. */
+    if (chunk.locked() != nullptr) platform_.unlock_process_pages(chunk.locked());
     const uint32_t slot = chunk.slot();
     static_cast<void>(chunks_.destroy(&chunk));
     SpinLockGuard locked(lock_);

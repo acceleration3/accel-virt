@@ -33,7 +33,6 @@
 #include <cstdint>
 #include <cstring>
 #include <sys/mman.h>
-#include <unistd.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -323,6 +322,37 @@ TEST(table_host, forwards_ranges_and_aliases_and_reads_their_refusals)
   void *refused = &mock;
   CHECK_STATUS(host.reserve_range(0x1000u, refused), Status::no_memory);
   CHECK(refused == nullptr);
+  host.unmap_guest(run, length); }
+
+/* A run laid under a dma-buf is the dma-buf's memory, holding what the RAM
+ * held; restored, the RAM holds what the memory held; each refusal reads back
+ * as not_supported. */
+TEST(table_host, forwards_overlays_and_restores_and_reads_their_refusals)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  mock.add_guest_ram(0x1000u, 0x1000u);
+  std::uint64_t length = 0x1000u;
+  bool          direct = false;
+  auto *const   run = static_cast<std::uint8_t *>(host.map_guest(0x1000u, length, direct));
+  run[3] = 0x21u;
+  const int memory = memfd_create("overlay", MFD_CLOEXEC);
+  CHECK(memory >= 0 && ftruncate(memory, 0x2000) == 0);
+  CHECK_STATUS(host.overlay_guest_run(run, 0x1000u, memory, 0x1000u), Status::ok);
+  CHECK_EQ(run[3], 0x21u);
+  auto *const library = static_cast<std::uint8_t *>(mmap(nullptr, 0x2000u, PROT_READ | PROT_WRITE, MAP_SHARED, memory, 0));
+  CHECK_EQ(library[0x1003], 0x21u);
+  library[0x1004] = 0x31u;
+  CHECK_EQ(run[4], 0x31u);
+  CHECK_STATUS(host.restore_guest_run(run, 0x1000u), Status::ok);
+  library[0x1004] = 0x41u;
+  CHECK_EQ(run[4], 0x31u);
+  mock.fail_overlay_at(1u);
+  CHECK_STATUS(host.overlay_guest_run(run, 0x1000u, memory, 0u), Status::not_supported);
+  CHECK_STATUS(host.overlay_guest_run(run, 0x1000u, memory, 0u), Status::ok);
+  mock.fail_restore_at(1u);
+  CHECK_STATUS(host.restore_guest_run(run, 0x1000u), Status::not_supported);
+  CHECK_STATUS(host.restore_guest_run(run, 0x1000u), Status::ok);
+  munmap(library, 0x2000u);
+  close(memory);
   host.unmap_guest(run, length); }
 
 TEST(table_host, forwards_the_recording_file_and_reads_each_refusal)

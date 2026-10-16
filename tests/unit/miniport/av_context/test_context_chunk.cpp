@@ -36,6 +36,22 @@ TEST(context_chunk, a_chunk_at_page_zero_of_slot_zero_is_whole)
   CHECK_EQ(chunk.first_page(), 0u);
   CHECK(chunk.invariants_hold()); }
 
+/* Pages a process lent: a blob and the lock on the pages, no window pages
+ * and no view (docs/host-memory.md, "Application memory"). */
+TEST(context_chunk, a_chunk_of_lent_pages_keeps_its_lock_and_no_window)
+{ int         lock = 0;
+  const ContextChunk chunk(2u, HostBlobId::first + 4u, &lock);
+  CHECK_EQ(chunk.slot(), 2u);
+  CHECK_EQ(chunk.resource_id(), HostBlobId::first + 4u);
+  CHECK(chunk.locked() == &lock);
+  CHECK_EQ(chunk.pages(), 0u);
+  CHECK_EQ(chunk.first_page(), 0u);
+  CHECK(chunk.mapping() == nullptr);
+  CHECK(chunk.invariants_hold());
+  CHECK(!ContextChunk(2u, 0u, &lock).invariants_hold());
+  /* A window chunk holds no lock. */
+  CHECK(ContextChunk(1u, HostBlobId::first, 4u, 2u, mapping).locked() == nullptr); }
+
 /* Each of the three things a chunk cannot be without, missing on its own,
  * is caught on its own. */
 TEST(context_chunk_invariants, a_chunk_with_no_resource_no_pages_or_no_view_is_caught)

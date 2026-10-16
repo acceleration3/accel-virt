@@ -115,6 +115,29 @@ TEST(standard_allocation_describe, gdi_surfaces_are_cpu_visible_only_when_they_s
       CHECK(descriptor.cpu_visible() == c.cpu_visible);
   } }
 
+/* An existing heap is dxgkrnl's cross-adapter GDI texture: as wide as the
+ * heap's bytes, one row, no format. It is the process's own memory, which
+ * the processor reads and writes, a row of bytes. */
+TEST(standard_allocation_describe, an_existing_heap_is_a_cpu_visible_row_of_its_bytes)
+{ MockPlatform platform;
+  D3dkmdtGdiSurfaceDataRecord surface = {0x30000u, 1u, 0, 7, 0u, 0xEEu};
+  Request request(gdi, &surface);
+  CHECK_STATUS(request.describe(platform), Status::ok);
+  CHECK_EQ(surface.Pitch, 0x30000u);
+  const AllocationDescriptor descriptor = request.descriptor();
+  CHECK(descriptor.kind() == AllocationKind::gdi);
+  CHECK(descriptor.cpu_visible());
+  CHECK(descriptor.size() == 0x30000u);
+  CHECK_EQ(descriptor.layout().pitch(), 0x30000u);
+  CHECK_EQ(descriptor.layout().height(), 1u);
+  /* No bytes, more than a row, or a format: not an existing heap. */
+  const D3dkmdtGdiSurfaceDataRecord refused[] = {
+      {0u, 1u, 0, 7, 0u, 0xEEu}, {0x1000u, 2u, 0, 7, 0u, 0xEEu}, {0x1000u, 1u, a8r8g8b8, 7, 0u, 0xEEu}};
+  for (D3dkmdtGdiSurfaceDataRecord heap : refused) {
+      CHECK_STATUS(Request(gdi, &heap).describe(platform), Status::invalid_parameter);
+      CHECK_EQ(heap.Pitch, 0xEEu);
+  } }
+
 TEST(standard_allocation_describe, refuses_what_it_cannot_describe)
 { MockPlatform platform;
   const std::int32_t unsupported_gdi[] = {0, 4, 5, 7, 8, 9};

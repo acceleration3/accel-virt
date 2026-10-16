@@ -172,6 +172,29 @@ TEST(host_allocation, opens_a_chunk_of_the_memory_asked_and_imports_it_whole)
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), after);
   CHECK_EQ(rig.kmt().commands(), 2u); }
 
+/* The process's own pages lent and imported: the view is the process's
+ * address, the import names the kernel's resource, and a refusal on either
+ * side holds nothing (docs/host-memory.md, "Application memory"). */
+TEST(host_allocation, adopts_the_processs_own_pages_and_imports_them)
+{ Rig rig;
+  alignas(4096) static std::uint8_t pages[2u * 4096u];
+  const HostMemoryRequest readback(HostMemoryRequest::Kind::readback, 0u);
+  rig.host().blob_import(0u, imported_memory);
+  CHECK_STATUS(rig.allocation().adopt(pages, sizeof pages, readback), Status::ok);
+  CHECK(rig.allocation().invariants_hold());
+  CHECK(rig.allocation().view() == pages);
+  CHECK_EQ(rig.allocation().bytes(), sizeof pages);
+  CHECK_EQ(rig.allocation().handle(), imported_memory);
+  CHECK_EQ(u32_at(rig.kmt().command_bytes(0u) + CommandHeader::encoded_size, 0u), MockKmt::first_window_resource);
+  CHECK_STATUS(rig.allocation().adopt(pages, sizeof pages, readback), Status::invalid_state);
+  rig.host().nop();
+  CHECK_STATUS(rig.allocation().close(), Status::ok);
+  rig.check_nothing_is_held();
+  CHECK_STATUS(rig.allocation().adopt(pages + 1, 4096u, readback), Status::invalid_parameter);
+  rig.host().blob_import(BlobImportAnswer::executor_refused, 0u);
+  CHECK_STATUS(rig.allocation().adopt(pages, sizeof pages, readback), Status::invalid_parameter);
+  rig.check_nothing_is_held(); }
+
 /* A chunk the kernel will not give is its answer, and nothing is imported. */
 TEST(host_allocation, a_refused_chunk_imports_nothing)
 { { Rig rig;

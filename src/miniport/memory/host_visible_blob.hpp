@@ -1,6 +1,8 @@
 /* One window chunk's memory on the device: a host blob of host GPU memory,
  * made for one av context and placed in the hostmem region so the guest can
- * address it through the BAR (docs/host-memory.md).
+ * address it through the BAR (docs/host-memory.md) - or made over pages a
+ * process lent, which the device turns into host GPU memory where they are
+ * ("Application memory"), and never placed.
  *
  * The device is a parameter and not a member because it is not stable for this
  * object's lifetime: an allocation outlives a power transition, and the
@@ -24,11 +26,17 @@ struct HostVisibleBlobProbe;
 class HostVisibleBlob {
 public:
     static constexpr uint64_t page_bytes = 0x1000u;
+    /* A piece's memory entries fill no more than the control queue's wide
+     * slot, one per page at worst. */
+    static constexpr uint32_t pages_per_piece = 2048u;
 
     explicit HostVisibleBlob(Platform &platform);
     /* The blob of `resource`, which this driver created and the device mapped
      * at `offset`: what a chunk remembers of it, to take it down again. */
     HostVisibleBlob(Platform &platform, uint32_t resource, uint64_t offset);
+    /* The blob of `resource`, which this driver created over lent pages and
+     * never placed. */
+    HostVisibleBlob(Platform &platform, uint32_t resource);
     HostVisibleBlob(const HostVisibleBlob &) = delete;
     HostVisibleBlob &operator=(const HostVisibleBlob &) = delete;
 
@@ -40,6 +48,14 @@ public:
      * only an unref can tell it to let go of the id. */
     [[nodiscard]] Status create(VirtioGpuDevice &device, uint32_t context_id, uint32_t resource_id,
                                 HostMemoryRequest memory, uint64_t bytes);
+    /* A blob of the memory `memory` names over the `bytes` of process pages
+     * `locked` describes (Platform::lock_process_pages), for the device's
+     * context `context_id`: HOST3D_GUEST, then the pages in order as
+     * RESOURCE_ATTACH_BACKING pieces of at most pages_per_piece pages. As
+     * create, and no_memory when no room for a piece can be had; a blob the
+     * device made counts as created whichever piece failed. */
+    [[nodiscard]] Status create_over(VirtioGpuDevice &device, uint32_t context_id, uint32_t resource_id,
+                                     HostMemoryRequest memory, void *locked, uint64_t bytes);
     /* Placed at `offset` of the region. The device's answer is judged: only
      * OK_MAP_INFO with a caching this driver can give a process counts as
      * mapped, and caching() is then that caching. */
@@ -73,7 +89,10 @@ private:
     static constexpr size_t   request_bytes = 64u;
     static constexpr size_t   answer_bytes = 64u;
 
-    [[nodiscard]] Status exchange(VirtioGpuDevice &device, size_t length, uint32_t &map_info);
+    [[nodiscard]] Status exchange(VirtioGpuDevice &device, const uint8_t *request, size_t length, uint32_t &map_info);
+    /* The pages of `locked` as attach pieces, through `request` and `frames`. */
+    [[nodiscard]] Status attach_pieces(VirtioGpuDevice &device, void *locked, uint64_t bytes, uint8_t *request,
+                                       uint64_t *frames);
 
     Platform &platform_;
     uint32_t  resource_;

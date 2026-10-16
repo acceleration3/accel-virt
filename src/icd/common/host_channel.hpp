@@ -129,6 +129,12 @@ public:
      * it; otherwise HostAllocation's refusal, with nothing kept. Under the
      * send lock, as are close_memory and find_memory. */
     [[nodiscard]] Status open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made);
+    /* The `bytes` of the process's own memory at `address` (whole pages,
+     * writable) lent to the device as host memory of the kind `memory` names
+     * and imported (HostAllocation::adopt, docs/host-memory.md, "Application
+     * memory"), kept as open_memory keeps what it makes, with its answers. */
+    [[nodiscard]] Status adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory,
+                                      HostAllocation *&made);
     /* What open_memory made, released - abandoned on a faulted channel, whose
      * context frees it on the host. The release's refusal, if any; the
      * allocation is gone either way. */
@@ -150,6 +156,11 @@ private:
     /* The arena at the shape's size, halved while the device refuses, down to
      * the least it is ever opened at. */
     [[nodiscard]] Status open_arena(GuestConnection &device);
+    /* A fresh slot for an allocation: invalid_state when not open or faulted,
+     * no_memory with no room. */
+    [[nodiscard]] Status keep(ObjectStorage<HostAllocation> *&kept);
+    /* `kept` answered as `made` when `taken` is ok, given up otherwise. */
+    [[nodiscard]] Status settle(ObjectStorage<HostAllocation> *kept, Status taken, HostAllocation *&made);
     /* Every allocation open_memory made, released or abandoned. */
     void                 close_memories(bool lost);
 

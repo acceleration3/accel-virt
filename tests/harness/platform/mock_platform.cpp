@@ -69,6 +69,8 @@ MockPlatform::~MockPlatform()
                                 frame_view_count_ + page_mapping_count_);
     if (process_mappings() != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u process view(s) left mapped", process_mappings());
+    if (process_locks() != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u process range(s) left locked", process_locks());
     if (bugcheck_routine_ != nullptr)
         registry.record_failure(__FILE__, __LINE__, "a bugcheck callback was never deregistered");
     for (std::uint32_t i = 0u; i < event_count_; i++) {
@@ -300,6 +302,58 @@ void *MockPlatform::attach_page_frames(const std::uint64_t *frames, std::uint32_
     return &page_frames_[page_frame_count_++];
 }
 
+void MockPlatform::lend_process_range(std::uint64_t address, const std::uint64_t *frames, std::uint32_t page_count)
+{
+    if (process_range_count_ == max_process_ranges) {
+        std::fprintf(stderr, "\n    more than %u process ranges lent\n", max_process_ranges);
+        std::abort();
+    }
+    process_ranges_[process_range_count_++] = ProcessRange{address, PageFrames{frames, page_count}, false};
+}
+
+void MockPlatform::fail_process_lock_at(std::uint32_t nth)
+{
+    process_lock_fail_at_ = nth == 0u ? 0u : process_lock_sequence_ + nth;
+}
+
+std::uint32_t MockPlatform::process_locks() const
+{
+    std::uint32_t locks = 0u;
+    for (std::uint32_t i = 0u; i < process_range_count_; i++) locks += process_ranges_[i].locked ? 1u : 0u;
+    return locks;
+}
+
+Status MockPlatform::lock_process_pages(std::uint64_t address, std::uint64_t bytes, void *&locked)
+{
+    require_irql_at_most(Irql::passive, "Platform::lock_process_pages");
+    locked = nullptr;
+    if (++process_lock_sequence_ == process_lock_fail_at_) return Status::no_memory;
+    for (std::uint32_t i = 0u; i < process_range_count_; i++) {
+        ProcessRange &range = process_ranges_[i];
+        if (range.address != address || std::uint64_t{range.frames.count} * 0x1000u != bytes) continue;
+        if (range.locked) {
+            record(Violation::frame_misuse, "process range 0x%llx locked twice",
+                   static_cast<unsigned long long>(address));
+            return Status::invalid_parameter;
+        }
+        range.locked = true;
+        locked = &range.frames;
+        return Status::ok;
+    }
+    return Status::invalid_parameter;
+}
+
+void MockPlatform::unlock_process_pages(void *locked)
+{
+    require_irql_at_most(Irql::passive, "Platform::unlock_process_pages");
+    for (std::uint32_t i = 0u; i < process_range_count_; i++) {
+        if (&process_ranges_[i].frames != locked || !process_ranges_[i].locked) continue;
+        process_ranges_[i].locked = false;
+        return;
+    }
+    record(Violation::frame_misuse, "unlocking a process range never locked");
+}
+
 /* A real MDL bounds the read by the span it describes; this one by the page
  * count it was attached with, and an unknown pointer is no MDL at all. */
 Status MockPlatform::read_page_frames(void *mdl, std::uint32_t first, std::uint32_t count, std::uint64_t *frames)
@@ -311,6 +365,13 @@ Status MockPlatform::read_page_frames(void *mdl, std::uint32_t first, std::uint3
         const PageFrames &attached = page_frames_[i];
         if (first > attached.count || count > attached.count - first) return Status::invalid_parameter;
         for (std::uint32_t page = 0u; page < count; page++) frames[page] = attached.frames[first + page];
+        return Status::ok;
+    }
+    for (std::uint32_t i = 0u; i < process_range_count_; i++) {
+        const ProcessRange &range = process_ranges_[i];
+        if (mdl != &range.frames || !range.locked) continue;
+        if (first > range.frames.count || count > range.frames.count - first) return Status::invalid_parameter;
+        for (std::uint32_t page = 0u; page < count; page++) frames[page] = range.frames.frames[first + page];
         return Status::ok;
     }
     const OwnedPages *const owned = find_owned(mdl);

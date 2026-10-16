@@ -474,6 +474,35 @@ TEST(host_channel_memory, opens_finds_and_closes_an_allocation_per_object)
 
 /* Nothing is kept of an allocation that did not open, and a channel that is
  * closed or faulted opens none. */
+/* The process's own pages lent are kept, found and closed as an allocation
+ * the channel opened is; a refusal keeps nothing, and a closed channel lends
+ * none (docs/host-memory.md, "Application memory"). */
+TEST(host_channel_memory, adopts_the_processs_own_pages_as_an_allocation_it_keeps)
+{ Rig rig;
+  HostChannel     channel(rig.platform(), rig.log(), "avtest: ", plain());
+  alignas(4096) static std::uint8_t pages[2u * 4096u];
+  const HostMemoryRequest readback(HostMemoryRequest::Kind::readback, 0u);
+  HostAllocation *made = reinterpret_cast<HostAllocation *>(&rig);
+  CHECK_STATUS(channel.adopt_memory(pages, sizeof pages, readback, made), Status::invalid_state);
+  CHECK(made == nullptr);
+  CHECK_STATUS(channel.open(rig.device()), Status::ok);
+  rig.host().blob_import(0u, first_memory);
+  CHECK_STATUS(channel.adopt_memory(pages, sizeof pages, readback, made), Status::ok);
+  CHECK(made != nullptr);
+  CHECK(made->view() == pages);
+  CHECK(channel.find_memory(first_memory) == made);
+  CHECK_EQ(channel.memories(), 1u);
+  rig.host().nop();
+  CHECK_STATUS(channel.close_memory(*made), Status::ok);
+  CHECK_EQ(channel.memories(), 0u);
+  CHECK_STATUS(channel.adopt_memory(pages + 1, 4096u, readback, made), Status::invalid_parameter);
+  CHECK(made == nullptr);
+  CHECK_EQ(channel.memories(), 0u);
+  rig.platform().fail_allocation_at(1u);
+  CHECK_STATUS(channel.adopt_memory(pages, sizeof pages, readback, made), Status::no_memory);
+  channel.close(true);
+  rig.check_nothing_held(channel); }
+
 TEST(host_channel_memory, a_refusal_keeps_nothing_and_a_closed_or_faulted_channel_opens_none)
 { Rig rig;
   HostChannel     channel(rig.platform(), rig.log(), "avtest: ", plain(), rig.lock());

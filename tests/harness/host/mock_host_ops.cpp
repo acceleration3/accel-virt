@@ -87,6 +87,12 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
         return host_of(opaque).alias_guest_run(run, size, at) == Status::ok ? 0 : 1;
     };
     table_.release_range = [](void *opaque, void *base, std::uint64_t size) { host_of(opaque).release_range(base, size); };
+    table_.overlay_guest_run = [](void *opaque, void *run, std::uint64_t size, int fd, std::uint64_t offset) {
+        return host_of(opaque).overlay_guest_run(run, size, fd, offset) == Status::ok ? 0 : 1;
+    };
+    table_.restore_guest_run = [](void *opaque, void *run, std::uint64_t size) {
+        return host_of(opaque).restore_guest_run(run, size) == Status::ok ? 0 : 1;
+    };
     table_.hostmem_size = [](void *opaque) { return host_of(opaque).hostmem_size(); };
     table_.place_in_hostmem = [](void *opaque, int fd, std::uint64_t size, std::uint64_t offset) {
         return host_of(opaque).place_in_hostmem(fd, size, offset) == Status::ok ? 0 : 1;

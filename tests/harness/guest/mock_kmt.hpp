@@ -434,6 +434,10 @@ public:
      * or past max_window_chunks held, is STATUS_INVALID_PARAMETER, as the
      * driver refuses it: nothing falls back to guest RAM. */
     void                open_host_window(std::uint64_t bytes);
+    /* An adoption (HostWindowRecord's) is answered as the driver answers
+     * one: the lowest free id, the request's own bytes and address, no window
+     * pages; window_chunk_memory is then the process's own pages. The next
+     * window open's refusal refuses an adoption the same. */
     /* The next window open answers `code`, whatever room there is. */
     void                refuse_next_window_open(std::uint32_t code);
     /* Window chunks held now, and opens ever granted in the window. */
@@ -600,6 +604,8 @@ private:
     Status        window_chunk(std::uint32_t context, std::uint8_t *data, std::uint32_t size);
     Status        open_window_chunk(std::uint32_t context, std::uint8_t *data, std::uint32_t size,
                                     const HostWindowRecord &request);
+    Status        adopt_chunk(std::uint32_t context, std::uint8_t *data, std::uint32_t size,
+                              const HostWindowRecord &request);
     /* The lowest host blob id no chunk holds. */
     std::uint32_t free_window_resource() const;
     /* The first page from the window's start where `pages` fit, or
@@ -656,6 +662,7 @@ private:
         std::uint64_t first;
         std::uint64_t pages;
         std::uint32_t memory;   /* the HostMemoryRequest it was opened with */
+        std::uint8_t *lent;     /* the process's own pages an adoption named, or null */
     };
     std::uint8_t *window_;
     std::uint64_t window_pages_;

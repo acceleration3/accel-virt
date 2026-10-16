@@ -71,10 +71,22 @@ Status StandardAllocation::describe_staging(AllocationDescriptor &descriptor) co
     return Status::ok;
 }
 
+Status StandardAllocation::describe_existing_heap(AllocationDescriptor &descriptor) const
+{
+    AV_SCOPE("StandardAllocation::describe_existing_heap");
+    auto &surface = *static_cast<D3dkmdtGdiSurfaceDataRecord *>(request_.pCreateSurfaceData);
+    if (surface.Width == 0u || surface.Height != 1u || surface.Format != 0) return Status::invalid_parameter;
+    const SurfaceLayout layout(surface.Width, 1u, 0u, surface.Width);
+    surface.Pitch = surface.Width;
+    descriptor = AllocationDescriptor(AllocationKind::gdi, true, layout, layout.bytes(), ScanoutTarget());
+    return Status::ok;
+}
+
 Status StandardAllocation::describe_gdi(AllocationDescriptor &descriptor) const
 {
     AV_SCOPE("StandardAllocation::describe_gdi");
     auto &surface = *static_cast<D3dkmdtGdiSurfaceDataRecord *>(request_.pCreateSurfaceData);
+    if (surface.Type == gdi_texture_cross_adapter) return describe_existing_heap(descriptor);
     const bool texture = surface.Type == gdi_texture || surface.Type == gdi_texture_cpu_visible;
     const bool staging_surface = surface.Type == gdi_staging || surface.Type == gdi_staging_cpu_visible;
     if (!texture && !staging_surface) return Status::invalid_parameter;

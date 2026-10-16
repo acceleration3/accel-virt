@@ -2,7 +2,8 @@
  * (docs/host-memory.md): host GPU memory of the kind the process asked for,
  * which the kernel placed in the window, made a resource of the transport's
  * av context and mapped into this process with the host's caching, all in one
- * HostWindowRecord escape. There is no allocation, no
+ * HostWindowRecord escape - or the process's own pages lent to the device,
+ * which become host GPU memory where they are ("Application memory"). There is no allocation, no
  * lock and no paging: the escape is the whole of it, and the close gives it
  * back. */
 #ifndef AV_HOST_WINDOW_CHUNK_HPP
@@ -17,6 +18,7 @@
 namespace av {
 
 class GuestConnection;
+class HostWindowRecord;
 class KmtTransport;
 struct HostWindowChunkProbe;
 
@@ -33,6 +35,11 @@ public:
      * with no window - or malformed when what it wrote back does not answer
      * the open. Nothing is held unless ok. */
     [[nodiscard]] Status open(uint64_t bytes, HostMemoryRequest memory);
+    /* The `bytes` of this process's memory at `address`, both whole pages and
+     * writable, lent as host memory of the kind `memory` names: view() is
+     * `address` itself from then on. As open, and invalid_parameter for a
+     * range that is not whole pages. */
+    [[nodiscard]] Status adopt(void *address, uint64_t bytes, HostMemoryRequest memory);
     /* Closes what is held: the kernel's refusal, or malformed for an answer
      * that is not the close's, and nothing is held after either way. On a
      * faulted transport nothing is sent: the kernel closes the chunk with the
@@ -51,6 +58,8 @@ public:
 
 private:
     [[nodiscard]] Status send(uint8_t *record, uint32_t size);
+    /* `record` sent and its answer taken as what is held. */
+    [[nodiscard]] Status take(HostWindowRecord &record);
 
     GuestConnection &connection_;
     KmtTransport    &transport_;

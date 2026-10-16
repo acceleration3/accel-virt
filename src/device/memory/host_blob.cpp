@@ -5,9 +5,9 @@
 
 namespace av {
 
-HostBlob::HostBlob(Host &host, uint32_t context, const AvHostMemory &memory)
-    : host_(host), context_(context), fd_(memory.fd), caching_(memory.caching), size_(memory.size), offset_(0u),
-      mapped_(false)
+HostBlob::HostBlob(Host &host, LentPages &lent, uint32_t context, const AvHostMemory &memory)
+    : host_(host), size_(memory.size), offset_(0u), context_(context), fd_(memory.fd), caching_(memory.caching),
+      mapped_(false), overlay_(host, lent)
 {
     AV_SCOPE("HostBlob::HostBlob");
 }
@@ -15,6 +15,7 @@ HostBlob::HostBlob(Host &host, uint32_t context, const AvHostMemory &memory)
 HostBlob::~HostBlob()
 {
     AV_SCOPE("HostBlob::~HostBlob");
+    overlay_.restore();
     if (mapped_) host_.remove_from_hostmem(offset_, size_);
     host_.close_descriptor(fd_);
 }
@@ -35,6 +36,18 @@ uint32_t HostBlob::caching() const
 {
     AV_SCOPE("HostBlob::caching");
     return caching_;
+}
+
+Status HostBlob::adopt(ControlRequest &request, size_t offset, uint32_t entries)
+{
+    AV_SCOPE("HostBlob::adopt");
+    return overlay_.add(request, offset, entries, fd_, size_);
+}
+
+uint64_t HostBlob::adopted() const
+{
+    AV_SCOPE("HostBlob::adopted");
+    return overlay_.covered();
 }
 
 Status HostBlob::map(uint64_t offset)

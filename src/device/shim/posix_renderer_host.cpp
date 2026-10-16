@@ -456,6 +456,18 @@ void PosixRendererHost::release_range(void *base, uint64_t bytes)
     munmap(base, bytes);
 }
 
+Status PosixRendererHost::overlay_guest_run(void *, uint64_t, int, uint64_t)
+{
+    AV_SCOPE("PosixRendererHost::overlay_guest_run");
+    return Status::not_supported;
+}
+
+Status PosixRendererHost::restore_guest_run(void *, uint64_t)
+{
+    AV_SCOPE("PosixRendererHost::restore_guest_run");
+    return Status::not_supported;
+}
+
 uint64_t PosixRendererHost::hostmem_size()
 {
     AV_SCOPE("PosixRendererHost::hostmem_size");

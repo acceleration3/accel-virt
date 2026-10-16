@@ -15,6 +15,7 @@
 #include "proto/wire/wire_reader.hpp"
 
 #include <cstdint>
+#include <cstring>
 #include <optional>
 
 using av::FakeVirtqueueDevice;
@@ -61,6 +62,7 @@ public:
 
     void answer_map_with(std::uint32_t map_info) { map_info_ = map_info; }
     void refuse_next() { refuse_ = true; }
+    void refuse_attaches() { refuse_attach_ = true; }
     void answer_nothing() { silent_ = true; }
     /* Bytes no device sends: too short to be a response header. */
     void answer_garbage() { garbage_ = true; }
@@ -84,6 +86,8 @@ private:
         if (host->refuse_) {
             host->refuse_ = false;
             answer.set(GpuResponse::err_invalid_parameter);
+        } else if (host->refuse_attach_ && asked == 0x0106u) {
+            answer.set(GpuResponse::err_out_of_memory);
         } else if (asked == 0x0208u) {
             answer.set_map_info(host->map_info_);
         } else {
@@ -100,6 +104,7 @@ private:
     bool                refuse_ = false;
     bool                garbage_ = false;
     bool                silent_ = false;
+    bool                refuse_attach_ = false;
 };
 
 class Fixture {
@@ -396,3 +401,126 @@ TEST(host_visible_blob, an_answer_that_does_not_decode_is_malformed)
   HostVisibleBlob blob(fixture.mapped().platform());
   CHECK_STATUS(blob.create(fixture.device(), context_id, resource, upload, page), Status::malformed);
   CHECK(!blob.created()); }
+
+namespace {
+
+const HostMemoryRequest readback(HostMemoryRequest::Kind::readback, 0u);
+constexpr std::uint64_t lent_at = 0x7FF000000000ull;
+
+std::uint32_t u32_at(const std::uint8_t *bytes, std::size_t at)
+{
+    std::uint32_t value = 0u;
+    std::memcpy(&value, bytes + at, sizeof value);
+    return value;
+}
+
+std::uint64_t u64_at(const std::uint8_t *bytes, std::size_t at)
+{
+    std::uint64_t value = 0u;
+    std::memcpy(&value, bytes + at, sizeof value);
+    return value;
+}
+
+}  // namespace
+
+/* Pages a process lent: a HOST3D_GUEST blob of no entries, not mappable,
+ * then the pages in order, one memory entry per run of adjacent frames. */
+TEST(host_visible_blob_create_over, makes_the_blob_then_names_its_pages_run_by_run)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host host(fixture.mapped());
+  const std::uint64_t frames[3] = {0x40000u, 0x41000u, 0x90000u};
+  fixture.mapped().platform().lend_process_range(lent_at, frames, 3u);
+  void *locked = nullptr;
+  CHECK_STATUS(fixture.mapped().platform().lock_process_pages(lent_at, 3u * page, locked), Status::ok);
+  HostVisibleBlob blob(fixture.mapped().platform());
+  CHECK_STATUS(blob.create_over(fixture.device(), context_id, resource, readback, locked, 3u * page), Status::ok);
+  CHECK(blob.created());
+  CHECK(!blob.mapped());
+  CHECK_EQ(host.answered(), 2u);
+  const std::uint8_t *const create = host.queue().request(0u);
+  CHECK_EQ(u32_at(create, 0u), 0x010Cu);
+  CHECK_EQ(u32_at(create, 16u), context_id);
+  CHECK_EQ(u32_at(create, 24u), resource);
+  CHECK_EQ(u32_at(create, 28u), CreateBlobRequest::memory_host3d_guest);
+  CHECK_EQ(u32_at(create, 32u), 0u);                 /* not mappable */
+  CHECK_EQ(u32_at(create, 36u), 0u);                 /* no entries yet */
+  CHECK_EQ(u64_at(create, 40u), std::uint64_t{readback.encoded()});
+  CHECK_EQ(u64_at(create, 48u), 3u * page);
+  const std::uint8_t *const attach = host.queue().request(1u);
+  CHECK_EQ(u32_at(attach, 0u), 0x0106u);
+  CHECK_EQ(u32_at(attach, 24u), resource);
+  CHECK_EQ(u32_at(attach, 28u), 2u);                 /* two runs */
+  CHECK_EQ(u64_at(attach, 32u), 0x40000u);
+  CHECK_EQ(u32_at(attach, 40u), 2u * page);
+  CHECK_EQ(u64_at(attach, 48u), 0x90000u);
+  CHECK_EQ(u32_at(attach, 56u), page);
+  /* What a chunk remembers of it comes down with an unref alone. */
+  HostVisibleBlob lent(fixture.mapped().platform(), resource);
+  CHECK(lent.created());
+  CHECK(!lent.mapped());
+  CHECK_STATUS(lent.destroy(fixture.device()), Status::ok);
+  CHECK_EQ(host.queue().request_type(2u), 0x0102u);
+  fixture.mapped().platform().unlock_process_pages(locked); }
+
+/* More pages than one piece holds go in as many pieces, in order. */
+TEST(host_visible_blob_create_over, a_range_past_one_piece_is_named_in_pieces)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host host(fixture.mapped());
+  constexpr std::uint32_t pages = HostVisibleBlob::pages_per_piece + 1u;
+  static std::uint64_t frames[pages];
+  for (std::uint32_t index = 0u; index < pages; index++) frames[index] = 0x100000u + std::uint64_t{index} * 2u * page;
+  fixture.mapped().platform().lend_process_range(lent_at, frames, pages);
+  void *locked = nullptr;
+  CHECK_STATUS(fixture.mapped().platform().lock_process_pages(lent_at, pages * page, locked), Status::ok);
+  HostVisibleBlob blob(fixture.mapped().platform());
+  CHECK_STATUS(blob.create_over(fixture.device(), context_id, resource, readback, locked, pages * page), Status::ok);
+  CHECK_EQ(host.answered(), 3u);
+  CHECK_EQ(u32_at(host.queue().request(1u), 28u), HostVisibleBlob::pages_per_piece);
+  CHECK_EQ(u32_at(host.queue().request(2u), 28u), 1u);
+  CHECK_EQ(u64_at(host.queue().request(2u), 32u), frames[pages - 1u]);
+  fixture.mapped().platform().unlock_process_pages(locked); }
+
+TEST(host_visible_blob_create_over, refuses_what_it_cannot_name_and_counts_a_blob_the_device_made)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host host(fixture.mapped());
+  const std::uint64_t frames[1] = {0x40000u};
+  fixture.mapped().platform().lend_process_range(lent_at, frames, 1u);
+  void *locked = nullptr;
+  CHECK_STATUS(fixture.mapped().platform().lock_process_pages(lent_at, page, locked), Status::ok);
+  VirtioGpuDevice &device = fixture.device();
+  HostVisibleBlob  blob(fixture.mapped().platform());
+  CHECK_STATUS(blob.create_over(device, 0u, resource, readback, locked, page), Status::invalid_parameter);
+  CHECK_STATUS(blob.create_over(device, context_id, 0u, readback, locked, page), Status::invalid_parameter);
+  CHECK_STATUS(blob.create_over(device, context_id, resource, HostMemoryRequest(), locked, page),
+               Status::invalid_parameter);
+  CHECK_STATUS(blob.create_over(device, context_id, resource, readback, nullptr, page), Status::invalid_parameter);
+  CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, 0u), Status::invalid_parameter);
+  CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, page + 1u),
+               Status::invalid_parameter);
+  CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, (std::uint64_t{1} << 32u) * page),
+               Status::invalid_parameter);
+  CHECK_EQ(host.answered(), 0u);
+  /* No room for a piece asks the device nothing. */
+  fixture.mapped().platform().fail_allocation_at(1u);
+  CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, page), Status::no_memory);
+  fixture.mapped().platform().fail_allocation_at(2u);
+  CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, page), Status::no_memory);
+  CHECK(!blob.created());
+  /* A creation the device refused is no blob. */
+  host.refuse_next();
+  CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, page), Status::not_supported);
+  CHECK(!blob.created());
+  /* A piece the device refused leaves a blob it made, to be released. */
+  host.refuse_attaches();
+  CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, page), Status::not_supported);
+  CHECK(blob.created());
+  CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, page), Status::invalid_state);
+  CHECK_STATUS(blob.destroy(device), Status::ok);
+  /* Pages the platform cannot read back are no pages to name. */
+  std::uint64_t not_a_lock = 0u;
+  CHECK_STATUS(blob.create_over(device, context_id, resource, readback, &not_a_lock, page), Status::invalid_parameter);
+  CHECK(blob.created());
+  fixture.mapped().platform().unlock_process_pages(locked); }

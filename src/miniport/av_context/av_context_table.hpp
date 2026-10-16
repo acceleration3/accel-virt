@@ -56,6 +56,9 @@ class AvContextTable {
 public:
     /* One per doorbell page. */
     static constexpr uint32_t max_contexts = RingSubmitter::doorbell_pages;
+    /* The most one adoption may lend: every page of it is a mapping of the
+     * QEMU process at worst. */
+    static constexpr uint64_t max_adopted_bytes = uint64_t{1} << 30u;
 
     /* `window` is the device's host window, which window chunks are placed in
      * and which must outlive the table. */
@@ -146,7 +149,15 @@ public:
      * is taken or the window has no run that long - the window's pages, not
      * a count of chunks, are what bounds them; not_supported with no window;
      * no_memory when the ids cannot be noted or the process cannot be given a
-     * view; the device's refusal otherwise. Nothing is held on a failed open. */
+     * view; the device's refusal otherwise. Nothing is held on a failed open.
+     *
+     * An adoption locks the process's pages `record` names, takes a free host
+     * blob id and has the device make a host blob of the memory `record`
+     * names over them (docs/host-memory.md, "Application memory"), answering
+     * the resource with the request's own bytes and address; its close has
+     * the device release the blob and then lets the pages go. no_space for a
+     * range over max_adopted_bytes, and the platform's refusal of the lock
+     * besides the open's. */
     [[nodiscard]] Status window_chunk(void *context, HostWindowRecord &record, VirtioGpuDevice &device);
     uint32_t             bound() const;
     /* DISPATCH. Whether the table still holds `context`. Destroying an
@@ -200,6 +211,9 @@ private:
      * context any more, so its window pages are free again. */
     void                 release_chunks(uint32_t slot, VirtioGpuDevice *device, bool host_let_go);
     [[nodiscard]] Status open_window(uint32_t slot, HostWindowRecord &record, VirtioGpuDevice &device);
+    [[nodiscard]] Status adopt_pages(uint32_t slot, HostWindowRecord &record, VirtioGpuDevice &device);
+    /* The blob over the pages `locked` holds, under a free id. */
+    [[nodiscard]] Status adopt_locked(uint32_t slot, void *locked, HostWindowRecord &record, VirtioGpuDevice &device);
     /* The chunk as a run of window pages under host blob id `resource`. */
     [[nodiscard]] Status place_in_window(uint32_t slot, uint32_t resource, HostWindowRecord &record,
                                          VirtioGpuDevice &device);

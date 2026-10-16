@@ -708,6 +708,36 @@ TEST(mock_kmt_escape, an_open_with_no_window_is_not_supported)
   CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
   CHECK_EQ(kmt.misuses(), 0u); }
 
+/* An adoption is answered as the driver answers one - with or without a
+ * window - and its chunk's memory is the process's own pages; a refusal set
+ * for the next open refuses it, and a full table refuses it too. */
+TEST(mock_kmt_escape, an_adoption_is_answered_with_its_own_range_and_its_memory_is_the_processs)
+{ MockKmt kmt;
+  EscapeRig rig(kmt);
+  alignas(4096) static std::uint8_t pages[2u * 4096u];
+  const auto address = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(pages));
+  std::uint8_t record[av::HostWindowRecord::encoded_size] = {};
+  CHECK_STATUS(av::HostWindowRecord(address, sizeof pages, readback).encode(record, sizeof record), Status::ok);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
+  av::HostWindowRecord request(address, sizeof pages, readback);
+  CHECK_STATUS(request.accept_answer(record, sizeof record), Status::ok);
+  CHECK_EQ(request.resource_id(), MockKmt::first_window_resource);
+  CHECK(kmt.window_chunk_memory(MockKmt::first_window_resource) == pages);
+  CHECK_EQ(kmt.window_request(MockKmt::first_window_resource).encoded(), readback.encoded());
+  CHECK_EQ(kmt.window_chunks(), 1u);
+  kmt.refuse_next_window_open(0xC0000017u);
+  CHECK_STATUS(av::HostWindowRecord(address, 4096u, readback).encode(record, sizeof record), Status::ok);
+  CHECK(rig.escape(record, sizeof record) != Status::ok);
+  CHECK_EQ(kmt.last_code(), 0xC0000017u);
+  for (std::uint32_t held = 1u; held < MockKmt::max_window_chunks; held++) {
+      CHECK_STATUS(av::HostWindowRecord(address, 4096u, readback).encode(record, sizeof record), Status::ok);
+      CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
+  }
+  CHECK_STATUS(av::HostWindowRecord(address, 4096u, readback).encode(record, sizeof record), Status::ok);
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
+  CHECK_EQ(kmt.window_chunks(), MockKmt::max_window_chunks);
+  CHECK_EQ(kmt.misuses(), 0u); }
+
 /* The memory an open asks for is the window's record of the chunk, and of
  * the last open; an open of memory no driver makes is refused. */
 TEST(mock_kmt_escape, a_window_chunk_keeps_the_memory_it_was_opened_as)
@@ -810,7 +840,7 @@ TEST(mock_kmt_escape, misuse_failure_zero_and_scripted_answers)
   kmt.answer_next_escape(scripted, sizeof scripted);
   CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
   CHECK_EQ(u32_at(record, 0u), 0xBBCCDDEEu);
-  CHECK_EQ(record[4], 2u);   /* the rest of the record as it was: its version */
+  CHECK_EQ(record[4], 3u);   /* the rest of the record as it was: its version */
   CHECK_EQ(kmt.window_chunks(), 0u);
   encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
   CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);   /* the script was for one escape */

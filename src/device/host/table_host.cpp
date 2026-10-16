@@ -235,6 +235,18 @@ Status TableHost::alias_guest_run(void *run, uint64_t bytes, void *at)
     return ops_.alias_guest_run(ops_.opaque, run, bytes, at) == 0 ? Status::ok : Status::not_supported;
 }
 
+Status TableHost::overlay_guest_run(void *run, uint64_t bytes, int fd, uint64_t offset)
+{
+    AV_SCOPE("TableHost::overlay_guest_run");
+    return ops_.overlay_guest_run(ops_.opaque, run, bytes, fd, offset) == 0 ? Status::ok : Status::not_supported;
+}
+
+Status TableHost::restore_guest_run(void *run, uint64_t bytes)
+{
+    AV_SCOPE("TableHost::restore_guest_run");
+    return ops_.restore_guest_run(ops_.opaque, run, bytes) == 0 ? Status::ok : Status::not_supported;
+}
+
 void TableHost::release_range(void *base, uint64_t bytes)
 {
     AV_SCOPE("TableHost::release_range");

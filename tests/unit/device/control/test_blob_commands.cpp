@@ -66,6 +66,23 @@ GpuRequestBuilder create_host(std::uint32_t id, std::uint64_t size, std::uint64_
     return create_blob(id, host3d, mappable, 0u, memory, size).context(for_context);
 }
 
+const std::uint64_t readback = HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u).encoded();
+
+/* A HOST3D_GUEST blob over pages a process lent, for the context the plane
+ * holds, of readback memory unless a test names other. */
+GpuRequestBuilder create_adopted(std::uint32_t id, std::uint64_t size, std::uint64_t memory = readback)
+{
+    return create_blob(id, host3d_guest, 0u, 0u, memory, size).context(context);
+}
+
+/* RESOURCE_ATTACH_BACKING naming one run of guest pages. */
+GpuRequestBuilder attach(std::uint32_t id, std::uint64_t address, std::uint32_t length)
+{
+    GpuRequestBuilder request(BlobCommands::resource_attach_backing);
+    request.u32(id).u32(1u).u64(address).u32(length).u32(0u);
+    return request;
+}
+
 GpuRequestBuilder map_blob(std::uint32_t id, std::uint64_t offset)
 {
     GpuRequestBuilder request(BlobCommands::resource_map_blob);
@@ -154,6 +171,82 @@ TEST(blob_commands_create, a_host_blob_is_memory_the_plane_allocates_for_its_con
   /* Neither a guest blob nor something the contexts in another process copy. */
   CHECK_EQ(fixture.blobs().live(), 0u);
   CHECK_EQ(fixture.plane().created_count(), 0u); }
+
+/* Pages a process lent: the blob is made with none, each ATTACH_BACKING lays
+ * the next of them over its memory in order, and released, the pages are the
+ * guest's own again holding what the memory held (docs/host-memory.md,
+ * "Application memory"). */
+TEST(blob_commands_create, an_adopted_blob_lies_over_the_pages_attached_to_it_until_released)
+{ Fixture fixture;
+  std::uint8_t *const first = fixture.host().guest_ram(ram + 0x3000u);
+  first[5] = 0x5Au;
+  CHECK_EQ(fixture.send(create_adopted(host_blob, 0x3000u)), ok_nodata);
+  CHECK(fixture.host_blobs().owns(context, host_blob));
+  CHECK_EQ(fixture.plane().last_memory().request, static_cast<std::uint32_t>(readback));
+  CHECK_EQ(fixture.send(attach(host_blob, ram + 0x3000u, 0x1000u)), ok_nodata);
+  CHECK_EQ(fixture.send(attach(host_blob, ram + 0x8000u, 0x2000u)), ok_nodata);
+  CHECK_EQ(fixture.host().overlaid_bytes(), 0x3000u);
+  /* What the guest held came along: the page reads the same through RAM. */
+  CHECK_EQ(first[5], 0x5Au);
+  /* Full, a further page runs past the blob. */
+  CHECK_EQ(fixture.send(attach(host_blob, ram + 0xC000u, 0x1000u)), err_invalid_parameter);
+  /* Never placed: the guest sees it through its own pages. */
+  CHECK_EQ(fixture.send(map_blob(host_blob, 0u)), ok_map_info);
+  CHECK_EQ(fixture.send(named(BlobCommands::resource_unmap_blob, host_blob)), ok_nodata);
+  CHECK_EQ(fixture.send(named(BlobCommands::resource_unref, host_blob)), ok_nodata);
+  CHECK_EQ(fixture.host().overlaid_bytes(), 0u);
+  CHECK_EQ(first[5], 0x5Au);
+  /* Given back, the pages can be lent again. */
+  CHECK_EQ(fixture.send(create_adopted(host_blob, 0x1000u)), ok_nodata);
+  CHECK_EQ(fixture.send(attach(host_blob, ram + 0x3000u, 0x1000u)), ok_nodata); }
+
+TEST(blob_commands_create, an_adoption_the_protocol_or_the_memory_does_not_allow_holds_nothing)
+{ struct Case {
+      GpuRequestBuilder request;
+      std::uint32_t     answer;
+  };
+  Case cases[] = {
+      {create_blob(host_blob, host3d_guest, 0u, 1u, readback, 0x1000u).context(context), err_invalid_parameter},
+      {create_blob(host_blob, host3d_guest, 0u, 0u, readback | std::uint64_t{1} << 32u, 0x1000u).context(context),
+       err_invalid_parameter},
+      {create_blob(host_blob, host3d_guest, 0u, 0u, readback, 0x1000u).context(context + 1u), err_invalid_context_id},
+      {create_adopted(5u, 0x1000u), err_invalid_resource_id},
+      {create_adopted(host_blob, 0x1800u), err_invalid_parameter},
+  };
+  for (Case &c : cases) {
+      Fixture fixture;
+      CHECK_EQ(fixture.send(c.request), c.answer);
+      CHECK_EQ(fixture.host_blobs().live(), 0u);
+  }
+  { Fixture refused;
+    refused.plane().refuse_memory_at(1u);
+    CHECK_EQ(refused.send(create_adopted(host_blob, 0x1000u)), err_out_of_memory);
+    CHECK_EQ(refused.host_blobs().live(), 0u); }
+  /* The guest maps its own pages write-back: memory the host maps
+   * write-combined cannot lie under them, and goes back. */
+  Fixture combined;
+  combined.plane().answer_caching(AV_MEMORY_WRITE_COMBINED);
+  CHECK_EQ(combined.send(create_adopted(host_blob, 0x1000u)), err_invalid_parameter);
+  CHECK_EQ(combined.host_blobs().live(), 0u);
+  CHECK_EQ(combined.plane().freed_count(), 1u); }
+
+/* ATTACH_BACKING is the base class's but for a host blob; for one, a piece
+ * that cannot be laid is refused with why. */
+TEST(blob_commands_attach, a_piece_is_laid_or_refused_and_anything_not_a_host_blob_is_the_base_class_s)
+{ Fixture fixture;
+  CHECK_EQ(fixture.send(attach(50u, ram, 0x1000u)), 0u);
+  CHECK_EQ(fixture.send(attach(host_blob, ram, 0x1000u)), 0u);
+  CHECK_EQ(fixture.send(attach(host_blob, ram, 0x1000u).truncate(31u)), 0u);
+  CHECK_EQ(fixture.send(create_adopted(host_blob, 0x4000u)), ok_nodata);
+  CHECK_EQ(fixture.send(create_adopted(host_blob + 1u, 0x4000u)), ok_nodata);
+  CHECK_EQ(fixture.send(attach(host_blob, ram, 0x1000u)), ok_nodata);
+  /* A page under one blob is refused another. */
+  CHECK_EQ(fixture.send(attach(host_blob + 1u, ram, 0x1000u)), err_invalid_parameter);
+  /* Memory that is not guest RAM, and memory there is no room to record. */
+  CHECK_EQ(fixture.send(attach(host_blob, 0x800000u, 0x1000u)), err_unspec);
+  fixture.host().fail_allocation_at(1u);
+  CHECK_EQ(fixture.send(attach(host_blob + 1u, ram + 0x1000u, 0x1000u)), err_out_of_memory);
+  CHECK_EQ(fixture.host().overlaid_bytes(), 0x1000u); }
 
 TEST(blob_commands_map, a_host_blob_maps_where_the_guest_asks_with_the_host_s_caching)
 { Fixture fixture;

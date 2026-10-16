@@ -949,6 +949,53 @@ bool MockHost::holds_range(void *at, std::uint64_t bytes)
 
 void MockHost::fail_reserve_at(std::uint32_t nth) { StateLock lock(state_); fail_reserve_ = nth; }
 void MockHost::fail_alias_at(std::uint32_t nth) { StateLock lock(state_); fail_alias_ = nth; }
+void MockHost::fail_overlay_at(std::uint32_t nth) { StateLock lock(state_); fail_overlay_ = nth; }
+void MockHost::fail_restore_at(std::uint32_t nth) { StateLock lock(state_); fail_restore_ = nth; }
+
+std::uint64_t MockHost::overlaid_bytes()
+{
+    StateLock lock(state_);
+    return overlaid_;
+}
+
+/* What av_move_run does in QEMU: the bytes into a fresh mapping of the file,
+ * which then takes the run's place. */
+namespace {
+
+bool move_run(void *run, std::uint64_t bytes, int fd, std::uint64_t offset)
+{
+    void *const staging = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, static_cast<off_t>(offset));
+    if (staging == MAP_FAILED) return false;
+    std::memcpy(staging, run, bytes);
+    munmap(staging, bytes);
+    return mmap(run, bytes, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, static_cast<off_t>(offset)) !=
+           MAP_FAILED;
+}
+
+}  // namespace
+
+Status MockHost::overlay_guest_run(void *run, std::uint64_t bytes, int fd, std::uint64_t offset)
+{
+    StateLock lock(state_);
+    if (fail_now(fail_overlay_)) return Status::not_supported;
+    GuestRegion *const region = region_holding(run, bytes);
+    if (region == nullptr || bytes == 0u || bytes % page != 0u || offset % page != 0u) return Status::not_supported;
+    if (!move_run(run, bytes, fd, offset)) return Status::not_supported;
+    overlaid_ += bytes;
+    return Status::ok;
+}
+
+Status MockHost::restore_guest_run(void *run, std::uint64_t bytes)
+{
+    StateLock lock(state_);
+    if (fail_now(fail_restore_)) return Status::not_supported;
+    GuestRegion *const region = region_holding(run, bytes);
+    if (region == nullptr || bytes > overlaid_) return Status::not_supported;
+    const std::uint64_t offset = static_cast<std::uint64_t>(static_cast<std::uint8_t *>(run) - region->bytes);
+    if (!move_run(run, bytes, region->fd, offset)) return Status::not_supported;
+    overlaid_ -= bytes;
+    return Status::ok;
+}
 
 /* A descriptor the test's subject may own and close. A pipe's read end costs
  * nothing and is a real file descriptor, which is what makes "closed exactly

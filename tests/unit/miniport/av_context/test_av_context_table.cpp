@@ -1439,6 +1439,177 @@ TEST(av_context_table_window_chunk, is_passive_only)
   while (fixture.platform().claim(Violation::lock_order)) {}
   while (fixture.platform().claim(Violation::release_order)) {} }
 
+/* Pages a process lent (docs/host-memory.md, "Application memory"): the
+ * kernel locks them, takes an id, has the device make a HOST3D_GUEST blob for
+ * the context and name the pages to it, and answers the process's own range;
+ * nothing of the window is taken and nothing is mapped. A close releases the
+ * blob and then lets the pages go. */
+namespace {
+
+constexpr std::uint32_t attach_type = 0x0106u;
+constexpr std::uint32_t blob_mem_host3d_guest = 3u;
+constexpr std::uint64_t lent_at = 0x7FF000000000ull;
+const HostMemoryRequest readback(HostMemoryRequest::Kind::readback, 0u);
+const std::uint64_t     lent_frames[3] = {0x50000u, 0x51000u, 0x70000u};
+
+Status adopt(Fixture &fixture, void *context, std::uint64_t bytes, HostWindowRecord &answer)
+{
+    answer = HostWindowRecord(lent_at, bytes, readback);
+    return fixture.table().window_chunk(context, answer, fixture.device());
+}
+
+}  // namespace
+
+TEST(av_context_table_adopt, lent_pages_become_a_blob_the_device_makes_over_them_and_come_back_on_close)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  bind_with_window(fixture);
+  fixture.platform().lend_process_range(lent_at, lent_frames, 3u);
+  HostWindowRecord answer;
+  CHECK_STATUS(adopt(fixture, &first_context, 3u * page, answer), Status::ok);
+  CHECK(answer.adopts());
+  CHECK_EQ(answer.resource_id(), chunk_base);
+  CHECK_EQ(answer.bytes(), 3u * page);
+  CHECK_EQ(answer.address(), lent_at);
+  CHECK_EQ(fixture.platform().process_locks(), 1u);
+  CHECK_EQ(host.field(create_blob_type, 3u, 16u), 1u);   /* the host context */
+  CHECK_EQ(host.field(create_blob_type, 3u, 24u), chunk_base);
+  CHECK_EQ(host.field(create_blob_type, 3u, 28u), blob_mem_host3d_guest);
+  CHECK_EQ(host.field(create_blob_type, 3u, 32u), 0u);   /* not mappable */
+  CHECK_EQ(field64(host, create_blob_type, 3u, 40u), readback.encoded());
+  CHECK_EQ(host.field(attach_type, 0u, 24u), chunk_base);
+  CHECK_EQ(host.field(attach_type, 0u, 28u), 2u);        /* two runs of frames */
+  CHECK_EQ(field64(host, attach_type, 0u, 32u), lent_frames[0]);
+  CHECK_EQ(host.count_of(map_blob_type), 0u);
+  CHECK_EQ(fixture.window().pages_in_use(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), context_views);
+  CHECK(fixture.table().invariants_hold());
+  /* A window chunk beside it takes the next id. */
+  HostWindowRecord windowed;
+  CHECK_STATUS(open_window(fixture, &first_context, page, windowed), Status::ok);
+  CHECK_EQ(windowed.resource_id(), chunk_base + 1u);
+  CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::ok);
+  CHECK_EQ(host.field(unref_type, 0u, 24u), chunk_base);
+  CHECK_EQ(host.count_of(unmap_blob_type), 0u);           /* never placed, never unmapped */
+  CHECK_EQ(fixture.platform().process_locks(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), context_views + 1u);
+  /* Lent again, it takes the id given back. */
+  CHECK_STATUS(adopt(fixture, &first_context, 3u * page, answer), Status::ok);
+  CHECK_EQ(answer.resource_id(), chunk_base);
+  CHECK(fixture.table().invariants_hold());
+  /* The context's destruction lets go of the pages after the blob. */
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  CHECK_EQ(fixture.platform().process_locks(), 0u);
+  /* Its own two, the window chunk's, and the context's three. */
+  CHECK_EQ(host.count_of(unref_type), 2u + 1u + 3u); }
+
+TEST(av_context_table_adopt, a_range_too_long_or_not_the_processs_holds_nothing)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  bind_with_window(fixture);
+  const std::uint32_t asked = host.queue().requests();
+  HostWindowRecord answer(lent_at, AvContextTable::max_adopted_bytes + page, readback);
+  CHECK_STATUS(fixture.table().window_chunk(&first_context, answer, fixture.device()), Status::no_space);
+  CHECK_STATUS(adopt(fixture, &first_context, page, answer), Status::invalid_parameter);   /* nothing lent there */
+  CHECK_EQ(host.queue().requests(), asked);
+  fixture.platform().lend_process_range(lent_at, lent_frames, 1u);
+  AvContextTableProbe::set_held(fixture.table(), 0u, AvContextTable::max_chunks_per_context);
+  CHECK_STATUS(adopt(fixture, &first_context, page, answer), Status::no_space);
+  CHECK(fixture.platform().claim(Violation::broken_invariant));
+  CHECK(fixture.platform().claim(Violation::broken_invariant));
+  AvContextTableProbe::set_held(fixture.table(), 0u, 0u);
+  AvContextTableProbe::take_every_id(fixture.table());
+  CHECK_STATUS(adopt(fixture, &first_context, page, answer), Status::no_space);
+  CHECK_EQ(host.queue().requests(), asked);
+  CHECK_EQ(fixture.platform().process_locks(), 0u);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* Each step that fails is undone in reverse, the pages let go of last; a blob
+ * the device would not release keeps its id. */
+TEST(av_context_table_adopt, a_step_that_fails_is_undone_and_the_pages_let_go)
+{ struct Case {
+      const char   *name;
+      std::uint32_t refuse;
+      bool          no_memory;
+      Status        expected;
+      std::uint32_t unrefs;
+  };
+  const Case cases[] = {
+      {"create refused", create_blob_type, false, Status::not_supported, 0u},
+      {"pages refused", attach_type, false, Status::not_supported, 1u},
+      {"no room to name the pages", 0u, true, Status::no_memory, 0u},
+  };
+  for (const Case &one : cases) {
+      Fixture fixture;
+      Host    host(fixture.mapped());
+      bind_with_window(fixture);
+      fixture.platform().lend_process_range(lent_at, lent_frames, 2u);
+      if (one.refuse != 0u) host.refuse_next(one.refuse);
+      if (one.no_memory) fixture.platform().fail_allocation_at(1u);
+      HostWindowRecord answer;
+      CHECK_STATUS(adopt(fixture, &first_context, 2u * page, answer), one.expected);
+      CHECK_EQ(answer.resource_id(), 0u);
+      CHECK_EQ(host.count_of(unref_type), one.unrefs);
+      CHECK_EQ(fixture.platform().process_locks(), 0u);
+      CHECK_STATUS(adopt(fixture, &first_context, 2u * page, answer), Status::ok);
+      CHECK_EQ(answer.resource_id(), chunk_base);
+      CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  }
+  /* No room for the chunk once the blob is made: the blob goes back. */
+  { Fixture fixture;
+    Host    host(fixture.mapped());
+    bind_with_window(fixture);
+    fixture.platform().lend_process_range(lent_at, lent_frames, 1u);
+    fixture.platform().fail_allocation_at(3u);
+    HostWindowRecord answer;
+    CHECK_STATUS(adopt(fixture, &first_context, page, answer), Status::no_memory);
+    CHECK_EQ(host.count_of(unref_type), 1u);
+    CHECK_EQ(fixture.platform().process_locks(), 0u);
+    CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+  /* A blob the device would not release, closed or undone, may still be over
+   * the pages: its id stays taken, and the pages are let go all the same. */
+  { Fixture fixture;
+    Host    host(fixture.mapped());
+    bind_with_window(fixture);
+    fixture.platform().lend_process_range(lent_at, lent_frames, 1u);
+    HostWindowRecord answer;
+    CHECK_STATUS(adopt(fixture, &first_context, page, answer), Status::ok);
+    host.refuse_next(unref_type);
+    CHECK_STATUS(close_window(fixture, &first_context, chunk_base), Status::ok);
+    CHECK_EQ(fixture.platform().process_locks(), 0u);
+    CHECK_STATUS(adopt(fixture, &first_context, page, answer), Status::ok);
+    CHECK_EQ(answer.resource_id(), chunk_base + 1u);
+    CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+  Fixture fixture;
+  Host    host(fixture.mapped());
+  bind_with_window(fixture);
+  fixture.platform().lend_process_range(lent_at, lent_frames, 1u);
+  fixture.platform().fail_allocation_at(3u);
+  host.refuse_next(unref_type);
+  HostWindowRecord answer;
+  CHECK_STATUS(adopt(fixture, &first_context, page, answer), Status::no_memory);
+  CHECK_EQ(fixture.platform().process_locks(), 0u);
+  CHECK_STATUS(adopt(fixture, &first_context, page, answer), Status::ok);
+  CHECK_EQ(answer.resource_id(), chunk_base + 1u);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* A table destroyed with lent pages still open lets go of them: the device
+ * stopped before the adapter went. */
+TEST(av_context_table_adopt, destruction_lets_go_of_pages_still_lent)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.window().initialize(window_base, 2u * page), Status::ok);
+  fixture.platform().lend_process_range(lent_at, lent_frames, 1u);
+  { AvContextTable table(fixture.platform(), fixture.mapped().interface(), fixture.allocations(), fixture.window());
+    CHECK_STATUS(table.bind(&first_context, fixture.record(), fixture.device(),
+                            fixture.mapped().function().doorbells(), capset()),
+                 Status::ok);
+    HostWindowRecord lent(lent_at, page, readback);
+    CHECK_STATUS(table.window_chunk(&first_context, lent, fixture.device()), Status::ok);
+    CHECK_EQ(fixture.platform().process_locks(), 1u); }
+  CHECK_EQ(fixture.platform().process_locks(), 0u);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 0u); }
+
 /* A chunk with no resource, one on a slot no context holds, a slot whose
  * count disagrees with its chunks, or more chunks than ids taken, is a table
  * that has lost track of what the device holds. */

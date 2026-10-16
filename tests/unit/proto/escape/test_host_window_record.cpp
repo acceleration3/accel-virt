@@ -57,8 +57,8 @@ TEST(host_window_record, an_open_round_trips_and_says_what_it_asks)
 { Bytes bytes(HostWindowRecord(Operation::open, asked, 0u, memory));
   CHECK_STATUS(bytes.status(), Status::ok);
   /* The layout the guest and the kernel agree on byte for byte: "AVW",
-   * version 2, open, no resource, the memory, the bytes, no address. */
-  const std::uint8_t leading[] = {0x41, 0x56, 0x57, 0x00, 2u, 0u, 1u, 0u, 0u, 0u, 0u, 0u, 3u, 5u, 0u, 0u};
+   * version 3, open, no resource, the memory, the bytes, no address. */
+  const std::uint8_t leading[] = {0x41, 0x56, 0x57, 0x00, 3u, 0u, 1u, 0u, 0u, 0u, 0u, 0u, 3u, 5u, 0u, 0u};
   CHECK(std::memcmp(bytes.data(), leading, sizeof leading) == 0);
   CHECK_EQ(u64_at(bytes.data(), 16u), asked);
   CHECK_EQ(u64_at(bytes.data(), 24u), 0u);
@@ -104,9 +104,11 @@ TEST(host_window_record, every_field_is_judged)
       {"magic", Operation::open, 0u, 4u, 0x00485641u},          /* AVH, the chunk binding's */
       {"version 0", Operation::open, 4u, 2u, 0u},
       {"version 1", Operation::open, 4u, 2u, 1u},
-      {"version 3", Operation::open, 4u, 2u, 3u},
+      {"version 2", Operation::open, 4u, 2u, 2u},
+      {"version 4", Operation::open, 4u, 2u, 4u},
       {"operation 0", Operation::open, 6u, 2u, 0u},
-      {"operation 3", Operation::open, 6u, 2u, 3u},
+      {"operation 4", Operation::open, 6u, 2u, 4u},
+      {"an open turned adoption, of no address", Operation::open, 6u, 2u, 3u},
       {"open with a resource already", Operation::open, 8u, 4u, resource},
       {"open of no memory", Operation::open, 12u, 4u, 0u},
       {"open of a memory kind there is none of", Operation::open, 12u, 4u, 4u},
@@ -129,6 +131,67 @@ TEST(host_window_record, every_field_is_judged)
       /* A refusal leaves the record as it was. */
       CHECK(!decoded.opens());
       CHECK_EQ(decoded.resource_id(), 7u);
+  } }
+
+/* An adoption names the process's own pages - whole pages at an address - and
+ * the memory they are to become; the kernel answers the resource and the
+ * request's own bytes and address (docs/host-memory.md, "Application memory"). */
+TEST(host_window_record, an_adoption_round_trips_and_is_answered_with_its_own_range)
+{ const std::uint64_t pages = 3u * 4096u;
+  Bytes bytes(HostWindowRecord(address, pages, memory));
+  CHECK_STATUS(bytes.status(), Status::ok);
+  CHECK_EQ(bytes.data()[6], 3u);
+  CHECK_EQ(u64_at(bytes.data(), 16u), pages);
+  CHECK_EQ(u64_at(bytes.data(), 24u), address);
+  HostWindowRecord decoded;
+  CHECK_STATUS(decode(bytes, decoded), Status::ok);
+  CHECK(decoded.adopts());
+  CHECK(!decoded.opens());
+  CHECK_EQ(decoded.address(), address);
+  CHECK_EQ(decoded.bytes(), pages);
+  CHECK_EQ(decoded.resource_id(), 0u);
+  CHECK_EQ(decoded.memory().encoded(), memory.encoded());
+  HostWindowRecord request(address, pages, memory);
+  Bytes answer(request.answered(resource, pages, address));
+  CHECK_STATUS(request.accept_answer(answer.data(), HostWindowRecord::encoded_size), Status::ok);
+  CHECK(request.adopts());
+  CHECK_EQ(request.resource_id(), resource);
+  CHECK_EQ(request.bytes(), pages);
+  CHECK_EQ(request.address(), address); }
+
+TEST(host_window_record, every_field_of_an_adoption_is_judged)
+{ const std::uint64_t pages = 3u * 4096u;
+  struct Case { const char *what; std::size_t at; std::uint8_t width; std::uint64_t value; };
+  const Case requests[] = {
+      {"no address", 24u, 8u, 0u},
+      {"an address off a page", 24u, 8u, address + 8u},
+      {"no bytes", 16u, 8u, 0u},
+      {"bytes not whole pages", 16u, 8u, pages + 1u},
+      {"a resource already", 8u, 4u, resource},
+      {"no memory", 12u, 4u, 0u},
+  };
+  for (const Case &one : requests) {
+      Bytes bytes(HostWindowRecord(address, pages, memory));
+      bytes.put(one.at, one.width, one.value);
+      HostWindowRecord decoded(Operation::close, 0u, 7u, none);
+      CHECK_STATUS(decode(bytes, decoded), Status::malformed);
+      CHECK(!decoded.adopts());
+      CHECK_EQ(decoded.resource_id(), 7u);
+  }
+  const Case answers[] = {
+      {"no resource", 8u, 4u, 0u},
+      {"other bytes", 16u, 8u, pages + 4096u},
+      {"fewer bytes", 16u, 8u, pages - 4096u},
+      {"another address", 24u, 8u, address + 4096u},
+      {"other memory", 12u, 4u, 0x0603u},
+  };
+  for (const Case &one : answers) {
+      HostWindowRecord request(address, pages, memory);
+      Bytes            answer(request.answered(resource, pages, address));
+      answer.put(one.at, one.width, one.value);
+      CHECK_STATUS(request.accept_answer(answer.data(), HostWindowRecord::encoded_size), Status::malformed);
+      CHECK_EQ(request.resource_id(), 0u);
+      CHECK_EQ(request.address(), address);
   } }
 
 TEST(host_window_record, a_short_buffer_is_refused_at_every_length_and_encode_refuses_one)

@@ -47,6 +47,13 @@ public:
      * page-multiple size, and nothing of the guest behind it
      * (docs/host-memory.md). */
     [[nodiscard]] Status host_blob(uint32_t context_id, uint32_t resource_id, HostMemoryRequest memory, uint64_t size);
+    /* Host GPU memory of the kind `memory` names over `size` bytes of guest
+     * pages a process lent (HOST3D_GUEST): not mappable, since the pages are
+     * already where the process sees them, and no entries yet - the pages
+     * follow as RESOURCE_ATTACH_BACKING pieces (docs/host-memory.md,
+     * "Application memory"). */
+    [[nodiscard]] Status adopted_blob(uint32_t context_id, uint32_t resource_id, HostMemoryRequest memory,
+                                      uint64_t size);
     /* Where in the hostmem region the device is to place it: the offset is the
      * guest's to choose, and the device refuses one that does not fit
      * (docs/protocol.md). */
@@ -93,6 +100,7 @@ private:
     static constexpr uint32_t name_bytes = 64u;
     static constexpr uint32_t blob_memory_guest = 1u;
     static constexpr uint32_t blob_memory_host3d = 2u;
+    static constexpr uint32_t blob_memory_host3d_guest = 3u;
     static constexpr uint32_t blob_flag_mappable = 1u;
 
     /* Starts a request of `size` bytes with its header; false when it cannot fit. */

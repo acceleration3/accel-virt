@@ -1,6 +1,10 @@
 /* One DxgkDdiGetStandardAllocationDriverData request: the runtime creating a
  * primary, shadow, staging or GDI surface without a user-mode driver asks the
- * driver to describe it, and passes the description back to CreateAllocation. */
+ * driver to describe it, and passes the description back to CreateAllocation.
+ * An existing heap (D3D12's OpenExistingHeapFromAddress, a
+ * D3DKMT_STANDARDALLOCATIONTYPE_EXISTINGHEAP allocation) arrives as a
+ * cross-adapter GDI texture as wide as the heap's bytes, one row high, of no
+ * format: dxgkrnl asks that of every driver for one. */
 #ifndef AV_STANDARD_ALLOCATION_HPP
 #define AV_STANDARD_ALLOCATION_HPP
 
@@ -28,13 +32,16 @@ public:
 private:
     static constexpr uint32_t staging_format = 21u;   /* D3DDDIFMT_A8R8G8B8 */
     enum : int32_t { shared_primary = 1, shadow = 2, staging = 3, gdi = 4 };
-    enum : int32_t { gdi_texture = 1, gdi_staging_cpu_visible = 2, gdi_staging = 3, gdi_texture_cpu_visible = 6 };
+    enum : int32_t { gdi_texture = 1, gdi_staging_cpu_visible = 2, gdi_staging = 3, gdi_texture_cpu_visible = 6,
+                     gdi_texture_cross_adapter = 7 };
 
     [[nodiscard]] Status layout_of(uint32_t width, uint32_t height, uint32_t format, SurfaceLayout &layout) const;
     [[nodiscard]] Status describe_shared_primary(AllocationDescriptor &descriptor) const;
     [[nodiscard]] Status describe_shadow(AllocationDescriptor &descriptor) const;
     [[nodiscard]] Status describe_staging(AllocationDescriptor &descriptor) const;
     [[nodiscard]] Status describe_gdi(AllocationDescriptor &descriptor) const;
+    /* The process's own pages, which the processor reads and writes. */
+    [[nodiscard]] Status describe_existing_heap(AllocationDescriptor &descriptor) const;
 
     Platform                                     &platform_;
     DxgkargGetStandardAllocationDriverDataRecord &request_;

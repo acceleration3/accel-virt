@@ -389,6 +389,11 @@ TEST(posix_renderer_host_guest, maps_extents_and_aliases_runs_through_the_region
   CHECK_EQ(static_cast<std::uint8_t *>(base)[2u * page + 6u], 0x4Fu);
   std::uint8_t outside[page] = {};
   CHECK_STATUS(host.alias_guest_run(outside, page, range), Status::not_supported);
+  /* Host blobs live in QEMU's process: the renderer lays none over its view
+   * of guest RAM, and has none to restore. */
+  CHECK_STATUS(host.overlay_guest_run(static_cast<std::uint8_t *>(base) + 2u * page, page, region, 0u),
+               Status::not_supported);
+  CHECK_STATUS(host.restore_guest_run(static_cast<std::uint8_t *>(base) + 2u * page, page), Status::not_supported);
   host.release_range(range, 2u * page);
   int           removed = -1;
   std::uint64_t size = 0u;

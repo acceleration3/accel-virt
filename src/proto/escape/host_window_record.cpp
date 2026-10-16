@@ -6,6 +6,12 @@
 
 namespace av {
 
+namespace {
+
+constexpr uint64_t page_bytes = 4096u;
+
+}  // namespace
+
 HostWindowRecord::HostWindowRecord() : operation_(0u), resource_id_(0u), memory_(0u), bytes_(0u), address_(0u)
 {
     AV_SCOPE("HostWindowRecord::HostWindowRecord");
@@ -17,6 +23,19 @@ HostWindowRecord::HostWindowRecord(Operation operation, uint64_t bytes, uint32_t
       bytes_(bytes), address_(0u)
 {
     AV_SCOPE("HostWindowRecord::HostWindowRecord");
+}
+
+HostWindowRecord::HostWindowRecord(uint64_t address, uint64_t bytes, HostMemoryRequest memory)
+    : operation_(static_cast<uint16_t>(Operation::adopt)), resource_id_(0u), memory_(memory.encoded()), bytes_(bytes),
+      address_(address)
+{
+    AV_SCOPE("HostWindowRecord::HostWindowRecord");
+}
+
+bool HostWindowRecord::adopts() const
+{
+    AV_SCOPE("HostWindowRecord::adopts");
+    return operation_ == static_cast<uint16_t>(Operation::adopt);
 }
 
 bool HostWindowRecord::opens() const
@@ -74,10 +93,14 @@ Status HostWindowRecord::encode(uint8_t *bytes, size_t capacity) const
 }
 
 /* An open names the bytes and the memory and leaves the answer's fields
- * empty; a close names a resource and nothing else. */
+ * empty; an adoption names whole pages of the process and the memory; a
+ * close names a resource and nothing else. */
 bool HostWindowRecord::is_request() const
 {
     AV_SCOPE("HostWindowRecord::is_request");
+    if (adopts())
+        return address_ != 0u && address_ % page_bytes == 0u && bytes_ != 0u && bytes_ % page_bytes == 0u &&
+               resource_id_ == 0u && memory().valid();
     if (address_ != 0u) return false;
     if (operation_ == static_cast<uint16_t>(Operation::open))
         return bytes_ != 0u && resource_id_ == 0u && memory().valid();
@@ -121,8 +144,10 @@ Status HostWindowRecord::accept_answer(const uint8_t *bytes, size_t length)
     const Status     read_back = answer.read(bytes, length);
     if (read_back != Status::ok) return read_back;
     if (!is_request() || answer.operation_ != operation_ || answer.memory_ != memory_) return Status::malformed;
-    const bool answered = opens() ? answer.resource_id_ != 0u && answer.bytes_ >= bytes_ && answer.address_ != 0u
-                                  : answer.resource_id_ == resource_id_ && answer.bytes_ == 0u && answer.address_ == 0u;
+    bool answered = answer.resource_id_ == resource_id_ && answer.bytes_ == 0u && answer.address_ == 0u;
+    if (opens()) answered = answer.resource_id_ != 0u && answer.bytes_ >= bytes_ && answer.address_ != 0u;
+    if (adopts())
+        answered = answer.resource_id_ != 0u && answer.bytes_ == bytes_ && answer.address_ == address_;
     if (!answered) return Status::malformed;
     *this = answer;
     return Status::ok;

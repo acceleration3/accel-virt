@@ -31,6 +31,11 @@ public:
      * invalid_state when one is held; otherwise the failing step's status -
      * the chunk's, or the import's (BlobImport) - with nothing left held. */
     [[nodiscard]] Status open(uint64_t bytes, HostMemoryRequest memory);
+    /* The `bytes` of this process's own memory at `address` (whole pages)
+     * lent and imported (HostWindowChunk::adopt): view() is `address`, and the
+     * host's API reads and writes those pages (docs/host-memory.md,
+     * "Application memory"). As open. */
+    [[nodiscard]] Status adopt(void *address, uint64_t bytes, HostMemoryRequest memory);
     /* Releases the import, then the chunk, each attempted whatever the one
      * before answered: the first failure, and nothing is held after. ok with
      * nothing asked when nothing is held. */
@@ -53,6 +58,9 @@ public:
     bool invariants_hold() const;
 
 private:
+    /* The chunk just taken, imported - or given back again. */
+    [[nodiscard]] Status import_taken();
+
     HostWindowChunk chunk_;
     BlobImport      import_;
 

@@ -358,3 +358,51 @@ TEST(host_window_chunk, invariants_want_a_resource_whole_pages_and_a_view_togeth
   CHECK(!chunk.invariants_hold());
   HostWindowChunkProbe::without_view(chunk);
   CHECK(chunk.invariants_hold()); }
+
+/* The process's own pages lent (docs/host-memory.md, "Application memory"):
+ * one escape names them, the view is the process's own address, and the
+ * close is the same as a window chunk's. */
+TEST(host_window_chunk, an_adoption_lends_the_processs_own_pages_and_its_view_is_them)
+{ Rig rig;
+  HostWindowChunk chunk(rig.connection(), rig.transport());
+  alignas(4096) static unsigned char pages[3u * 4096u];
+  const HostMemoryRequest readback(HostMemoryRequest::Kind::readback, 0u);
+  const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
+  CHECK_STATUS(chunk.adopt(pages, sizeof pages, readback), Status::ok);
+  CHECK(chunk.invariants_hold());
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes + 1u);
+  HostWindowRecord sent;
+  CHECK_STATUS(sent.decode(rig.kmt().last_escape(), HostWindowRecord::encoded_size), Status::ok);
+  CHECK(sent.adopts());
+  CHECK_EQ(sent.address(), static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(pages)));
+  CHECK_EQ(sent.bytes(), sizeof pages);
+  CHECK_EQ(sent.memory().encoded(), readback.encoded());
+  CHECK_EQ(chunk.resource_id(), MockKmt::first_window_resource);
+  CHECK_EQ(chunk.bytes(), sizeof pages);
+  CHECK(chunk.view() == pages);
+  CHECK(rig.kmt().window_chunk_memory(chunk.resource_id()) == pages);
+  /* Held, a second open or adoption asks nothing. */
+  CHECK_STATUS(chunk.adopt(pages, sizeof pages, readback), Status::invalid_state);
+  CHECK_STATUS(chunk.release(), Status::ok);
+  CHECK_EQ(chunk.resource_id(), 0u);
+  rig.check_only_the_link_is_left(); }
+
+/* Not whole pages, nothing, or no memory named: refused before the kernel is
+ * asked; the kernel's refusal is the answer, and nothing is held. */
+TEST(host_window_chunk, an_adoption_of_no_whole_pages_or_one_the_kernel_refuses_holds_nothing)
+{ Rig rig;
+  HostWindowChunk chunk(rig.connection(), rig.transport());
+  alignas(4096) static unsigned char pages[2u * 4096u];
+  const HostMemoryRequest readback(HostMemoryRequest::Kind::readback, 0u);
+  const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
+  CHECK_STATUS(chunk.adopt(nullptr, 4096u, readback), Status::invalid_parameter);
+  CHECK_STATUS(chunk.adopt(pages + 8, 4096u, readback), Status::invalid_parameter);
+  CHECK_STATUS(chunk.adopt(pages, 0u, readback), Status::invalid_parameter);
+  CHECK_STATUS(chunk.adopt(pages, 4097u, readback), Status::invalid_parameter);
+  CHECK_STATUS(chunk.adopt(pages, 4096u, HostMemoryRequest()), Status::invalid_parameter);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
+  rig.kmt().refuse_next_window_open(refused);
+  CHECK(chunk.adopt(pages, sizeof pages, readback) != Status::ok);
+  CHECK_EQ(chunk.resource_id(), 0u);
+  CHECK(chunk.invariants_hold());
+  rig.check_only_the_link_is_left(); }

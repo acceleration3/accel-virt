@@ -107,15 +107,39 @@ Status HostChannel::open_memory(uint64_t bytes, HostMemoryRequest memory, HostAl
 {
     AV_SCOPE("HostChannel::open_memory");
     made = nullptr;
-    if (!opened() || faulted()) return Status::invalid_state;
-    const ThreadLockHold release(lock_);
+    const ThreadLockHold           release(lock_);
     ObjectStorage<HostAllocation> *kept = nullptr;
+    const Status                   room = keep(kept);
+    if (room != Status::ok) return room;
+    return settle(kept, kept->object().open(bytes, memory), made);
+}
+
+Status HostChannel::adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made)
+{
+    AV_SCOPE("HostChannel::adopt_memory");
+    made = nullptr;
+    const ThreadLockHold           release(lock_);
+    ObjectStorage<HostAllocation> *kept = nullptr;
+    const Status                   room = keep(kept);
+    if (room != Status::ok) return room;
+    return settle(kept, kept->object().adopt(address, bytes, memory), made);
+}
+
+Status HostChannel::keep(ObjectStorage<HostAllocation> *&kept)
+{
+    AV_SCOPE("HostChannel::keep");
+    if (!opened() || faulted()) return Status::invalid_state;
     if (memories_.create(kept) != Status::ok) return Status::no_memory;
     static_cast<void>(kept->construct(*device_, transport_.object()));   /* a fresh slot */
-    const Status opened_memory = kept->object().open(bytes, memory);
-    if (opened_memory != Status::ok) {
+    return Status::ok;
+}
+
+Status HostChannel::settle(ObjectStorage<HostAllocation> *kept, Status taken, HostAllocation *&made)
+{
+    AV_SCOPE("HostChannel::settle");
+    if (taken != Status::ok) {
         static_cast<void>(memories_.destroy(kept));
-        return opened_memory;
+        return taken;
     }
     made = &kept->object();
     return Status::ok;

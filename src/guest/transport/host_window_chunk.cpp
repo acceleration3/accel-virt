@@ -41,6 +41,23 @@ Status HostWindowChunk::open(uint64_t bytes, HostMemoryRequest memory)
     if (resource_id_ != 0u) return Status::invalid_state;
     if (bytes == 0u || !memory.valid()) return Status::invalid_parameter;
     HostWindowRecord record(HostWindowRecord::Operation::open, bytes, 0u, memory);
+    return take(record);
+}
+
+Status HostWindowChunk::adopt(void *address, uint64_t bytes, HostMemoryRequest memory)
+{
+    AV_SCOPE("HostWindowChunk::adopt");
+    if (resource_id_ != 0u) return Status::invalid_state;
+    const auto at = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(address));
+    if (at == 0u || at % page_bytes != 0u || bytes == 0u || bytes % page_bytes != 0u || !memory.valid())
+        return Status::invalid_parameter;
+    HostWindowRecord record(at, bytes, memory);
+    return take(record);
+}
+
+Status HostWindowChunk::take(HostWindowRecord &record)
+{
+    AV_SCOPE("HostWindowChunk::take");
     uint8_t          encoded[HostWindowRecord::encoded_size] = {};
     static_cast<void>(record.encode(encoded, sizeof encoded));   /* the buffer is the encoded size */
     const Status escaped = send(encoded, sizeof encoded);

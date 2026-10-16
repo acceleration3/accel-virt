@@ -9,7 +9,7 @@
 namespace av {
 
 HostBlobTable::HostBlobTable(Host &host)
-    : host_(host), contexts_(nullptr), space_(host), lock_(nullptr), blobs_(host), ids_(host, Pool::paged),
+    : host_(host), contexts_(nullptr), space_(host), lent_(host), lock_(nullptr), blobs_(host), ids_(host, Pool::paged),
       placed_(host, Pool::paged)
 {
     AV_SCOPE("HostBlobTable::HostBlobTable");
@@ -126,7 +126,7 @@ Status HostBlobTable::create(uint32_t id, uint32_t context, HostMemoryRequest re
     host_.lock_mutex(lock_);
     ScopeExit unlock([this] { host_.unlock_mutex(lock_); });
     HostBlob *blob = nullptr;
-    if (blobs_.create(blob, host_, context, memory) != Status::ok) {
+    if (blobs_.create(blob, host_, lent_, context, memory) != Status::ok) {
         host_.close_descriptor(memory.fd);
         contexts_->free_memory(id);
         return Status::no_memory;
@@ -134,6 +134,25 @@ Status HostBlobTable::create(uint32_t id, uint32_t context, HostMemoryRequest re
     uint32_t slot = 0u;
     static_cast<void>(ids_.insert(id, blob, slot));
     return Status::ok;
+}
+
+Status HostBlobTable::create_over_guest(uint32_t id, uint32_t context, HostMemoryRequest request, uint64_t size)
+{
+    AV_SCOPE("HostBlobTable::create_over_guest");
+    const Status created = create(id, context, request, size);
+    if (created != Status::ok) return created;
+    if (blob_of(id)->caching() == AV_MEMORY_WRITE_BACK) return Status::ok;
+    destroy(id);
+    return Status::not_supported;
+}
+
+Status HostBlobTable::adopt(uint32_t id, ControlRequest &request, size_t offset, uint32_t entries)
+{
+    AV_SCOPE("HostBlobTable::adopt");
+    host_.require_main_loop("HostBlobTable::adopt");
+    HostBlob *const blob = blob_of(id);
+    if (blob == nullptr) return Status::not_found;
+    return blob->adopt(request, offset, entries);
 }
 
 /* Room to note the placement first: a blob the host placed must never be one
@@ -220,6 +239,7 @@ void HostBlobTable::report(StateWriter &writer) const
         writer.number("caching", blob->caching());
         writer.flag("mapped", blob->mapped());
         writer.number("offset", blob->offset());
+        writer.number("adopted", blob->adopted());
         writer.close();
     });
     writer.close();

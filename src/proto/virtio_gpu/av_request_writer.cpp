@@ -121,6 +121,21 @@ Status AvRequestWriter::host_blob(uint32_t context_id, uint32_t resource_id, Hos
     return Status::ok;
 }
 
+Status AvRequestWriter::adopted_blob(uint32_t context_id, uint32_t resource_id, HostMemoryRequest memory,
+                                     uint64_t size)
+{
+    AV_SCOPE("AvRequestWriter::adopted_blob");
+    WireWriter writer(bytes_, capacity_);
+    if (!begin(writer, resource_create_blob, context_id, host_blob_size)) return Status::too_large;
+    writer.write_u32(resource_id);
+    writer.write_u32(blob_memory_host3d_guest);
+    writer.write_u32(0u);
+    writer.write_u32(0u);
+    writer.write_u64(memory.encoded());
+    writer.write_u64(size);
+    return Status::ok;
+}
+
 Status AvRequestWriter::map_blob(uint32_t resource_id, uint64_t offset)
 {
     AV_SCOPE("AvRequestWriter::map_blob");

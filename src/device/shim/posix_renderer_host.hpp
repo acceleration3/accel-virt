@@ -88,6 +88,9 @@ public:
     [[nodiscard]] Status reserve_range(uint64_t bytes, void *&base) override;
     [[nodiscard]] Status alias_guest_run(void *run, uint64_t bytes, void *at) override;
     void                 release_range(void *base, uint64_t bytes) override;
+    /* Host blobs live in QEMU's process, never in the renderer's. */
+    [[nodiscard]] Status overlay_guest_run(void *run, uint64_t bytes, int fd, uint64_t offset) override;
+    [[nodiscard]] Status restore_guest_run(void *run, uint64_t bytes) override;
 
     uint64_t             hostmem_size() override;
     [[nodiscard]] Status place_in_hostmem(int fd, uint64_t size, uint64_t offset) override;

@@ -5,7 +5,14 @@
 namespace av {
 
 ContextChunk::ContextChunk(uint32_t slot, uint32_t resource_id, uint32_t first_page, uint32_t pages, void *mapping)
-    : slot_(slot), resource_id_(resource_id), first_page_(first_page), pages_(pages), mapping_(mapping)
+    : slot_(slot), resource_id_(resource_id), first_page_(first_page), pages_(pages), mapping_(mapping),
+      locked_(nullptr)
+{
+    AV_SCOPE("ContextChunk::ContextChunk");
+}
+
+ContextChunk::ContextChunk(uint32_t slot, uint32_t resource_id, void *locked)
+    : slot_(slot), resource_id_(resource_id), first_page_(0u), pages_(0u), mapping_(nullptr), locked_(locked)
 {
     AV_SCOPE("ContextChunk::ContextChunk");
 }
@@ -40,10 +47,17 @@ void *ContextChunk::mapping() const
     return mapping_;
 }
 
+void *ContextChunk::locked() const
+{
+    AV_SCOPE("ContextChunk::locked");
+    return locked_;
+}
+
 bool ContextChunk::invariants_hold() const
 {
     AV_SCOPE("ContextChunk::invariants_hold");
-    return resource_id_ != 0u && pages_ != 0u && mapping_ != nullptr;
+    if (resource_id_ == 0u) return false;
+    return locked_ != nullptr || (pages_ != 0u && mapping_ != nullptr);
 }
 
 }  // namespace av

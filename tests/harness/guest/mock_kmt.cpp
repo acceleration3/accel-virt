@@ -1098,6 +1098,7 @@ Status MockKmt::window_chunk(std::uint32_t context, std::uint8_t *data, std::uin
     HostWindowRecord record;
     if (record.decode(data, size) != Status::ok) return refuse(invalid_parameter);
     if (record.opens()) return open_window_chunk(context, data, size, record);
+    if (record.adopts()) return adopt_chunk(context, data, size, record);
     for (WindowChunk &chunk : window_chunks_) {
         if (chunk.resource != record.resource_id() || chunk.context != context) continue;
         clear_chunk(chunk);
@@ -1139,11 +1140,30 @@ Status MockKmt::open_window_chunk(std::uint32_t context, std::uint8_t *data, std
     if (first == window_pages_ || !request.memory().valid()) return refuse(invalid_parameter);
     for (WindowChunk &chunk : window_chunks_) {
         if (chunk.resource != 0u) continue;
-        chunk = WindowChunk{free_window_resource(), context, first, pages, request.memory().encoded()};
+        chunk = WindowChunk{free_window_resource(), context, first, pages, request.memory().encoded(), nullptr};
         window_opens_++;
         last_window_request_ = request.memory().encoded();
         const std::uint64_t address = reinterpret_cast<std::uintptr_t>(window_ + first * page_bytes);
         static_cast<void>(request.answered(chunk.resource, answered_bytes(pages), address).encode(data, size));
+        return succeed();
+    }
+    return refuse(invalid_parameter);
+}
+
+Status MockKmt::adopt_chunk(std::uint32_t context, std::uint8_t *data, std::uint32_t size,
+                            const HostWindowRecord &request)
+{
+    if (window_refusal_ != 0u) {
+        const std::uint32_t code = window_refusal_;
+        window_refusal_ = 0u;
+        return refuse(code);
+    }
+    for (WindowChunk &chunk : window_chunks_) {
+        if (chunk.resource != 0u) continue;
+        auto *const lent = reinterpret_cast<std::uint8_t *>(static_cast<std::uintptr_t>(request.address()));
+        chunk = WindowChunk{free_window_resource(), context, 0u, 0u, request.memory().encoded(), lent};
+        last_window_request_ = request.memory().encoded();
+        static_cast<void>(request.answered(chunk.resource, request.bytes(), request.address()).encode(data, size));
         return succeed();
     }
     return refuse(invalid_parameter);
@@ -1207,7 +1227,8 @@ HostMemoryRequest MockKmt::window_request(std::uint32_t resource) const
 std::uint8_t *MockKmt::window_chunk_memory(std::uint32_t resource) const
 {
     for (const WindowChunk &chunk : window_chunks_)
-        if (resource != 0u && chunk.resource == resource) return window_ + chunk.first * page_bytes;
+        if (resource != 0u && chunk.resource == resource)
+            return chunk.lent != nullptr ? chunk.lent : window_ + chunk.first * page_bytes;
     return nullptr;
 }
 

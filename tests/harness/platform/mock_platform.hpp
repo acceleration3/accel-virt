@@ -69,6 +69,13 @@ public:
     /* The block itself is the view: the modelled process and the test share one
      * address space, so what a process writes there the device reads. Counted
      * with map_to_process for fail_process_map_at. */
+    /* A range lend_process_range registered: its frames, as an MDL
+     * read_page_frames reads, held until unlocked. Anything else is a range
+     * the modelled process does not have, refused as the kernel's probe
+     * refuses it; fail_process_lock_at refuses one that is there. A lock left
+     * held fails the test. */
+    Status        lock_process_pages(std::uint64_t address, std::uint64_t bytes, void *&locked) override;
+    void          unlock_process_pages(void *locked) override;
     Status        map_pages_to_process(void *pages, std::uint64_t &view, void *&mapping) override;
     /* As map_pages_to_process, the view marked read-only for
      * read_only_process_mappings; the modelled process is trusted to keep to
@@ -178,6 +185,14 @@ public:
      * one to BuildPagingBuffer. The frames must outlive this platform; any
      * other pointer is an MDL this platform never made, and is refused. */
     void *attach_page_frames(const std::uint64_t *frames, std::uint32_t page_count);
+
+    /* The modelled process's memory at `address`: `page_count` pages, these
+     * frames. The frames must outlive this platform. */
+    void          lend_process_range(std::uint64_t address, const std::uint64_t *frames, std::uint32_t page_count);
+    /* Makes the Nth lock_process_pages from now (1-based) answer no_memory. */
+    void          fail_process_lock_at(std::uint32_t nth);
+    /* Locks lock_process_pages took and unlock_process_pages has not let go. */
+    std::uint32_t process_locks() const;
 
     /* What a device sees at a fake physical address: the host pointer, if the
      * whole range lies inside one contiguous block. */
@@ -419,6 +434,16 @@ private:
     std::uint64_t  slept_ticks_ = 0u;
     PageFrames     page_frames_[max_page_frames];
     std::uint32_t  page_frame_count_;
+    struct ProcessRange {
+        std::uint64_t address;
+        PageFrames    frames;
+        bool          locked;
+    };
+    static constexpr std::uint32_t max_process_ranges = 16u;
+    ProcessRange   process_ranges_[max_process_ranges] = {};
+    std::uint32_t  process_range_count_ = 0u;
+    std::uint32_t  process_lock_sequence_ = 0u;
+    std::uint32_t  process_lock_fail_at_ = 0u;
     AttachedWindow register_windows_[max_register_windows];
     std::uint32_t  register_window_count_;
 

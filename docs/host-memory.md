@@ -176,6 +176,74 @@ What happens next depends on the API:
 | Direct3D 9 | `readback` session arena | the source's mapping |
 | OpenGL | `readback` context arena | the source's mapping; readbacks through a memory object over the dma-buf where the driver takes one |
 | OpenCL | `readback` context arena; `ALLOC_HOST_PTR` buffers in it | `CL_MEM_USE_HOST_PTR` over the source's mapping |
+| Application memory (all of the above that take an application's pages) | `readback`, laid under the process's own pages | the API's own import of that blob |
+
+## Application memory
+
+Some APIs hand the driver memory the application already has and expect the
+GPU to read and write those very pages:
+
+- Direct3D 12's existing heaps (`OpenExistingHeapFromAddress`,
+  `OpenExistingHeapFromFileMapping`), and every write-back heap, since
+  D3D12Core asks for `D3D12_HEAP_FLAG_ALLOW_WRITE_WATCH` as nothing but a
+  write-back heap and only memory the process allocated with
+  `MEM_WRITE_WATCH` answers `GetWriteWatch` (GFXReconstruct's capture makes
+  every upload buffer one);
+- OpenCL's `CL_MEM_USE_HOST_PTR`;
+- Vulkan's `VK_EXT_external_memory_host`;
+- OpenGL's `GL_AMD_pinned_memory`.
+
+Guest RAM is still never handed to a host GPU. Instead the pages become host
+GPU memory where they are: the device lays a source allocation under them.
+
+1. **The process lends the pages.** It sends `HostWindowRecord` `adopt` on
+   its av context: the address and bytes (whole pages) and a class, always
+   `readback` - the process maps its own pages write-back, so the host memory
+   under them must be cached (`HostWindowChunk::adopt`,
+   `HostAllocation::adopt`, `HostChannel::adopt_memory`).
+2. **The kernel locks them.** `Platform::lock_process_pages` probes and
+   locks the range for writing in the calling process (copy-on-write and
+   demand-zero pages become its own), and a host blob id is taken. Nothing of
+   the window is used and nothing is mapped (`AvContextTable::adopt_pages`).
+3. **The device lays memory under them.** The kernel sends
+   `RESOURCE_CREATE_BLOB` with memory `HOST3D_GUEST`, no flags, no entries,
+   the class as the context object, then the pages' frames in order as
+   `RESOURCE_ATTACH_BACKING` pieces of at most 2048 pages
+   (`HostVisibleBlob::create_over`). The device allocates the memory as for
+   any host blob and refuses memory the host does not map write-back
+   (`HostBlobTable::create_over_guest`). For each run of a piece it copies
+   what the RAM holds into the allocation at the run's offset and maps the
+   dma-buf over the run's RAM in QEMU's address space with `MAP_FIXED`
+   (`GuestPageOverlay`, `Host::overlay_guest_run`); KVM follows through its
+   MMU notifiers, as it does for the hostmem window. The guest's page tables
+   do not change: the process's pointer, its write watch and every other view
+   of those frames now reach the host GPU's memory.
+4. **The context imports it** with `IMPORT_BLOB`, as any host blob: the API
+   names the import's handle in its commands.
+5. **Release.** The close has the device release the blob: each run gets its
+   RAM back holding what the allocation held (`Host::restore_guest_run` maps
+   the RAM's own file there again after copying), so what the GPU wrote stays
+   in the process's pages. Only then does the kernel unlock them - whatever
+   the device answered, since a process may not end holding locked pages.
+
+A page lies under one blob at a time (`LentPages`, one set per device): a
+second overlay would copy the first blob's memory into its own, and the
+first's restore would take the page from under it. Two of a process's ranges
+sharing a page - OpenCL buffers over neighbouring bytes - are told apart
+there, and the second lending is refused; the API then uses its own copy as
+before.
+
+Limits:
+
+- Guest RAM must be file-backed (`memfd`, as LSW's VM is): anonymous RAM
+  could not be given back, so it is refused before anything moves.
+- Each run is a mapping of the QEMU process (`vm.max_map_count`); one lending
+  is at most 1 GiB (`AvContextTable::max_adopted_bytes`).
+- A run is swapped by copy-then-map, so a write another of the process's
+  threads makes to those pages in that instant can be lost; the API calls
+  that lend and release are the moments an application does not write them.
+- The device in av-renderer's process cannot overlay QEMU's RAM: there the
+  lending is refused and the APIs copy.
 
 ## The Vulkan guest's memory types
 

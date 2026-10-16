@@ -244,6 +244,31 @@ TEST(av_request_writer_host_blob, is_a_mappable_host3d_blob_of_no_entries_for_it
   CHECK(HostMemoryRequest(static_cast<std::uint32_t>(decoded.blob_id())).vulkan_type() == 7u);
   CHECK(decoded.size() == 0x200000u); }
 
+/* Pages a process lent: HOST3D_GUEST, not mappable, no entries - the pages
+ * follow in ATTACH_BACKING pieces - of the memory named and the size lent. */
+TEST(av_request_writer_adopted_blob, is_an_unmappable_host3d_guest_blob_of_no_entries_yet)
+{ Buffer buffer;
+  AvRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
+  const HostMemoryRequest memory(HostMemoryRequest::Kind::readback, 0u);
+  CHECK_STATUS(writer.adopted_blob(9u, 50u, memory, 0x30000u), Status::ok);
+  CHECK_EQ(writer.length(), 56u);
+  WireReader reader(buffer.bytes, writer.length());
+  CreateBlobRequest decoded;
+  CHECK_STATUS(decoded.decode(reader), Status::ok);
+  CHECK_EQ(decoded.context_id(), 9u);
+  CHECK_EQ(decoded.resource_id(), 50u);
+  CHECK_EQ(decoded.memory(), CreateBlobRequest::memory_host3d_guest);
+  CHECK_EQ(decoded.flags(), 0u);
+  CHECK_EQ(decoded.entries(), 0u);
+  CHECK(decoded.blob_id() == memory.encoded());
+  CHECK(decoded.size() == 0x30000u);
+  std::uint8_t small[40];
+  std::memset(small, 0xEE, sizeof small);
+  AvRequestWriter tight(small, sizeof small);
+  CHECK_STATUS(tight.adopted_blob(9u, 50u, memory, 0x30000u), Status::too_large);
+  CHECK_EQ(tight.length(), 0u);
+  CHECK_EQ(small[32], 0xEEu); }
+
 TEST(av_request_writer_map_blob, carries_the_offset_the_driver_chose)
 { Buffer buffer;
   AvRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
