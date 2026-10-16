@@ -37,6 +37,7 @@
 #include "core/log/driver_log.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/submission/fault_code.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -96,6 +97,13 @@ public:
 
     bool opened() const;
     bool faulted() const;
+    /* Whether the context is lost: its transport faulted, or its fence page
+     * says the host faulted it - which an idle context learns only here.
+     * False while closed. */
+    bool      lost() const;
+    /* Why, as the fence page says: none while not lost, and for a loss the
+     * host gave no reason for - a send the kernel refused. */
+    FaultCode fault_code() const;
     /* What the generated clients send through, under the send lock: only
      * while open. */
     ClientTransport    &wire();

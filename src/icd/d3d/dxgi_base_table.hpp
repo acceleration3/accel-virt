@@ -81,18 +81,18 @@ public:
     Hresult offer_resources(DxgiDdiArgRecord *args);
     Hresult reclaim_resources(DxgiDdiArgReclaimResourcesRecord *args);
     Hresult reclaim_resources1(DxgiDdiArgReclaimResources1Record *args);
-    /* Every slot a later feature fills: hr_not_impl, or the removal code on a
-     * device that is gone. `entry` names the slot in the log. */
-    Hresult until_later(DxgiDdiArgRecord *args, const char *entry);
+    /* Every slot a later feature fills: hr_not_impl. */
+    Hresult until_later(DxgiDdiArgRecord *args);
 
     void report(StateWriter &writer) const;
 
     bool invariants_hold() const;
 
 private:
-    /* hr_ok while the device is live and `args` is this device's; otherwise
-     * what the caller must answer instead. */
-    Hresult usable(const DxgiDdiArgRecord *args, const char *entry);
+    /* hr_ok for arguments there are; otherwise what the caller must answer
+     * instead. The drivers that draw (D3d11Driver) publish a table of their
+     * own over this one, which answers for a device they lost. */
+    Hresult usable(const DxgiDdiArgRecord *args) const;
 
     UmdDevice                        &device_;
     Revision                          revision_;

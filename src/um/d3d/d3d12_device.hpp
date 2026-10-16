@@ -31,10 +31,10 @@
 #include "core/support/object_storage.hpp"
 #include "core/log/keyed_log.hpp"
 #include "core/trace/function_scope.hpp"
+#include "icd/common/loss_latch.hpp"
 #include "icd/common/refused_calls.hpp"
 #include "icd/d3d/d3d12_address_space.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
-#include "icd/d3d/device_removal.hpp"
 #include "icd/d3d/pipeline_library_blob.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
 #include "um/d3d/batch_follower.hpp"
@@ -97,8 +97,10 @@ public:
     d3d12proto::DescriptorRef descriptor(D3D12DDI_GPU_DESCRIPTOR_HANDLE handle) const;
     /* The id in a record the runtime handed back, 0 for none. */
     uint32_t                  id_of(const void *block) const;
-    /* A failure the runtime learns of through the core layer's callback: the
-     * only way a slot that returns nothing reports one. Logged once. */
+    /* The device is lost, as the session's fault code says why
+     * (icd::LossLatch): the runtime learns it once, through the core layer's
+     * callback - the only way a slot that returns nothing reports one - and
+     * `what` is logged once. */
     void                      lost(const char *what);
     /* A present from `queue` (d3d12_device_present.cpp): the command list's
      * slot, but the queue's work. */
@@ -194,7 +196,7 @@ private:
     d3d::D3d12AddressSpace                addresses_;
     D3d12Recorder                         recorder_;
     ResourceRecord                        null_resource_;
-    d3d::DeviceRemoval                    removal_;
+    icd::LossLatch                        loss_;
     d3d::PipelineLibraryBlob              library_blob_;
     d3d::D3dCallTrace                    &trace_;
     uint32_t                              context_number_;

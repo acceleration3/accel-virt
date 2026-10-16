@@ -21,7 +21,6 @@ using Kind = d3d::D3d9StateEntry::Kind;
 namespace {
 
 constexpr uint32_t stage_vertex = 0u;
-/* What a lost device's line is logged once under. */
 constexpr uint32_t stage_pixel = 1u;
 constexpr uint32_t components = 4u;
 /* D3DHAL_STATESET* (reverse-engineering.md §4.4). */
@@ -54,7 +53,7 @@ uint32_t query_bytes(D3DDDIQUERYTYPE type)
 
 D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d9HostCaps &caps,
                        d3d::UmdAdapter &adapter, d3d::D3dCallTrace &trace)
-    : session_(session), memory_(memory), log_(log), lines_(memory, log, "avumd: "), refused_(lines_), removal_(), caps_(caps), adapter_(adapter), lock_(), channel_(),
+    : session_(session), memory_(memory), log_(log), lines_(memory, log, "avumd: "), refused_(lines_), loss_(lines_), caps_(caps), adapter_(adapter), lock_(), channel_(),
       follower_(), resources_(memory), queries_(memory), blocks_(memory), recording_(nullptr), batch_(), shadow_(),
       callbacks_{}, kernel_(), allocations_(kernel_, lines_, session_.kmt()), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
@@ -192,13 +191,14 @@ HANDLE D3d9Device::handle_of(uint32_t id) const
     return reinterpret_cast<HANDLE>(static_cast<uintptr_t>(id));
 }
 
-/* The first call that could not be sent says why; every later one follows
- * from it. */
+/* The Direct3D 9 DDI has one spelling of a lost device, whatever the session's
+ * fault code says. */
 HRESULT D3d9Device::lost(const char *call)
 {
     AV_SCOPE("D3d9Device::lost");
-    removal_.remove(static_cast<d3d::Hresult>(D3DDDIERR_DEVICEREMOVED));
-    return static_cast<HRESULT>(removal_.check(log_, call));
+    loss_.lose(session_.fault_code());
+    static_cast<void>(loss_.refuses(call));
+    return D3DDDIERR_DEVICEREMOVED;
 }
 
 void D3d9Device::not_implemented(const char *call)

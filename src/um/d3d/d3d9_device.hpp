@@ -21,12 +21,12 @@
 #include "core/trace/function_scope.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/log/keyed_log.hpp"
+#include "icd/common/loss_latch.hpp"
 #include "icd/common/refused_calls.hpp"
 #include "icd/d3d/d3d9_state_batch.hpp"
 #include "icd/d3d/d3d9_state_block.hpp"
 #include "icd/d3d/d3d9_state_shadow.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
-#include "icd/d3d/device_removal.hpp"
 #include "icd/d3d/upload_sink.hpp"
 #include "proto/generated/d3d9/d3d9_wire_types.h"
 #include "um/common/performance_clock.hpp"
@@ -236,8 +236,8 @@ private:
     LogSink                        &log_;
     KeyedLog                        lines_;
     icd::RefusedCalls               refused_;
-    /* Why the device is gone, said once, by the first call that found it. */
-    d3d::DeviceRemoval              removal_;
+    /* Why the device is gone, said once by each call that finds it. */
+    icd::LossLatch                  loss_;
     const D3d9HostCaps                  &caps_;
     d3d::UmdAdapter                     &adapter_;
     ReentrantCallLock                    lock_;

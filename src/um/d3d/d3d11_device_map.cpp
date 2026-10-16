@@ -73,7 +73,7 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
             .text(" bytes of format ")
             .number(resource.format)
             .write();
-        set_error(D3DDDIERR_DEVICEREMOVED);
+        lost(__func__);
         return;
     }
     /* What the read-back wrote is the host's already. */

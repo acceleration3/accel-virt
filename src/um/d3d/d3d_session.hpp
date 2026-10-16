@@ -78,8 +78,10 @@ public:
     uint32_t members() const;
     /* Whether the host faulted the session's context - its Direct3D device
      * was lost - as its transport found or its fence page says, a session
-     * whose devices are idle included. False for one not open. */
-    bool     lost() const;
+     * whose devices are idle included (HostChannel::lost); and why. False
+     * and none for one not open. */
+    bool      lost() const;
+    FaultCode fault_code() const;
 
     /* A non-zero id no other object or device of the session has. Any thread. */
     uint32_t               next_id();

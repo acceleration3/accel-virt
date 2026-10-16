@@ -35,7 +35,7 @@ constexpr uint32_t copy_discard = 0x2u;
 
 D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps,
                          d3d::D3dCallTrace &trace, const d3d::SharedRowsRequest &rows)
-    : session_(session), memory_(memory), shadows_(memory), maps_(memory), log_(log), lines_(memory, log, "avumd: "), refused_(lines_), caps_(caps), runtime_{}, core_layer_{}, kernel_(), clock_(), allocations_(kernel_, lines_, session_.kmt()),
+    : session_(session), memory_(memory), shadows_(memory), maps_(memory), log_(log), lines_(memory, log, "avumd: "), refused_(lines_), loss_(lines_), caps_(caps), runtime_{}, core_layer_{}, kernel_(), clock_(), allocations_(kernel_, lines_, session_.kmt()),
       core_(nullptr), dxgi_(nullptr), channel_(), slices_(), parent_(nullptr), recording_lock_(), calls_(), recording_(),
       recorded_(), context_(nullptr), follower_(), gate_(), feature_level_(0u),
       guest_surfaces_(memory, Pool::paged), guest_lock_refused_(), present_refused_(), present_flags_(~0u), follow_refused_(), token_refused_(), frame_(1u),
@@ -128,6 +128,15 @@ void D3d11Device::set_error(HRESULT result)
         .hex(static_cast<uint32_t>(result), 8u)
         .write();
     if (core_ != nullptr) core_->pfnSetErrorCb(core_layer_, result);
+}
+
+HRESULT D3d11Device::lost(const char *entry)
+{
+    AV_SCOPE("D3d11Device::lost");
+    loss_.lose(session_.fault_code());
+    static_cast<void>(loss_.refuses(entry));
+    if (core_ != nullptr) core_->pfnSetErrorCb(core_layer_, D3DDDIERR_DEVICEREMOVED);
+    return loss_.guilty() ? DXGI_ERROR_DEVICE_RESET : DXGI_ERROR_DEVICE_REMOVED;
 }
 
 void D3d11Device::not_implemented(const char *call)
@@ -343,12 +352,12 @@ BOOL D3d11Device::flush(UINT, UINT)
 {
     AV_SCOPE("D3d11Device::flush");
     if (wire().application_flush() != Status::ok) {
-        set_error(D3DDDIERR_DEVICEREMOVED);
+        lost(__func__);
         return TRUE;
     }
     /* The runtime signals a fence it was asked to after flushing, on the
      * kernel context: the signal must wait for what the flush sent. */
-    if (FAILED(follow_host())) set_error(D3DDDIERR_DEVICEREMOVED);
+    if (FAILED(follow_host())) lost(__func__);
     return TRUE;
 }
 
@@ -454,7 +463,7 @@ VOID D3d11Device::release_resource(D3D10DDI_HRESOURCE, HANDLE token)
     AV_SCOPE("D3d11Device::release_resource");
     if (token == nullptr || context_ == nullptr) return;
     if (wire().application_flush() != Status::ok || FAILED(follow_host())) {
-        set_error(D3DDDIERR_DEVICEREMOVED);
+        lost(__func__);
         return;
     }
     const HRESULT queued = kernel_.release(token, context_);
@@ -523,7 +532,7 @@ VOID D3d11Device::command_list_execute(D3D11DDI_HCOMMANDLIST handle)
         .text(" bytes could not be run, status ")
         .number(static_cast<uint32_t>(ran))
         .write();
-    set_error(D3DDDIERR_DEVICEREMOVED);
+    lost(__func__);
 }
 
 /* A context-local handle is a copy of the immediate context's block
@@ -628,8 +637,12 @@ VOID D3d11Device::create_command_list(const D3D11DDIARG_CREATECOMMANDLIST *args,
     const Status took = context.wire().take_recorded(commands, bytes, taken);
     if (took != Status::ok) {
         if (commands != nullptr) memory_.release(commands);
-        if (took == Status::no_space) log_.write("avumd: a command list outgrew its deferred context's recording block");
-        set_error(took == Status::no_space ? E_OUTOFMEMORY : D3DDDIERR_DEVICEREMOVED);
+        if (took != Status::no_space) {
+            lost(__func__);
+            return;
+        }
+        log_.write("avumd: a command list outgrew its deferred context's recording block");
+        set_error(E_OUTOFMEMORY);
         return;
     }
     list = CommandListRecord{d3d::RecordStamp(CommandListRecord::tag, 0u), commands, taken};

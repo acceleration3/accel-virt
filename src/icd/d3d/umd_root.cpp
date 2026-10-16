@@ -32,7 +32,7 @@ namespace av::d3d {
 UmdRoot::UmdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, LogSink &log, UmdBinding &binding,
                  UmdHostDriver *builder)
     : lock_(lock), lines_(log, "avumd: "), binding_(binding), builder_(builder), connections_(kmt),
-      adapters_(memory), devices_(memory, log)
+      adapters_(memory), devices_(memory)
 {
     AV_SCOPE("UmdRoot::UmdRoot");
     binding_.bind(*this);

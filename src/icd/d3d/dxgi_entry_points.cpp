@@ -23,25 +23,25 @@ UmdDevice *device_behind(const void *args)
     return umd_binding.root().device_of(static_cast<const DxgiDdiArgRecord *>(args)->hDevice);
 }
 
-#define AV_DXGI_LATER(name, entry)                                                                                 \
+#define AV_DXGI_LATER(name)                                                                                        \
     extern "C" Hresult AV_RUNTIME_CALL name(DxgiDdiArgRecord *args)                                                                           \
     {                                                                                                              \
         UmdDevice *const device = device_behind(args);                                                             \
-        return device == nullptr ? hr_invalid_arg : device->dxgi().until_later(args, entry);                       \
+        return device == nullptr ? hr_invalid_arg : device->dxgi().until_later(args);                       \
     }
 
-AV_DXGI_LATER(avumd_dxgi_present, "pfnPresent")
-AV_DXGI_LATER(avumd_dxgi_set_display_mode, "pfnSetDisplayMode")
-AV_DXGI_LATER(avumd_dxgi_query_resource_residency, "pfnQueryResourceResidency")
-AV_DXGI_LATER(avumd_dxgi_rotate_resource_identities, "pfnRotateResourceIdentities")
-AV_DXGI_LATER(avumd_dxgi_blt, "pfnBlt")
-AV_DXGI_LATER(avumd_dxgi_resolve_shared_resource, "pfnResolveSharedResource")
-AV_DXGI_LATER(avumd_dxgi_blt1, "pfnBlt1")
-AV_DXGI_LATER(avumd_dxgi_reserved1, "pfnReserved1")
-AV_DXGI_LATER(avumd_dxgi_present_multiplane_overlay, "pfnPresentMultiplaneOverlay")
-AV_DXGI_LATER(avumd_dxgi_reserved2, "pfnReserved2")
-AV_DXGI_LATER(avumd_dxgi_present1, "pfnPresent1")
-AV_DXGI_LATER(avumd_dxgi_present_multiplane_overlay1, "pfnPresentMultiplaneOverlay1")
+AV_DXGI_LATER(avumd_dxgi_present)
+AV_DXGI_LATER(avumd_dxgi_set_display_mode)
+AV_DXGI_LATER(avumd_dxgi_query_resource_residency)
+AV_DXGI_LATER(avumd_dxgi_rotate_resource_identities)
+AV_DXGI_LATER(avumd_dxgi_blt)
+AV_DXGI_LATER(avumd_dxgi_resolve_shared_resource)
+AV_DXGI_LATER(avumd_dxgi_blt1)
+AV_DXGI_LATER(avumd_dxgi_reserved1)
+AV_DXGI_LATER(avumd_dxgi_present_multiplane_overlay)
+AV_DXGI_LATER(avumd_dxgi_reserved2)
+AV_DXGI_LATER(avumd_dxgi_present1)
+AV_DXGI_LATER(avumd_dxgi_present_multiplane_overlay1)
 
 #undef AV_DXGI_LATER
 

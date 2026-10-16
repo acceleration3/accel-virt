@@ -318,7 +318,7 @@ HRESULT D3d9Device::lock(D3DDDIARG_LOCK *args)
         const HRESULT read = read_surface(*locked, args->SubResourceIndex, pitch, rows);
         /* A device the host lost hands out no bytes: the application is told
          * the device is gone rather than shown what the shadow held before. */
-        if (removal_.removed()) return read;
+        if (loss_.lost()) return read;
         if (SUCCEEDED(read))
             static_cast<void>(PitchedRows(subresource.shadow, subresource.shadow_pitch, subresource.shadow_bytes)
                                   .copy_from(PitchedRows(readback_, pitch, size_t{rows} * pitch), rows));

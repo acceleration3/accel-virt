@@ -592,7 +592,7 @@ VOID D3d11Device::query_end(D3D10DDI_HQUERY query)
     record.last_end = session_.query_results().ended();
     record.first_miss = 0u;
     static_cast<void>(d3dproto::av_d3d_EndQuery(wire(), record.stamp.id()));
-    if (record.waited_on != 0u && wire().flush() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
+    if (record.waited_on != 0u && wire().flush() != Status::ok) lost(__func__);
 }
 
 VOID D3d11Device::query_get_data(D3D10DDI_HQUERY handle, void *data, UINT size, UINT flags)
@@ -612,7 +612,7 @@ VOID D3d11Device::query_get_data(D3D10DDI_HQUERY handle, void *data, UINT size, 
     if (query.first_miss == 0u) query.first_miss = now;
     if (query.last_end != 0u && now - query.first_miss < clock_.frequency() / patience_per_second) {
         query.waited_on = 1u;
-        if (wire().flush() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
+        if (wire().flush() != Status::ok) lost(__func__);
         else still_drawing();
         return;
     }
@@ -620,7 +620,7 @@ VOID D3d11Device::query_get_data(D3D10DDI_HQUERY handle, void *data, UINT size, 
     uint32_t ready = 0u;
     uint64_t answered = 0u;
     if (!d3dproto::av_d3d_GetQueryData(wire(), query.stamp.id(), flags, &ready, answer, sizeof(answer), &answered)) {
-        set_error(D3DDDIERR_DEVICEREMOVED);
+        lost(__func__);
         return;
     }
     if (ready == 0u) {

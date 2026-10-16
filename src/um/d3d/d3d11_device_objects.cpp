@@ -181,12 +181,12 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
         if (resource.shadow_watched != 0u) shadows_.forget_writes(resource.shadow, resource.shadow_bytes);
     }
     /* Bound once its first contents are in the slice. */
-    if (resource.on_slice != 0u && !bind_slice(resource)) set_error(D3DDDIERR_DEVICEREMOVED);
+    if (resource.on_slice != 0u && !bind_slice(resource)) lost(__func__);
 
     /* Another process - DWM - may open the key as soon as the kernel hands
      * it the handle, on its own stream: the host must have made the resource
      * by then, contents included. */
-    if (kernel_visible && wire().run_held() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
+    if (kernel_visible && wire().run_held() != Status::ok) lost(__func__);
 }
 
 /* Published under the key the miniport minted, as the size its allocation

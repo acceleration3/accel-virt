@@ -80,8 +80,7 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
      * batch this publishes (present_to_kernel), and DWM and the scanout wait
      * on the present. */
     if (FAILED(show_flip(source, subresource)) || wire().flush() != Status::ok) {
-        set_error(D3DDDIERR_DEVICEREMOVED);
-        return DXGI_ERROR_DEVICE_REMOVED;
+        return lost(__func__);
     }
     switch (source.present_model) {
     case d3d::SwapChainBuffer::Model::flip:
@@ -111,8 +110,7 @@ HRESULT D3d11Device::show_flip(const ResourceRecord &source, uint32_t subresourc
                       (source.bind & D3D10_DDI_BIND_PRESENT) != 0u;
     if (!flip && source.present_model != d3d::SwapChainBuffer::Model::scanout) return S_OK;
     if (d3dproto::av_d3d_PresentPoint(wire(), source.stamp.id(), subresource, 0u)) return S_OK;
-    set_error(D3DDDIERR_DEVICEREMOVED);
-    return DXGI_ERROR_DEVICE_REMOVED;
+    return lost(__func__);
 }
 
 /* A present the kernel copies from the buffer's own pages - into the window's
@@ -126,8 +124,7 @@ HRESULT D3d11Device::present_pages(ResourceRecord &source, uint32_t subresource,
         return present_point(source, subresource, destination, dxgi_context);
     const HRESULT published = publish(source, subresource);
     if (FAILED(published) && removed_on_host()) {
-        set_error(D3DDDIERR_DEVICEREMOVED);
-        return DXGI_ERROR_DEVICE_REMOVED;
+        return lost(__func__);
     }
     if (FAILED(published)) {
         log_.write("avumd: a present whose surface could not be read back");
@@ -148,8 +145,7 @@ HRESULT D3d11Device::present_point(ResourceRecord &source, uint32_t subresource,
     const uint32_t point = source.presents.next();
     if (!d3dproto::av_d3d_PresentPoint(wire(), source.stamp.id(), subresource, point) ||
         wire().flush() != Status::ok) {
-        set_error(D3DDDIERR_DEVICEREMOVED);
-        return DXGI_ERROR_DEVICE_REMOVED;
+        return lost(__func__);
     }
     return present_to_kernel(source, destination, dxgi_context, point);
 }
@@ -260,14 +256,12 @@ HRESULT D3d11Device::stage_plane(ResourceRecord &source, uint32_t subresource)
     if (source.shared_key == 0u) {
         const HRESULT published = publish(source, subresource);
         if (FAILED(published) && removed_on_host()) {
-            set_error(D3DDDIERR_DEVICEREMOVED);
-            return DXGI_ERROR_DEVICE_REMOVED;
+            return lost(__func__);
         }
         return published;
     }
     if (FAILED(show_flip(source, subresource)) || wire().flush() != Status::ok) {
-        set_error(D3DDDIERR_DEVICEREMOVED);
-        return DXGI_ERROR_DEVICE_REMOVED;
+        return lost(__func__);
     }
     return S_OK;
 }
@@ -423,7 +417,7 @@ HRESULT D3d11Device::resolve_shared_resource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE 
     /* Another process reads a shared resource through the host's own object,
      * so there is nothing to resolve into guest memory - only the work before
      * it to submit. */
-    return wire().flush() == Status::ok ? S_OK : D3DDDIERR_DEVICEREMOVED;
+    return wire().flush() == Status::ok ? S_OK : lost(__func__);
 }
 
 HRESULT D3d11Device::set_display_mode(DXGI_DDI_ARG_SETDISPLAYMODE *args)

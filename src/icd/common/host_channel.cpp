@@ -256,6 +256,21 @@ bool HostChannel::faulted() const
     return transport_.constructed() && transport_.object().faulted();
 }
 
+bool HostChannel::lost() const
+{
+    AV_SCOPE("HostChannel::lost");
+    if (!transport_.constructed()) return false;
+    const KmtTransport &transport = transport_.object();
+    return transport.faulted() || transport.host_faulted();
+}
+
+FaultCode HostChannel::fault_code() const
+{
+    AV_SCOPE("HostChannel::fault_code");
+    if (!lost()) return FaultCode::none;
+    return static_cast<FaultCode>(transport_.object().host_fault_code());
+}
+
 ClientTransport &HostChannel::wire()
 {
     AV_SCOPE("HostChannel::wire");

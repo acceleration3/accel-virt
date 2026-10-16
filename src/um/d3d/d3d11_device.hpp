@@ -23,6 +23,7 @@
 #include "core/support/object_storage.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
+#include "icd/common/loss_latch.hpp"
 #include "icd/common/refused_calls.hpp"
 #include "icd/common/once_latch.hpp"
 #include "icd/d3d/command_recording.hpp"
@@ -135,6 +136,13 @@ private:
     /* An error the runtime learns of through the core layer's callback: the
      * only way a slot that returns nothing reports one. */
     void            set_error(HRESULT result);
+    /* The device is lost, as the session's fault code says why
+     * (icd::LossLatch): the runtime is told through the core layer's callback,
+     * `entry` is logged once, and the answer is DXGI's spelling of the cause -
+     * DEVICE_RESET for a context the host faulted for its own commands,
+     * DEVICE_REMOVED for any other - which a slot that returns nothing
+     * drops. */
+    HRESULT         lost(const char *entry);
     /* E_NOTIMPL for the DDI named `call`, which the log names: a void DDI's
      * refusal otherwise reaches the application only as a device error, and a
      * program that does not check for one fails later somewhere else. */
@@ -277,6 +285,7 @@ private:
     LogSink          &log_;
     KeyedLog         lines_;
     icd::RefusedCalls refused_;
+    icd::LossLatch    loss_;
     const D3d11HostCaps   &caps_;
     D3D10DDI_HRTDEVICE     runtime_;
     D3D10DDI_HRTCORELAYER  core_layer_;

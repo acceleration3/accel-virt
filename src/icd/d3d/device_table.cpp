@@ -6,7 +6,7 @@
 
 namespace av::d3d {
 
-DeviceTable::DeviceTable(BlockSource &memory, LogSink &log) : log_(log), devices_(memory)
+DeviceTable::DeviceTable(BlockSource &memory) : devices_(memory)
 {
     AV_SCOPE("DeviceTable::DeviceTable");
 }
@@ -17,7 +17,7 @@ Status DeviceTable::make(UmdDevice *&made, UmdAdapter &adapter, void *block)
     made = nullptr;
     if (block == nullptr) return Status::invalid_parameter;
     UmdDevice   *device = nullptr;
-    const Status created = devices_.create(device, adapter, log_);
+    const Status created = devices_.create(device, adapter);
     if (created != Status::ok) return created;
     DeviceCookie *const cookie = static_cast<DeviceCookie *>(block);
     cookie->clear();

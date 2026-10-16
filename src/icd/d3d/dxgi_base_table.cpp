@@ -54,17 +54,16 @@ const DxgiDdiBaseCallbacksRecord *DxgiBaseTable::callbacks() const
     return callbacks_;
 }
 
-Hresult DxgiBaseTable::usable(const DxgiDdiArgRecord *args, const char *entry)
+Hresult DxgiBaseTable::usable(const DxgiDdiArgRecord *args) const
 {
     AV_SCOPE("DxgiBaseTable::usable");
-    if (args == nullptr) return hr_invalid_arg;
-    return device_.lost(entry);
+    return args == nullptr ? hr_invalid_arg : hr_ok;
 }
 
 Hresult DxgiBaseTable::gamma_caps(DxgiDdiArgGetGammaControlCapsRecord *args)
 {
     AV_SCOPE("DxgiBaseTable::gamma_caps");
-    const Hresult refused = usable(reinterpret_cast<const DxgiDdiArgRecord *>(args), "pfnGetGammaCaps");
+    const Hresult refused = usable(reinterpret_cast<const DxgiDdiArgRecord *>(args));
     if (refused != hr_ok) return refused;
     if (args->pGammaCapabilities == nullptr) return hr_invalid_arg;
     DxgiGammaControlCapabilitiesRecord *const caps =
@@ -83,13 +82,13 @@ Hresult DxgiBaseTable::resource_priority(DxgiDdiArgRecord *args)
     AV_SCOPE("DxgiBaseTable::resource_priority");
     /* Advisory, and this driver has no eviction order of its own to apply it
      * to: accepted and dropped, which is what a driver without one does. */
-    return usable(args, "pfnSetResourcePriority");
+    return usable(args);
 }
 
 Hresult DxgiBaseTable::overlay_caps(DxgiDdiArgGetMultiplaneOverlayCapsRecord *args)
 {
     AV_SCOPE("DxgiBaseTable::overlay_caps");
-    const Hresult refused = usable(reinterpret_cast<const DxgiDdiArgRecord *>(args), "pfnGetMultiplaneOverlayCaps");
+    const Hresult refused = usable(reinterpret_cast<const DxgiDdiArgRecord *>(args));
     if (refused != hr_ok) return refused;
     args->MaxPlanes = 0u;
     args->MaxRGBPlanes = 0u;
@@ -103,7 +102,7 @@ Hresult DxgiBaseTable::overlay_group_caps(DxgiDdiArgGetMultiplaneOverlayGroupCap
 {
     AV_SCOPE("DxgiBaseTable::overlay_group_caps");
     const Hresult refused =
-        usable(reinterpret_cast<const DxgiDdiArgRecord *>(args), "pfnGetMultiplaneOverlayGroupCaps");
+        usable(reinterpret_cast<const DxgiDdiArgRecord *>(args));
     if (refused != hr_ok) return refused;
     args->MaxPlanes = 0u;
     args->MaxStretchFactor = 0u;
@@ -115,7 +114,7 @@ Hresult DxgiBaseTable::overlay_group_caps(DxgiDdiArgGetMultiplaneOverlayGroupCap
 Hresult DxgiBaseTable::present_duration(DxgiDdiArgCheckPresentDurationSupportRecord *args)
 {
     AV_SCOPE("DxgiBaseTable::present_duration");
-    const Hresult refused = usable(reinterpret_cast<const DxgiDdiArgRecord *>(args), "pfnCheckPresentDurationSupport");
+    const Hresult refused = usable(reinterpret_cast<const DxgiDdiArgRecord *>(args));
     if (refused != hr_ok) return refused;
     args->ClosestSmallerDuration = 0u;
     args->ClosestLargerDuration = 0u;
@@ -126,7 +125,7 @@ Hresult DxgiBaseTable::overlay_color_space(DxgiDdiArgCheckMultiplaneOverlayColor
 {
     AV_SCOPE("DxgiBaseTable::overlay_color_space");
     const Hresult refused =
-        usable(reinterpret_cast<const DxgiDdiArgRecord *>(args), "pfnCheckMultiplaneOverlayColorSpaceSupport");
+        usable(reinterpret_cast<const DxgiDdiArgRecord *>(args));
     if (refused != hr_ok) return refused;
     /* What avgpu's planes show (OverlaySupport): the scanout's RGB formats in
      * the desktop's colour space, and NV12 and YUY2 video in a BT.601 or
@@ -144,19 +143,19 @@ Hresult DxgiBaseTable::trim_residency(DxgiDdiArgRecord *args)
     AV_SCOPE("DxgiBaseTable::trim_residency");
     /* Residency is the KMD's here, so there is nothing of the driver's to
      * trim; the runtime asks and is told it happened. */
-    return usable(args, "pfnTrimResidencySet");
+    return usable(args);
 }
 
 Hresult DxgiBaseTable::offer_resources(DxgiDdiArgRecord *args)
 {
     AV_SCOPE("DxgiBaseTable::offer_resources");
-    return usable(args, "pfnOfferResources1");
+    return usable(args);
 }
 
 Hresult DxgiBaseTable::reclaim_resources(DxgiDdiArgReclaimResourcesRecord *args)
 {
     AV_SCOPE("DxgiBaseTable::reclaim_resources");
-    const Hresult refused = usable(reinterpret_cast<const DxgiDdiArgRecord *>(args), "pfnReclaimResources");
+    const Hresult refused = usable(reinterpret_cast<const DxgiDdiArgRecord *>(args));
     if (refused != hr_ok) return refused;
     if (args->Resources != 0u && args->pResources == nullptr) return hr_invalid_arg;
     if (args->pDiscarded != nullptr)
@@ -167,17 +166,17 @@ Hresult DxgiBaseTable::reclaim_resources(DxgiDdiArgReclaimResourcesRecord *args)
 Hresult DxgiBaseTable::reclaim_resources1(DxgiDdiArgReclaimResources1Record *args)
 {
     AV_SCOPE("DxgiBaseTable::reclaim_resources1");
-    const Hresult refused = usable(reinterpret_cast<const DxgiDdiArgRecord *>(args), "pfnReclaimResources1");
+    const Hresult refused = usable(reinterpret_cast<const DxgiDdiArgRecord *>(args));
     if (refused != hr_ok) return refused;
     if (args->Resources != 0u && (args->pResources == nullptr || args->pResults == nullptr)) return hr_invalid_arg;
     for (uint32_t index = 0u; index < args->Resources; index++) args->pResults[index] = reclaim_ok;
     return hr_ok;
 }
 
-Hresult DxgiBaseTable::until_later(DxgiDdiArgRecord *args, const char *entry)
+Hresult DxgiBaseTable::until_later(DxgiDdiArgRecord *args)
 {
     AV_SCOPE("DxgiBaseTable::until_later");
-    const Hresult refused = usable(args, entry);
+    const Hresult refused = usable(args);
     if (refused != hr_ok) return refused;
     return hr_not_impl;
 }

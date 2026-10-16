@@ -273,7 +273,7 @@ GPUs, which nothing does yet.
 | `HostImageScanout` | object | `src/miniport/display/` | the key shown and whether a frame waits | shows a keyed primary through `SET_SCANOUT_IMAGE` |
 | `ImageScanout` | system | `src/device/display/` | each head's key and its surface | keeps each head's console surface showing its image |
 | `D3dHostImages` | system | `src/executor/d3d/` | a staging texture per size | reads a keyed image into memory the device gives |
-| `DeviceRemoval` | object | `src/icd/d3d/` | removed reason per device | says which device a refused command removed |
+| `LossLatch` | object | `src/icd/common/` | the first fault code a device was lost to | keeps why each device is gone - DEVICE_RESET for a context the host faulted for its own commands, DEVICE_REMOVED otherwise - and says it once per entry point; every API's contexts keep one |
 | `StandardAllocationBlob` | object | `src/proto/resources/` | the fields of the KMD's standard blob | encodes and decodes it for the KMD and the UMD |
 | `KernelSurface` | object | `src/icd/d3d/` | a surface's allocation and resource private data | writes and reads what a presented or shared surface's kernel allocation carries, for both UMDs |
 | `DxvkVulkanDevice` | system | `src/executor/shim/` | DXVK's Vulkan device and its entry points | makes, imports and wraps images on DXVK's device and waits on its queue |

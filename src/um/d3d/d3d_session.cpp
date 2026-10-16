@@ -63,9 +63,13 @@ uint32_t D3dSession::members() const
 bool D3dSession::lost() const
 {
     AV_SCOPE("D3dSession::lost");
-    if (!stream_.constructed()) return false;
-    const KmtTransport &transport = channel_.transport();
-    return transport.faulted() || transport.host_faulted();
+    return channel_.lost();
+}
+
+FaultCode D3dSession::fault_code() const
+{
+    AV_SCOPE("D3dSession::fault_code");
+    return channel_.fault_code();
 }
 
 Status D3dSession::escape(uint8_t *data, uint32_t size)
