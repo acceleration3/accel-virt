@@ -223,7 +223,7 @@ target_link_libraries(avd3d12samples_host PRIVATE ${CMAKE_DL_LIBS} Threads::Thre
 # core/trace's, every function opens a scope on it, and every device lock marks
 # it (LockMarks).
 file(GLOB_RECURSE AV_DEVICE_SOURCES CONFIGURE_DEPENDS src/device/*.cpp src/proto/*.cpp src/core/trace/*.cpp)
-list(APPEND AV_DEVICE_SOURCES src/core/platform/lock_marks.cpp)
+list(APPEND AV_DEVICE_SOURCES src/core/platform/lock_marks.cpp src/core/platform/thread_lock_hold.cpp)
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_RECORD_ENTRY})
 list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp src/core/support/byte_range.cpp
   src/core/support/setting_text.cpp src/core/support/fnv1a_digest.cpp
