@@ -1,5 +1,6 @@
 #include "executor/d3d/shared_surfaces.hpp"
 
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/poll_budget.hpp"
 #include "executor/d3d/frame_stager.hpp"
@@ -15,32 +16,24 @@ constexpr uint64_t nanoseconds_per_ms = 1000000u;
 
 }  // namespace
 
-SharedSurfaces::SharedSurfaces(BlockSource &blocks) : mutex_(), surfaces_(blocks, Pool::paged), slots_{}, clock_(0u), time_()
-{
-    AV_SCOPE("SharedSurfaces::SharedSurfaces");
-    pthread_mutex_init(&mutex_, nullptr);
-}
-
 /* The frames still kept belong to pools that live as long as this does, and
  * go with them: nothing is given back to a pool that is going too. */
-SharedSurfaces::~SharedSurfaces()
+SharedSurfaces::SharedSurfaces(BlockSource &blocks) : lock_(), surfaces_(blocks, Pool::paged), slots_{}, clock_(0u), time_()
 {
-    AV_SCOPE("SharedSurfaces::~SharedSurfaces");
-    pthread_mutex_destroy(&mutex_);
+    AV_SCOPE("SharedSurfaces::SharedSurfaces");
 }
 
 bool SharedSurfaces::presented(const SurfacePoint &frame, Staging staging)
 {
     AV_SCOPE("SharedSurfaces::presented");
     if (!frame.names()) return false;
-    lock();
-    Surface *const presenting = row(frame.surface());
-    const bool     stage = staging == Staging::every_present || presenting == nullptr || presenting->blt_read_;
+    const ThreadLockHold locked(lock_);
+    Surface *const       presenting = row(frame.surface());
+    const bool           stage = staging == Staging::every_present || presenting == nullptr || presenting->blt_read_;
     if (presenting != nullptr) {
         presenting->point_ = frame.point();
         presenting->pending_ = stage ? frame.point() : 0u;
     }
-    unlock();
     return stage;
 }
 
@@ -49,15 +42,17 @@ bool SharedSurfaces::keep(const SurfacePoint &frame, StagedFrame &staged)
     AV_SCOPE("SharedSurfaces::keep");
     if (!frame.names()) return false;
     StagedFrame *evicted = nullptr;
-    lock();
-    Slot *place = slot(frame);
-    if (place != nullptr && place->reading_) place = nullptr;
-    else if (place != nullptr) evicted = place->staged_;
-    else place = room(evicted);
-    if (place != nullptr) *place = Slot{frame, &staged, ++clock_, false};
-    Surface *const kept_for = known(frame.surface());
-    if (kept_for != nullptr && kept_for->pending_ == frame.point()) kept_for->pending_ = 0u;
-    unlock();
+    Slot        *place = nullptr;
+    {
+        const ThreadLockHold locked(lock_);
+        place = slot(frame);
+        if (place != nullptr && place->reading_) place = nullptr;
+        else if (place != nullptr) evicted = place->staged_;
+        else place = room(evicted);
+        if (place != nullptr) *place = Slot{frame, &staged, ++clock_, false};
+        Surface *const kept_for = known(frame.surface());
+        if (kept_for != nullptr && kept_for->pending_ == frame.point()) kept_for->pending_ = 0u;
+    }
     if (evicted != nullptr) evicted->release();
     return place != nullptr;
 }
@@ -65,10 +60,9 @@ bool SharedSurfaces::keep(const SurfacePoint &frame, StagedFrame &staged)
 void SharedSurfaces::abandon(const SurfacePoint &frame)
 {
     AV_SCOPE("SharedSurfaces::abandon");
-    lock();
-    Surface *const abandoned = frame.names() ? known(frame.surface()) : nullptr;
+    const ThreadLockHold locked(lock_);
+    Surface *const       abandoned = frame.names() ? known(frame.surface()) : nullptr;
     if (abandoned != nullptr && abandoned->pending_ == frame.point()) abandoned->pending_ = 0u;
-    unlock();
 }
 
 void SharedSurfaces::stage(const SurfacePoint &frame, Staging staging, FrameStager &stager)
@@ -111,17 +105,18 @@ SharedSurfaces::Look SharedSurfaces::look(const SurfacePoint &frame, AvFrameView
     StagedFrame &staged = *claimed;
     const StagedFrame::Reading reading = staged.read(view);
     if (reading == StagedFrame::Reading::mapped) return Look::mapped;
-    /* A slot being read is neither evicted nor released, so it is still this. */
-    lock();
-    Slot *const again = slot(frame);
     StagedFrame *failed = nullptr;
-    if (reading == StagedFrame::Reading::failed) {
-        failed = again->staged_;
-        *again = Slot{};
-    } else {
-        again->reading_ = false;
+    {
+        /* A slot being read is neither evicted nor released, so it is still this. */
+        const ThreadLockHold locked(lock_);
+        Slot *const          again = slot(frame);
+        if (reading == StagedFrame::Reading::failed) {
+            failed = again->staged_;
+            *again = Slot{};
+        } else {
+            again->reading_ = false;
+        }
     }
-    unlock();
     if (failed != nullptr) failed->release();
     return failed != nullptr ? Look::refused : Look::wait;
 }
@@ -129,39 +124,36 @@ SharedSurfaces::Look SharedSurfaces::look(const SurfacePoint &frame, AvFrameView
 StagedFrame *SharedSurfaces::claim(const SurfacePoint &frame, Look &found)
 {
     AV_SCOPE("SharedSurfaces::claim");
-    lock();
-    Slot *const kept = slot(frame);
+    const ThreadLockHold locked(lock_);
+    Slot *const          kept = slot(frame);
     if (kept == nullptr) {
         Surface *const writer = known(frame.surface());
         const bool passed_by = writer != nullptr && writer->pending_ != frame.point() && passed(*writer, frame.point());
         if (passed_by) writer->blt_read_ = true;
-        unlock();
         found = passed_by ? Look::refused : Look::wait;
         return nullptr;
     }
     if (kept->reading_) {
-        unlock();
         found = Look::refused;
         return nullptr;
     }
     kept->reading_ = true;
-    StagedFrame *const staged = kept->staged_;
-    unlock();
     found = Look::mapped;
-    return staged;
+    return kept->staged_;
 }
 
 void SharedSurfaces::unmap(const SurfacePoint &frame)
 {
     AV_SCOPE("SharedSurfaces::unmap");
-    lock();
-    Slot *const kept = frame.names() ? slot(frame) : nullptr;
     StagedFrame *staged = nullptr;
-    if (kept != nullptr && kept->reading_) {
-        staged = kept->staged_;
-        *kept = Slot{};
+    {
+        const ThreadLockHold locked(lock_);
+        Slot *const          kept = frame.names() ? slot(frame) : nullptr;
+        if (kept != nullptr && kept->reading_) {
+            staged = kept->staged_;
+            *kept = Slot{};
+        }
     }
-    unlock();
     if (staged != nullptr) staged->release();
 }
 
@@ -170,15 +162,17 @@ void SharedSurfaces::release(uint64_t surface)
     AV_SCOPE("SharedSurfaces::release");
     StagedFrame *going[max_frames] = {};
     uint32_t     count = 0u;
-    lock();
-    for (Slot &kept : slots_) {
-        if (kept.staged_ == nullptr || kept.reading_ || (surface != 0u && kept.frame_.surface() != surface)) continue;
-        going[count++] = kept.staged_;
-        kept = Slot{};
+    {
+        const ThreadLockHold locked(lock_);
+        for (Slot &kept : slots_) {
+            if (kept.staged_ == nullptr || kept.reading_ || (surface != 0u && kept.frame_.surface() != surface))
+                continue;
+            going[count++] = kept.staged_;
+            kept = Slot{};
+        }
+        if (surface == 0u) surfaces_.clear();
+        else static_cast<void>(surfaces_.erase(surface));
     }
-    if (surface == 0u) surfaces_.clear();
-    else static_cast<void>(surfaces_.erase(surface));
-    unlock();
     for (uint32_t index = 0u; index < count; index++) going[index]->release();
 }
 
@@ -225,23 +219,11 @@ bool SharedSurfaces::passed(const Surface &surface, uint32_t point) const
     return static_cast<int32_t>(surface.point_ - point) >= 0;
 }
 
-void SharedSurfaces::lock() const
-{
-    AV_SCOPE("SharedSurfaces::lock");
-    pthread_mutex_lock(&mutex_);
-}
-
-void SharedSurfaces::unlock() const
-{
-    AV_SCOPE("SharedSurfaces::unlock");
-    pthread_mutex_unlock(&mutex_);
-}
-
 bool SharedSurfaces::invariants_hold() const
 {
     AV_SCOPE("SharedSurfaces::invariants_hold");
-    lock();
-    bool holds = true;
+    const ThreadLockHold locked(lock_);
+    bool                 holds = true;
     for (uint32_t one = 0u; one < max_frames; one++) {
         const Slot &kept = slots_[one];
         if (kept.staged_ == nullptr) {
@@ -252,9 +234,7 @@ bool SharedSurfaces::invariants_hold() const
         for (uint32_t other = one + 1u; other < max_frames; other++)
             holds = holds && !(slots_[other].staged_ != nullptr && slots_[other].frame_ == kept.frame_);
     }
-    holds = holds && surfaces_.invariants_hold();
-    unlock();
-    return holds;
+    return holds && surfaces_.invariants_hold();
 }
 
 }  // namespace av

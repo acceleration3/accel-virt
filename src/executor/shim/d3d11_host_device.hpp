@@ -31,6 +31,7 @@
 
 #include "core/log/driver_log.hpp"
 #include "device/host/stdio_log.hpp"
+#include "device/shim/posix_lock.hpp"
 #include "core/support/object_pool.hpp"
 #include "executor/host_device_renewal.hpp"
 #include "executor/renewable_device.hpp"
@@ -45,7 +46,6 @@
 #include "executor/shim/host_image_export.hpp"
 #include "executor/shim/plane_composer.hpp"
 
-#include <pthread.h>
 #include <stdint.h>
 
 struct ID3D11Device5;
@@ -300,7 +300,7 @@ private:
     /* The staging texture images are read through, kept while the size and
      * format the scanout asks for stay the same. */
     ID3D11Texture2D        *staging_;
-    pthread_mutex_t         mutex_;
+    PosixLock               lock_;
     /* Workers waiting for the lock, and how often it was taken: a worker that
      * lets go while another waits holds off until that one has it, since a
      * mutex handed back at once goes to whoever asks first - the worker that

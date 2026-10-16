@@ -18,9 +18,10 @@
 
 #include "core/support/growable_array.hpp"
 #include "core/support/status.hpp"
+#include "device/shim/posix_condition.hpp"
+#include "device/shim/posix_lock.hpp"
 #include "executor/monotonic_clock.hpp"
 
-#include <pthread.h>
 #include <stdint.h>
 
 namespace av {
@@ -31,7 +32,6 @@ struct DeviceTenantsProbe;
 class DeviceTenants {
 public:
     explicit DeviceTenants(BlockSource &blocks);
-    ~DeviceTenants();
     DeviceTenants(const DeviceTenants &) = delete;
     DeviceTenants &operator=(const DeviceTenants &) = delete;
 
@@ -55,8 +55,8 @@ public:
     bool invariants_hold() const;
 
 private:
-    mutable pthread_mutex_t mutex_;
-    pthread_cond_t          left_;
+    mutable PosixLock           lock_;
+    PosixCondition              left_;
     GrowableArray<WakeSignal *> tenants_;
     bool                        lost_;
     /* What vacate's wait measures its deadline on; `left_` waits on it. */

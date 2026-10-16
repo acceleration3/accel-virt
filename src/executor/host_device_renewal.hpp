@@ -9,9 +9,9 @@
 #ifndef AV_HOST_DEVICE_RENEWAL_HPP
 #define AV_HOST_DEVICE_RENEWAL_HPP
 
+#include "device/shim/posix_lock.hpp"
 #include "executor/device_tenants.hpp"
 
-#include <pthread.h>
 #include <stdint.h>
 
 namespace av {
@@ -26,7 +26,6 @@ public:
     /* `blocks` is what the tenants' list grows in; `lines` where a loss and
      * a renewal are said. */
     HostDeviceRenewal(BlockSource &blocks, DriverLog &lines);
-    ~HostDeviceRenewal();
     HostDeviceRenewal(const HostDeviceRenewal &) = delete;
     HostDeviceRenewal &operator=(const HostDeviceRenewal &) = delete;
 
@@ -48,7 +47,7 @@ public:
 private:
     DeviceTenants   tenants_;
     DriverLog      &lines_;
-    pthread_mutex_t renewing_;
+    PosixLock       renewing_;
 };
 
 }  // namespace av

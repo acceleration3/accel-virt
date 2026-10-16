@@ -27,7 +27,6 @@
 #include "proto/context/device_uuid.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
 
-#include <pthread.h>
 #include <stdint.h>
 
 struct ID3D12CommandQueue;

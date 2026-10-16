@@ -19,6 +19,8 @@
 #ifndef AV_GPU_CLOCK_HOLD_HPP
 #define AV_GPU_CLOCK_HOLD_HPP
 
+#include "device/shim/posix_condition.hpp"
+#include "device/shim/posix_lock.hpp"
 #include "executor/monotonic_clock.hpp"
 
 #include <pthread.h>
@@ -76,8 +78,8 @@ private:
     int             fd_;
     uint32_t        context_;
     pthread_t       thread_;
-    pthread_mutex_t lock_;
-    pthread_cond_t  wake_;
+    PosixLock       lock_;
+    PosixCondition  wake_;
     uint64_t        last_busy_;
     uint64_t        held_since_;
     /* How long this hold lasts before it is let go to look again. */

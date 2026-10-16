@@ -8,6 +8,7 @@
 #include <stdio.h>
 
 #include "core/log/log_line.hpp"
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
@@ -22,17 +23,15 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice()
-    : runtime_(nullptr), uuid_(), tenant_heap_(), renewal_(tenant_heap_, lines_), device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), clock_(), carry_heap_(), carried_(carry_heap_)
+    : runtime_(nullptr), uuid_(), tenant_heap_(), renewal_(tenant_heap_, lines_), device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_), frames_(*this), staging_(nullptr), lock_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), clock_(), carry_heap_(), carried_(carry_heap_)
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
-    pthread_mutex_init(&mutex_, nullptr);
 }
 
 D3d11HostDevice::~D3d11HostDevice()
 {
     AV_SCOPE("D3d11HostDevice::~D3d11HostDevice");
     close();
-    pthread_mutex_destroy(&mutex_);
 }
 
 bool D3d11HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid, HostShares &shares)
@@ -433,7 +432,7 @@ void D3d11HostDevice::lock(ID3DDeviceContextState *state)
 {
     AV_SCOPE("D3d11HostDevice::lock");
     __atomic_fetch_add(&waiting_, 1u, __ATOMIC_ACQ_REL);
-    pthread_mutex_lock(&mutex_);
+    lock_.acquire();
     __atomic_fetch_sub(&waiting_, 1u, __ATOMIC_ACQ_REL);
     __atomic_fetch_add(&taken_, uint64_t{1}, __ATOMIC_RELEASE);
     select(state);
@@ -451,7 +450,7 @@ void D3d11HostDevice::unlock()
 {
     AV_SCOPE("D3d11HostDevice::unlock");
     const uint64_t mine = __atomic_load_n(&taken_, __ATOMIC_ACQUIRE);
-    pthread_mutex_unlock(&mutex_);
+    lock_.release();
     if (__atomic_load_n(&waiting_, __ATOMIC_ACQUIRE) == 0u) return;
     /* Bounded: a waiter that is itself descheduled must not stall this one. */
     constexpr uint32_t patience = 100000u;
@@ -467,10 +466,12 @@ ID3DDeviceContextState *D3d11HostDevice::make_state(uint32_t &feature_level)
     const D3D_FEATURE_LEVEL level = static_cast<D3D_FEATURE_LEVEL>(feature_level_);
     D3D_FEATURE_LEVEL chosen = level;
     ID3DDeviceContextState *state = nullptr;
-    pthread_mutex_lock(&mutex_);
-    const HRESULT made = device_->CreateDeviceContextState(0u, &level, 1u, D3D11_SDK_VERSION,
-                                                           __uuidof(ID3D11Device1), &chosen, &state);
-    pthread_mutex_unlock(&mutex_);
+    HRESULT                 made = E_FAIL;
+    {
+        const ThreadLockHold locked(lock_);
+        made = device_->CreateDeviceContextState(0u, &level, 1u, D3D11_SDK_VERSION, __uuidof(ID3D11Device1), &chosen,
+                                                 &state);
+    }
     if (FAILED(made)) return nullptr;
     feature_level = chosen;
     return state;
@@ -479,7 +480,7 @@ ID3DDeviceContextState *D3d11HostDevice::make_state(uint32_t &feature_level)
 void D3d11HostDevice::forget_state(ID3DDeviceContextState *state)
 {
     AV_SCOPE("D3d11HostDevice::forget_state");
-    pthread_mutex_lock(&mutex_);
+    const ThreadLockHold locked(lock_);
     if (state != nullptr && state == active_) {
         /* The context holds a reference to the state in force, so the session
          * releasing its own would not free it; a fresh state is swapped in so
@@ -495,7 +496,6 @@ void D3d11HostDevice::forget_state(ID3DDeviceContextState *state)
         }
         active_ = nullptr;
     }
-    pthread_mutex_unlock(&mutex_);
 }
 
 ID3D11Device5 *D3d11HostDevice::device() const

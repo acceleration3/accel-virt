@@ -31,10 +31,10 @@
 
 #include "core/support/keyed_slots.hpp"
 #include "device/abi/av_executor.h"
+#include "device/shim/posix_lock.hpp"
 #include "executor/monotonic_clock.hpp"
 #include "proto/resources/surface_point.hpp"
 
-#include <pthread.h>
 #include <stdint.h>
 
 namespace av {
@@ -51,7 +51,6 @@ public:
     static constexpr uint32_t max_frames = 32u;
 
     explicit SharedSurfaces(BlockSource &blocks);
-    ~SharedSurfaces();
     SharedSurfaces(const SharedSurfaces &) = delete;
     SharedSurfaces &operator=(const SharedSurfaces &) = delete;
 
@@ -122,10 +121,8 @@ private:
     /* Under the lock: whether `surface`'s writer has passed `point`, points
      * counting on past 2^32 as their difference does. */
     bool     passed(const Surface &surface, uint32_t point) const;
-    void     lock() const;
-    void     unlock() const;
 
-    mutable pthread_mutex_t mutex_;
+    mutable PosixLock       lock_;
     KeyedSlots<uint64_t, Surface> surfaces_;
     Slot                    slots_[max_frames];
     uint64_t                clock_;

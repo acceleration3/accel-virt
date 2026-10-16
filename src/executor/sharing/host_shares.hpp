@@ -34,13 +34,14 @@
 #define AV_HOST_SHARES_HPP
 
 #include "core/support/object_pool.hpp"
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/sharing/share.hpp"
 #include "executor/sharing/share_holder.hpp"
 #include "executor/sharing/share_index.hpp"
+#include "device/shim/posix_lock.hpp"
 
-#include <pthread.h>
 #include <stdint.h>
 
 struct IUnknown;
@@ -159,8 +160,6 @@ public:
     bool     invariants_hold() const;
 
 private:
-    class Lock;
-
     /* A share the index names, pinned so it outlives the lock; null for an
      * unknown id. The caller unpins it with settle. */
     Share       *pinned(uint32_t domain, uint64_t id);
@@ -194,7 +193,7 @@ private:
     DriverLog              &lines_;
     /* The highest count a line was written for. */
     uint32_t                reported_;
-    mutable pthread_mutex_t mutex_;
+    mutable PosixLock       lock_;
     ObjectPool<Share>       shares_;
     ObjectPool<ShareHolder> holders_;
     ObjectPool<Retired>     retired_;
@@ -207,12 +206,11 @@ template <typename Visit>
 void HostShares::each_direct3d11(Visit visit)
 {
     AV_SCOPE("HostShares::each_direct3d11");
-    pthread_mutex_lock(&mutex_);
+    const ThreadLockHold locked(lock_);
     shares_.for_each([&visit](const Share &share) {
         if (share.origin() == ShareOrigin::d3d11 && share.resource() != nullptr)
             visit(share.domain(), share.id(), share.resource());
     });
-    pthread_mutex_unlock(&mutex_);
 }
 
 }  // namespace av

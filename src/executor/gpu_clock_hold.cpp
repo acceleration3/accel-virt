@@ -1,5 +1,6 @@
 #include "executor/gpu_clock_hold.hpp"
 
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 
 #include <drm/amdgpu_drm.h>
@@ -22,7 +23,7 @@ void *run_clock_hold(void *hold)
 }  // namespace
 
 GpuClockHold::GpuClockHold()
-    : clock_(), fd_(-1), context_(0u), thread_{}, lock_(PTHREAD_MUTEX_INITIALIZER), wake_(PTHREAD_COND_INITIALIZER),
+    : clock_(), fd_(-1), context_(0u), thread_{}, lock_(), wake_(lock_),
       last_busy_(0u), held_since_(0u), hold_for_(0u), peak_mhz_(0u), slow_(0u), held_(false), wanted_(false), stopping_(false), open_(false)
 {
     AV_SCOPE("GpuClockHold::GpuClockHold");
@@ -35,16 +36,12 @@ GpuClockHold::~GpuClockHold()
 }
 
 /* Contexts on one GPU attach on workers of their own, so two may open its
- * hold at once. Under the lock only one sets it up, and none while a watching
- * thread waits on the condition: destroying a condition with a waiter never
- * returns. */
+ * hold at once. Under the lock only one sets it up. */
 bool GpuClockHold::open(int32_t render_minor)
 {
     AV_SCOPE("GpuClockHold::open");
-    pthread_mutex_lock(&lock_);
-    const bool opened = open_ || start(render_minor);
-    pthread_mutex_unlock(&lock_);
-    return opened;
+    const ThreadLockHold locked(lock_);
+    return open_ || start(render_minor);
 }
 
 /* The watching thread takes the lock first thing, so it starts only once this
@@ -67,12 +64,6 @@ bool GpuClockHold::start(int32_t render_minor)
     context_ = made.out.alloc.ctx_id;
     peak_mhz_ = sensor(AMDGPU_INFO_SENSOR_PEAK_PSTATE_GFX_SCLK);
     stopping_ = false;
-    pthread_condattr_t clock;
-    pthread_condattr_init(&clock);
-    pthread_condattr_setclock(&clock, CLOCK_MONOTONIC);
-    pthread_cond_destroy(&wake_);
-    pthread_cond_init(&wake_, &clock);
-    pthread_condattr_destroy(&clock);
     if (pthread_create(&thread_, nullptr, &run_clock_hold, this) != 0) {
         ::close(fd_);
         fd_ = -1;
@@ -88,15 +79,14 @@ void GpuClockHold::busy()
     if (!__atomic_load_n(&open_, __ATOMIC_ACQUIRE)) return;
     __atomic_store_n(&last_busy_, clock_.now_nanoseconds(), __ATOMIC_SEQ_CST);
     if (__atomic_load_n(&wanted_, __ATOMIC_RELAXED) || __atomic_exchange_n(&wanted_, true, __ATOMIC_SEQ_CST)) return;
-    pthread_mutex_lock(&lock_);
-    pthread_cond_signal(&wake_);
-    pthread_mutex_unlock(&lock_);
+    const ThreadLockHold locked(lock_);
+    wake_.signal();
 }
 
 void GpuClockHold::watch()
 {
     AV_SCOPE("GpuClockHold::watch");
-    pthread_mutex_lock(&lock_);
+    const ThreadLockHold locked(lock_);
     while (!stopping_) {
         if (clock_.now_nanoseconds() - __atomic_load_n(&last_busy_, __ATOMIC_RELAXED) >= release_after_ns) {
             if (held_) let_go();
@@ -105,11 +95,11 @@ void GpuClockHold::watch()
             /* A batch after the store above either sees wanted_ clear and
              * signals, or was counted before the idle test: no wake is lost. */
             if (clock_.now_nanoseconds() - __atomic_load_n(&last_busy_, __ATOMIC_SEQ_CST) >= release_after_ns)
-                pthread_cond_wait(&wake_, &lock_);
+                wake_.wait();
             continue;
         }
         const timespec until = clock_.ahead(look_every_ns);
-        pthread_cond_timedwait(&wake_, &lock_, &until);
+        static_cast<void>(wake_.wait_until(until));
         if (stopping_) break;
         if (held_) {
             if (clock_.now_nanoseconds() - held_since_ >= hold_for_) let_go();
@@ -119,7 +109,6 @@ void GpuClockHold::watch()
         if (slow_ >= slow_looks) take();
     }
     if (held_) let_go();
-    pthread_mutex_unlock(&lock_);
 }
 
 bool GpuClockHold::slow() const
@@ -169,10 +158,11 @@ void GpuClockHold::close()
 {
     AV_SCOPE("GpuClockHold::close");
     if (!open_) return;
-    pthread_mutex_lock(&lock_);
-    stopping_ = true;
-    pthread_cond_signal(&wake_);
-    pthread_mutex_unlock(&lock_);
+    {
+        const ThreadLockHold locked(lock_);
+        stopping_ = true;
+        wake_.signal();
+    }
     pthread_join(thread_, nullptr);
     union drm_amdgpu_ctx freed = {};
     freed.in.op = AMDGPU_CTX_OP_FREE_CTX;

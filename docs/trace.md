@@ -254,11 +254,14 @@ copied the table.
   - `executor/0 sessions= live= gpus= overflowed=`, `gpu/<n> uuid= sub_apis=`;
   - per open domain: `domain/<id> gpu=`;
   - per live session: `session/<slot> api= gpu= domain=`;
-  - per GPU, `gpu_shares/<n>`, then its `HostShares`: `shares/0 live= objects=
-    d3d11= d3d12= released_by_guest= unindexed= holders= retiring=`, and per
-    share `share/<id> domain= origin= kind= size= guest_holds= published=
-    exported= holders= opens= writes=` (or `busy=true` while a worker holds
-    the table); then `exportable_images/0 live= retired= blocks=`.
+  - per GPU, `gpu_shares/<n>`, then its `HostShares`: `shares/0 busy=false
+    live= objects= d3d11= d3d12= released_by_guest= unindexed= holders=
+    retiring=`, and per share `share/<id> domain= origin= kind= size=
+    guest_holds= published= exported= holders= opens= writes=` (or only
+    `busy=true` while a worker holds the table); then
+    `exportable_images/0 live= retired= blocks=`; then its
+    `HostMemorySource`: `memory_source/0 busy=false mappable_types=
+    visible_types= live= bytes=` (or only `busy=true`).
   Before it does, it pins itself with `RTLD_NODELETE`: QEMU closes an executor
   it no longer needs, and the socket's thread and every traced thread's signal
   stack destructor run code in the library for the rest of the process.
@@ -317,6 +320,15 @@ copied the table.
 - **Locks.** Every device mutex goes through `TableHost`, which marks
   `waiting`, `acquired` and `released`. `AvHostOps` gained
   `try_lock_mutex` (`qemu_mutex_trylock`), and `Host::try_lock_mutex` with it.
+  Every other lock of the host binaries - the executor library's, the device
+  module's own trace thread's, av-renderer's (whose `Host` mutexes are one
+  each) - is a `PosixLock` (`src/device/shim/`), the `ThreadLock` over a
+  pthread mutex, which marks the same three the way `SrwLock` does in the
+  guest: `waiting` only when a try fails. A wait on its `PosixCondition`
+  marks the lock released and the thread waiting on the condition, then the
+  lock acquired once woken, so an idle thread reads as waiting rather than
+  stalled. An executor dump takes a table's `PosixLock` through
+  `ReportGate`, as the guest roots do.
 - **Cost.** A micro-benchmark decoded `VkInstanceCreateInfo` from the fuzz
   corpus 2 000 000 times (`-O2`; the generated decoder itself has no marks,
   the `WireReader` it calls has).

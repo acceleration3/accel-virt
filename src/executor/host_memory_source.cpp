@@ -1,19 +1,19 @@
 #include "executor/host_memory_source.hpp"
 
-#include "core/support/scope_exit.hpp"
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/report_gate.hpp"
 #include "core/trace/state_writer.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/memory_exporter.hpp"
 #include "executor/owned_fd.hpp"
-
 
 namespace av {
 
 static_assert(GuestMemoryTypes::no_type == HostMemoryRequest::memory_types);
 
 HostMemorySource::HostMemorySource(MemoryExporter &exporter, BlockSource &blocks)
-    : exporter_(exporter), memories_(blocks), mutex_(PTHREAD_MUTEX_INITIALIZER), host_(), asked_(0u), mappable_(0u),
+    : exporter_(exporter), memories_(blocks), lock_(), host_(), asked_(0u), mappable_(0u),
       visible_(0u), vulkan_()
 {
     AV_SCOPE("HostMemorySource::HostMemorySource");
@@ -24,7 +24,6 @@ HostMemorySource::~HostMemorySource()
     AV_SCOPE("HostMemorySource::~HostMemorySource");
     memories_.for_each([this](const SourceMemory &memory) { exporter_.free(memory.exported()); });
     memories_.destroy_all();
-    pthread_mutex_destroy(&mutex_);
 }
 
 /* A type is asked of the exporter once, the first time anything wants to
@@ -52,8 +51,7 @@ void HostMemorySource::learn()
 uint32_t HostMemorySource::mappable_types()
 {
     AV_SCOPE("HostMemorySource::mappable_types");
-    pthread_mutex_lock(&mutex_);
-    ScopeExit unlock([this] { pthread_mutex_unlock(&mutex_); });
+    const ThreadLockHold held(lock_);
     learn();
     return mappable_;
 }
@@ -61,8 +59,7 @@ uint32_t HostMemorySource::mappable_types()
 bool HostMemorySource::vulkan_types(GuestMemoryTypes &answer)
 {
     AV_SCOPE("HostMemorySource::vulkan_types");
-    pthread_mutex_lock(&mutex_);
-    ScopeExit unlock([this] { pthread_mutex_unlock(&mutex_); });
+    const ThreadLockHold held(lock_);
     learn();
     if (asked_ == 0u) return false;
     answer = vulkan_;
@@ -127,8 +124,7 @@ Status HostMemorySource::allocate(uint32_t domain, uint64_t key, uint64_t size, 
 {
     AV_SCOPE("HostMemorySource::allocate");
     if (!request.valid() || size == 0u || size % page_bytes != 0u) return Status::invalid_parameter;
-    pthread_mutex_lock(&mutex_);
-    ScopeExit unlock([this] { pthread_mutex_unlock(&mutex_); });
+    const ThreadLockHold held(lock_);
     learn();
     if (find(domain, key) != nullptr) return Status::conflict;
     uint32_t       types[most_choices] = {};
@@ -172,8 +168,7 @@ void HostMemorySource::let_go(SourceMemory &memory)
 void HostMemorySource::free(uint32_t domain, uint64_t key)
 {
     AV_SCOPE("HostMemorySource::free");
-    pthread_mutex_lock(&mutex_);
-    ScopeExit           unlock([this] { pthread_mutex_unlock(&mutex_); });
+    const ThreadLockHold held(lock_);
     SourceMemory *const memory = find(domain, key);
     if (memory == nullptr) return;
     memory->detach();
@@ -183,8 +178,7 @@ void HostMemorySource::free(uint32_t domain, uint64_t key)
 void HostMemorySource::free_domain(uint32_t domain)
 {
     AV_SCOPE("HostMemorySource::free_domain");
-    pthread_mutex_lock(&mutex_);
-    ScopeExit unlock([this] { pthread_mutex_unlock(&mutex_); });
+    const ThreadLockHold held(lock_);
     for (SourceMemory *memory = nullptr;
          (memory = memories_.find_if([domain](const SourceMemory &held) {
               return held.attached() && held.domain() == domain;
@@ -197,8 +191,7 @@ void HostMemorySource::free_domain(uint32_t domain)
 SourceMemory *HostMemorySource::acquire(uint32_t domain, uint64_t key)
 {
     AV_SCOPE("HostMemorySource::acquire");
-    pthread_mutex_lock(&mutex_);
-    ScopeExit           unlock([this] { pthread_mutex_unlock(&mutex_); });
+    const ThreadLockHold held(lock_);
     SourceMemory *const memory = find(domain, key);
     if (memory != nullptr) memory->acquire();
     return memory;
@@ -207,9 +200,8 @@ SourceMemory *HostMemorySource::acquire(uint32_t domain, uint64_t key)
 void HostMemorySource::release(SourceMemory &memory)
 {
     AV_SCOPE("HostMemorySource::release");
-    pthread_mutex_lock(&mutex_);
+    const ThreadLockHold held(lock_);
     let_go(memory);
-    pthread_mutex_unlock(&mutex_);
 }
 
 uint32_t HostMemorySource::live() const
@@ -221,20 +213,16 @@ uint32_t HostMemorySource::live() const
 void HostMemorySource::report(StateWriter &writer) const
 {
     AV_SCOPE("HostMemorySource::report");
-    writer.open("memory_source", 0u);
+    /* allocate and release change the pool under the lock, from any
+     * session's worker, and learn the types; a dump must not wait on one
+     * holding it. */
+    const ReportGate gate(lock_, writer, "memory_source");
+    if (!gate.held()) return;
     writer.hex("mappable_types", mappable_);
     writer.hex("visible_types", visible_);
-    /* allocate and release change the pool under the mutex, from any
-     * session's worker; a dump must not wait on one holding it. */
-    if (pthread_mutex_trylock(&mutex_) != 0) {
-        writer.flag("busy", true);
-        writer.close();
-        return;
-    }
     writer.number("live", memories_.live());
     uint64_t bytes = 0u;
     memories_.for_each([&bytes](const SourceMemory &memory) { bytes += memory.size(); });
-    pthread_mutex_unlock(&mutex_);
     writer.number("bytes", bytes);
     writer.close();
 }

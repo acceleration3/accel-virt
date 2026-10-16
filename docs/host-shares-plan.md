@@ -342,7 +342,7 @@ records, with `mmap(MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE)`, as
 
 ### 4.6 Locks
 
-`HostShares` has its own lock (a pthread mutex) around its rows, because
+`HostShares` has its own lock (a `PosixLock`) around its rows, because
 three kinds of caller reach it:
 
 - every context's worker, through `share_object`, `open_object` and

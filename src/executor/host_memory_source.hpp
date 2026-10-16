@@ -16,11 +16,11 @@
 
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
+#include "device/shim/posix_lock.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
 #include "proto/resources/host_memory_request.hpp"
 
-#include <pthread.h>
 #include <stdint.h>
 
 #include <vulkan/vulkan_core.h>
@@ -93,7 +93,8 @@ private:
 
     MemoryExporter              &exporter_;
     ObjectPool<SourceMemory>     memories_;
-    mutable pthread_mutex_t      mutex_;
+    /* Mutable: a dump, which reads but never waits, takes it too. */
+    mutable PosixLock            lock_;
     /* The GPU's types as last read, which were asked of the exporter, which
      * passed, and which of those an importer may also map; and what a Vulkan
      * guest sees of them. */

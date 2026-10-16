@@ -2,7 +2,9 @@
 
 #include "core/log/driver_log.hpp"
 #include "core/log/log_line.hpp"
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/report_gate.hpp"
 #include "core/trace/state_writer.hpp"
 #include "executor/owned_fd.hpp"
 #include "executor/session_backend.hpp"
@@ -11,40 +13,15 @@
 
 namespace av {
 
-/* The table's lock for one scope. */
-class HostShares::Lock {
-public:
-    explicit Lock(pthread_mutex_t &mutex);
-    ~Lock();
-    Lock(const Lock &) = delete;
-    Lock &operator=(const Lock &) = delete;
-
-private:
-    pthread_mutex_t &mutex_;
-};
-
-HostShares::Lock::Lock(pthread_mutex_t &mutex) : mutex_(mutex)
-{
-    AV_SCOPE("HostShares::Lock::Lock");
-    pthread_mutex_lock(&mutex_);
-}
-
-HostShares::Lock::~Lock()
-{
-    AV_SCOPE("HostShares::Lock::~Lock");
-    pthread_mutex_unlock(&mutex_);
-}
-
 HostShares::Retired::Retired(IUnknown *object) : object_(object)
 {
     AV_SCOPE("HostShares::Retired::Retired");
 }
 
 HostShares::HostShares(BlockSource &blocks, DriverLog &lines)
-    : lines_(lines), reported_(0u), mutex_(), shares_(blocks), holders_(blocks), retired_(blocks), index_(blocks)
+    : lines_(lines), reported_(0u), lock_(), shares_(blocks), holders_(blocks), retired_(blocks), index_(blocks)
 {
     AV_SCOPE("HostShares::HostShares");
-    pthread_mutex_init(&mutex_, nullptr);
 }
 
 HostShares::~HostShares()
@@ -56,7 +33,6 @@ HostShares::~HostShares()
         retired.object_->Release();
         return true;
     });
-    pthread_mutex_destroy(&mutex_);
 }
 
 /* ------------------------------------------------------------ objects */
@@ -74,7 +50,7 @@ Status HostShares::publish(uint32_t domain, uint64_t id, uint32_t kind, uint64_t
         bool mine = false;
         bool exported = false;
         {
-            const Lock locked(mutex_);
+            const ThreadLockHold locked(lock_);
             const bool publisher = known->publisher() == &session;
             /* A Direct3D resource is published before anyone says what kind of
              * object it is to other APIs: its first publish by handle does. */
@@ -90,7 +66,7 @@ Status HostShares::publish(uint32_t domain, uint64_t id, uint32_t kind, uint64_t
             if (!session.export_object(kind, handle, handle_kind, descriptor)) {
                 answer = Status::not_supported;
             } else {
-                const Lock locked(mutex_);
+                const ThreadLockHold locked(lock_);
                 if (known->descriptor() < 0) known->keep_descriptor(handle_kind, descriptor);
             }
         }
@@ -101,7 +77,7 @@ Status HostShares::publish(uint32_t domain, uint64_t id, uint32_t kind, uint64_t
     uint32_t handle_kind = 0u;
     OwnedFd  descriptor;
     if (!session.export_object(kind, handle, handle_kind, descriptor)) return Status::not_supported;
-    const Lock   locked(mutex_);
+    const ThreadLockHold locked(lock_);
     Share *const share = make(domain, id, kind, size, ShareOrigin::object);
     /* Shared by another session between the export and this lock. */
     if (share == nullptr) return index_.find(domain, id) != nullptr ? Status::conflict : Status::no_memory;
@@ -122,7 +98,7 @@ Status HostShares::open(uint32_t domain, uint64_t id, uint32_t kind, uint64_t si
     int              fd = -1;
     SharedImageShape shape;
     {
-        const Lock locked(mutex_);
+        const ThreadLockHold locked(lock_);
         shape = share->shape();
         if (share->descriptor() < 0) answer = Status::not_found;
         else if (!share->accepts(kind, size)) answer = Status::invalid_parameter;
@@ -137,7 +113,7 @@ Status HostShares::open(uint32_t domain, uint64_t id, uint32_t kind, uint64_t si
     if (answer == Status::ok && !session.import_object(kind, handle_kind, fd, size, shape, made, detail))
         answer = Status::not_supported;
     if (answer == Status::ok) {
-        const Lock   locked(mutex_);
+        const ThreadLockHold locked(lock_);
         ShareHolder *holder = nullptr;
         if (holders_.create(holder, session, made, detail) == Status::ok) {
             share->hold(*holder);
@@ -161,7 +137,7 @@ void HostShares::close(uint32_t domain, uint64_t id, SessionBackend &session)
     uint64_t detail = 0u;
     bool     held = false;
     {
-        const Lock         locked(mutex_);
+        const ThreadLockHold locked(lock_);
         ShareHolder *const holder = share->holder_of(session);
         if (holder != nullptr) {
             held = true;
@@ -181,7 +157,7 @@ Status HostShares::publish_resource(uint32_t domain, uint64_t id, IUnknown *reso
 {
     AV_SCOPE("HostShares::publish_resource");
     if (id == 0u || resource == nullptr) return Status::invalid_parameter;
-    const Lock locked(mutex_);
+    const ThreadLockHold locked(lock_);
     if (index_.find(domain, id) != nullptr) return Status::conflict;
     Share *const share = make(domain, id, 0u, 0u, origin);
     if (share == nullptr) return Status::no_memory;
@@ -194,7 +170,7 @@ Status HostShares::publish_resource(uint32_t domain, uint64_t id, IUnknown *reso
 IUnknown *HostShares::open_resource(uint32_t domain, uint64_t id)
 {
     AV_SCOPE("HostShares::open_resource");
-    const Lock   locked(mutex_);
+    const ThreadLockHold locked(lock_);
     Share *const share = index_.find(domain, id);
     if (share == nullptr) return nullptr;
     IUnknown *const opened = share->shown() != nullptr ? share->shown() : share->view();
@@ -207,7 +183,7 @@ IUnknown *HostShares::open_resource(uint32_t domain, uint64_t id)
 IUnknown *HostShares::resource(uint32_t domain, uint64_t id)
 {
     AV_SCOPE("HostShares::resource");
-    const Lock         locked(mutex_);
+    const ThreadLockHold locked(lock_);
     const Share *const share = index_.find(domain, id);
     IUnknown *const    found = share != nullptr ? share->resource() : nullptr;
     if (found != nullptr) found->AddRef();
@@ -217,7 +193,7 @@ IUnknown *HostShares::resource(uint32_t domain, uint64_t id)
 IUnknown *HostShares::view(uint32_t domain, uint64_t id)
 {
     AV_SCOPE("HostShares::view");
-    const Lock         locked(mutex_);
+    const ThreadLockHold locked(lock_);
     const Share *const share = index_.find(domain, id);
     IUnknown *const    found = share != nullptr ? share->view() : nullptr;
     if (found != nullptr) found->AddRef();
@@ -228,7 +204,7 @@ bool HostShares::keep_view(uint32_t domain, uint64_t id, IUnknown *view)
 {
     AV_SCOPE("HostShares::keep_view");
     if (view == nullptr) return false;
-    const Lock   locked(mutex_);
+    const ThreadLockHold locked(lock_);
     Share *const share = index_.find(domain, id);
     if (share == nullptr) return false;
     /* Only a view of its own is replaced: the resource itself stays. */
@@ -241,7 +217,7 @@ bool HostShares::keep_view(uint32_t domain, uint64_t id, IUnknown *view)
 IUnknown *HostShares::shown(uint32_t domain, uint64_t id)
 {
     AV_SCOPE("HostShares::shown");
-    const Lock         locked(mutex_);
+    const ThreadLockHold locked(lock_);
     const Share *const share = index_.find(domain, id);
     IUnknown *const    found = share != nullptr ? share->shown() : nullptr;
     if (found != nullptr) found->AddRef();
@@ -252,7 +228,7 @@ bool HostShares::keep_shown(uint32_t domain, uint64_t id, IUnknown *copy)
 {
     AV_SCOPE("HostShares::keep_shown");
     if (copy == nullptr) return false;
-    const Lock   locked(mutex_);
+    const ThreadLockHold locked(lock_);
     Share *const share = index_.find(domain, id);
     if (share == nullptr) return false;
     if (share->shown() != nullptr) retire(share->shown());
@@ -264,7 +240,7 @@ bool HostShares::keep_shown(uint32_t domain, uint64_t id, IUnknown *copy)
 bool HostShares::describe_image(uint32_t domain, uint64_t id, const SharedImageShape &shape)
 {
     AV_SCOPE("HostShares::describe_image");
-    const Lock   locked(mutex_);
+    const ThreadLockHold locked(lock_);
     Share *const share = index_.find(domain, id);
     if (share == nullptr) return false;
     share->describe_image(shape);
@@ -274,7 +250,7 @@ bool HostShares::describe_image(uint32_t domain, uint64_t id, const SharedImageS
 void HostShares::written(uint32_t domain, uint64_t id)
 {
     AV_SCOPE("HostShares::written");
-    const Lock   locked(mutex_);
+    const ThreadLockHold locked(lock_);
     Share *const share = index_.find(domain, id);
     if (share != nullptr) share->written();
 }
@@ -283,7 +259,7 @@ bool HostShares::writes(uint32_t domain, uint64_t id, uint64_t &count)
 {
     AV_SCOPE("HostShares::writes");
     count = 0u;
-    const Lock         locked(mutex_);
+    const ThreadLockHold locked(lock_);
     const Share *const share = index_.find(domain, id);
     if (share == nullptr) return false;
     count = share->writes();
@@ -302,7 +278,7 @@ void HostShares::session_closed(SessionBackend &session)
         uint64_t handle = 0u;
         uint64_t detail = 0u;
         {
-            const Lock         locked(mutex_);
+            const ThreadLockHold locked(lock_);
             ShareHolder *const holder = share->holder_of(session);
             kind = share->kind();
             handle = holder->handle();
@@ -312,7 +288,7 @@ void HostShares::session_closed(SessionBackend &session)
         session.release_object(kind, handle, detail);
         settle(*share);
     }
-    const Lock locked(mutex_);
+    const ThreadLockHold locked(lock_);
     shares_.for_each([&session](const Share &share) {
         if (share.publisher() == &session) const_cast<Share &>(share).publish_by(nullptr);
     });
@@ -321,7 +297,7 @@ void HostShares::session_closed(SessionBackend &session)
 Share *HostShares::held_by(const SessionBackend &session)
 {
     AV_SCOPE("HostShares::held_by");
-    const Lock   locked(mutex_);
+    const ThreadLockHold locked(lock_);
     Share *const share = shares_.find_if([&session](const Share &held) { return held.holder_of(session) != nullptr; });
     if (share != nullptr) share->pin();
     return share;
@@ -330,7 +306,7 @@ Share *HostShares::held_by(const SessionBackend &session)
 void HostShares::release(uint32_t domain, uint64_t id)
 {
     AV_SCOPE("HostShares::release");
-    const Lock locked(mutex_);
+    const ThreadLockHold locked(lock_);
     if (id != 0u) {
         Share *const share = index_.find(domain, id);
         if (share == nullptr) return;
@@ -356,7 +332,7 @@ void HostShares::release(uint32_t domain, uint64_t id)
 void HostShares::clear()
 {
     AV_SCOPE("HostShares::clear");
-    const Lock locked(mutex_);
+    const ThreadLockHold locked(lock_);
     shares_.destroy_if([this](const Share &share) {
         Share &freed = const_cast<Share &>(share);
         while (freed.holders() != nullptr) drop(freed, *freed.holders());
@@ -369,7 +345,7 @@ template <typename GiveUp>
 void HostShares::retire_each(GiveUp give_up)
 {
     AV_SCOPE("HostShares::retire_each");
-    const Lock locked(mutex_);
+    const ThreadLockHold locked(lock_);
     shares_.for_each([this, &give_up](const Share &visited) {
         IUnknown *objects[3];
         const uint32_t given = give_up(const_cast<Share &>(visited), objects);
@@ -387,7 +363,7 @@ bool HostShares::restore_resource(uint32_t domain, uint64_t id, IUnknown *resour
 {
     AV_SCOPE("HostShares::restore_resource");
     if (resource == nullptr) return false;
-    const Lock   locked(mutex_);
+    const ThreadLockHold locked(lock_);
     Share *const share = index_.find(domain, id);
     if (share == nullptr || share->origin() != ShareOrigin::d3d11 || share->resource() != nullptr) return false;
     resource->AddRef();
@@ -404,7 +380,7 @@ void HostShares::lose_direct3d12()
 uint32_t HostShares::take_retired(IUnknown **objects, uint32_t capacity)
 {
     AV_SCOPE("HostShares::take_retired");
-    const Lock locked(mutex_);
+    const ThreadLockHold locked(lock_);
     uint32_t   taken = 0u;
     retired_.destroy_if([objects, capacity, &taken](const Retired &retired) {
         if (taken == capacity) return false;
@@ -417,20 +393,16 @@ uint32_t HostShares::take_retired(IUnknown **objects, uint32_t capacity)
 uint32_t HostShares::live() const
 {
     AV_SCOPE("HostShares::live");
-    const Lock locked(mutex_);
+    const ThreadLockHold locked(lock_);
     return shares_.live();
 }
 
 void HostShares::report(StateWriter &writer)
 {
     AV_SCOPE("HostShares::report");
-    writer.open("shares", 0u);
-    if (pthread_mutex_trylock(&mutex_) != 0) {
-        /* A dump must not wait on the worker holding the table. */
-        writer.flag("busy", true);
-        writer.close();
-        return;
-    }
+    /* A dump must not wait on the worker holding the table. */
+    const ReportGate gate(lock_, writer, "shares");
+    if (!gate.held()) return;
     uint32_t by_origin[3] = {0u, 0u, 0u};
     uint32_t released = 0u;
     uint32_t unindexed = 0u;
@@ -463,14 +435,13 @@ void HostShares::report(StateWriter &writer)
         writer.number("writes", share.writes());
         writer.close();
     });
-    pthread_mutex_unlock(&mutex_);
     writer.close();
 }
 
 bool HostShares::invariants_hold() const
 {
     AV_SCOPE("HostShares::invariants_hold");
-    const Lock locked(mutex_);
+    const ThreadLockHold locked(lock_);
     uint32_t   holders = 0u;
     uint32_t   indexed = 0u;
     uint32_t   unfound = 0u;
@@ -489,7 +460,7 @@ bool HostShares::invariants_hold() const
 Share *HostShares::pinned(uint32_t domain, uint64_t id)
 {
     AV_SCOPE("HostShares::pinned");
-    const Lock   locked(mutex_);
+    const ThreadLockHold locked(lock_);
     Share *const share = index_.find(domain, id);
     if (share != nullptr) share->pin();
     return share;
@@ -498,7 +469,7 @@ Share *HostShares::pinned(uint32_t domain, uint64_t id)
 void HostShares::settle(Share &share)
 {
     AV_SCOPE("HostShares::settle");
-    const Lock locked(mutex_);
+    const ThreadLockHold locked(lock_);
     share.unpin();
     free_if_unheld(share);
 }

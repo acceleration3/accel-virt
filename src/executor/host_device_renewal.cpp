@@ -2,7 +2,7 @@
 
 #include "core/log/driver_log.hpp"
 #include "core/log/log_line.hpp"
-#include "core/support/scope_exit.hpp"
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/renewable_device.hpp"
 
@@ -12,13 +12,6 @@ HostDeviceRenewal::HostDeviceRenewal(BlockSource &blocks, DriverLog &lines)
     : tenants_(blocks), lines_(lines), renewing_()
 {
     AV_SCOPE("HostDeviceRenewal::HostDeviceRenewal");
-    pthread_mutex_init(&renewing_, nullptr);
-}
-
-HostDeviceRenewal::~HostDeviceRenewal()
-{
-    AV_SCOPE("HostDeviceRenewal::~HostDeviceRenewal");
-    pthread_mutex_destroy(&renewing_);
 }
 
 bool HostDeviceRenewal::admit(WakeSignal &wake)
@@ -61,8 +54,7 @@ void HostDeviceRenewal::declare(const char *why)
 bool HostDeviceRenewal::renew(RenewableDevice &device, uint32_t wait_ms)
 {
     AV_SCOPE("HostDeviceRenewal::renew");
-    pthread_mutex_lock(&renewing_);
-    ScopeExit unlock([this] { pthread_mutex_unlock(&renewing_); });
+    const ThreadLockHold one_at_a_time(renewing_);
     if (device.present() && !lost(device)) return true;
     if (!tenants_.vacate(wait_ms)) {
         LogLine(lines_).text("sessions are still on the lost device after ").number(wait_ms).text(" ms: not made again yet").write();
