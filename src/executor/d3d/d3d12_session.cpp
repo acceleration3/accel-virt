@@ -345,8 +345,7 @@ bool D3d12Session::on_OpenDevice12(uint32_t, uint32_t &hresult, d3d12proto::Caps
         /* A device the sessions before this one lost is made again for it,
          * once they are gone; the wait is for their workers to fault them. */
         constexpr uint32_t renew_wait_ms = 2000u;
-        HostShares *const  host = shares_ != nullptr ? shares_->shares() : nullptr;
-        if (!device_->renew(renew_wait_ms, host, shown_by_) || !device_->admit(tenant_)) {
+        if (!device_->renew(renew_wait_ms) || !device_->admit(tenant_)) {
             hresult = static_cast<uint32_t>(DXGI_ERROR_DEVICE_REMOVED);
             return true;
         }

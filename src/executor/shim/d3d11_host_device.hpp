@@ -32,7 +32,8 @@
 #include "core/log/driver_log.hpp"
 #include "device/host/stdio_log.hpp"
 #include "core/support/object_pool.hpp"
-#include "executor/device_tenants.hpp"
+#include "executor/host_device_renewal.hpp"
+#include "executor/renewable_device.hpp"
 #include "executor/monotonic_clock.hpp"
 #include "executor/shim/carried_share.hpp"
 #include "executor/shim/host_heap.hpp"
@@ -72,7 +73,7 @@ class D3d12HostDevice;
 class Vkd3dImageExport;
 class WakeSignal;
 
-class D3d11HostDevice {
+class D3d11HostDevice final : public RenewableDevice {
 public:
     D3d11HostDevice();
     ~D3d11HostDevice();
@@ -181,8 +182,11 @@ public:
      * freed. After anything that may free a share: a guest's release, a
      * session's end. */
     void               retire_shares();
+    /* What the shares hold of the GPU's Direct3D 12 device let go of, as it
+     * is made again: its surfaces' views here drained under the lock. */
+    void               forget_direct3d12();
     /* The GPU's Direct3D 12 device, whose surfaces this one makes views of
-     * (open_shared); null for none. */
+     * (open_shared) and which shows through this one; null for none. */
     void               pair(D3d12HostDevice *device12);
     /* The GPU's compositing context, whose images the shared textures of
      * other APIs' pictures are made over (CompositorDevice); null for none. */
@@ -232,8 +236,11 @@ private:
     [[nodiscard]] bool make();
     /* Everything make made let go of, the shares' objects already gone. */
     void               unmake();
-    /* The device is lost, `why`: every session woken, and a line, the first time. */
-    void               declare(const char *why);
+    /* RenewableDevice: the device, what DXVK says of it, and everything on
+     * it made again under the lock, the shares' resources carried over. */
+    bool               present() const override;
+    bool               removed() override;
+    [[nodiscard]] bool remake() override;
     /* Under the lock, before the lost device's objects go: what each shared
      * resource it made is, kept in carried_. */
     void               carry_shares();
@@ -272,7 +279,7 @@ private:
     DeviceUuid              uuid_;
     /* Where the tenants' list grows from: before it, as it is destroyed after. */
     HostHeap                tenant_heap_;
-    DeviceTenants           tenants_;
+    HostDeviceRenewal       renewal_;
     ID3D11Device5          *device_;
     D3d12HostDevice        *device12_;
     CompositorDevice *compositor_;

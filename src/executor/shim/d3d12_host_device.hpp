@@ -20,7 +20,8 @@
 
 #include "core/log/driver_log.hpp"
 #include "device/host/stdio_log.hpp"
-#include "executor/device_tenants.hpp"
+#include "executor/host_device_renewal.hpp"
+#include "executor/renewable_device.hpp"
 #include "executor/shim/d3d12_frame_pool.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "proto/context/device_uuid.hpp"
@@ -40,12 +41,11 @@ namespace av {
 
 class D3d11HostDevice;
 class D3dRuntime;
-class HostShares;
 class WakeSignal;
 class StagedFrame;
 class Vkd3dImageExport;
 
-class D3d12HostDevice {
+class D3d12HostDevice final : public RenewableDevice {
 public:
     D3d12HostDevice();
     ~D3d12HostDevice();
@@ -68,11 +68,15 @@ public:
     /* Whether the device is lost, as D3d11HostDevice::lost says it of its own:
      * vkd3d-proton's GetDeviceRemovedReason. A tenant's thread. */
     bool               lost();
-    /* A lost device made again, as D3d11HostDevice::renew: the last tenant
-     * waited for up to `wait_ms`, what `shares` held of the old device let go
-     * of through `shown_by`'s lock, which drains them, and vkd3d-proton's
-     * device made anew. True for a device not lost, or made again. */
-    [[nodiscard]] bool renew(uint32_t wait_ms, HostShares *shares, D3d11HostDevice *shown_by);
+    /* The GPU's Direct3D 11 device, which shows this one's swap chains and
+     * holds the shares; set by its pair(). */
+    void               pair(D3d11HostDevice *shown_by);
+    /* A lost device made again (HostDeviceRenewal): the last tenant waited
+     * for up to `wait_ms`, what the shares held of the old device let go of
+     * through the Direct3D 11 device's lock, which drains them, and
+     * vkd3d-proton's device made anew. True for a device not lost, or made
+     * again. */
+    [[nodiscard]] bool renew(uint32_t wait_ms);
     /* For tests: vkd3d-proton's Vulkan device made lost, as a GPU fault
      * would lose it, and the loss declared. False where the host cannot. */
     [[nodiscard]] bool lose();
@@ -100,18 +104,22 @@ private:
     void measure();
     /* vkd3d-proton's device made on the GPU open found. */
     [[nodiscard]] bool make();
-    void               declare(const char *why);
+    /* RenewableDevice: the device, what vkd3d-proton says of it, and the
+     * device made anew. Only a tenant reads device_ outside renew, and there
+     * is none while it is remade. */
+    bool               present() const override;
+    bool               removed() override;
+    [[nodiscard]] bool remake() override;
 
     const D3dRuntime  *runtime_;
     DeviceUuid         uuid_;
     /* Where the tenants' list grows from: before it, as it is destroyed after. */
     HostHeap           tenant_heap_;
-    DeviceTenants      tenants_;
-    /* Held by renew alone: two sessions may both find the device lost. */
-    pthread_mutex_t    renewing_;
     /* QEMU's stderr, where a loss and a renewal are seen. */
     StdioLog           sink_;
     DriverLog          lines_;
+    HostDeviceRenewal  renewal_;
+    D3d11HostDevice   *shown_by_;
     ID3D12Device      *device_;
     d3d12proto::Caps12 caps_;
     D3d12FramePool     frames_;

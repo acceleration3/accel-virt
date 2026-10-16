@@ -23,7 +23,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice()
-    : runtime_(nullptr), uuid_(), tenant_heap_(), tenants_(tenant_heap_), device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), clock_(), carry_heap_(), carried_(carry_heap_)
+    : runtime_(nullptr), uuid_(), tenant_heap_(), renewal_(tenant_heap_, lines_), device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), clock_(), carry_heap_(), carried_(carry_heap_)
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
     pthread_mutex_init(&mutex_, nullptr);
@@ -336,13 +336,13 @@ bool D3d11HostDevice::placed() const
 bool D3d11HostDevice::admit(WakeSignal &wake)
 {
     AV_SCOPE("D3d11HostDevice::admit");
-    return device_ != nullptr && tenants_.join(wake) == Status::ok;
+    return device_ != nullptr && renewal_.admit(wake);
 }
 
 void D3d11HostDevice::dismiss(WakeSignal &wake)
 {
     AV_SCOPE("D3d11HostDevice::dismiss");
-    tenants_.leave(wake);
+    renewal_.dismiss(wake);
 }
 
 /* DXVK knows its device is lost once a submission or a wait said so, and
@@ -350,23 +350,19 @@ void D3d11HostDevice::dismiss(WakeSignal &wake)
 bool D3d11HostDevice::lost()
 {
     AV_SCOPE("D3d11HostDevice::lost");
-    if (tenants_.lost()) return true;
-    if (device_ == nullptr || SUCCEEDED(device_->GetDeviceRemovedReason())) return false;
-    declare("DXVK reports it removed");
-    return true;
+    return renewal_.lost(*this);
 }
 
-void D3d11HostDevice::declare(const char *why)
+bool D3d11HostDevice::present() const
 {
-    AV_SCOPE("D3d11HostDevice::declare");
-    if (!tenants_.lose()) return;
-    LogLine(lines_)
-        .text("the device was lost (")
-        .text(why)
-        .text("): its ")
-        .number(tenants_.count())
-        .text(" sessions are faulted, and it is made again once they are gone")
-        .write();
+    AV_SCOPE("D3d11HostDevice::present");
+    return device_ != nullptr;
+}
+
+bool D3d11HostDevice::removed()
+{
+    AV_SCOPE("D3d11HostDevice::removed");
+    return device_ != nullptr && FAILED(device_->GetDeviceRemovedReason());
 }
 
 bool D3d11HostDevice::usable()
@@ -378,36 +374,24 @@ bool D3d11HostDevice::usable()
 bool D3d11HostDevice::renew(uint32_t wait_ms)
 {
     AV_SCOPE("D3d11HostDevice::renew");
-    if (runtime_ == nullptr) return false;
-    /* Looked at under the lock: another session's renew may be remaking it. */
+    return runtime_ != nullptr && renewal_.renew(*this, wait_ms);
+}
+
+/* What anything still holds of the old device goes before it does: the
+ * shares' textures under this lock - what each is kept first, to be made
+ * again - then everything made on it. */
+bool D3d11HostDevice::remake()
+{
+    AV_SCOPE("D3d11HostDevice::remake");
     lock(nullptr);
-    const bool fine = usable();
+    carry_shares();
+    if (shares_ != nullptr) shares_->lose_direct3d11();
+    if (device_ != nullptr) retire_locked();
+    unmake();
+    const bool     made = make();
+    const uint32_t restored = restore_shares();
     unlock();
-    if (fine) return true;
-    if (!tenants_.vacate(wait_ms)) {
-        LogLine(lines_).text("sessions are still on the lost device after ").number(wait_ms).text(" ms: not made again yet").write();
-        return false;
-    }
-    lock(nullptr);
-    bool made = device_ != nullptr && !tenants_.lost();
-    if (!made) {
-        /* What anything still holds of the old device goes before it does:
-         * the shares' textures under this lock - what each is kept first, to
-         * be made again - then everything made on it. */
-        carry_shares();
-        if (shares_ != nullptr) shares_->lose_direct3d11();
-        if (device_ != nullptr) retire_locked();
-        unmake();
-        made = make();
-        const uint32_t restored = restore_shares();
-        if (made) static_cast<void>(tenants_.renew());
-        LogLine(lines_)
-            .text(made ? "the lost device was made again, with " : "the lost device could not be made again; ")
-            .number(restored)
-            .text(" shared resources")
-            .write();
-    }
-    unlock();
+    LogLine(lines_).number(restored).text(" shared resources carried to the device made again").write();
     return made;
 }
 
@@ -443,7 +427,7 @@ bool D3d11HostDevice::lose()
     lock(nullptr);
     const bool tripped = device_ != nullptr && vulkan_.table().lose();
     unlock();
-    if (tripped) declare("a test lost it on purpose");
+    if (tripped) renewal_.declare("a test lost it on purpose");
     return tripped;
 }
 
@@ -636,6 +620,14 @@ void D3d11HostDevice::pair(D3d12HostDevice *device12)
 {
     AV_SCOPE("D3d11HostDevice::pair");
     device12_ = device12;
+    if (device12 != nullptr) device12->pair(this);
+}
+
+void D3d11HostDevice::forget_direct3d12()
+{
+    AV_SCOPE("D3d11HostDevice::forget_direct3d12");
+    if (shares_ != nullptr) shares_->lose_direct3d12();
+    retire_shares();
 }
 
 void D3d11HostDevice::use_compositor(CompositorDevice *compositor)
