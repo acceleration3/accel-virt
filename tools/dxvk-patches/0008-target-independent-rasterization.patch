@@ -1,0 +1,1704 @@
+From: accel-virt
+Subject: [PATCH] d3d11: target-independent rasterization, emulated exactly
+
+Direct3D 11.1's target-independent rasterization (a rasterizer state's
+ForcedSampleCount above 1 with single-sample render targets bound, or with
+none) rasterizes at the forced count whatever the targets are: the pixel
+shader runs once for each pixel with any sample of D3D's standard pattern
+covered and sees that pattern's coverage as SV_Coverage. Direct2D draws its
+anti-aliased geometry this way - 16 samples, the masks OR'd or XOR'd into an
+R16_UINT atlas and counted - and DXVK ignored the forced count with a
+render target bound, so the atlas got one sample's coverage and hairlines
+lost rows. Vulkan rasterizes at the attachments' sample count (only NVIDIA's
+mixed samples decouple the two), and RADV rasterizes 8 samples at most.
+
+It is emulated, the same way on every GPU. The draw is rasterized at one
+sample, conservatively, so every pixel the triangle touches gets a fragment.
+A generated geometry shader passes the vertex or domain shader's outputs on
+and hands the pixel shader its triangle in the rasterizer's own fixed point
+(16.8, round-to-nearest-even, from viewport 0 in push data), with the edges'
+top-left flags and each clip distance over w. A variant of the pixel shader
+computes the forced pattern's coverage from it in 64-bit integers - every
+edge function positive, or zero on a top or left edge - and clips at every
+sample, replaces SV_Coverage with it, interpolates by sample index at the
+forced pattern's positions, and demotes a pixel with no sample covered.
+UAV-only rendering at a forced count takes the same path: the hardware's
+geometric clipping at clip distances moved an edge past a sample where D3D
+clips each sample. sampleinfo reports the forced count as the rasterizer's.
+
+Not emulated, drawn as before: lines and points, wireframe, a geometry
+shader or stream output of the application's, a previous stage writing the
+layer or viewport index. A triangle with a vertex at w <= 0 or past 2^21
+pixels counts every sample of each pixel it touches.
+---
+diff --git a/src/d3d11/d3d11_context.cpp b/src/d3d11/d3d11_context.cpp
+index a02a7021..b701ac98 100644
+--- a/src/d3d11/d3d11_context.cpp
++++ b/src/d3d11/d3d11_context.cpp
+@@ -3260,6 +3260,9 @@ namespace dxvk {
+ 
+   template<typename ContextType>
+   void D3D11CommonContext<ContextType>::ApplyDirtyGraphicsBindings() {
++    if (unlikely(m_tir.dirty))
++      ApplyTargetIndependentRasterization();
++
+     auto dirtyMask = m_state.lazy.shadersDirty & m_state.lazy.shadersUsed;
+     dirtyMask.clr(D3D11ShaderType::eCompute);
+ 
+@@ -3330,6 +3333,7 @@ namespace dxvk {
+   template<typename ContextType>
+   void D3D11CommonContext<ContextType>::ApplyPrimitiveTopology() {
+     D3D11_PRIMITIVE_TOPOLOGY topology = m_state.ia.primitiveTopology;
++    m_tir.dirty = true;
+     DxvkInputAssemblyState iaState(VK_PRIMITIVE_TOPOLOGY_MAX_ENUM, false);
+ 
+     if (topology <= D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP_ADJ) {
+@@ -3437,6 +3441,8 @@ namespace dxvk {
+   
+   template<typename ContextType>
+   void D3D11CommonContext<ContextType>::ApplyRasterizerState() {
++    m_tir.dirty = true;
++
+     if (m_state.rs.state != nullptr) {
+       EmitCs([
+         cState      = m_state.rs.state->GetState(),
+@@ -3459,14 +3465,17 @@ namespace dxvk {
+     D3D11SpecData specData = {};
+     specData.sampleCount = m_state.om.sampleCount;
+ 
+-    if (unlikely(!specData.sampleCount)) {
+-      specData.sampleCount = m_state.rs.state
+-        ? m_state.rs.state->Desc().ForcedSampleCount
+-        : 0u;
++    // The rasterizer runs at a forced sample count whatever
++    // the render targets are, and sampleinfo reports it.
++    UINT forcedSampleCount = m_state.rs.state
++      ? m_state.rs.state->Desc().ForcedSampleCount
++      : 0u;
+ 
+-      if (!specData.sampleCount)
+-        specData.sampleCount = 1u;
+-    }
++    if (forcedSampleCount)
++      specData.sampleCount = forcedSampleCount;
++
++    if (unlikely(!specData.sampleCount))
++      specData.sampleCount = 1u;
+ 
+     EmitCs([
+       cSpecData = specData
+@@ -3480,6 +3489,7 @@ namespace dxvk {
+   template<typename ContextType>
+   void D3D11CommonContext<ContextType>::ApplyViewportState() {
+     uint32_t viewportCount = m_state.rs.numViewports;
++    m_tir.dirty = true;
+ 
+     if (likely(viewportCount)) {
+       EmitCsCmd<DxvkViewport>(D3D11CmdType::None, viewportCount,
+@@ -3530,6 +3540,107 @@ namespace dxvk {
+   }
+ 
+ 
++  template<typename ContextType>
++  void D3D11CommonContext<ContextType>::ApplyTargetIndependentRasterization() {
++    m_tir.dirty = false;
++
++    D3D11TirDraw draw = DetermineTargetIndependentRasterization();
++
++    if (draw.gs != nullptr) {
++      if (unlikely(draw.gs->needsCompile()))
++        m_device->requestCompileShader(draw.gs);
++
++      if (unlikely(draw.ps->needsCompile()))
++        m_device->requestCompileShader(draw.ps);
++
++      EmitCs([
++        cDraw = std::move(draw)
++      ] (DxvkContext* ctx) mutable {
++        ctx->bindShader<VK_SHADER_STAGE_GEOMETRY_BIT>(Forwarder::move(cDraw.gs));
++        ctx->bindShader<VK_SHADER_STAGE_FRAGMENT_BIT>(Forwarder::move(cDraw.ps));
++        ctx->setRasterizerState(cDraw.rs);
++        ctx->pushData(VK_SHADER_STAGE_GEOMETRY_BIT, 0u, sizeof(cDraw.viewport), &cDraw.viewport);
++      });
++
++      m_tir.active = true;
++      return;
++    }
++
++    if (m_tir.active) {
++      m_tir.active = false;
++
++      BindShader<D3D11ShaderType::eGeometry>(GetCommonShader(m_state.gs.ptr()));
++      BindShader<D3D11ShaderType::ePixel>(GetCommonShader(m_state.ps.ptr()));
++      ApplyRasterizerState();
++
++      m_tir.dirty = false;
++    }
++  }
++
++
++  template<typename ContextType>
++  D3D11TirDraw D3D11CommonContext<ContextType>::DetermineTargetIndependentRasterization() {
++    D3D11TirDraw draw = { };
++
++    auto rs = m_state.rs.state.ptr();
++
++    if (likely(!rs || rs->Desc().ForcedSampleCount <= 1u))
++      return draw;
++
++    UINT sampleCount = rs->Desc().ForcedSampleCount;
++    auto& tirShaders = m_parent->GetTirShaders();
++
++    // What the emulation covers: filled triangles, from the vertex or
++    // domain shader straight to the pixel shader, with render targets or
++    // without. Anything else is drawn at one sample with render targets,
++    // at the forced count the device supports without.
++    D3D11_PRIMITIVE_TOPOLOGY topology = m_state.ia.primitiveTopology;
++
++    bool triangles = topology == D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST
++                  || topology == D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
++
++    if (m_state.ds != nullptr) {
++      triangles = m_state.ds->GetCommonShader()->GetShader()->metadata().outputTopology
++        == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
++    }
++
++    bool eligible = tirShaders.IsSupported() && triangles
++      && rs->Desc().FillMode == D3D11_FILL_SOLID
++      && m_state.vs != nullptr && m_state.ps != nullptr && m_state.gs == nullptr
++      && m_state.rs.numViewports;
++
++    D3D11TirGeometryShader gs = { };
++
++    if (eligible) {
++      auto prevStage = m_state.ds != nullptr
++        ? m_state.ds->GetCommonShader()->GetShader()
++        : m_state.vs->GetCommonShader()->GetShader();
++
++      auto ps = m_state.ps->GetCommonShader();
++
++      gs = tirShaders.GetGeometryShader(prevStage,
++        ps->GetInputRegisterCount(), ps->ReadsClipDistances());
++
++      if (gs.shader != nullptr) {
++        draw.gs = gs.shader;
++        draw.ps = tirShaders.GetPixelShader(ps, sampleCount, gs.layout);
++        draw.rs = rs->GetTirState();
++
++        const auto& vp = m_state.rs.viewports[0u];
++        draw.viewport = {{ vp.TopLeftX, vp.TopLeftY, vp.Width, vp.Height }};
++        return draw;
++      }
++    }
++
++    static bool s_warned = false;
++
++    if (!std::exchange(s_warned, true))
++      Logger::warn(str::format("D3D11: Target-independent rasterization at ", sampleCount, " samples not emulated for this draw"));
++
++    return draw;
++  }
++
++
+   template<typename ContextType>
+   void D3D11CommonContext<ContextType>::BatchDraw(
+     const VkDrawIndirectCommand&            draw) {
+@@ -3586,6 +3697,9 @@ namespace dxvk {
+     const D3D11CommonShader*    pShaderModule) {
+     uint64_t oldUavMask = m_state.lazy.bindingsUsed[ShaderStage].uavMask;
+ 
++    if (ShaderStage != D3D11ShaderType::eCompute)
++      m_tir.dirty = true;
++
+     if (pShaderModule) {
+       auto buffer = pShaderModule->GetIcb();
+       auto shader = pShaderModule->GetShader();
+@@ -3683,6 +3797,8 @@ namespace dxvk {
+ 
+   template<typename ContextType>
+   void D3D11CommonContext<ContextType>::BindFramebuffer() {
++    m_tir.dirty = true;
++
+     DxvkDepthBiasRepresentation depthBiasRepresentation =
+       { VK_DEPTH_BIAS_REPRESENTATION_LEAST_REPRESENTABLE_VALUE_FORMAT_EXT,
+         m_device->features().extDepthBiasControl.depthBiasExact };
+@@ -4828,7 +4944,7 @@ namespace dxvk {
+ 
+   template<typename ContextType>
+   bool D3D11CommonContext<ContextType>::HasDirtyGraphicsBindings() {
+-    return (m_state.lazy.shadersDirty & m_state.lazy.shadersUsed).any(
++    return m_tir.dirty || (m_state.lazy.shadersDirty & m_state.lazy.shadersUsed).any(
+       D3D11ShaderType::eVertex, D3D11ShaderType::eGeometry,
+       D3D11ShaderType::eHull,   D3D11ShaderType::eDomain,
+       D3D11ShaderType::ePixel);
+@@ -4837,6 +4953,9 @@ namespace dxvk {
+ 
+   template<typename ContextType>
+   void D3D11CommonContext<ContextType>::ResetCommandListState() {
++    m_tir.dirty = true;
++    m_tir.active = false;
++
+     EmitCs([
+       cUsedBindings  = GetMaxUsedBindings()
+     ] (DxvkContext* ctx) {
+diff --git a/src/d3d11/d3d11_context.h b/src/d3d11/d3d11_context.h
+index 666ae132..1e69a509 100644
+--- a/src/d3d11/d3d11_context.h
++++ b/src/d3d11/d3d11_context.h
+@@ -790,6 +790,8 @@ namespace dxvk {
+     D3D11ContextState           m_state;
+     UINT                        m_flags;
+ 
++    D3D11TirBinding             m_tir;
++
+     DxvkStagingBuffer           m_staging;
+ 
+     D3D11CmdType                m_csDataType = D3D11CmdType::None;
+@@ -851,6 +853,10 @@ namespace dxvk {
+ 
+     void ApplyViewportState();
+ 
++    void ApplyTargetIndependentRasterization();
++
++    D3D11TirDraw DetermineTargetIndependentRasterization();
++
+     void BatchDraw(
+       const VkDrawIndirectCommand&            draw);
+ 
+diff --git a/src/d3d11/d3d11_context_state.h b/src/d3d11/d3d11_context_state.h
+index b2f7a47e..fd3f857a 100644
+--- a/src/d3d11/d3d11_context_state.h
++++ b/src/d3d11/d3d11_context_state.h
+@@ -378,6 +378,33 @@ namespace dxvk {
+     D3D11ClassInstances instances;
+   };
+ 
++  /**
++   * \brief Emulated target-independent rasterization
++   *
++   * Whether the bound state needs looking at again, and whether
++   * the emulation's shaders and rasterizer state are bound.
++   */
++  struct D3D11TirBinding {
++    bool dirty  = true;
++    bool active = false;
++  };
++
++
++  /**
++   * \brief What an emulated TIR draw binds
++   *
++   * The geometry shader handing the pixel shader its triangle, the
++   * pixel shader computing the coverage, the rasterizer state at one
++   * sample, and viewport 0 as the geometry shader's push data.
++   */
++  struct D3D11TirDraw {
++    Rc<DxvkShader>          gs;
++    Rc<DxvkShader>          ps;
++    DxvkRasterizerState     rs = { };
++    std::array<float, 4u>   viewport = { };
++  };
++
++
+   /**
+    * \brief Maximum used binding numbers in a shader stage
+    */
+diff --git a/src/d3d11/d3d11_device.cpp b/src/d3d11/d3d11_device.cpp
+index 97df7a07..22b70df6 100644
+--- a/src/d3d11/d3d11_device.cpp
++++ b/src/d3d11/d3d11_device.cpp
+@@ -51,6 +51,7 @@ namespace dxvk {
+     m_d3d11Formats      (m_dxvkDevice),
+     m_d3d11Options      (m_dxvkDevice->instance()->config()),
+     m_shaderOptions     (GetShaderOptions(m_dxvkDevice, m_d3d11Options)),
++    m_tirShaders        (this),
+     m_maxFeatureLevel   (D3D11DeviceFeatures::GetMaxFeatureLevel(*m_dxvkDevice)),
+     m_deviceFeatures    (*m_dxvkDevice, m_d3d11Options, m_featureLevel) {
+     m_initializer = new D3D11Initializer(this);
+diff --git a/src/d3d11/d3d11_device.h b/src/d3d11/d3d11_device.h
+index 0b90bc7b..941e53a1 100644
+--- a/src/d3d11/d3d11_device.h
++++ b/src/d3d11/d3d11_device.h
+@@ -23,6 +23,7 @@
+ #include "d3d11_options.h"
+ #include "d3d11_shader.h"
+ #include "d3d11_state.h"
++#include "d3d11_tir.h"
+ #include "d3d11_util.h"
+ 
+ namespace dxvk {
+@@ -459,6 +460,14 @@ namespace dxvk {
+       return &m_d3d11Options;
+     }
+ 
++    const DxvkShaderOptions& GetShaderOptions() const {
++      return m_shaderOptions;
++    }
++
++    D3D11TirShaders& GetTirShaders() {
++      return m_tirShaders;
++    }
++
+     D3D10Device* GetD3D10Interface() const {
+       return m_d3d10Device;
+     }
+@@ -512,6 +521,7 @@ namespace dxvk {
+     D3D11StateObjectSet<D3D11RasterizerState>   m_rsStateObjects;
+     D3D11StateObjectSet<D3D11SamplerState>      m_samplerObjects;
+     D3D11ShaderModuleSet                        m_shaderModules;
++    D3D11TirShaders                             m_tirShaders;
+ 
+     D3D_FEATURE_LEVEL               m_maxFeatureLevel;
+     D3D11DeviceFeatures             m_deviceFeatures;
+diff --git a/src/d3d11/d3d11_rasterizer.cpp b/src/d3d11/d3d11_rasterizer.cpp
+index 558f3e34..51922fd9 100644
+--- a/src/d3d11/d3d11_rasterizer.cpp
++++ b/src/d3d11/d3d11_rasterizer.cpp
+@@ -36,7 +36,7 @@ namespace dxvk {
+     // we do not need to enable it in case the parameters are both 0.
+     m_state.setDepthClip(desc.DepthClipEnable);
+     m_state.setConservativeMode(DecodeConservativeRasterizationMode(desc.ConservativeRaster));
+-    m_state.setSampleCount(desc.ForcedSampleCount);
++    m_state.setSampleCount(ClampForcedSampleCount(device, desc.ForcedSampleCount));
+     m_state.setFlatShading(false);
+     m_state.setLineMode(VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT);
+ 
+@@ -54,6 +54,31 @@ namespace dxvk {
+       if (features.extLineRasterization.smoothLines)
+         m_state.setLineMode(VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT);
+     }
++
++    // Target-independent rasterization is emulated at one sample, the
++    // coverage computed in the pixel shader of every pixel the triangle
++    // touches (D3D11TirShaders).
++    m_tirState = m_state;
++    m_tirState.setSampleCount(0u);
++    m_tirState.setConservativeMode(features.extConservativeRasterization
++      ? VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT
++      : VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT);
++  }
++
++
++  UINT D3D11RasterizerState::ClampForcedSampleCount(
++          D3D11Device*                    device,
++          UINT                            count) {
++    // A draw the emulation does not take, lines or points with only UAVs
++    // bound, rasterizes at the forced count itself. Vulkan needs a count
++    // the device rasterizes without attachments at, at most the forced one.
++    VkSampleCountFlags supported = device->GetDXVKDevice()->properties()
++      .core.properties.limits.framebufferNoAttachmentsSampleCounts;
++
++    while (count > 1u && !(supported & count))
++      count >>= 1u;
++
++    return count;
+   }
+   
+   
+diff --git a/src/d3d11/d3d11_rasterizer.h b/src/d3d11/d3d11_rasterizer.h
+index 94f2582b..33fb720a 100644
+--- a/src/d3d11/d3d11_rasterizer.h
++++ b/src/d3d11/d3d11_rasterizer.h
+@@ -43,6 +43,16 @@ namespace dxvk {
+       return m_state;
+     }
+ 
++    /**
++     * \brief State for emulated target-independent rasterization
++     *
++     * Rasterizes at one sample, conservatively where supported.
++     * \returns Rasterizer state for emulated TIR draws
++     */
++    DxvkRasterizerState GetTirState() const {
++      return m_tirState;
++    }
++
+     DxvkDepthBias GetDepthBias() const {
+       return m_depthBias;
+     }
+@@ -61,9 +71,14 @@ namespace dxvk {
+             D3D11_RASTERIZER_DESC2* pDesc);
+     
+   private:
++
++    static UINT ClampForcedSampleCount(
++            D3D11Device*            device,
++            UINT                    count);
+     
+     D3D11_RASTERIZER_DESC2 m_desc;
+     DxvkRasterizerState    m_state      = { };
++    DxvkRasterizerState    m_tirState   = { };
+     DxvkDepthBias          m_depthBias  = { };
+     D3D10RasterizerState   m_d3d10;
+ 
+diff --git a/src/d3d11/d3d11_shader.cpp b/src/d3d11/d3d11_shader.cpp
+index e50d360a..fac48c10 100644
+--- a/src/d3d11/d3d11_shader.cpp
++++ b/src/d3d11/d3d11_shader.cpp
+@@ -4,6 +4,7 @@
+ #include <dxbc/dxbc_container.h>
+ #include <dxbc/dxbc_interface.h>
+ #include <dxbc/dxbc_parser.h>
++#include <dxbc/dxbc_signature.h>
+ 
+ #include "d3d11_device.h"
+ #include "d3d11_shader.h"
+@@ -227,6 +228,8 @@ namespace dxvk {
+     if (pLinkage)
+       GatherInterefaceInfo(pLinkage, pShaderBytecode, BytecodeLength);
+ 
++    GatherInputInfo(pShaderBytecode, BytecodeLength);
++
+     CreateIrShader(pDevice, ShaderKey, ModuleInfo, pShaderBytecode, BytecodeLength, Icb);
+     pDevice->GetDXVKDevice()->registerShader(m_shader);
+   }
+@@ -262,16 +265,39 @@ namespace dxvk {
+       pDevice->InitShaderIcb(this, icbSizeInBytes, Icb.data);
+     }
+ 
+-    // Create actual shader converter
++    // Create actual shader converter. It is kept even when the shader
++    // comes from the cache: shader variants are converted from it.
++    m_converter = new D3D11ShaderConverter(ShaderKey,
++      ModuleInfo, pShaderBytecode, BytecodeLength, bool(m_buffer));
++
+     m_shader = pDevice->GetDXVKDevice()->createCachedShader(
+       ShaderKey.toString(), ModuleInfo, nullptr);
+ 
+     if (!m_shader) {
+-      Rc<D3D11ShaderConverter> converter = new D3D11ShaderConverter(ShaderKey,
+-        ModuleInfo, pShaderBytecode, BytecodeLength, bool(m_buffer));
+-
+       m_shader = pDevice->GetDXVKDevice()->createCachedShader(
+-        ShaderKey.toString(), ModuleInfo, std::move(converter));
++        ShaderKey.toString(), ModuleInfo, m_converter);
++    }
++  }
++
++
++  void D3D11CommonShader::GatherInputInfo(
++    const void*                   pShaderBytecode,
++          size_t                  BytecodeLength) {
++    dxbc_spv::dxbc::Container container(pShaderBytecode, BytecodeLength);
++    dxbc_spv::util::ByteReader chunk(container.getInputSignatureChunk());
++
++    if (!chunk)
++      return;
++
++    dxbc_spv::dxbc::Signature signature(chunk);
++
++    for (const auto& e : signature) {
++      if (e.getRegisterIndex() >= 0)
++        m_inputRegisterCount = std::max(m_inputRegisterCount, uint32_t(e.getRegisterIndex()) + 1u);
++
++      if (e.getSystemValue() == dxbc_spv::dxbc::SignatureSysval::eClipDistance
++       || e.getSystemValue() == dxbc_spv::dxbc::SignatureSysval::eCullDistance)
++        m_readsClipDistances = true;
+     }
+   }
+ 
+diff --git a/src/d3d11/d3d11_shader.h b/src/d3d11/d3d11_shader.h
+index b7cb6bef..a1e5436c 100644
+--- a/src/d3d11/d3d11_shader.h
++++ b/src/d3d11/d3d11_shader.h
+@@ -176,11 +176,45 @@ namespace dxvk {
+       return m_interfaces.EncodeInstanceData(Slot, pClassInstance);
+     }
+ 
++    /**
++     * \brief Converter of the shader's DXBC
++     *
++     * Converts the shader again for variants of it.
++     * \returns Shader converter
++     */
++    Rc<DxvkIrShaderConverter> GetConverter() const {
++      return m_converter;
++    }
++
++    /**
++     * \brief Number of input registers
++     *
++     * One past the highest input register the input signature
++     * names, i.e. the first input location the shader leaves free.
++     * \returns Input register count
++     */
++    uint32_t GetInputRegisterCount() const {
++      return m_inputRegisterCount;
++    }
++
++    /**
++     * \brief Whether the shader reads clip or cull distances
++     * \returns \c true if SV_ClipDistance or SV_CullDistance is an input
++     */
++    bool ReadsClipDistances() const {
++      return m_readsClipDistances;
++    }
++
+   private:
+ 
+     Rc<DxvkShader> m_shader;
+     Rc<DxvkBuffer> m_buffer;
+ 
++    Rc<DxvkIrShaderConverter> m_converter;
++
++    uint32_t            m_inputRegisterCount = 0u;
++    bool                m_readsClipDistances = false;
++
+     D3D11BindingMask    m_bindings = { };
+     D3D11InterfaceInfo  m_interfaces = { };
+ 
+@@ -197,6 +231,10 @@ namespace dxvk {
+       const void*                   pShaderBytecode,
+             size_t                  BytecodeLength);
+ 
++    void GatherInputInfo(
++      const void*                   pShaderBytecode,
++            size_t                  BytecodeLength);
++
+   };
+ 
+ 
+diff --git a/src/d3d11/d3d11_tir.cpp b/src/d3d11/d3d11_tir.cpp
+new file mode 100644
+index 00000000..bd8d5d1a
+--- /dev/null
++++ b/src/d3d11/d3d11_tir.cpp
+@@ -0,0 +1,907 @@
++#include <ir/ir_serialize.h>
++
++#include "d3d11_device.h"
++#include "d3d11_shader.h"
++#include "d3d11_tir.h"
++
++namespace dxvk {
++
++  namespace ir = dxbc_spv::ir;
++
++  namespace {
++
++    /** D3D's standard sample patterns, in 1/16 pixel from the pixel center */
++    struct D3D11TirSample {
++      int32_t x;
++      int32_t y;
++    };
++
++    const std::array<D3D11TirSample, 2u>  g_pattern2  = {{ { 4,  4 }, {-4, -4 } }};
++    const std::array<D3D11TirSample, 4u>  g_pattern4  = {{ {-2, -6 }, { 6, -2 }, {-6,  2 }, { 2,  6 } }};
++    const std::array<D3D11TirSample, 8u>  g_pattern8  = {{ { 1, -3 }, {-1,  3 }, { 5,  1 }, {-3, -5 },
++                                                           {-5,  5 }, {-7, -1 }, { 3,  7 }, { 7, -7 } }};
++    const std::array<D3D11TirSample, 16u> g_pattern16 = {{ { 1,  1 }, {-1, -3 }, {-3,  2 }, { 4, -1 },
++                                                           {-5, -2 }, { 2,  5 }, { 5,  3 }, { 3, -5 },
++                                                           {-2,  6 }, { 0, -7 }, {-4, -6 }, {-6,  4 },
++                                                           {-8,  0 }, { 7, -4 }, { 6,  7 }, {-7, -8 } }};
++
++    std::pair<const D3D11TirSample*, uint32_t> GetSamplePattern(UINT SampleCount) {
++      switch (SampleCount) {
++        case  2u: return { g_pattern2.data(),  2u };
++        case  4u: return { g_pattern4.data(),  4u };
++        case  8u: return { g_pattern8.data(),  8u };
++        case 16u: return { g_pattern16.data(), 16u };
++        default:  return { nullptr, 0u };
++      }
++    }
++
++    /** Fixed-point subpixel precision, 16.8 as D3D specifies */
++    constexpr uint32_t SubpixelBits = 8u;
++    constexpr float    SubpixelScale = float(1u << SubpixelBits);
++
++    /** Largest vertex coordinate, in subpixels, for which the edge
++     *  functions stay within 64 bits and edge deltas within 32. */
++    constexpr float    MaxFixedCoord = float(1u << 29u);
++
++    constexpr uint32_t FlagValid = 0x1u;
++    constexpr uint32_t FlagTopLeftShift = 1u;
++
++
++    /**
++     * \brief Typed helpers over an IR builder
++     *
++     * Keeps the arithmetic of the coverage computation readable.
++     * Float operations are precise so that every driver computes
++     * the same coverage, as a D3D rasterizer would.
++     */
++    class D3D11TirIr {
++
++    public:
++
++      explicit D3D11TirIr(ir::Builder& builder)
++      : m_b(builder) { }
++
++      ir::Builder& b() { return m_b; }
++
++      ir::SsaDef u32(uint32_t v) { return m_b.makeConstant(v); }
++      ir::SsaDef i32(int32_t v)  { return m_b.makeConstant(v); }
++      ir::SsaDef i64(int64_t v)  { return m_b.makeConstant(v); }
++      ir::SsaDef f32(float v)    { return m_b.makeConstant(v); }
++      ir::SsaDef bconst(bool v)  { return m_b.makeConstant(v); }
++
++      ir::SsaDef addr(uint32_t a) { return u32(a); }
++      ir::SsaDef addr(uint32_t a, uint32_t b) { return m_b.makeConstant(a, b); }
++      ir::SsaDef addr(uint32_t a, uint32_t b, uint32_t c) { return m_b.makeConstant(a, b, c); }
++
++      ir::SsaDef fadd(ir::SsaDef a, ir::SsaDef b) { return precise(ir::Op::FAdd(F(), a, b)); }
++      ir::SsaDef fsub(ir::SsaDef a, ir::SsaDef b) { return precise(ir::Op::FSub(F(), a, b)); }
++      ir::SsaDef fmul(ir::SsaDef a, ir::SsaDef b) { return precise(ir::Op::FMul(F(), a, b)); }
++      ir::SsaDef fdiv(ir::SsaDef a, ir::SsaDef b) { return precise(ir::Op::FDiv(F(), a, b)); }
++      ir::SsaDef fabs(ir::SsaDef a) { return m_b.add(ir::Op::FAbs(F(), a)); }
++      ir::SsaDef fround(ir::SsaDef a) { return precise(ir::Op::FRound(F(), a, ir::RoundMode::eNearestEven)); }
++      ir::SsaDef flt(ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::FLt(B(), a, b)); }
++      ir::SsaDef fgt(ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::FGt(B(), a, b)); }
++      ir::SsaDef fge(ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::FGe(B(), a, b)); }
++      ir::SsaDef fisnan(ir::SsaDef a) { return m_b.add(ir::Op::FIsNan(B(), a)); }
++
++      ir::SsaDef iadd(ir::Type t, ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::IAdd(t, a, b)); }
++      ir::SsaDef isub(ir::Type t, ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::ISub(t, a, b)); }
++      ir::SsaDef imul(ir::Type t, ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::IMul(t, a, b)); }
++      ir::SsaDef iand(ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::IAnd(U(), a, b)); }
++      ir::SsaDef ior(ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::IOr(U(), a, b)); }
++      ir::SsaDef ieq(ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::IEq(B(), a, b)); }
++      ir::SsaDef ine(ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::INe(B(), a, b)); }
++      ir::SsaDef slt(ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::SLt(B(), a, b)); }
++      ir::SsaDef sgt(ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::SGt(B(), a, b)); }
++      ir::SsaDef sge(ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::SGe(B(), a, b)); }
++
++      ir::SsaDef band(ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::BAnd(B(), a, b)); }
++      ir::SsaDef bor(ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::BOr(B(), a, b)); }
++      ir::SsaDef bnot(ir::SsaDef a) { return m_b.add(ir::Op::BNot(B(), a)); }
++      ir::SsaDef select(ir::Type t, ir::SsaDef c, ir::SsaDef a, ir::SsaDef b) { return m_b.add(ir::Op::Select(t, c, a, b)); }
++
++      ir::SsaDef ftoi(ir::SsaDef a) { return m_b.add(ir::Op::ConvertFtoI(I(), a)); }
++      ir::SsaDef itof(ir::SsaDef a) { return precise(ir::Op::ConvertItoF(F(), a)); }
++      ir::SsaDef widen(ir::SsaDef a) { return m_b.add(ir::Op::ConvertItoI(L(), a)); }
++      ir::SsaDef bitcast(ir::Type t, ir::SsaDef a) { return m_b.add(ir::Op::Cast(t, a)); }
++
++      static ir::Type F() { return ir::Type(ir::ScalarType::eF32); }
++      static ir::Type I() { return ir::Type(ir::ScalarType::eI32); }
++      static ir::Type U() { return ir::Type(ir::ScalarType::eU32); }
++      static ir::Type L() { return ir::Type(ir::ScalarType::eI64); }
++      static ir::Type B() { return ir::Type(ir::ScalarType::eBool); }
++
++      /** Begins an if block; returns the construct to end */
++      ir::SsaDef beginIf(ir::SsaDef cond) {
++        return m_b.add(ir::Op::ScopedIf(ir::SsaDef(), cond));
++      }
++
++      void endIf(ir::SsaDef construct) {
++        auto end = m_b.add(ir::Op::ScopedEndIf(construct));
++        m_b.rewriteOp(construct, ir::Op(m_b.getOp(construct)).setOperand(0u, end));
++      }
++
++    private:
++
++      ir::Builder& m_b;
++
++      ir::SsaDef precise(ir::Op op) {
++        op.setFlags(ir::OpFlag::ePrecise);
++        return m_b.add(std::move(op));
++      }
++
++    };
++
++
++    /** A 2D point in the rasterizer's fixed point */
++    struct D3D11TirPoint {
++      ir::SsaDef x;
++      ir::SsaDef y;
++    };
++
++
++    /** Address into an I/O variable, null if it is a whole scalar */
++    ir::SsaDef BuildAddress(D3D11TirIr& ir, const small_vector<uint32_t, 4u>& indices) {
++      switch (indices.size()) {
++        case 0u: return ir::SsaDef();
++        case 1u: return ir.addr(indices[0u]);
++        case 2u: return ir.addr(indices[0u], indices[1u]);
++        default: return ir.addr(indices[0u], indices[1u], indices[2u]);
++      }
++    }
++
++
++    /**
++     * \brief Geometry shader feeding the coverage data
++     *
++     * Passes each triangle of the previous stage on unchanged, with the
++     * triangle itself in the rasterizer's fixed point as flat data for
++     * the pixel shader. Culls on cull distances and clip distances of
++     * NaN as D3D does, and drops triangles of no area in fixed point,
++     * which D3D does not rasterize.
++     */
++    class D3D11TirGeometryShaderConverter : public DxvkIrShaderConverter {
++
++    public:
++
++      D3D11TirGeometryShaderConverter(
++              std::string                   name,
++              std::vector<D3D11TirVarying>  varyings,
++        const D3D11TirLayout&               layout,
++              bool                          forwardClip)
++      : m_name(std::move(name)), m_varyings(std::move(varyings)),
++        m_layout(layout), m_forwardClip(forwardClip) { }
++
++      void convertShader(ir::Builder& builder) {
++        D3D11TirIr ir(builder);
++
++        m_forwards.clear();
++        m_clipOut.clear();
++        m_cullCount = 0u;
++
++        auto mainFunc = builder.add(ir::Op::Function(ir::ScalarType::eVoid));
++        builder.add(ir::Op::FunctionEnd());
++        builder.add(ir::Op::DebugName(mainFunc, "main"));
++
++        m_entry = builder.addAfter(ir::SsaDef(), ir::Op::EntryPoint(mainFunc, ir::ShaderStage::eGeometry));
++        builder.add(ir::Op::DebugName(m_entry, m_name.c_str()));
++        builder.setCursor(mainFunc);
++
++        builder.add(ir::Op::SetGsInstances(m_entry, 1u));
++        builder.add(ir::Op::SetGsInputPrimitive(m_entry, ir::PrimitiveType::eTriangles));
++        builder.add(ir::Op::SetGsOutputPrimitive(m_entry, ir::PrimitiveType::eTriangles, 0x1u));
++        builder.add(ir::Op::SetGsOutputVertices(m_entry, 3u));
++
++        declareIo(builder);
++
++        auto viewport = builder.add(ir::Op::DclPushData(ir::Type(ir::ScalarType::eF32, 4u),
++          m_entry, 0u, ir::ShaderStageMask(ir::ShaderStage::eGeometry)));
++        builder.add(ir::Op::DebugName(viewport, "tir_viewport"));
++
++        // Vertices in the rasterizer's fixed point, as D3D computes window
++        // coordinates: (x / w + 1) * width / 2 + x0, (1 - y / w) * height / 2 + y0
++        std::array<ir::SsaDef, 4u> vp = { };
++
++        for (uint32_t i = 0u; i < 4u; i++)
++          vp[i] = builder.add(ir::Op::PushDataLoad(D3D11TirIr::F(), viewport, ir.u32(i)));
++
++        auto halfW = ir.fmul(vp[2u], ir.f32(0.5f));
++        auto halfH = ir.fmul(vp[3u], ir.f32(0.5f));
++
++        std::array<D3D11TirPoint, 3u> fixed = { };
++        std::array<ir::SsaDef, 3u> rcpW = { };
++        ir::SsaDef valid = ir.bconst(true);
++
++        for (uint32_t v = 0u; v < 3u; v++) {
++          auto x = builder.add(ir::Op::InputLoad(D3D11TirIr::F(), m_positionIn, ir.addr(v, 0u)));
++          auto y = builder.add(ir::Op::InputLoad(D3D11TirIr::F(), m_positionIn, ir.addr(v, 1u)));
++          auto w = builder.add(ir::Op::InputLoad(D3D11TirIr::F(), m_positionIn, ir.addr(v, 3u)));
++
++          rcpW[v] = ir.fdiv(ir.f32(1.0f), w);
++
++          auto wx = ir.fadd(ir.fmul(ir.fadd(ir.fdiv(x, w), ir.f32(1.0f)), halfW), vp[0u]);
++          auto wy = ir.fadd(ir.fmul(ir.fsub(ir.f32(1.0f), ir.fdiv(y, w)), halfH), vp[1u]);
++
++          auto fx = ir.fround(ir.fmul(wx, ir.f32(SubpixelScale)));
++          auto fy = ir.fround(ir.fmul(wy, ir.f32(SubpixelScale)));
++
++          // NaN compares false and leaves the triangle invalid too
++          auto ok = ir.band(ir.fgt(w, ir.f32(0.0f)), ir.band(
++            ir.flt(ir.fabs(fx), ir.f32(MaxFixedCoord)),
++            ir.flt(ir.fabs(fy), ir.f32(MaxFixedCoord))));
++
++          fixed[v].x = ir.ftoi(ir.select(D3D11TirIr::F(), ok, fx, ir.f32(0.0f)));
++          fixed[v].y = ir.ftoi(ir.select(D3D11TirIr::F(), ok, fy, ir.f32(0.0f)));
++
++          valid = ir.band(valid, ok);
++        }
++
++        // Orient the triangle so that its interior has positive edge
++        // functions; the emitted vertices keep the application's order.
++        auto e1x = ir.isub(D3D11TirIr::I(), fixed[1u].x, fixed[0u].x);
++        auto e1y = ir.isub(D3D11TirIr::I(), fixed[1u].y, fixed[0u].y);
++        auto e2x = ir.isub(D3D11TirIr::I(), fixed[2u].x, fixed[0u].x);
++        auto e2y = ir.isub(D3D11TirIr::I(), fixed[2u].y, fixed[0u].y);
++
++        auto area = ir.isub(D3D11TirIr::L(),
++          ir.imul(D3D11TirIr::L(), ir.widen(e1x), ir.widen(e2y)),
++          ir.imul(D3D11TirIr::L(), ir.widen(e1y), ir.widen(e2x)));
++
++        auto flip = ir.slt(area, ir.i64(0));
++        auto degenerate = ir.band(valid, ir.ieq(area, ir.i64(0)));
++
++        std::array<D3D11TirPoint, 3u> oriented = { fixed[0u],
++          D3D11TirPoint { ir.select(D3D11TirIr::I(), flip, fixed[2u].x, fixed[1u].x),
++                          ir.select(D3D11TirIr::I(), flip, fixed[2u].y, fixed[1u].y) },
++          D3D11TirPoint { ir.select(D3D11TirIr::I(), flip, fixed[1u].x, fixed[2u].x),
++                          ir.select(D3D11TirIr::I(), flip, fixed[1u].y, fixed[2u].y) } };
++
++        // Top-left rule, with y pointing down: a left edge runs upwards,
++        // a top edge is horizontal and runs to the right.
++        auto flags = ir.select(D3D11TirIr::U(), valid, ir.u32(FlagValid), ir.u32(0u));
++
++        for (uint32_t e = 0u; e < 3u; e++) {
++          const auto& a = oriented[e];
++          const auto& b = oriented[(e + 1u) % 3u];
++
++          auto dx = ir.isub(D3D11TirIr::I(), b.x, a.x);
++          auto dy = ir.isub(D3D11TirIr::I(), b.y, a.y);
++
++          auto topLeft = ir.bor(ir.slt(dy, ir.i32(0)),
++            ir.band(ir.ieq(dy, ir.i32(0)), ir.sgt(dx, ir.i32(0))));
++
++          flags = ir.ior(flags, ir.select(D3D11TirIr::U(), topLeft,
++            ir.u32(1u << (FlagTopLeftShift + e)), ir.u32(0u)));
++        }
++
++        // Clip distances over w, which keeps their sign along the
++        // triangle linear in its screen-space barycentrics.
++        std::vector<ir::SsaDef> clipData;
++        ir::SsaDef culled = ir.bconst(false);
++
++        for (uint32_t p = 0u; p < m_layout.clipPlanes; p++) {
++          std::array<ir::SsaDef, 3u> dw = { };
++
++          for (uint32_t v = 0u; v < 3u; v++) {
++            auto d = builder.add(ir::Op::InputLoad(D3D11TirIr::F(), m_clipIn, ir.addr(v, p)));
++            culled = ir.bor(culled, ir.fisnan(d));
++            dw[v] = ir.fmul(d, rcpW[v]);
++          }
++
++          clipData.push_back(dw[0u]);
++          clipData.push_back(ir.select(D3D11TirIr::F(), flip, dw[2u], dw[1u]));
++          clipData.push_back(ir.select(D3D11TirIr::F(), flip, dw[1u], dw[2u]));
++        }
++
++        for (uint32_t c = 0u; c < m_cullCount; c++) {
++          ir::SsaDef out = ir.bconst(true);
++
++          for (uint32_t v = 0u; v < 3u; v++) {
++            auto d = builder.add(ir::Op::InputLoad(D3D11TirIr::F(), m_cullIn, ir.addr(v, c)));
++            out = ir.band(out, ir.bnot(ir.fge(d, ir.f32(0.0f))));
++          }
++
++          culled = ir.bor(culled, out);
++        }
++
++        std::array<ir::SsaDef, 8u> triangle = { };
++
++        for (uint32_t v = 0u; v < 3u; v++) {
++          triangle[2u * v + 0u] = ir.bitcast(D3D11TirIr::U(), oriented[v].x);
++          triangle[2u * v + 1u] = ir.bitcast(D3D11TirIr::U(), oriented[v].y);
++        }
++
++        triangle[6u] = flags;
++        triangle[7u] = ir.u32(0u);
++
++        auto emit = ir.bnot(ir.bor(culled, degenerate));
++        auto block = ir.beginIf(emit);
++
++        for (uint32_t v = 0u; v < 3u; v++) {
++          emitVaryings(ir, v);
++
++          auto primitiveId = builder.add(ir::Op::InputLoad(D3D11TirIr::U(), m_primitiveIdIn, ir::SsaDef()));
++          builder.add(ir::Op::OutputStore(m_primitiveIdOut, ir::SsaDef(), primitiveId));
++
++          for (uint32_t i = 0u; i < triangle.size(); i++)
++            builder.add(ir::Op::OutputStore(m_dataOut[i / 4u], ir.u32(i % 4u), triangle[i]));
++
++          for (uint32_t i = 0u; i < 4u * m_clipOut.size(); i++) {
++            auto value = i < clipData.size() ? clipData[i] : ir.f32(0.0f);
++            builder.add(ir::Op::OutputStore(m_clipOut[i / 4u], ir.u32(i % 4u), value));
++          }
++
++          builder.add(ir::Op::EmitVertex(0u));
++        }
++
++        builder.add(ir::Op::EmitPrimitive(0u));
++        ir.endIf(block);
++
++        builder.add(ir::Op::Return());
++      }
++
++      uint32_t determineResourceIndex(
++              ir::ShaderStage           stage,
++              ir::ScalarType            type,
++              uint32_t                  regSpace,
++              uint32_t                  regIndex) const {
++        return -1u;
++      }
++
++      void dumpSource(const std::string& path) const { }
++
++      std::string getDebugName() const {
++        return m_name;
++      }
++
++    private:
++
++      struct Forward {
++        const D3D11TirVarying* varying;
++        ir::SsaDef input;
++        ir::SsaDef output;
++      };
++
++      std::string                   m_name;
++      std::vector<D3D11TirVarying>  m_varyings;
++      D3D11TirLayout                m_layout;
++      bool                          m_forwardClip;
++
++      ir::SsaDef                    m_entry;
++      ir::SsaDef                    m_positionIn;
++      ir::SsaDef                    m_clipIn;
++      ir::SsaDef                    m_cullIn;
++      uint32_t                      m_cullCount = 0u;
++      ir::SsaDef                    m_primitiveIdIn;
++      ir::SsaDef                    m_primitiveIdOut;
++      std::array<ir::SsaDef, 2u>    m_dataOut = { };
++      std::vector<ir::SsaDef>       m_clipOut;
++      std::vector<Forward>          m_forwards;
++
++      void declareIo(ir::Builder& builder) {
++        for (const auto& v : m_varyings) {
++          auto inputType = v.type;
++          inputType.addArrayDimension(3u);
++
++          ir::SsaDef input = v.isBuiltIn
++            ? builder.add(ir::Op::DclInputBuiltIn(inputType, m_entry, v.builtIn))
++            : builder.add(ir::Op::DclInput(inputType, m_entry, v.location, v.component));
++
++          if (v.isBuiltIn) {
++            if (v.builtIn == ir::BuiltIn::ePosition)
++              m_positionIn = input;
++
++            if (v.builtIn == ir::BuiltIn::eClipDistance)
++              m_clipIn = input;
++
++            if (v.builtIn == ir::BuiltIn::eCullDistance) {
++              m_cullIn = input;
++              m_cullCount = v.type.getArraySize(0u);
++            }
++          }
++
++          bool forward = v.isBuiltIn
++            ? (v.builtIn == ir::BuiltIn::ePosition || m_forwardClip)
++            : (v.location < m_layout.location);
++
++          if (!forward)
++            continue;
++
++          ir::SsaDef output = v.isBuiltIn
++            ? builder.add(ir::Op::DclOutputBuiltIn(v.type, m_entry, v.builtIn, 0u))
++            : builder.add(ir::Op::DclOutput(v.type, m_entry, v.location, v.component, 0u));
++
++          builder.setOpFlags(output, v.flags);
++          m_forwards.push_back({ &v, input, output });
++        }
++
++        m_primitiveIdIn = builder.add(ir::Op::DclInputBuiltIn(
++          ir::Type(ir::ScalarType::eU32), m_entry, ir::BuiltIn::ePrimitiveId));
++        m_primitiveIdOut = builder.add(ir::Op::DclOutputBuiltIn(
++          ir::Type(ir::ScalarType::eU32), m_entry, ir::BuiltIn::ePrimitiveId, 0u));
++
++        for (uint32_t i = 0u; i < m_dataOut.size(); i++) {
++          m_dataOut[i] = builder.add(ir::Op::DclOutput(ir::Type(ir::ScalarType::eU32, 4u),
++            m_entry, m_layout.location + i, 0u, 0u));
++          builder.add(ir::Op::DebugName(m_dataOut[i], "tir_triangle"));
++        }
++
++        for (uint32_t i = m_dataOut.size(); i < m_layout.locationCount(); i++) {
++          auto clip = builder.add(ir::Op::DclOutput(ir::Type(ir::ScalarType::eF32, 4u),
++            m_entry, m_layout.location + i, 0u, 0u));
++          builder.add(ir::Op::DebugName(clip, "tir_clip"));
++          m_clipOut.push_back(clip);
++        }
++      }
++
++      void emitVaryings(D3D11TirIr& ir, uint32_t vertex) {
++        auto& builder = ir.b();
++
++        for (const auto& f : m_forwards) {
++          const auto& type = f.varying->type;
++
++          uint32_t elements = type.isArrayType() ? type.getArraySize(0u) : 1u;
++          uint32_t components = type.getBaseType(0u).getVectorSize();
++          auto scalarType = ir::Type(type.getBaseType(0u).getBaseType());
++
++          for (uint32_t e = 0u; e < elements; e++) {
++            for (uint32_t c = 0u; c < components; c++) {
++              small_vector<uint32_t, 4u> src;
++              small_vector<uint32_t, 4u> dst;
++
++              src.push_back(vertex);
++
++              if (type.isArrayType()) {
++                src.push_back(e);
++                dst.push_back(e);
++              }
++
++              if (components > 1u) {
++                src.push_back(c);
++                dst.push_back(c);
++              }
++
++              auto value = builder.add(ir::Op::InputLoad(scalarType, f.input, BuildAddress(ir, src)));
++              builder.add(ir::Op::OutputStore(f.output, BuildAddress(ir, dst), value));
++            }
++          }
++        }
++      }
++
++    };
++
++
++    /**
++     * \brief Pixel shader computing the forced pattern's coverage
++     *
++     * The application's pixel shader, with SV_Coverage computed from the
++     * triangle the geometry shader hands it, and demoted where no sample
++     * of the pattern is covered. A sample is covered if every edge function
++     * is positive there, or zero on a top or left edge, and if no clip
++     * distance interpolated to it is negative. Without a valid triangle in
++     * fixed point (a vertex behind the eye or past 2^21 pixels) every
++     * sample of a rasterized pixel counts as covered.
++     */
++    class D3D11TirPixelShaderConverter : public DxvkIrShaderConverter {
++
++    public:
++
++      D3D11TirPixelShaderConverter(
++              std::string                   name,
++              Rc<DxvkIrShaderConverter>     base,
++              UINT                          sampleCount,
++        const D3D11TirLayout&               layout)
++      : m_name(std::move(name)), m_base(std::move(base)),
++        m_sampleCount(sampleCount), m_layout(layout) { }
++
++      void convertShader(ir::Builder& builder) {
++        m_base->convertShader(builder);
++
++        D3D11TirIr ir(builder);
++
++        auto [entry, mainFunc] = findEntryPoint(builder);
++
++        auto position = findInputBuiltIn(builder, ir::BuiltIn::ePosition);
++
++        if (!position) {
++          position = builder.add(ir::Op::DclInputBuiltIn(ir::Type(ir::ScalarType::eF32, 4u),
++            entry, ir::BuiltIn::ePosition, ir::InterpolationModes(ir::InterpolationMode::eNoPerspective)));
++        }
++
++        std::array<ir::SsaDef, 2u> dataIn = { };
++
++        for (uint32_t i = 0u; i < dataIn.size(); i++) {
++          dataIn[i] = builder.add(ir::Op::DclInput(ir::Type(ir::ScalarType::eU32, 4u),
++            entry, m_layout.location + i, 0u, ir::InterpolationModes(ir::InterpolationMode::eFlat)));
++          builder.add(ir::Op::DebugName(dataIn[i], "tir_triangle"));
++        }
++
++        std::vector<ir::SsaDef> clipIn;
++
++        for (uint32_t i = dataIn.size(); i < m_layout.locationCount(); i++) {
++          auto clip = builder.add(ir::Op::DclInput(ir::Type(ir::ScalarType::eF32, 4u),
++            entry, m_layout.location + i, 0u, ir::InterpolationModes(ir::InterpolationMode::eFlat)));
++          builder.add(ir::Op::DebugName(clip, "tir_clip"));
++          clipIn.push_back(clip);
++        }
++
++        auto cursor = builder.setCursor(mainFunc);
++
++        auto mask = computeCoverage(ir, position, dataIn, clipIn);
++
++        auto block = ir.beginIf(ir.ieq(mask, ir.u32(0u)));
++        builder.add(ir::Op::Demote());
++        ir.endIf(block);
++
++        builder.setCursor(cursor);
++
++        replaceCoverageInput(builder, mask);
++        lowerSampleInterpolation(ir);
++      }
++
++      uint32_t determineResourceIndex(
++              ir::ShaderStage           stage,
++              ir::ScalarType            type,
++              uint32_t                  regSpace,
++              uint32_t                  regIndex) const {
++        return m_base->determineResourceIndex(stage, type, regSpace, regIndex);
++      }
++
++      void dumpSource(const std::string& path) const {
++        m_base->dumpSource(path);
++      }
++
++      std::string getDebugName() const {
++        return m_name;
++      }
++
++    private:
++
++      std::string                 m_name;
++      Rc<DxvkIrShaderConverter>   m_base;
++      UINT                        m_sampleCount;
++      D3D11TirLayout              m_layout;
++
++      ir::SsaDef computeCoverage(
++              D3D11TirIr&               ir,
++              ir::SsaDef                position,
++        const std::array<ir::SsaDef, 2u>& dataIn,
++        const std::vector<ir::SsaDef>& clipIn) {
++        auto& builder = ir.b();
++
++        // Pixel center in fixed point. Fragment coordinates are exact
++        // half-integers, so this conversion is exact as well.
++        D3D11TirPoint center = { };
++        center.x = ir.ftoi(ir.fmul(builder.add(ir::Op::InputLoad(D3D11TirIr::F(), position, ir.u32(0u))), ir.f32(SubpixelScale)));
++        center.y = ir.ftoi(ir.fmul(builder.add(ir::Op::InputLoad(D3D11TirIr::F(), position, ir.u32(1u))), ir.f32(SubpixelScale)));
++
++        std::array<ir::SsaDef, 8u> data = { };
++
++        for (uint32_t i = 0u; i < data.size(); i++)
++          data[i] = builder.add(ir::Op::InputLoad(D3D11TirIr::U(), dataIn[i / 4u], ir.u32(i % 4u)));
++
++        std::array<D3D11TirPoint, 3u> vertices = { };
++
++        for (uint32_t v = 0u; v < 3u; v++) {
++          vertices[v].x = ir.bitcast(D3D11TirIr::I(), data[2u * v + 0u]);
++          vertices[v].y = ir.bitcast(D3D11TirIr::I(), data[2u * v + 1u]);
++        }
++
++        auto flags = data[6u];
++        auto valid = ir.ine(ir.iand(flags, ir.u32(FlagValid)), ir.u32(0u));
++
++        // Edge functions at the pixel center, exact in 64 bits,
++        // and their steps per subpixel
++        struct Edge {
++          ir::SsaDef value;
++          ir::SsaDef dx;
++          ir::SsaDef dy;
++          ir::SsaDef bias;
++        };
++
++        std::array<Edge, 3u> edges = { };
++
++        for (uint32_t e = 0u; e < 3u; e++) {
++          const auto& a = vertices[e];
++          const auto& b = vertices[(e + 1u) % 3u];
++
++          auto dx = ir.widen(ir.isub(D3D11TirIr::I(), b.x, a.x));
++          auto dy = ir.widen(ir.isub(D3D11TirIr::I(), b.y, a.y));
++
++          auto rx = ir.widen(ir.isub(D3D11TirIr::I(), center.x, a.x));
++          auto ry = ir.widen(ir.isub(D3D11TirIr::I(), center.y, a.y));
++
++          edges[e].value = ir.isub(D3D11TirIr::L(),
++            ir.imul(D3D11TirIr::L(), dx, ry),
++            ir.imul(D3D11TirIr::L(), dy, rx));
++          edges[e].dx = dx;
++          edges[e].dy = dy;
++
++          auto topLeft = ir.ine(ir.iand(flags, ir.u32(1u << (FlagTopLeftShift + e))), ir.u32(0u));
++          edges[e].bias = ir.select(D3D11TirIr::L(), topLeft, ir.i64(0), ir.i64(1));
++        }
++
++        std::vector<ir::SsaDef> clipData;
++
++        for (uint32_t i = 0u; i < 3u * m_layout.clipPlanes; i++)
++          clipData.push_back(builder.add(ir::Op::InputLoad(D3D11TirIr::F(), clipIn[i / 4u], ir.u32(i % 4u))));
++
++        auto [pattern, count] = GetSamplePattern(m_sampleCount);
++        auto mask = ir.u32(0u);
++
++        for (uint32_t s = 0u; s < count; s++) {
++          auto ox = ir.i64(int64_t(pattern[s].x) * int64_t(1u << (SubpixelBits - 4u)));
++          auto oy = ir.i64(int64_t(pattern[s].y) * int64_t(1u << (SubpixelBits - 4u)));
++
++          auto covered = ir.bconst(true);
++          std::array<ir::SsaDef, 3u> values = { };
++
++          for (uint32_t e = 0u; e < 3u; e++) {
++            values[e] = ir.iadd(D3D11TirIr::L(), edges[e].value, ir.isub(D3D11TirIr::L(),
++              ir.imul(D3D11TirIr::L(), edges[e].dx, oy),
++              ir.imul(D3D11TirIr::L(), edges[e].dy, ox)));
++
++            covered = ir.band(covered, ir.sge(ir.isub(D3D11TirIr::L(), values[e], edges[e].bias), ir.i64(0)));
++          }
++
++          // The barycentric weight of a vertex is the edge function
++          // of the edge opposite to it, up to the triangle's area.
++          for (uint32_t p = 0u; p < m_layout.clipPlanes; p++) {
++            auto d = ir.fadd(ir.fadd(
++              ir.fmul(ir.itof(values[1u]), clipData[3u * p + 0u]),
++              ir.fmul(ir.itof(values[2u]), clipData[3u * p + 1u])),
++              ir.fmul(ir.itof(values[0u]), clipData[3u * p + 2u]));
++
++            covered = ir.band(covered, ir.fge(d, ir.f32(0.0f)));
++          }
++
++          mask = ir.ior(mask, ir.select(D3D11TirIr::U(), covered, ir.u32(1u << s), ir.u32(0u)));
++        }
++
++        auto all = ir.u32(count < 32u ? (1u << count) - 1u : ~0u);
++        return ir.select(D3D11TirIr::U(), valid, mask, all);
++      }
++
++      void replaceCoverageInput(ir::Builder& builder, ir::SsaDef mask) {
++        auto coverage = findInputBuiltIn(builder, ir::BuiltIn::eSampleMask);
++
++        if (!coverage)
++          return;
++
++        small_vector<ir::SsaDef, 16u> uses;
++        builder.getUses(coverage, uses);
++
++        for (auto use : uses) {
++          if (builder.getOp(use).getOpCode() == ir::OpCode::eInputLoad)
++            builder.rewriteDef(use, mask);
++        }
++      }
++
++      /**
++       * \brief Interpolates at the forced pattern's samples
++       *
++       * Pull-model interpolation by sample index uses the forced pattern,
++       * whose positions the pixel shader interpolates at as offsets from
++       * the pixel center: the rasterizer runs at one sample.
++       */
++      void lowerSampleInterpolation(D3D11TirIr& ir) {
++        auto& builder = ir.b();
++
++        small_vector<ir::SsaDef, 16u> ops;
++
++        for (auto iter = builder.getCode().first; iter != builder.getCode().second; iter++) {
++          if (iter->getOpCode() == ir::OpCode::eInterpolateAtSample)
++            ops.push_back(iter->getDef());
++        }
++
++        auto [pattern, count] = GetSamplePattern(m_sampleCount);
++
++        for (auto def : ops) {
++          auto op = builder.getOp(def);
++
++          auto input = ir::SsaDef(op.getOperand(0u));
++          auto address = ir::SsaDef(op.getOperand(1u));
++          auto sample = ir::SsaDef(op.getOperand(2u));
++
++          auto cursor = builder.setCursor(builder.getPrev(def));
++
++          ir::SsaDef x = ir.f32(float(pattern[0u].x) / 16.0f);
++          ir::SsaDef y = ir.f32(float(pattern[0u].y) / 16.0f);
++
++          for (uint32_t s = 1u; s < count; s++) {
++            auto match = ir.ieq(sample, ir.u32(s));
++            x = ir.select(D3D11TirIr::F(), match, ir.f32(float(pattern[s].x) / 16.0f), x);
++            y = ir.select(D3D11TirIr::F(), match, ir.f32(float(pattern[s].y) / 16.0f), y);
++          }
++
++          auto offset = builder.add(ir::Op::CompositeConstruct(ir::Type(ir::ScalarType::eF32, 2u), x, y));
++          builder.setCursor(cursor);
++
++          builder.rewriteOp(def, ir::Op::InterpolateAtOffset(op.getType(), input, address, offset));
++        }
++      }
++
++      static ir::SsaDef findInputBuiltIn(ir::Builder& builder, ir::BuiltIn builtIn) {
++        auto [a, b] = builder.getDeclarations();
++
++        for (auto iter = a; iter != b; iter++) {
++          if (iter->getOpCode() == ir::OpCode::eDclInputBuiltIn
++           && ir::BuiltIn(iter->getOperand(iter->getFirstLiteralOperandIndex())) == builtIn)
++            return iter->getDef();
++        }
++
++        return ir::SsaDef();
++      }
++
++      static std::pair<ir::SsaDef, ir::SsaDef> findEntryPoint(ir::Builder& builder) {
++        auto [a, b] = builder.getDeclarations();
++
++        for (auto iter = a; iter != b; iter++) {
++          if (iter->getOpCode() == ir::OpCode::eEntryPoint)
++            return std::make_pair(iter->getDef(), ir::SsaDef(iter->getOperand(0u)));
++        }
++
++        throw DxvkError("D3D11: TIR: Pixel shader has no entry point");
++      }
++
++    };
++
++  }
++
++
++  D3D11TirShaders::D3D11TirShaders(D3D11Device* pDevice)
++  : m_device(pDevice) {
++    auto dxvkDevice = pDevice->GetDXVKDevice();
++
++    const auto& features = dxvkDevice->features();
++    const auto& limits = dxvkDevice->properties().core.properties.limits;
++
++    m_supported = features.core.features.geometryShader
++               && features.core.features.shaderInt64;
++
++    m_maxLocations = std::min(limits.maxFragmentInputComponents,
++                              limits.maxGeometryOutputComponents) / 4u;
++    m_maxGsComponents = limits.maxGeometryOutputComponents;
++    m_maxGsTotalComponents = limits.maxGeometryTotalOutputComponents;
++  }
++
++
++  D3D11TirShaders::~D3D11TirShaders() {
++
++  }
++
++
++  D3D11TirGeometryShader D3D11TirShaders::GetGeometryShader(
++    const Rc<DxvkShader>&         pPrevStage,
++          uint32_t                Location,
++          bool                    ForwardClip) {
++    std::lock_guard lock(m_mutex);
++
++    GsKey key = { pPrevStage.ptr(), Location, ForwardClip };
++    auto entry = m_geometryShaders.find(key);
++
++    if (entry != m_geometryShaders.end())
++      return entry->second.shader;
++
++    GsEntry value = { pPrevStage, CreateGeometryShader(pPrevStage, Location, ForwardClip) };
++    m_geometryShaders.insert({ key, value });
++    return value.shader;
++  }
++
++
++  Rc<DxvkShader> D3D11TirShaders::GetPixelShader(
++    const D3D11CommonShader*      pShader,
++          UINT                    SampleCount,
++    const D3D11TirLayout&         Layout) {
++    std::lock_guard lock(m_mutex);
++
++    auto base = pShader->GetShader();
++
++    PsKey key = { base.ptr(), SampleCount, Layout };
++    auto entry = m_pixelShaders.find(key);
++
++    if (entry != m_pixelShaders.end())
++      return entry->second.shader;
++
++    auto name = str::format(base->debugName(), "_TIR", SampleCount, "_L", Layout.location, "_C", Layout.clipPlanes);
++    auto info = static_cast<DxvkIrShader*>(base.ptr())->getShaderCreateInfo();
++
++    Rc<DxvkIrShaderConverter> converter = new D3D11TirPixelShaderConverter(
++      name, pShader->GetConverter(), SampleCount, Layout);
++
++    auto shader = m_device->GetDXVKDevice()->createCachedShader(name, info, converter);
++    m_device->GetDXVKDevice()->registerShader(shader);
++
++    m_pixelShaders.insert({ key, PsEntry { base, shader } });
++    return shader;
++  }
++
++
++  D3D11TirGeometryShader D3D11TirShaders::CreateGeometryShader(
++    const Rc<DxvkShader>&         pPrevStage,
++          uint32_t                Location,
++          bool                    ForwardClip) {
++    D3D11TirGeometryShader result = { };
++    result.layout.location = Location;
++
++    auto [data, size] = static_cast<DxvkIrShader*>(pPrevStage.ptr())->getSerializedIr();
++
++    ir::Builder builder;
++    ir::Deserializer deserializer(data, size);
++
++    if (!deserializer.deserialize(builder))
++      throw DxvkError("D3D11: TIR: Failed to deserialize shader");
++
++    std::vector<D3D11TirVarying> varyings;
++    uint32_t components = 4u * Location + 1u;
++
++    auto [a, b] = builder.getDeclarations();
++
++    for (auto iter = a; iter != b; iter++) {
++      if (iter->getOpCode() != ir::OpCode::eDclOutput
++       && iter->getOpCode() != ir::OpCode::eDclOutputBuiltIn)
++        continue;
++
++      D3D11TirVarying varying = { };
++      varying.type = iter->getType();
++      varying.flags = iter->getFlags();
++
++      uint32_t literal = iter->getFirstLiteralOperandIndex();
++
++      if (iter->getOpCode() == ir::OpCode::eDclOutputBuiltIn) {
++        varying.isBuiltIn = true;
++        varying.builtIn = ir::BuiltIn(iter->getOperand(literal));
++
++        switch (varying.builtIn) {
++          case ir::BuiltIn::ePosition:
++            components += 4u;
++            break;
++
++          case ir::BuiltIn::eClipDistance:
++            result.layout.clipPlanes = varying.type.getArraySize(0u);
++            [[fallthrough]];
++
++          case ir::BuiltIn::eCullDistance:
++            if (ForwardClip)
++              components += varying.type.getArraySize(0u);
++            break;
++
++          default:
++            // The layer and viewport index cannot be read by a geometry
++            // shader, and the viewport index would need every viewport.
++            Logger::warn(str::format("D3D11: TIR: ", pPrevStage->debugName(),
++              " writes built-in ", uint32_t(varying.builtIn), ", not emulating TIR"));
++            return result;
++        }
++      } else {
++        varying.location = uint32_t(iter->getOperand(literal));
++        varying.component = uint32_t(iter->getOperand(literal + 1u));
++      }
++
++      varyings.push_back(varying);
++    }
++
++    components += 4u * result.layout.locationCount();
++
++    if (Location + result.layout.locationCount() > m_maxLocations
++     || components > m_maxGsComponents
++     || components * 3u > m_maxGsTotalComponents) {
++      Logger::warn(str::format("D3D11: TIR: ", pPrevStage->debugName(),
++        " leaves no room for coverage data at location ", Location, ", not emulating TIR"));
++      return result;
++    }
++
++    auto name = str::format(pPrevStage->debugName(), "_TIRGS_L", Location, ForwardClip ? "_CLIP" : "");
++
++    DxvkIrShaderCreateInfo info = { };
++    info.options = m_device->GetShaderOptions();
++
++    Rc<DxvkIrShaderConverter> converter = new D3D11TirGeometryShaderConverter(
++      name, std::move(varyings), result.layout, ForwardClip);
++
++    result.shader = m_device->GetDXVKDevice()->createCachedShader(name, info, converter);
++    m_device->GetDXVKDevice()->registerShader(result.shader);
++    return result;
++  }
++
++}
+diff --git a/src/d3d11/d3d11_tir.h b/src/d3d11/d3d11_tir.h
+new file mode 100644
+index 00000000..58f90eec
+--- /dev/null
++++ b/src/d3d11/d3d11_tir.h
+@@ -0,0 +1,213 @@
++#pragma once
++
++#include <unordered_map>
++#include <vector>
++
++#include "../dxvk/dxvk_shader_ir.h"
++
++#include "../util/thread.h"
++
++namespace dxvk {
++
++  class D3D11CommonShader;
++  class D3D11Device;
++
++  /**
++   * \brief Where the coverage data lives in the pixel shader's inputs
++   *
++   * The locations right after the pixel shader's own inputs: the three
++   * vertices in fixed point and the edges' top-left flags, then each clip
++   * distance at each vertex, over its w, for clipping at every sample.
++   */
++  struct D3D11TirLayout {
++    /// First input location the coverage data occupies
++    uint32_t location = 0u;
++    /// Clip distances evaluated per sample
++    uint32_t clipPlanes = 0u;
++
++    /// Number of locations the coverage data occupies
++    uint32_t locationCount() const {
++      return 2u + (3u * clipPlanes + 3u) / 4u;
++    }
++
++    bool eq(const D3D11TirLayout& other) const {
++      return location == other.location
++          && clipPlanes == other.clipPlanes;
++    }
++  };
++
++
++  /**
++   * \brief Output of the stage feeding the rasterizer
++   *
++   * One output declaration of the vertex or domain shader,
++   * which the geometry shader reads and passes on.
++   */
++  struct D3D11TirVarying {
++    dxbc_spv::ir::Type    type;
++    dxbc_spv::ir::OpFlags flags;
++    dxbc_spv::ir::BuiltIn builtIn = dxbc_spv::ir::BuiltIn::ePosition;
++    bool                  isBuiltIn = false;
++    uint32_t              location = 0u;
++    uint32_t              component = 0u;
++  };
++
++
++  /**
++   * \brief Geometry shader for one previous stage and layout
++   */
++  struct D3D11TirGeometryShader {
++    /// The geometry shader, or null if the previous
++    /// stage's outputs leave TIR unable to be emulated
++    Rc<DxvkShader>  shader;
++    /// Layout of the data handed to the pixel shader
++    D3D11TirLayout  layout;
++  };
++
++
++  /**
++   * \brief Shaders that emulate target-independent rasterization
++   *
++   * Target-independent rasterization (TIR, D3D11.1) rasterizes at a forced
++   * sample count, up to 16, whatever the render targets are, which must be
++   * single-sampled: the pixel shader runs once per pixel with any sample of
++   * D3D's standard pattern covered, and sees that pattern's coverage as
++   * SV_Coverage. Vulkan rasterizes at the attachments' sample count, and
++   * only NVIDIA's mixed-samples extension decouples the two. Nor do all
++   * GPUs rasterize 16 samples at all: RADV offers 8 at most.
++   *
++   * So it is emulated, the same on every GPU. The draw is rasterized at
++   * one sample, conservatively where the device can, so that every pixel
++   * the triangle touches gets a fragment. A geometry shader hands each
++   * fragment its triangle in the rasterizer's own fixed point (16.8,
++   * snapped round-to-nearest-even), and the pixel shader computes the
++   * forced pattern's coverage from it with the top-left rule, exactly as a
++   * D3D rasterizer does, clipping at every sample as D3D requires. A pixel
++   * with no sample covered is demoted. Draws with no render target bound
++   * (UAV-only rendering) are emulated as well, even where Vulkan could
++   * rasterize the count without attachments: hardware clips at clip
++   * distances geometrically, which moved an edge past a sample by a
++   * fraction of a subpixel, where D3D clips each sample.
++   *
++   * Creates and caches the geometry shader for each stage feeding the
++   * rasterizer and the coverage-computing variant of each pixel shader.
++   * Thread-safe.
++   */
++  class D3D11TirShaders {
++
++  public:
++
++    D3D11TirShaders(D3D11Device* pDevice);
++
++    ~D3D11TirShaders();
++
++    /**
++     * \brief Checks whether the device can emulate TIR
++     *
++     * Requires geometry shaders and 64-bit integers, which
++     * the edge functions of the 16.8 fixed point need.
++     */
++    bool IsSupported() const {
++      return m_supported;
++    }
++
++    /**
++     * \brief Geometry shader for the stage feeding the rasterizer
++     *
++     * \param [in] pPrevStage Vertex or domain shader
++     * \param [in] Location First location free of the pixel shader's inputs
++     * \param [in] ForwardClip Whether the pixel shader reads clip or cull distances
++     * \returns Geometry shader and layout. The shader is null if
++     *    the previous stage writes the layer or viewport index, or if
++     *    the data does not fit into the remaining locations.
++     */
++    D3D11TirGeometryShader GetGeometryShader(
++      const Rc<DxvkShader>&         pPrevStage,
++            uint32_t                Location,
++            bool                    ForwardClip);
++
++    /**
++     * \brief Coverage-computing variant of a pixel shader
++     *
++     * \param [in] pShader Pixel shader
++     * \param [in] SampleCount Forced sample count
++     * \param [in] Layout Layout of the coverage data
++     * \returns Pixel shader variant
++     */
++    Rc<DxvkShader> GetPixelShader(
++      const D3D11CommonShader*      pShader,
++            UINT                    SampleCount,
++      const D3D11TirLayout&         Layout);
++
++  private:
++
++    struct GsKey {
++      DxvkShader* prevStage;
++      uint32_t    location;
++      bool        forwardClip;
++
++      bool eq(const GsKey& other) const {
++        return prevStage == other.prevStage
++            && location == other.location
++            && forwardClip == other.forwardClip;
++      }
++
++      size_t hash() const {
++        DxvkHashState hash;
++        hash.add(reinterpret_cast<uintptr_t>(prevStage));
++        hash.add(location);
++        hash.add(uint32_t(forwardClip));
++        return hash;
++      }
++    };
++
++    struct GsEntry {
++      Rc<DxvkShader>          prevStage;
++      D3D11TirGeometryShader  shader;
++    };
++
++    struct PsKey {
++      DxvkShader*     shader;
++      UINT            sampleCount;
++      D3D11TirLayout  layout;
++
++      bool eq(const PsKey& other) const {
++        return shader == other.shader
++            && sampleCount == other.sampleCount
++            && layout.eq(other.layout);
++      }
++
++      size_t hash() const {
++        DxvkHashState hash;
++        hash.add(reinterpret_cast<uintptr_t>(shader));
++        hash.add(sampleCount);
++        hash.add(layout.location);
++        hash.add(layout.clipPlanes);
++        return hash;
++      }
++    };
++
++    struct PsEntry {
++      Rc<DxvkShader>  base;
++      Rc<DxvkShader>  shader;
++    };
++
++    D3D11Device*      m_device;
++    bool              m_supported = false;
++    uint32_t          m_maxLocations = 0u;
++    uint32_t          m_maxGsComponents = 0u;
++    uint32_t          m_maxGsTotalComponents = 0u;
++
++    dxvk::mutex       m_mutex;
++
++    std::unordered_map<GsKey, GsEntry, DxvkHash, DxvkEq> m_geometryShaders;
++    std::unordered_map<PsKey, PsEntry, DxvkHash, DxvkEq> m_pixelShaders;
++
++    D3D11TirGeometryShader CreateGeometryShader(
++      const Rc<DxvkShader>&         pPrevStage,
++            uint32_t                Location,
++            bool                    ForwardClip);
++
++  };
++
++}
+diff --git a/src/d3d11/meson.build b/src/d3d11/meson.build
+index af2b7b27..dc60593d 100644
+--- a/src/d3d11/meson.build
++++ b/src/d3d11/meson.build
+@@ -53,6 +53,7 @@ d3d11_src = [
+   'd3d11_state_object.cpp',
+   'd3d11_swapchain.cpp',
+   'd3d11_texture.cpp',
++  'd3d11_tir.cpp',
+   'd3d11_util.cpp',
+   'd3d11_video.cpp',
+   'd3d11_view_dsv.cpp',

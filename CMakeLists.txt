@@ -513,7 +513,8 @@ foreach(src ${AV_UNIT_TESTS})
   # this machine's GPU (feature 044, T028).
   # DXVK's driver threads allocate from modules they unload before exit, which
   # LeakSanitizer reports as `<unknown module>` and no suppression can name.
-  if(name STREQUAL "test_d3d_backend_device" OR name STREQUAL "test_d3d12_session_device" OR
+  if(name STREQUAL "test_d3d_backend_device" OR name STREQUAL "test_d3d_tir_device" OR
+     name STREQUAL "test_d3d12_session_device" OR
      name STREQUAL "test_d3d12_session_features_device" OR name STREQUAL "test_d3d12_session_tiles_device" OR
      name STREQUAL "test_d3d_gl_interop_device" OR name STREQUAL "test_d3d_cl_interop_device" OR
      name STREQUAL "test_frame_write_device" OR name STREQUAL "test_buffer_slice_device" OR
