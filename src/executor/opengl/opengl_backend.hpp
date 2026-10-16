@@ -103,6 +103,8 @@ public:
     uint64_t ran() const;
 
 private:
+    /* An import after the arena: lent pages, as a memory object. */
+    [[nodiscard]] bool lend(ImportedBlob &blob);
     /* The table's hooks into this backend: its fences and its region. */
     void install_hooks();
     /* The oldest fence retired if the GPU has passed it. */

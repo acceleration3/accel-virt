@@ -1,4 +1,6 @@
 #include "executor/opengl/opengl_backend.hpp"
+
+#include <unistd.h>
 #include "executor/sharing/shared_image_shape.hpp"
 
 #include "core/log/log_line.hpp"
@@ -259,11 +261,32 @@ bool OpenGlBackend::lost() const
  * this context can share while it is held. One handed over as a dma-buf is
  * mapped here, and is also what a pixel transfer packs into on the GPU
  * (GlPackBuffer). */
+/* The context's arena is its first import; every one after is pages the
+ * application lent (GL_AMD_pinned_memory, docs/host-memory.md, "Application
+ * memory"), which become a memory object of the context: its name is what
+ * the guest gives glBufferStorageMemEXT. */
 bool OpenGlBackend::adopt(ImportedBlob &blob)
 {
     AV_SCOPE("OpenGlBackend::adopt");
+    if (region_.memory() != nullptr) return lend(blob);
     if (!region_.adopt(blob)) return false;
     pack_.adopt(blob.memory().share(), blob.memory().size());
+    return true;
+}
+
+bool OpenGlBackend::lend(ImportedBlob &blob)
+{
+    AV_SCOPE("OpenGlBackend::lend");
+    const int fd = blob.memory().share();
+    if (fd < 0) return false;
+    uint32_t     name = 0u;
+    const bool   imported = import_.imports_memory() && import_.import_memory(fd, blob.memory().size(), name);
+    close(fd);
+    if (!imported) {
+        LogLine(lines_).text("no memory object over ").number(blob.memory().size()).text(" lent bytes").write();
+        return false;
+    }
+    blob.record(name, name);
     return true;
 }
 
@@ -282,6 +305,11 @@ void OpenGlBackend::unpack()
 void OpenGlBackend::abandon(ImportedBlob &blob)
 {
     AV_SCOPE("OpenGlBackend::abandon");
+    if (&blob.memory() != region_.memory()) {
+        if (blob.object() != 0u) import_.delete_memory(static_cast<uint32_t>(blob.object()));
+        blob.record(0u, 0u);
+        return;
+    }
     region_.abandon(blob);
     pack_.abandon();
 }

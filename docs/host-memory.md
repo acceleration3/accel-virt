@@ -219,7 +219,13 @@ GPU memory where they are: the device lays a source allocation under them.
    do not change: the process's pointer, its write watch and every other view
    of those frames now reach the host GPU's memory.
 4. **The context imports it** with `IMPORT_BLOB`, as any host blob: the API
-   names the import's handle in its commands.
+   names the import's handle in its commands. What the import is depends on
+   the API, as for any blob - a Direct3D 12 heap, a Vulkan `VkDeviceMemory`,
+   the source memory an OpenCL buffer is made over with
+   `CL_MEM_USE_HOST_PTR`, and for OpenGL a memory object of the context
+   (`GL_EXT_memory_object`), which `GL_AMD_pinned_memory`'s buffer is given
+   storage over with `glBufferStorageMemEXT`. An API's first import is still
+   its arena; every one after is lent pages.
 5. **Release.** The close has the device release the blob: each run gets its
    RAM back holding what the allocation held (`Host::restore_guest_run` maps
    the RAM's own file there again after copying), so what the GPU wrote stays
@@ -232,7 +238,9 @@ the memory out of use until it knows that work finished: OpenCL retires a
 released buffer's arena block and its lent pages (`ClArenaBlocks::retire`,
 `HostChannel::retire_memory`, both on `RetireList`) and reclaims them when
 every queue of the context has drained; a queue released with work
-unfinished holds them until the context ends. Direct3D 12 needs no list: an
+unfinished holds them until the context ends. OpenGL retires a deleted
+pinned buffer's pages the same way and reclaims them after `glFinish`.
+Direct3D 12 needs no list: an
 application may not destroy a heap the GPU still uses.
 
 A page lies under one blob at a time (`LentPages`, one set per device): a

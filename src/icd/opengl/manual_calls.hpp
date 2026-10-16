@@ -237,6 +237,9 @@ private:
     /* glBufferData or glBufferStorage gave the buffer at `target` new
      * storage of `size` bytes. */
     void            respecify_bound(GuestGlContext &context, uint32_t target, intptr_t size, bool with_data);
+    /* GL_AMD_pinned_memory's glBufferData: the bound pinned buffer given
+     * storage over the application's own `size` bytes at `data`. */
+    void            pin_storage(GuestGlContext &context, intptr_t size, const void *data);
     /* The bytes glBufferSubData at `target` wrote, told to the copies. */
     void            wrote_bound(GuestGlContext &context, uint32_t target, intptr_t offset, intptr_t size,
                                 const void *data);

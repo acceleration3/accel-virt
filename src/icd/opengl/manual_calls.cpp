@@ -1,5 +1,7 @@
 #include "icd/opengl/manual_calls.hpp"
 
+#include "guest/transport/host_allocation.hpp"
+
 #include "icd/common/host_completion_wait.hpp"
 #include "icd/opengl/gl_external_objects.hpp"
 #include "icd/opengl/sync_wait_probe.hpp"
@@ -395,6 +397,8 @@ void ManualCalls::bind_buffer(uint32_t target, uint32_t buffer)
     AV_SCOPE("ManualCalls::bind_buffer");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
+    /* The pinned memory target is the ICD's alone: the host never binds it. */
+    if (target == PinnedBuffers::target) return context->pinned().bind(buffer);
     context->arrays().bind_buffer(target, buffer);
     glproto::av_glBindBuffer(*context->wire(), target, buffer);
 }
@@ -405,6 +409,7 @@ void ManualCalls::delete_buffers(int32_t count, const uint32_t *buffers)
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
     context->arrays().delete_buffers(count, buffers);
+    context->pinned().forget(count, buffers);
     context->mappings().forget(count, buffers);
     context->shadows().forget(count, buffers);
     glproto::av_glDeleteBuffers(*context->wire(), count, buffers);
@@ -449,11 +454,34 @@ void ManualCalls::delete_vertex_arrays(int32_t count, const uint32_t *arrays)
     glproto::av_glDeleteVertexArrays(*context->wire(), count, arrays);
 }
 
+/* The host's buffer becomes an object by a bind, and its storage the memory
+ * object the lent pages' import is, by glBufferStorageMemEXT
+ * (GL_EXT_memory_object) at the copy-write target, which is then put back as
+ * the application had it. */
+void ManualCalls::pin_storage(GuestGlContext &context, intptr_t size, const void *data)
+{
+    AV_SCOPE("ManualCalls::pin_storage");
+    static constexpr uint32_t copy_write_buffer = 0x8F37u;
+    if (size <= 0 || data == nullptr) return context.record(gl_invalid_value);
+    HostAllocation *lent = nullptr;
+    uint64_t        offset = 0u;
+    const uint32_t  buffer = context.pinned().bound();
+    if (context.pinned().pin(data, static_cast<uint64_t>(size), lent, offset) != Status::ok)
+        return context.record(gl_invalid_operation);
+    uint32_t previous = 0u;
+    if (!bound_to(context, copy_write_buffer, previous)) previous = 0u;
+    ClientTransport &wire = *context.wire();
+    glproto::av_glBindBuffer(wire, copy_write_buffer, buffer);
+    glproto::av_glBufferStorageMemEXT(wire, copy_write_buffer, size, static_cast<uint32_t>(lent->handle()), offset);
+    glproto::av_glBindBuffer(wire, copy_write_buffer, previous);
+}
+
 void ManualCalls::buffer_data(uint32_t target, intptr_t size, const void *data, uint32_t usage)
 {
     AV_SCOPE("ManualCalls::buffer_data");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
+    if (target == PinnedBuffers::target) return pin_storage(*context, size, data);
     respecify_bound(*context, target, size, data != nullptr);
     BufferPieces pieces(*context->wire());
     const bool   cut = pieces.cuts_write(size, data);
@@ -614,6 +642,9 @@ void ManualCalls::finish()
     icd::HostCompletionWait wait(kmt_, icd::SlicedWait::forever);
     static_cast<void>(wait.run(probe));
     glproto::av_glDeleteSync(wire, fence);
+    /* Everything sent before is done: pinned memory let go of before it is
+     * nobody's any more. */
+    context->pinned().reclaim();
 }
 
 /* The host's debug messages are not carried back yet: the callback is kept

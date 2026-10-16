@@ -27,6 +27,7 @@
 #include "icd/opengl/granted_profile.hpp"
 #include "icd/opengl/gl_external_objects.hpp"
 #include "icd/opengl/mapped_buffers.hpp"
+#include "icd/opengl/pinned_buffers.hpp"
 #include "icd/opengl/pixel_staging_buffer.hpp"
 #include "icd/opengl/query_shapes.hpp"
 #include "icd/opengl/uniform_shapes.hpp"
@@ -140,6 +141,8 @@ public:
     BatchMark            mark() const;
 
     ClientArrayState &arrays();
+    /* GL_AMD_pinned_memory's buffers over the application's own memory. */
+    PinnedBuffers    &pinned();
     UniformShapes    &uniforms();
     QueryShapes      &queries();
     /* The OpenGL extensions reported for this context, learned at make. */
@@ -243,6 +246,7 @@ private:
     PixelStagingBuffer             staging_;
     MappedBuffers                  mappings_;
     GlExternalObjects              externals_;
+    PinnedBuffers                  pinned_;
     char                           strings_[strings][string_bytes];
     uint64_t                       debug_callback_;
     uint64_t                       debug_user_;
