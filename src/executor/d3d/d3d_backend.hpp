@@ -94,8 +94,12 @@ public:
      * its own address. */
     [[nodiscard]] bool adopt(const SourceMemory &memory, uint64_t &handle) override;
     void abandon(const SourceMemory &memory, uint64_t handle) override;
-    /* A shared texture's memory, which other APIs import (feature 053);
-     * Direct3D imports nothing, as it opens what it shares by id. */
+    /* A shared texture's memory, which other APIs import (feature 053).
+     * Direct3D imports nothing: it opens by key what a Direct3D session
+     * published (D3dShares), and a guest's Direct3D runtime opens no other
+     * shared allocation - one with no Direct3D resource data behind it is
+     * refused before the driver sees it - so no Direct3D context ever sends
+     * OPEN_SHARED_OBJECT. */
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                      OwnedFd &descriptor) override;
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,

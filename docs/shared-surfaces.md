@@ -26,8 +26,10 @@ device  routing only: SharedObjectCommand, LocalContextPlane, ExportService
           |  every call named by the domain
 library HostShares, one per host GPU: Share rows (domain, id)
           |- the descriptor other APIs import (a backend's export_object)
-          |- the Direct3D resource, its Direct3D 11 view, its flip copy
-          |- holders: each session that imported it, with its handle
+          |- D3dShareState (through D3dShares): the Direct3D resource, its
+          |  Direct3D 11 view, its flip copy, copies and opens
+          |- holders: each session that imported it, once per thing it was
+          |  made into (a Vulkan device or semaphore), with its handle
           `- ExportableImages (shim): the Vulkan memory under a shared
              Direct3D 11 texture, freed once DXVK destroys the texture
 ```
@@ -35,11 +37,13 @@ library HostShares, one per host GPU: Share rows (domain, id)
 **Lifetimes.** The guest holds every row from its publish until 0x02F1 (or a
 reset, id 0, which also unindexes what sessions still hold, as the guest mints
 the ids again). A session that imported a row holds it until it closes it or
-ends; its backend releases what it imported. The publisher is recorded - it
-may publish again and may not open its own - but holds nothing: what it made
-is its own, and a Direct3D opener holds its resource by its own COM reference.
-A row nobody holds is freed, its descriptor closed and its COM references
-given back under the Direct3D 11 device's lock.
+ends; its backend releases what it imported. A session holds a row once for
+each thing its import was made into, so a Vulkan context imports what one of
+its devices published into another of them (executor ABI 23). The publisher
+is recorded - it may publish again - but holds nothing: what it made is its
+own, and a Direct3D opener holds its resource by its own COM reference. A row
+nobody holds is freed, its descriptor closed and its COM references retired
+(`D3dRetired`) and given back under the Direct3D 11 device's lock.
 
 **Locks.** `HostShares` has its own lock and holds it around its rows only:
 never across a backend's export, import or release, nor while taking the

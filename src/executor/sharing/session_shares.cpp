@@ -3,6 +3,7 @@
 #include "executor/sharing/shared_image_shape.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/sharing/d3d_shares.hpp"
 #include "executor/sharing/host_shares.hpp"
 
 namespace av {
@@ -63,13 +64,13 @@ Status SessionShares::publish_resource(uint64_t id, IUnknown *resource, ShareOri
 {
     AV_SCOPE("SessionShares::publish_resource");
     if (shares_ == nullptr) return Status::invalid_state;
-    return shares_->publish_resource(domain_, id, resource, origin, *session_);
+    return D3dShares(*shares_).publish_resource(domain_, id, resource, origin, *session_);
 }
 
 void SessionShares::written(uint64_t id)
 {
     AV_SCOPE("SessionShares::written");
-    if (shares_ != nullptr) shares_->written(domain_, id);
+    if (shares_ != nullptr) D3dShares(*shares_).written(domain_, id);
 }
 
 bool SessionShares::describe_image(uint64_t id, const SharedImageShape &shape)

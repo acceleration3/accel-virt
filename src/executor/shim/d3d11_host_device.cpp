@@ -13,6 +13,7 @@
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/poll_budget.hpp"
+#include "executor/sharing/d3d_shares.hpp"
 #include "executor/sharing/host_shares.hpp"
 #include "core/trace/state_writer.hpp"
 #include "executor/shim/d3d_runtime.hpp"
@@ -211,7 +212,7 @@ bool D3d11HostDevice::sync_surface(uint32_t domain, uint64_t surface, uint64_t &
     writes = 0u;
     fd = -1;
     lock(nullptr);
-    const bool synced = usable() && shares_->writes(domain, surface, writes) && vulkan_.sync_file(fd);
+    const bool synced = usable() && D3dShares(*shares_).writes(domain, surface, writes) && vulkan_.sync_file(fd);
     unlock();
     return synced;
 }
@@ -237,8 +238,9 @@ void D3d11HostDevice::retire_locked()
     constexpr uint32_t batch = 32u;
     IUnknown          *objects[batch];
     if (shares_ == nullptr) return;
-    for (uint32_t taken = shares_->take_retired(objects, batch); taken != 0u;
-         taken = shares_->take_retired(objects, batch))
+    D3dShares          direct3d(*shares_);
+    for (uint32_t taken = direct3d.take_retired(objects, batch); taken != 0u;
+         taken = direct3d.take_retired(objects, batch))
         for (uint32_t index = 0u; index < taken; index++) objects[index]->Release();
     images_.collect();
 }
@@ -381,7 +383,7 @@ bool D3d11HostDevice::remake()
     AV_SCOPE("D3d11HostDevice::remake");
     lock(nullptr);
     carry_shares();
-    if (shares_ != nullptr) shares_->lose_direct3d11();
+    if (shares_ != nullptr) D3dShares(*shares_).lose_direct3d11();
     if (device_ != nullptr) retire_locked();
     unmake();
     const bool     made = make();
@@ -395,7 +397,7 @@ void D3d11HostDevice::carry_shares()
 {
     AV_SCOPE("D3d11HostDevice::carry_shares");
     if (shares_ == nullptr || device_ == nullptr) return;
-    shares_->each_direct3d11([this](uint32_t domain, uint64_t id, IUnknown *resource) {
+    D3dShares(*shares_).each_direct3d11([this](uint32_t domain, uint64_t id, IUnknown *resource) {
         CarriedShare *carried = nullptr;
         if (carried_.create(carried, domain, id) != Status::ok) return;
         if (!carried->record(resource, images_)) static_cast<void>(carried_.destroy(carried));
@@ -410,7 +412,7 @@ uint32_t D3d11HostDevice::restore_shares()
         CarriedShare &carried = const_cast<CarriedShare &>(visited);
         IUnknown *const made = carried.remake(device_, images_);
         if (made == nullptr) return true;
-        if (shares_->restore_resource(carried.domain(), carried.id(), made)) restored++;
+        if (D3dShares(*shares_).restore_resource(carried.domain(), carried.id(), made)) restored++;
         made->Release();
         return true;
     });
@@ -509,7 +511,7 @@ bool D3d11HostDevice::show(uint32_t domain, uint64_t id, ID3D11Texture2D *presen
     AV_SCOPE("D3d11HostDevice::show");
     if (device_ == nullptr || context_ == nullptr || presented == nullptr) return false;
     ID3D11Texture2D *copy = nullptr;
-    IUnknown *const  held = shares_->shown(domain, id);
+    IUnknown *const  held = D3dShares(*shares_).shown(domain, id);
     if (held != nullptr) {
         static_cast<void>(held->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&copy)));
         held->Release();
@@ -522,7 +524,7 @@ bool D3d11HostDevice::show(uint32_t domain, uint64_t id, ID3D11Texture2D *presen
         desc.CPUAccessFlags = 0u;
         desc.MiscFlags &= D3D11_RESOURCE_MISC_TEXTURECUBE;
         if (FAILED(device_->CreateTexture2D(&desc, nullptr, &copy)) || copy == nullptr) return false;
-        const bool kept = shares_->keep_shown(domain, id, copy);
+        const bool kept = D3dShares(*shares_).keep_shown(domain, id, copy);
         retire_locked();
         if (!kept) {
             copy->Release();
@@ -538,7 +540,7 @@ IUnknown *D3d11HostDevice::open_shared(uint32_t domain, uint64_t id)
 {
     AV_SCOPE("D3d11HostDevice::open_shared");
     if (shares_ == nullptr) return nullptr;
-    return viewed(domain, id, shares_->open_resource(domain, id));
+    return viewed(domain, id, D3dShares(*shares_).open_resource(domain, id));
 }
 
 /* What a present showed of `id` - the copy its flip took - where one was, and
@@ -547,7 +549,7 @@ IUnknown *D3d11HostDevice::open_shared(uint32_t domain, uint64_t id)
 ID3D11Texture2D *D3d11HostDevice::presented_texture(uint32_t domain, uint64_t id)
 {
     AV_SCOPE("D3d11HostDevice::presented_texture");
-    IUnknown *const shown = shares_ != nullptr ? shares_->shown(domain, id) : nullptr;
+    IUnknown *const shown = shares_ != nullptr ? D3dShares(*shares_).shown(domain, id) : nullptr;
     if (shown == nullptr) return shared_texture(domain, id);
     ID3D11Texture2D *texture = nullptr;
     const bool cast = SUCCEEDED(shown->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)));
@@ -559,7 +561,7 @@ ID3D11Texture2D *D3d11HostDevice::shared_texture(uint32_t domain, uint64_t id)
 {
     AV_SCOPE("D3d11HostDevice::shared_texture");
     if (shares_ == nullptr) return nullptr;
-    IUnknown *const found = viewed(domain, id, shares_->view(domain, id));
+    IUnknown *const found = viewed(domain, id, D3dShares(*shares_).view(domain, id));
     if (found == nullptr) return nullptr;
     ID3D11Texture2D *texture = nullptr;
     const bool cast = SUCCEEDED(found->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)));
@@ -577,7 +579,7 @@ IUnknown *D3d11HostDevice::viewed(uint32_t domain, uint64_t id, IUnknown *found)
     ID3D11Texture2D *const texture = view_of(resource);
     resource->Release();
     if (texture == nullptr) return nullptr;
-    static_cast<void>(shares_->keep_view(domain, id, texture));
+    static_cast<void>(D3dShares(*shares_).keep_view(domain, id, texture));
     retire_locked();
     return texture;
 }
@@ -623,7 +625,7 @@ void D3d11HostDevice::pair(D3d12HostDevice *device12)
 void D3d11HostDevice::forget_direct3d12()
 {
     AV_SCOPE("D3d11HostDevice::forget_direct3d12");
-    if (shares_ != nullptr) shares_->lose_direct3d12();
+    if (shares_ != nullptr) D3dShares(*shares_).lose_direct3d12();
     retire_shares();
 }
 

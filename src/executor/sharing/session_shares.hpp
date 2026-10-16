@@ -7,7 +7,7 @@
 #define AV_SESSION_SHARES_HPP
 
 #include "core/support/status.hpp"
-#include "executor/sharing/share.hpp"
+#include "executor/sharing/share_origin.hpp"
 
 #include <stdint.h>
 

@@ -8,15 +8,9 @@
 #include "core/trace/state_writer.hpp"
 #include "executor/owned_fd.hpp"
 #include "executor/session_backend.hpp"
-#include "executor/shim/d3d_headers.hpp"
 
 
 namespace av {
-
-HostShares::Retired::Retired(IUnknown *object) : object_(object)
-{
-    AV_SCOPE("HostShares::Retired::Retired");
-}
 
 HostShares::HostShares(BlockSource &blocks, DriverLog &lines)
     : lines_(lines), reported_(0u), lock_(), shares_(blocks), holders_(blocks), retired_(blocks), index_(blocks)
@@ -27,12 +21,9 @@ HostShares::HostShares(BlockSource &blocks, DriverLog &lines)
 HostShares::~HostShares()
 {
     AV_SCOPE("HostShares::~HostShares");
+    /* Nothing is left to hand the device: whatever was waiting goes with
+     * retired_. */
     clear();
-    /* Nothing is left to hand the device: whatever was waiting goes now. */
-    retired_.destroy_if([](const Retired &retired) {
-        retired.object_->Release();
-        return true;
-    });
 }
 
 /* ------------------------------------------------------------ objects */
@@ -150,91 +141,6 @@ void HostShares::close(uint32_t domain, uint64_t id, SessionBackend &session, ui
 
 /* ----------------------------------------------------------- Direct3D */
 
-Status HostShares::publish_resource(uint32_t domain, uint64_t id, IUnknown *resource, ShareOrigin origin,
-                                    SessionBackend &session)
-{
-    AV_SCOPE("HostShares::publish_resource");
-    if (id == 0u || resource == nullptr) return Status::invalid_parameter;
-    const ThreadLockHold locked(lock_);
-    if (index_.find(domain, id) != nullptr) return Status::conflict;
-    Share *const share = make(domain, id, 0u, 0u, origin);
-    if (share == nullptr) return Status::no_memory;
-    resource->AddRef();
-    share->keep_resource(resource);
-    share->publish_by(&session);
-    return Status::ok;
-}
-
-IUnknown *HostShares::open_resource(uint32_t domain, uint64_t id)
-{
-    AV_SCOPE("HostShares::open_resource");
-    const ThreadLockHold locked(lock_);
-    Share *const share = index_.find(domain, id);
-    if (share == nullptr) return nullptr;
-    IUnknown *const opened = share->shown() != nullptr ? share->shown() : share->view();
-    if (opened == nullptr) return nullptr;
-    share->opened();
-    opened->AddRef();
-    return opened;
-}
-
-IUnknown *HostShares::resource(uint32_t domain, uint64_t id)
-{
-    AV_SCOPE("HostShares::resource");
-    const ThreadLockHold locked(lock_);
-    const Share *const share = index_.find(domain, id);
-    IUnknown *const    found = share != nullptr ? share->resource() : nullptr;
-    if (found != nullptr) found->AddRef();
-    return found;
-}
-
-IUnknown *HostShares::view(uint32_t domain, uint64_t id)
-{
-    AV_SCOPE("HostShares::view");
-    const ThreadLockHold locked(lock_);
-    const Share *const share = index_.find(domain, id);
-    IUnknown *const    found = share != nullptr ? share->view() : nullptr;
-    if (found != nullptr) found->AddRef();
-    return found;
-}
-
-bool HostShares::keep_view(uint32_t domain, uint64_t id, IUnknown *view)
-{
-    AV_SCOPE("HostShares::keep_view");
-    if (view == nullptr) return false;
-    const ThreadLockHold locked(lock_);
-    Share *const share = index_.find(domain, id);
-    if (share == nullptr) return false;
-    /* Only a view of its own is replaced: the resource itself stays. */
-    if (share->view() != share->resource()) retire(share->view());
-    view->AddRef();
-    share->keep_view(view);
-    return true;
-}
-
-IUnknown *HostShares::shown(uint32_t domain, uint64_t id)
-{
-    AV_SCOPE("HostShares::shown");
-    const ThreadLockHold locked(lock_);
-    const Share *const share = index_.find(domain, id);
-    IUnknown *const    found = share != nullptr ? share->shown() : nullptr;
-    if (found != nullptr) found->AddRef();
-    return found;
-}
-
-bool HostShares::keep_shown(uint32_t domain, uint64_t id, IUnknown *copy)
-{
-    AV_SCOPE("HostShares::keep_shown");
-    if (copy == nullptr) return false;
-    const ThreadLockHold locked(lock_);
-    Share *const share = index_.find(domain, id);
-    if (share == nullptr) return false;
-    if (share->shown() != nullptr) retire(share->shown());
-    copy->AddRef();
-    share->keep_shown(copy);
-    return true;
-}
-
 bool HostShares::describe_image(uint32_t domain, uint64_t id, const SharedImageShape &shape)
 {
     AV_SCOPE("HostShares::describe_image");
@@ -242,25 +148,6 @@ bool HostShares::describe_image(uint32_t domain, uint64_t id, const SharedImageS
     Share *const share = index_.find(domain, id);
     if (share == nullptr) return false;
     share->describe_image(shape);
-    return true;
-}
-
-void HostShares::written(uint32_t domain, uint64_t id)
-{
-    AV_SCOPE("HostShares::written");
-    const ThreadLockHold locked(lock_);
-    Share *const share = index_.find(domain, id);
-    if (share != nullptr) share->written();
-}
-
-bool HostShares::writes(uint32_t domain, uint64_t id, uint64_t &count)
-{
-    AV_SCOPE("HostShares::writes");
-    count = 0u;
-    const ThreadLockHold locked(lock_);
-    const Share *const share = index_.find(domain, id);
-    if (share == nullptr) return false;
-    count = share->writes();
     return true;
 }
 
@@ -339,55 +226,6 @@ void HostShares::clear()
     });
 }
 
-template <typename GiveUp>
-void HostShares::retire_each(GiveUp give_up)
-{
-    AV_SCOPE("HostShares::retire_each");
-    const ThreadLockHold locked(lock_);
-    shares_.for_each([this, &give_up](const Share &visited) {
-        IUnknown *objects[3];
-        const uint32_t given = give_up(const_cast<Share &>(visited), objects);
-        for (uint32_t index = 0u; index < given; index++) retire(objects[index]);
-    });
-}
-
-void HostShares::lose_direct3d11()
-{
-    AV_SCOPE("HostShares::lose_direct3d11");
-    retire_each([](Share &share, IUnknown **objects) { return share.give_up_direct3d11(objects); });
-}
-
-bool HostShares::restore_resource(uint32_t domain, uint64_t id, IUnknown *resource)
-{
-    AV_SCOPE("HostShares::restore_resource");
-    if (resource == nullptr) return false;
-    const ThreadLockHold locked(lock_);
-    Share *const share = index_.find(domain, id);
-    if (share == nullptr || share->origin() != ShareOrigin::d3d11 || share->resource() != nullptr) return false;
-    resource->AddRef();
-    share->keep_resource(resource);
-    return true;
-}
-
-void HostShares::lose_direct3d12()
-{
-    AV_SCOPE("HostShares::lose_direct3d12");
-    retire_each([](Share &share, IUnknown **objects) { return share.give_up_direct3d12(objects); });
-}
-
-uint32_t HostShares::take_retired(IUnknown **objects, uint32_t capacity)
-{
-    AV_SCOPE("HostShares::take_retired");
-    const ThreadLockHold locked(lock_);
-    uint32_t   taken = 0u;
-    retired_.destroy_if([objects, capacity, &taken](const Retired &retired) {
-        if (taken == capacity) return false;
-        objects[taken++] = retired.object_;
-        return true;
-    });
-    return taken;
-}
-
 uint32_t HostShares::live() const
 {
     AV_SCOPE("HostShares::live");
@@ -429,8 +267,8 @@ void HostShares::report(StateWriter &writer)
         uint32_t holders = 0u;
         for (const ShareHolder *holder = share.holders(); holder != nullptr; holder = holder->next()) holders++;
         writer.number("holders", holders);
-        writer.number("opens", share.opens());
-        writer.number("writes", share.writes());
+        writer.number("opens", share.direct3d().opens());
+        writer.number("writes", share.direct3d().writes());
         writer.close();
     });
     writer.close();
@@ -486,8 +324,7 @@ void HostShares::forget(Share &share)
     if (share.indexed()) index_.remove(share.domain(), share.id());
     share.unindex();
     share.drop_descriptor();
-    IUnknown *objects[3];
-    for (uint32_t index = 0u, given = share.give_up_objects(objects); index < given; index++) retire(objects[index]);
+    share.direct3d().retire_all(retired_);
 }
 
 void HostShares::drop(Share &share, ShareHolder &holder)
@@ -541,13 +378,6 @@ void HostShares::milestone(uint32_t live)
         .number(holders_.live())
         .text(" holders)")
         .write();
-}
-
-void HostShares::retire(IUnknown *object)
-{
-    AV_SCOPE("HostShares::retire");
-    Retired *retired = nullptr;
-    if (retired_.create(retired, object) != Status::ok) object->Release();
 }
 
 }  // namespace av

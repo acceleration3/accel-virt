@@ -16,12 +16,16 @@
  * BlockSource, because the guest makes shared objects without bound - DWM
  * keeps every Windows.Graphics.Capture buffer it ever opened.
  *
+ * What Direct3D keeps of a share - its COM objects, their retirement - is
+ * D3dShares', over the rows and the lock here (with_direct3d and its kin):
+ * this class knows shares, descriptors and holders, and no COM object.
+ *
  * Locking. One lock guards the shares. It is never held across a backend's
  * export, import or release (those may block on a host driver) nor while
  * taking the Direct3D 11 device's lock: the order is that lock first, this one
  * second, and a share a caller works on outside this lock is pinned. COM
  * references of freed shares are not released here, where the Direct3D 11
- * lock may not be held, but handed to take_retired, which the device drains
+ * lock may not be held, but retired (D3dRetired), which the device drains
  * under its lock.
  *
  * Seen in the log: a share that cannot be recorded, and the first time the
@@ -37,14 +41,13 @@
 #include "core/platform/thread_lock_hold.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
+#include "executor/sharing/d3d_retired.hpp"
 #include "executor/sharing/share.hpp"
 #include "executor/sharing/share_holder.hpp"
 #include "executor/sharing/share_index.hpp"
 #include "device/shim/posix_lock.hpp"
 
 #include <stdint.h>
-
-struct IUnknown;
 
 namespace av {
 
@@ -94,34 +97,26 @@ public:
 
     /* ------------------------------------------------------- Direct3D */
 
-    /* A Direct3D resource, published under `id` as `session` created it, with
-     * a reference of the share's own. conflict for an id the domain already
-     * shares, invalid_parameter for id 0 or no resource. */
-    [[nodiscard]] Status publish_resource(uint32_t domain, uint64_t id, IUnknown *resource, ShareOrigin origin,
-                                          SessionBackend &session);
-    /* What a Direct3D session opening `id` gets: the flip copy a compositor
-     * reads, else the Direct3D 11 view, else the resource - with a reference
-     * of the caller's, which is what holds it. Null for an unknown id. */
-    IUnknown *open_resource(uint32_t domain, uint64_t id);
-    /* The resource `id` was published as, with a reference of the caller's:
-     * for making a view of it or exporting it. */
-    IUnknown *resource(uint32_t domain, uint64_t id);
-    /* The Direct3D 11 view (or the resource), likewise. */
-    IUnknown *view(uint32_t domain, uint64_t id);
-    /* `view` kept as what a Direct3D 11 session opens `id` as, with a
-     * reference of the share's own. False for an unknown id. */
-    bool      keep_view(uint32_t domain, uint64_t id, IUnknown *view);
-    /* The flip copy, with a reference of the caller's, or null. */
-    IUnknown *shown(uint32_t domain, uint64_t id);
-    /* `copy` kept as `id`'s flip copy, with a reference of the share's own. */
-    bool      keep_shown(uint32_t domain, uint64_t id, IUnknown *copy);
-    /* What `id`'s memory is as an image, as its publisher made it: an
-     * importer views the memory as that image. False for an unknown id. */
-    bool      describe_image(uint32_t domain, uint64_t id, const SharedImageShape &shape);
-    /* One more copy into `id` ran on the host. */
-    void      written(uint32_t domain, uint64_t id);
-    /* How many have: false for an unknown id. */
-    bool      writes(uint32_t domain, uint64_t id, uint64_t &count);
+    /* `act(share)` for a new share of `origin` published under `id` by
+     * `session`, under the lock: what Direct3D keeps of it is put there.
+     * conflict for an id the domain already shares, invalid_parameter for id
+     * 0, no_memory when it cannot be recorded. */
+    template <typename Act>
+    [[nodiscard]] Status publish_direct3d(uint32_t domain, uint64_t id, ShareOrigin origin, SessionBackend &session,
+                                          Act act);
+    /* `act(share, retired)` for the share `id` names, under the lock; false,
+     * nothing done, for an unknown id. */
+    template <typename Act>
+    bool                 with_direct3d(uint32_t domain, uint64_t id, Act act);
+    /* `act(share, retired)` for every share, under the lock. */
+    template <typename Act>
+    void                 each_direct3d(Act act);
+    /* `act(retired)`: what the shares let go of, under the lock. */
+    template <typename Act>
+    void                 with_retired(Act act);
+    /* What a share is as an image, as its publisher made it: an importer
+     * views the memory as that image. False for an unknown id. */
+    bool                 describe_image(uint32_t domain, uint64_t id, const SharedImageShape &shape);
 
     /* ------------------------------------------------------- lifetime */
 
@@ -135,29 +130,6 @@ public:
     void     release(uint32_t domain, uint64_t id);
     /* Every share of every domain gone: the host device is closing. */
     void     clear();
-    /* The GPU's Direct3D 11 or 12 device was lost and is made again: every
-     * share lets go of what was that device's (Share::give_up_direct3d11,
-     * give_up_direct3d12) to take_retired, which the Direct3D 11 device
-     * drains under its lock before the old device goes. The shares stay the
-     * guest's until it lets go; one whose resource went opens nothing, as a
-     * shared handle from before a TDR opens nothing on Windows. */
-    void     lose_direct3d11();
-    void     lose_direct3d12();
-    /* `visit(domain, id, resource)` for every share Direct3D 11 published
-     * whose resource it still holds, under the table's lock: what the lost
-     * device made, read before lose_direct3d11 lets it go, so it can be made
-     * again (CarriedShare). The visit must not call back into this table. */
-    template <typename Visit>
-    void     each_direct3d11(Visit visit);
-    /* `resource`, made again on the device made in place of a lost one, kept
-     * as what the share Direct3D 11 published as `id` is from now on, with a
-     * reference of the share's own: false, nothing kept, for an id no share
-     * names any more - the guest let it go meanwhile - or one that holds a
-     * resource still. */
-    [[nodiscard]] bool restore_resource(uint32_t domain, uint64_t id, IUnknown *resource);
-    /* COM references of freed shares, now the caller's to release under the
-     * Direct3D 11 device's lock: up to `capacity` of them, the count answered. */
-    uint32_t take_retired(IUnknown **objects, uint32_t capacity);
     uint32_t live() const;
     /* Shares by origin, holders, and what is waiting to be retired. */
     void     report(StateWriter &writer);
@@ -173,8 +145,8 @@ private:
     void         settle(Share &share);
     /* `share` freed if no one holds it. The caller holds the lock. */
     void         free_if_unheld(Share &share);
-    /* `share` out of the index, its descriptor closed and its COM objects
-     * retired, ready to destroy. The caller holds the lock. */
+    /* `share` out of the index, its descriptor closed and its Direct3D
+     * objects retired, ready to destroy. The caller holds the lock. */
     void         forget(Share &share);
     /* `holder` taken off `share` and destroyed. The caller holds the lock. */
     void         drop(Share &share, ShareHolder &holder);
@@ -183,16 +155,6 @@ private:
     /* The line written when the live shares reach `live`, a power of two. The
      * caller holds the lock. */
     void         milestone(uint32_t live);
-    /* `object` kept for take_retired, or released now when nothing can hold it. */
-    void         retire(IUnknown *object);
-    /* Every share's objects that `give_up` hands over, retired. */
-    template <typename GiveUp>
-    void         retire_each(GiveUp give_up);
-
-    struct Retired {
-        explicit Retired(IUnknown *object);
-        IUnknown *object_;
-    };
 
     DriverLog              &lines_;
     /* The highest count a line was written for. */
@@ -200,21 +162,52 @@ private:
     mutable PosixLock       lock_;
     ObjectPool<Share>       shares_;
     ObjectPool<ShareHolder> holders_;
-    ObjectPool<Retired>     retired_;
+    D3dRetired              retired_;
     ShareIndex              index_;
 
     friend struct HostSharesProbe;
 };
 
-template <typename Visit>
-void HostShares::each_direct3d11(Visit visit)
+template <typename Act>
+Status HostShares::publish_direct3d(uint32_t domain, uint64_t id, ShareOrigin origin, SessionBackend &session,
+                                    Act act)
 {
-    AV_SCOPE("HostShares::each_direct3d11");
+    AV_SCOPE("HostShares::publish_direct3d");
+    if (id == 0u) return Status::invalid_parameter;
     const ThreadLockHold locked(lock_);
-    shares_.for_each([&visit](const Share &share) {
-        if (share.origin() == ShareOrigin::d3d11 && share.resource() != nullptr)
-            visit(share.domain(), share.id(), share.resource());
-    });
+    if (index_.find(domain, id) != nullptr) return Status::conflict;
+    Share *const share = make(domain, id, 0u, 0u, origin);
+    if (share == nullptr) return Status::no_memory;
+    act(*share);
+    share->publish_by(&session);
+    return Status::ok;
+}
+
+template <typename Act>
+bool HostShares::with_direct3d(uint32_t domain, uint64_t id, Act act)
+{
+    AV_SCOPE("HostShares::with_direct3d");
+    const ThreadLockHold locked(lock_);
+    Share *const share = index_.find(domain, id);
+    if (share == nullptr) return false;
+    act(*share, retired_);
+    return true;
+}
+
+template <typename Act>
+void HostShares::each_direct3d(Act act)
+{
+    AV_SCOPE("HostShares::each_direct3d");
+    const ThreadLockHold locked(lock_);
+    shares_.for_each([this, &act](const Share &share) { act(const_cast<Share &>(share), retired_); });
+}
+
+template <typename Act>
+void HostShares::with_retired(Act act)
+{
+    AV_SCOPE("HostShares::with_retired");
+    const ThreadLockHold locked(lock_);
+    act(retired_);
 }
 
 }  // namespace av

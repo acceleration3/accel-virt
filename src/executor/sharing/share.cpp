@@ -6,9 +6,8 @@
 namespace av {
 
 Share::Share(uint32_t domain, uint64_t id, uint32_t kind, uint64_t size, ShareOrigin origin)
-    : id_(id), size_(size), writes_(0u), opens_(0u), resource_(nullptr), view_(nullptr), shown_(nullptr),
-      holders_(nullptr), publisher_(nullptr), domain_(domain), kind_(kind), handle_kind_(0u), pins_(0u),
-      descriptor_(), origin_(origin), guest_holds_(true), indexed_(true)
+    : id_(id), size_(size), direct3d_(origin), holders_(nullptr), publisher_(nullptr), domain_(domain), kind_(kind),
+      handle_kind_(0u), pins_(0u), descriptor_(), origin_(origin), guest_holds_(true), indexed_(true)
 {
     AV_SCOPE("Share::Share");
 }
@@ -188,75 +187,16 @@ void Share::drop_descriptor()
     descriptor_.close();
 }
 
-IUnknown *Share::resource() const
+D3dShareState &Share::direct3d()
 {
-    AV_SCOPE("Share::resource");
-    return resource_;
+    AV_SCOPE("Share::direct3d");
+    return direct3d_;
 }
 
-void Share::keep_resource(IUnknown *resource)
+const D3dShareState &Share::direct3d() const
 {
-    AV_SCOPE("Share::keep_resource");
-    resource_ = resource;
-}
-
-IUnknown *Share::view() const
-{
-    AV_SCOPE("Share::view");
-    return view_ != nullptr ? view_ : resource_;
-}
-
-void Share::keep_view(IUnknown *view)
-{
-    AV_SCOPE("Share::keep_view");
-    view_ = view;
-}
-
-IUnknown *Share::shown() const
-{
-    AV_SCOPE("Share::shown");
-    return shown_;
-}
-
-void Share::keep_shown(IUnknown *shown)
-{
-    AV_SCOPE("Share::keep_shown");
-    shown_ = shown;
-}
-
-uint32_t Share::give_up_objects(IUnknown **objects)
-{
-    AV_SCOPE("Share::give_up_objects");
-    IUnknown **const kept[] = {&resource_, &view_, &shown_};
-    uint32_t         count = 0u;
-    for (IUnknown **held : kept) {
-        if (*held == nullptr) continue;
-        objects[count++] = *held;
-        *held = nullptr;
-    }
-    return count;
-}
-
-uint32_t Share::give_up_direct3d11(IUnknown **objects)
-{
-    AV_SCOPE("Share::give_up_direct3d11");
-    IUnknown **const kept[] = {origin_ == ShareOrigin::d3d11 ? &resource_ : nullptr, &view_, &shown_};
-    uint32_t         count = 0u;
-    for (IUnknown **held : kept) {
-        if (held == nullptr || *held == nullptr) continue;
-        objects[count++] = *held;
-        *held = nullptr;
-    }
-    return count;
-}
-
-uint32_t Share::give_up_direct3d12(IUnknown **objects)
-{
-    AV_SCOPE("Share::give_up_direct3d12");
-    if (origin_ != ShareOrigin::d3d12 || resource_ == nullptr) return 0u;
-    objects[0] = resource_;
-    resource_ = nullptr;
-    return 1u;
+    AV_SCOPE("Share::direct3d");
+    return direct3d_;
 }
 
 const SharedImageShape &Share::shape() const
@@ -269,30 +209,6 @@ void Share::describe_image(const SharedImageShape &shape)
 {
     AV_SCOPE("Share::describe_image");
     shape_ = shape;
-}
-
-void Share::written()
-{
-    AV_SCOPE("Share::written");
-    writes_++;
-}
-
-uint64_t Share::writes() const
-{
-    AV_SCOPE("Share::writes");
-    return writes_;
-}
-
-void Share::opened()
-{
-    AV_SCOPE("Share::opened");
-    opens_++;
-}
-
-uint64_t Share::opens() const
-{
-    AV_SCOPE("Share::opens");
-    return opens_;
 }
 
 }  // namespace av
