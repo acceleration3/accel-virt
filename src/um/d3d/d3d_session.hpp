@@ -75,7 +75,7 @@ public:
     [[nodiscard]] Status escape(uint8_t *data, uint32_t size);
     /* One device fewer; the last closes the session. */
     void    leave();
-    uint32_t members() const;
+    uint32_t users() const;
     /* Whether the host faulted the session's context - its Direct3D device
      * was lost - as its transport found or its fence page says, a session
      * whose devices are idle included (HostChannel::lost); and why. False

@@ -54,9 +54,9 @@ void D3dSession::leave()
     if (members_ == 0u) close();
 }
 
-uint32_t D3dSession::members() const
+uint32_t D3dSession::users() const
 {
-    AV_SCOPE("D3dSession::members");
+    AV_SCOPE("D3dSession::users");
     return members_;
 }
 

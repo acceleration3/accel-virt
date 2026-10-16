@@ -237,7 +237,7 @@ private:
     bool                           been_current_;
     uint32_t                       error_;
     uint64_t                       share_target_;
-    /* The device link a made or lost context holds; no_link otherwise. */
+    /* The device link a made or lost context holds. */
     icd::ContextLink               link_;
     /* Why the context was lost. */
     icd::LossLatch                 loss_;

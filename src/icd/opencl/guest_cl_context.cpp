@@ -357,7 +357,7 @@ void GuestClContext::report(StateWriter &writer) const
     AV_SCOPE("GuestClContext::report");
     writer.open("context", 0u);
     writer.number("state", static_cast<uint32_t>(state_));
-    writer.number("link", link_.link());
+    writer.number("device", guest_device());
     loss_.report(writer);
     writer.flag("arena", has_arena());
     writer.number("mappings", mappings());

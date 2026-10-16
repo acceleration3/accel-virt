@@ -404,7 +404,7 @@ void GuestGlContext::report(StateWriter &writer, uint64_t handle) const
     writer.number("share", options_.share_context());
     writer.number("share_target", share_target_);
     writer.number("error", error_);
-    writer.number("link", link_.link());
+    writer.number("device", guest_device());
     loss_.report(writer);
     writer.flag("arena", channel_.arena_view() != nullptr);
     writer.text("renderer", state_ == State::created ? "" : strings_[renderer_row]);
