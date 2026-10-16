@@ -3,8 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "icd/common/thread_lock_hold.hpp"
-#include "proto/resources/allocation_descriptor.hpp"
-#include "proto/resources/shared_object_record.hpp"
+#include "proto/resources/shared_allocation_data.hpp"
 
 namespace av::icd {
 
@@ -75,18 +74,13 @@ Status SharedHandles::adopt(uint32_t device, uint64_t handle, uint64_t &object_i
     /* What came back is the creating process's bytes, which this process did
      * not write: a record that is not there, or one with no id minted into it,
      * names no object and the open is given back. */
-    SharedObjectRecord record;
-    const bool         carries =
-        written == AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size &&
-        record.decode(carried + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size) ==
-            Status::ok &&
-        record.assigned();
-    if (!carries) {
+    SharedAllocationData data;
+    if (data.decode(carried, written) != Status::ok || !data.assigned()) {
         static_cast<void>(kmt_.destroy_shared_allocation(device, resource));
         return Status::invalid_parameter;
     }
-    keep(SharedHandleSlot{handle, record.object_id(), device, resource});
-    object_id = record.object_id();
+    keep(SharedHandleSlot{handle, data.object_id(), device, resource});
+    object_id = data.object_id();
     return Status::ok;
 }
 

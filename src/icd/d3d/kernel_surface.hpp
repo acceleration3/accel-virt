@@ -11,9 +11,8 @@
 #define AV_KERNEL_SURFACE_HPP
 
 #include "core/support/status.hpp"
-#include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/scanout_target.hpp"
-#include "proto/resources/shared_object_record.hpp"
+#include "proto/resources/shared_allocation_data.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -23,7 +22,7 @@ namespace av::d3d {
 class KernelSurface {
 public:
     /* The allocation's private data: its descriptor, then the identity. */
-    static constexpr size_t allocation_bytes = AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size;
+    static constexpr size_t allocation_bytes = SharedAllocationData::encoded_size;
     /* The resource's private data: this driver's mark, then a reserved word. */
     static constexpr size_t resource_bytes = 2u * sizeof(uint64_t);
 
@@ -67,7 +66,7 @@ private:
     /* The D3DDDIFORMAT the miniport's descriptors name the surface by. */
     uint32_t kernel_format() const;
 
-    uint8_t       allocation_[allocation_bytes];
+    SharedAllocationData allocation_;
     uint64_t      resource_[2];
     uint32_t      width_;
     /* Rows of elements: a block-compressed surface's rows of blocks, which

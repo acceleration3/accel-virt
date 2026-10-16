@@ -4,6 +4,7 @@
 #include "proto/d3d/d3d9_present_format.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "icd/common/shared_bytes.hpp"
+#include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 #include "proto/resources/surface_layout.hpp"
 
@@ -17,7 +18,7 @@ constexpr uint32_t unsized_element_bytes = 4u;
 }  // namespace
 
 KernelSurface::KernelSurface()
-    : allocation_{}, resource_{}, width_(0u), rows_(0u), format_(0u), pitch_(0u), bytes_(0u), scanout_(),
+    : allocation_(), resource_{}, width_(0u), rows_(0u), format_(0u), pitch_(0u), bytes_(0u), scanout_(),
       primary_(false)
 {
     AV_SCOPE("KernelSurface::KernelSurface");
@@ -36,7 +37,7 @@ KernelSurface::KernelSurface(uint32_t width, uint32_t height, uint32_t format)
  * its bytes, and Direct3D 9 on 12, which shares every texture it makes, ran
  * the aperture out loading a level. */
 KernelSurface::KernelSurface(uint32_t width, uint32_t height, uint32_t format, const ScanoutTarget &scanout)
-    : allocation_{}, resource_{}, width_(width), rows_(0u), format_(format), pitch_(0u), bytes_(0u),
+    : allocation_(), resource_{}, width_(width), rows_(0u), format_(format), pitch_(0u), bytes_(0u),
       scanout_(scanout), primary_(true)
 {
     AV_SCOPE("KernelSurface::KernelSurface");
@@ -52,18 +53,16 @@ KernelSurface::KernelSurface(uint32_t width, uint32_t height, uint32_t format, c
     bytes_ = SharedBytes(uint64_t{pitch_} * rows_).pages();
 }
 
-/* Both are encoded into buffers of exactly their encoded sizes, which is the
- * only way either encode fails; a surface of no texels is refused first. */
+/* A surface of no texels is refused first: its descriptor would be one the
+ * miniport refuses. */
 Status KernelSurface::make()
 {
     AV_SCOPE("KernelSurface::make");
     if (bytes_ == 0u) return Status::invalid_parameter;
     const AllocationKind kind = primary_ ? AllocationKind::shared_primary : AllocationKind::surface;
-    static_cast<void>(AllocationDescriptor(kind, true, SurfaceLayout(width_, rows_, kernel_format(), pitch_), bytes_,
-                                           scanout_)
-                          .encode(allocation_, AllocationDescriptor::encoded_size));
-    static_cast<void>(SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::memory), 0u, bytes_)
-                          .encode(allocation_ + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size));
+    allocation_ = SharedAllocationData(
+        AllocationDescriptor(kind, true, SurfaceLayout(width_, rows_, kernel_format(), pitch_), bytes_, scanout_),
+        SharedObjectKind(SharedObjectKind::memory), bytes_);
     resource_[0] = mark;
     resource_[1] = 0u;
     return Status::ok;
@@ -75,15 +74,15 @@ Status KernelSurface::open(const void *resource, size_t resource_size, const voi
     if (resource == nullptr || resource_size < resource_bytes) return Status::not_found;
     __builtin_memcpy(resource_, resource, resource_bytes);
     if (resource_[0] != mark) return Status::not_found;
-    if (allocation == nullptr || allocation_size != allocation_bytes) return Status::malformed;
-    __builtin_memcpy(allocation_, allocation, allocation_bytes);
+    if (allocation_.decode(static_cast<const uint8_t *>(allocation), allocation_size) != Status::ok)
+        return Status::malformed;
     return Status::ok;
 }
 
 uint8_t *KernelSurface::allocation_data()
 {
     AV_SCOPE("KernelSurface::allocation_data");
-    return allocation_;
+    return allocation_.lend();
 }
 
 const uint64_t *KernelSurface::resource_data() const
@@ -107,10 +106,10 @@ uint64_t KernelSurface::bytes() const
 uint64_t KernelSurface::key() const
 {
     AV_SCOPE("KernelSurface::key");
-    SharedObjectRecord minted;
-    if (minted.decode(allocation_ + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size) != Status::ok)
-        return 0u;
-    return minted.assigned() ? minted.object_id() : 0u;
+    /* The kernel writes into the bytes lent, so they are read afresh. */
+    SharedAllocationData minted;
+    if (minted.decode(allocation_.bytes(), allocation_bytes) != Status::ok) return 0u;
+    return minted.object_id();
 }
 
 bool KernelSurface::primary() const

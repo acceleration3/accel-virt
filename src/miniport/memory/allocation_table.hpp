@@ -13,6 +13,7 @@
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/shared_allocation_data.hpp"
 #include "proto/resources/shared_object_record.hpp"
 
 #include <stdint.h>
@@ -73,9 +74,8 @@ public:
 
 private:
     static constexpr int32_t rotation_identity = 1;   /* D3DDDI_ROTATION_IDENTITY */
-    /* A descriptor followed by a SharedObjectRecord: 48 + 40. */
-    static constexpr uint32_t shareable_private_size =
-        static_cast<uint32_t>(AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size);
+    /* Shareable private data: a descriptor followed by a SharedObjectRecord. */
+    static constexpr uint32_t shareable_private_size = static_cast<uint32_t>(SharedAllocationData::encoded_size);
     /* DXGK_CREATEALLOCATIONFLAGS::Resource and
      * DXGK_DESTROYALLOCATIONFLAGS::DestroyResource, each bit 0 of their own
      * Value. A shared object's identity is minted over a resource, because
@@ -83,9 +83,9 @@ private:
     static constexpr uint32_t resource_flag = 1u;
 
     [[nodiscard]] Status create_one(struct DxgkAllocationInfoRecord &info, Resource *resource);
-    /* Mints an identity for `allocation` into the record that follows the
-     * descriptor in `private_data`, and writes it back there. */
-    [[nodiscard]] Status share(Allocation &allocation, const uint8_t *private_data);
+    /* Mints an identity for `allocation` from the creator's unassigned
+     * `record`; the open writes it back (DeviceTable::claim). */
+    [[nodiscard]] Status share(Allocation &allocation, SharedObjectRecord record);
     void                 destroy_created(DxgkargCreateAllocationRecord &request, uint32_t count);
     void                 retire(Allocation &allocation);
 

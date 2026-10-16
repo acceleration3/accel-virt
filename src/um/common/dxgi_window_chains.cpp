@@ -7,8 +7,7 @@
 #include "guest/kmt/kmt.hpp"
 #include "core/log/log_sink.hpp"
 #include "icd/common/thread_lock.hpp"
-#include "proto/resources/allocation_descriptor.hpp"
-#include "proto/resources/shared_object_record.hpp"
+#include "proto/resources/shared_allocation_data.hpp"
 #include "um/common/shared_rows_scope.hpp"
 
 #include <d3d11.h>
@@ -41,7 +40,6 @@ constexpr char flipped_source[] = "Texture2D slot : register(t0);"
 constexpr char chain_open_key[] = "chain open";
 constexpr char chain_presented_key[] = "chain presented";
 constexpr uint32_t buffer_count = 2u;
-constexpr uint32_t private_bytes = AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size;
 
 }  // namespace
 
@@ -388,22 +386,16 @@ bool DxgiWindowChains::identify(Device &device, ID3D11Texture2D *texture, uint64
     if (FAILED(resource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr,
                                             &shared)))
         return false;
-    uint8_t      carried[private_bytes] = {};
-    uint32_t     written = 0u;
-    uint32_t     opened = 0u;
-    const Status read = kmt_.open_shared_object(device.kmt_device, reinterpret_cast<uint64_t>(shared), opened,
-                                                carried, private_bytes, written);
+    SharedAllocationData carried;
+    uint32_t             written = 0u;
+    uint32_t             opened = 0u;
+    const Status         read = kmt_.open_shared_object(device.kmt_device, reinterpret_cast<uint64_t>(shared), opened,
+                                                        carried.lend(), static_cast<uint32_t>(SharedAllocationData::encoded_size), written);
     if (read == Status::ok) static_cast<void>(kmt_.destroy_shared_allocation(device.kmt_device, opened));
     static_cast<void>(kmt_.close_shared_object(reinterpret_cast<uint64_t>(shared)));
-    AllocationDescriptor described;
-    SharedObjectRecord   record;
-    if (read != Status::ok || written != private_bytes ||
-        described.decode(carried, AllocationDescriptor::encoded_size) != Status::ok ||
-        record.decode(carried + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size) != Status::ok ||
-        !record.assigned())
-        return false;
-    id = record.object_id();
-    bytes = described.size();
+    if (read != Status::ok || carried.reread(written) != Status::ok || !carried.assigned()) return false;
+    id = carried.object_id();
+    bytes = carried.size();
     return true;
 }
 

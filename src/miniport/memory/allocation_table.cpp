@@ -1,6 +1,7 @@
 #include "miniport/memory/allocation_table.hpp"
 
 #include "miniport/memory/shared_object_table.hpp"
+#include "proto/resources/shared_allocation_data.hpp"
 #include "proto/resources/shared_object_record.hpp"
 
 #include "miniport/ddi/dxgk_allocation_info_record.hpp"
@@ -43,15 +44,18 @@ Status AllocationTable::create_one(DxgkAllocationInfoRecord &info, Resource *res
      * STATUS_INVALID_PARAMETER otherwise (feature 053). */
     if (info.PrivateDriverDataSize != AllocationDescriptor::encoded_size && !shareable)
         return Status::not_supported;
-    auto *const bytes = static_cast<uint8_t *>(info.pPrivateDriverData);
-    if (descriptor.decode(bytes, AllocationDescriptor::encoded_size) != Status::ok)
-        return Status::invalid_parameter;
+    const auto *const    bytes = static_cast<const uint8_t *>(info.pPrivateDriverData);
+    SharedAllocationData shared_data;
+    const Status         read = shareable ? shared_data.decode(bytes, SharedAllocationData::encoded_size)
+                                          : descriptor.decode(bytes, AllocationDescriptor::encoded_size);
+    if (read != Status::ok) return Status::invalid_parameter;
+    if (shareable) descriptor = shared_data.descriptor();
     if (descriptor.size() > segment_.size()) return Status::invalid_parameter;
     const uint64_t size = (descriptor.size() + Allocation::page_bytes - 1u) & ~(Allocation::page_bytes - 1u);
     Allocation *allocation = nullptr;
     const Status status = allocations_.create(allocation, platform_, segments_, descriptor, size);
     if (status != Status::ok) return status;
-    const Status shared = shareable ? share(*allocation, bytes) : Status::ok;
+    const Status shared = shareable ? share(*allocation, shared_data.record()) : Status::ok;
     if (shared != Status::ok) {
         static_cast<void>(allocations_.destroy(allocation));
         return shared;
@@ -64,12 +68,9 @@ Status AllocationTable::create_one(DxgkAllocationInfoRecord &info, Resource *res
     return Status::ok;
 }
 
-Status AllocationTable::share(Allocation &allocation, const uint8_t *private_data)
+Status AllocationTable::share(Allocation &allocation, SharedObjectRecord record)
 {
     AV_SCOPE("AllocationTable::share");
-    SharedObjectRecord record;
-    const uint8_t *const at = private_data + AllocationDescriptor::encoded_size;
-    if (record.decode(at, SharedObjectRecord::encoded_size) != Status::ok) return Status::invalid_parameter;
     const Status minted = shared_.mint(allocation, record);
     if (minted != Status::ok) return minted;
     /* Nothing is written back here. dxgkrnl copies the caller's own bytes over

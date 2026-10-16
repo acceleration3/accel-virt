@@ -20,6 +20,7 @@ class StateWriter;
 class Adapter;
 class Allocation;
 class AllocationTable;
+class SharedAllocationData;
 class SharedObject;
 struct DeviceTableProbe;
 class DxgkrnlInterface;
@@ -69,7 +70,7 @@ private:
     /* The creating device's own open, where the minted record is written into
      * the bytes dxgkrnl copies out (research.md §15). */
     [[nodiscard]] Status adopt(const Allocation &allocation, const struct DxgkOpenAllocationInfoRecord &info,
-                               SharedObject *&object);
+                               SharedAllocationData &data, SharedObject *&object);
     [[nodiscard]] Status claim(const Allocation &allocation, const struct DxgkOpenAllocationInfoRecord &info,
                                SharedObject *&object);
     void                 close_opened(DxgkargOpenAllocationRecord &request, uint32_t count);

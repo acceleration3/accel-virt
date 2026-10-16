@@ -7,7 +7,7 @@
 #include "miniport/memory/allocation.hpp"
 #include "miniport/memory/allocation_table.hpp"
 #include "miniport/memory/shared_object_table.hpp"
-#include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/shared_allocation_data.hpp"
 #include "proto/resources/shared_object_record.hpp"
 #include "miniport/driver/acquired_handle_data.hpp"
 #include "miniport/driver/dxgkrnl_interface.hpp"
@@ -83,13 +83,10 @@ Status DeviceTable::claim(const Allocation &allocation, const DxgkOpenAllocation
     AV_SCOPE("DeviceTable::claim");
     object = nullptr;
     if (allocation.shared_id() == 0u) return Status::ok;
-    if (info.pPrivateDriverData == nullptr ||
-        info.PrivateDriverDataSize != AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size)
+    SharedAllocationData data;
+    if (data.decode(static_cast<const uint8_t *>(info.pPrivateDriverData), info.PrivateDriverDataSize) != Status::ok)
         return Status::invalid_parameter;
-    SharedObjectRecord record;
-    const auto *const  at =
-        static_cast<const uint8_t *>(info.pPrivateDriverData) + AllocationDescriptor::encoded_size;
-    if (record.decode(at, SharedObjectRecord::encoded_size) != Status::ok) return Status::invalid_parameter;
+    const SharedObjectRecord &record = data.record();
     /* An unassigned record on an allocation that already has an identity is
      * the creating device's own open, which dxgkrnl runs inside every create
      * after copying the caller's bytes back over whatever the create wrote. So
@@ -101,7 +98,7 @@ Status DeviceTable::claim(const Allocation &allocation, const DxgkOpenAllocation
      * once dxgkrnl has resolved the allocation handle for it, and across
      * processes that handle comes from the NT handle; the record was never
      * what made the open allowed. */
-    if (!record.assigned()) return adopt(allocation, info, object);
+    if (!record.assigned()) return adopt(allocation, info, data, object);
     /* The allocation dxgkrnl resolved and the record the creator wrote have to
      * be the same object: either alone is something a process can arrange. */
     if (record.object_id() != allocation.shared_id()) return Status::invalid_parameter;
@@ -111,14 +108,15 @@ Status DeviceTable::claim(const Allocation &allocation, const DxgkOpenAllocation
 /* The creating device's own open: the identity is the allocation's, and the
  * record goes back into the bytes dxgkrnl will copy out. */
 Status DeviceTable::adopt(const Allocation &allocation, const DxgkOpenAllocationInfoRecord &info,
-                          SharedObject *&object)
+                          SharedAllocationData &data, SharedObject *&object)
 {
     AV_SCOPE("DeviceTable::adopt");
     SharedObjectRecord minted;
     const Status       opened = shared_.open_minted(allocation.shared_id(), object, minted);
     if (opened != Status::ok) return opened;
-    auto *const at = static_cast<uint8_t *>(info.pPrivateDriverData) + AllocationDescriptor::encoded_size;
-    static_cast<void>(minted.encode(at, SharedObjectRecord::encoded_size));
+    /* Read just above, so the mint cannot be refused. */
+    static_cast<void>(data.mint(minted));
+    __builtin_memcpy(info.pPrivateDriverData, data.bytes(), SharedAllocationData::encoded_size);
     return Status::ok;
 }
 

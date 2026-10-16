@@ -7,6 +7,7 @@
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/resources/scanout_target.hpp"
+#include "proto/resources/shared_allocation_data.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 #include "icd/common/shared_bytes.hpp"
 #include "proto/resources/shared_object_record.hpp"
@@ -840,30 +841,24 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
     /* One page, and its pages are never read. What is shared is the host
      * object; this exists only because dxgkrnl mints an identity over an
      * allocation and there is no guest allocation of host memory at all. */
-    uint8_t carrier_data[AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size] = {};
-    static_cast<void>(AllocationDescriptor(AllocationKind::client, true, SurfaceLayout(),
-                                           SharedObjectRecord::page_size, ScanoutTarget())
-                          .encode(carrier_data, AllocationDescriptor::encoded_size));
-    static_cast<void>(SharedObjectRecord(0u, SharedObjectKind(kind), 0u, size)
-                          .encode(carrier_data + AllocationDescriptor::encoded_size,
-                                  SharedObjectRecord::encoded_size));
+    SharedAllocationData carrier_data(
+        AllocationDescriptor(AllocationKind::client, true, SurfaceLayout(), SharedObjectRecord::page_size,
+                             ScanoutTarget()),
+        SharedObjectKind(kind), size);
     uint32_t     carrier = 0u;
-    const Status created =
-        kmt_.create_shared_allocation(guest_device, carrier_data, sizeof carrier_data, carrier);
+    const Status created = kmt_.create_shared_allocation(
+        guest_device, carrier_data.lend(), static_cast<uint32_t>(SharedAllocationData::encoded_size), carrier);
     if (created != Status::ok) {
         refused("vkAllocateMemory: no allocation to mint a shared object's identity into, NTSTATUS");
         /* What the refusal was about, because the status alone cannot say:
          * a device of 0 is a connection that never opened, and the length is
          * the one thing this request has that an ordinary create does not. */
         lines_.note("vkAllocateMemory: the carrier was asked for on guest device", guest_device);
-        lines_.note("vkAllocateMemory: the carrier's private driver data was bytes", sizeof carrier_data);
+        lines_.note("vkAllocateMemory: the carrier's private driver data was bytes", SharedAllocationData::encoded_size);
         return VK_ERROR_TOO_MANY_OBJECTS;
     }
     ScopeExit unwind([&] { static_cast<void>(kmt_.destroy_shared_allocation(guest_device, carrier)); });
-    SharedObjectRecord    minted;
-    if (minted.decode(carrier_data + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size) !=
-            Status::ok ||
-        !minted.assigned()) {
+    if (carrier_data.reread(SharedAllocationData::encoded_size) != Status::ok || !carrier_data.assigned()) {
         log_.write("avvk: the miniport minted no identity into a shared object's carrier");
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
@@ -872,15 +867,15 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
     SharedObjectCall     call(made.connection()->transport());
     const uint64_t       wire_handle = memory != VK_NULL_HANDLE ? vkproto::handle_to_wire(memory)
                                                                 : vkproto::handle_to_wire(semaphore);
-    const Status         published = call.share(minted.object_id(), kind, size, wire_handle);
+    const Status         published = call.share(carrier_data.object_id(), kind, size, wire_handle);
     if (published != Status::ok) {
         lines_.note("vkAllocateMemory: the device would not publish a shared object, status", call.device_status());
         return VK_ERROR_TOO_MANY_OBJECTS;
     }
     uint64_t     handle = 0u;
-    const Status shared = shared_handles_.mint(guest_device, carrier, minted.object_id(), handle);
+    const Status shared = shared_handles_.mint(guest_device, carrier, carrier_data.object_id(), handle);
     if (shared != Status::ok) {
-        static_cast<void>(call.release(minted.object_id(), kind, size));
+        static_cast<void>(call.release(carrier_data.object_id(), kind, size));
         if (shared == Status::no_memory) {
             log_.write("avvk: no memory to keep a shared object's NT handle");
             return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -890,10 +885,10 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
     }
     /* A row the arguments here always make: what refuses one is a process
      * with no memory left, and then nothing published is left behind. */
-    if (!externals_.remember(device, memory, semaphore, minted.object_id(), size, handle, carrier)) {
+    if (!externals_.remember(device, memory, semaphore, carrier_data.object_id(), size, handle, carrier)) {
         log_.write("avvk: no memory to remember a shared object; it is given back");
         shared_handles_.forget(handle);
-        static_cast<void>(call.release(minted.object_id(), kind, size));
+        static_cast<void>(call.release(carrier_data.object_id(), kind, size));
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     unwind.dismiss();
