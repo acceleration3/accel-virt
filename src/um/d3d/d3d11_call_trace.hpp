@@ -65,8 +65,6 @@ private:
 
     /* Whether this call is one to write, counting it either way. */
     bool     take();
-    /* The decimal number at `text`, which is left where it ended. */
-    uint64_t parsed(const char *&text) const;
     uint64_t microseconds() const;
     uint32_t thread() const;
 

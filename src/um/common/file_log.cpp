@@ -8,19 +8,17 @@ namespace av {
 
 namespace {
 
-constexpr wchar_t directory[] = L"C:\\ProgramData\\av";
-constexpr wchar_t prefix[] = L"C:\\ProgramData\\av\\";
 constexpr wchar_t suffix[] = L".log";
 constexpr size_t stem_chars = 32u;
-/* The prefix, the stem, a dash, ten digits of a DWORD, a dash and ten of a
+/* The directory, the stem, a dash, ten digits of a DWORD, a dash and ten of a
  * tick where the first name cannot be opened, the suffix and the NUL. */
 constexpr size_t path_chars =
-    sizeof prefix / sizeof prefix[0] + stem_chars + 1u + 10u + 1u + 10u + sizeof suffix / sizeof suffix[0];
+    DiagnosticsDirectory::prefix_chars + stem_chars + 1u + 10u + 1u + 10u + sizeof suffix / sizeof suffix[0];
 constexpr size_t line_bytes = 256u;
 
 }  // namespace
 
-FileLog::FileLog(const wchar_t *stem) : stem_(stem), file_(INVALID_HANDLE_VALUE)
+FileLog::FileLog(const wchar_t *stem) : directory_(), stem_(stem), file_(INVALID_HANDLE_VALUE)
 {
     AV_SCOPE("FileLog::FileLog");
 }
@@ -35,8 +33,7 @@ void FileLog::open()
 {
     AV_SCOPE("FileLog::open");
     wchar_t path[path_chars] = {};
-    size_t  length = 0u;
-    for (const wchar_t *text = prefix; *text != L'\0'; text++) path[length++] = *text;
+    size_t  length = directory_.place(L"", path, path_chars);
     for (size_t index = 0u; stem_[index] != L'\0' && index < stem_chars; index++) path[length++] = stem_[index];
     path[length++] = L'-';
     wchar_t digits[10] = {};
@@ -46,7 +43,7 @@ void FileLog::open()
     while (count != 0u) path[length++] = digits[--count];
     for (const wchar_t *text = suffix; *text != L'\0'; text++) path[length++] = *text;
 
-    static_cast<void>(CreateDirectoryW(directory, nullptr));
+    directory_.make();
     file_ = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
                         FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file_ != INVALID_HANDLE_VALUE) return;

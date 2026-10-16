@@ -7,6 +7,7 @@
 #define AV_UM_FILE_LOG_HPP
 
 #include "core/log/log_sink.hpp"
+#include "um/common/diagnostics_directory.hpp"
 
 namespace av {
 
@@ -23,8 +24,9 @@ public:
     void write(const char *line) override;
 
 private:
-    const wchar_t *stem_;
-    void          *file_;
+    DiagnosticsDirectory directory_;
+    const wchar_t       *stem_;
+    void                *file_;
 };
 
 }  // namespace av

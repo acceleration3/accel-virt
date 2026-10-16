@@ -9,7 +9,7 @@
 namespace av {
 
 ProcessTrace::ProcessTrace()
-    : host_(), security_(), section_(), table_(host_), events_file_(), events_(), service_(), crash_(), module_(""), previous_(nullptr)
+    : host_(), security_(), section_(), table_(host_), directory_(), events_file_(), events_(), service_(), crash_(), module_(""), previous_(nullptr)
 {
     AV_SCOPE("ProcessTrace::ProcessTrace");
 }
@@ -45,8 +45,7 @@ Status ProcessTrace::start(const char *module, StateReporter &reporter, Filter f
     /* Every scope costs the call it opens, thousands a frame on an
      * application's own thread, so the table is bound only when a trace is
      * asked for: C:\ProgramData\av\trace-scopes, or the perfetto flag. */
-    if (GetFileAttributesW(L"C:\\ProgramData\\av\\trace-scopes") != INVALID_FILE_ATTRIBUTES ||
-        events_file_.wanted())
+    if (directory_.flagged(L"trace-scopes") || events_file_.wanted())
         scope_binding.bind(table_);
     record_events(module, pid);
     HMODULE     pinned = nullptr;

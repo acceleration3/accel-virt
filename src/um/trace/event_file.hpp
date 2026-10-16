@@ -6,6 +6,7 @@
 #define AV_UM_EVENT_FILE_HPP
 
 #include "core/support/status.hpp"
+#include "um/common/diagnostics_directory.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -41,8 +42,9 @@ private:
     const char *field(const char *text, uint32_t index) const;
     uint32_t    number(uint32_t index, uint32_t fallback) const;
 
-    uint8_t *region_;
-    size_t   bytes_;
+    DiagnosticsDirectory directory_;
+    uint8_t             *region_;
+    size_t               bytes_;
 };
 
 }  // namespace av

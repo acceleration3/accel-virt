@@ -15,13 +15,19 @@ EnvSetting::EnvSetting(const char *name) : value_(getenv(name))
 bool EnvSetting::on() const
 {
     AV_SCOPE("EnvSetting::on");
-    return value_ != nullptr && value_[0] == '1';
+    return value_.on();
 }
 
 const char *EnvSetting::text() const
 {
     AV_SCOPE("EnvSetting::text");
-    return value_;
+    return value_.text();
+}
+
+bool EnvSetting::number(uint64_t &value) const
+{
+    AV_SCOPE("EnvSetting::number");
+    return value_.number(value);
 }
 
 }  // namespace av

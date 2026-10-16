@@ -80,14 +80,10 @@ Status HostTrace::start(const char *module)
     constexpr uint32_t device_depth = 2u;
     constexpr uint32_t executor_depth = 6u;
     const bool         device = module[0] == 'd';
-    const char *const  depth = EnvSetting("AV_TRACE_DEPTH").text();
-    uint32_t           limit = !perfetto ? 0u : device ? device_depth : executor_depth;
-    if (depth != nullptr) {
-        limit = 0u;
-        for (const char *digit = depth; *digit >= '0' && *digit <= '9'; digit++)
-            limit = limit * 10u + static_cast<uint32_t>(*digit - '0');
-    }
-    table_.limit_depth(limit);
+    const EnvSetting   depth("AV_TRACE_DEPTH");
+    uint64_t           limit = !perfetto ? 0u : device ? device_depth : executor_depth;
+    if (depth.text() != nullptr && !depth.number(limit)) limit = 0u;
+    table_.limit_depth(static_cast<uint32_t>(limit));
     /* AV_TRACE_ONLY: a comma-separated list of scope names, the only ones
      * recorded. */
     table_.only(EnvSetting("AV_TRACE_ONLY").text());

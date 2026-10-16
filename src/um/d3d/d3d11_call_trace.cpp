@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "icd/d3d/record_stamp.hpp"
+#include "um/common/guest_setting.hpp"
 
 #include <windows.h>
 
@@ -26,14 +27,15 @@ D3d11CallTrace::D3d11CallTrace()
 void D3d11CallTrace::open()
 {
     AV_SCOPE("D3d11CallTrace::open");
-    char value[32] = {};
-    if (GetEnvironmentVariableA("AV_D3D11_TRACE", value, sizeof value) == 0u) return;
-    const char *text = value;
-    const uint64_t first = parsed(text);
-    if (*text == '+') {
-        text++;
+    const GuestSetting setting("AV_D3D11_TRACE");
+    const SettingText  value = setting.value();
+    if (value.text() == nullptr) return;
+    uint64_t first = 0u;
+    if (!value.number(first)) first = 0u;
+    const SettingText counted = value.after('+');
+    if (counted.text() != nullptr) {
         skip_ = first;
-        count_ = parsed(text);
+        if (!counted.number(count_)) count_ = 0u;
     } else {
         count_ = first;
     }
@@ -45,14 +47,6 @@ void D3d11CallTrace::open()
     frequency_ = frequency.QuadPart > 0 ? static_cast<uint64_t>(frequency.QuadPart) : 1u;
     file_.open();
     on_ = true;
-}
-
-uint64_t D3d11CallTrace::parsed(const char *&text) const
-{
-    AV_SCOPE("D3d11CallTrace::parsed");
-    uint64_t value = 0u;
-    while (*text >= '0' && *text <= '9') value = value * 10u + static_cast<uint64_t>(*text++ - '0');
-    return value;
 }
 
 uint32_t D3d11CallTrace::number_context()

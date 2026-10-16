@@ -60,7 +60,7 @@ src/km/         src/device/qemu, src/*/shim/      src/um/
 
 | Directory | Holds |
 |---|---|
-| `support/` | `Status`, `NtStatus`, `ObjectPool`/`ObjectStorage`, `GrowableArray`, `KeyedSlots` and `ClaimedRows` (storage for counts an application controls, see "Counts with no fixed bound"), `ScopeExit`, `Alignment`, `ByteRange`, `TextBuffer`, `RuntimeCall`, `AV_UNTESTABLE` |
+| `support/` | `Status`, `NtStatus`, `ObjectPool`/`ObjectStorage`, `GrowableArray`, `KeyedSlots` and `ClaimedRows` (storage for counts an application controls, see "Counts with no fixed bound"), `ScopeExit`, `Alignment`, `ByteRange`, `TextBuffer`, `RuntimeCall`, `SettingText` (how every knob's text is judged), `AV_UNTESTABLE` |
 | `trace/` | `AV_SCOPE`, trace tables, event rings, crash and state dumps |
 | `log/` | `DriverLog`, `KeyedLog`, `LogLine`, `LogSink`, `LogQueue`: the logging the host, the guest drivers and the kernel's debug port share |
 | `platform/` | the `Platform` contract the miniport runs on (implemented by `src/km` and `MockPlatform`), locks and their guards, lock ranks, `LogBudget`, `InvariantScope`; also `BlockSource` and `LockMarks`, which every binary uses |
@@ -151,7 +151,7 @@ One `ContextSession` per guest context runs its API's commands on the host GPU.
 | `icd/vulkan/`, `icd/opengl/`, `icd/opencl/` | each ICD's logic |
 | `icd/d3d/` | the Direct3D user-mode driver's portable logic; `ddi/` mirrors the runtimes' structures |
 | `icd/vendor/` | the ADL and NVAPI libraries' portable logic (docs/vendor-libraries.md); `ddi/` mirrors their structures |
-| `um/common/` | the Windows halves of `icd/common`'s seams: file log, lazy driver, process heap, SRW lock, window chains |
+| `um/common/` | the Windows halves of `icd/common`'s seams: file log, lazy driver, process heap, SRW lock, window chains; the process's `AV_` settings (`GuestSetting`) and `C:\ProgramData\av` (`DiagnosticsDirectory`) |
 | `um/vulkan/`, `um/opengl/`, `um/opencl/` | each ICD's exports and library root |
 | `um/d3d/` | avumd's exports, devices and DDI thunks (see "Known exceptions") |
 | `um/vendor/` | the ADL and NVAPI libraries' exports, lazy root and record layout proofs |

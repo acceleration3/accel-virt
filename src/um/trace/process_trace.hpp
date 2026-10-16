@@ -10,6 +10,7 @@
 #include "core/support/status.hpp"
 #include "core/trace/event_ring.hpp"
 #include "core/trace/trace_table.hpp"
+#include "um/common/diagnostics_directory.hpp"
 #include "um/trace/event_file.hpp"
 #include "um/trace/object_security.hpp"
 #include "um/trace/state_service.hpp"
@@ -51,6 +52,7 @@ private:
     ObjectSecurity   security_;
     TraceSection     section_;
     TraceTable       table_;
+    DiagnosticsDirectory directory_;
     EventFile        events_file_;
     EventRing        events_;
     StateService     service_;

@@ -16,12 +16,11 @@ namespace av {
 
 namespace {
 
-constexpr wchar_t directory[] = L"C:\\ProgramData\\av";
 constexpr size_t  line_bytes = 512u;
 
 }  // namespace
 
-WindowsCrash::WindowsCrash() : modules_(), returns_{}
+WindowsCrash::WindowsCrash() : directory_(), modules_(), returns_{}
 {
     AV_SCOPE("WindowsCrash::WindowsCrash");
 }
@@ -43,14 +42,16 @@ void WindowsCrash::write(const char *module, TraceTable &table, TraceHost &host,
     const CrashEvent  event(module, GetCurrentProcessId(), exception->ExceptionCode, address);
     CrashReport       report(event, text, modules_, returns_, frames);
 
-    static_cast<void>(CreateDirectoryW(directory, nullptr));
-    WideName path;
-    path.append("C:\\ProgramData\\av\\crash-");
-    path.append(module);
-    path.append("-");
-    path.append(static_cast<uint32_t>(GetCurrentProcessId()));
-    path.append(".txt");
-    HANDLE file = CreateFileW(path.text(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    directory_.make();
+    WideName name;
+    name.append("crash-");
+    name.append(module);
+    name.append("-");
+    name.append(static_cast<uint32_t>(GetCurrentProcessId()));
+    name.append(".txt");
+    wchar_t path[MAX_PATH] = {};
+    if (directory_.place(name.text(), path, MAX_PATH) == 0u) return;
+    HANDLE file = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) return;
     for (;;) {
         char       bytes[line_bytes];

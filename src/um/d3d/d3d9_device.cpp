@@ -8,6 +8,7 @@
 #include "core/log/log_sink.hpp"
 #include "icd/common/pieces.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
+#include "um/common/guest_setting.hpp"
 #include "um/d3d/d3d9_host_caps.hpp"
 #include "um/d3d/d3d_session.hpp"
 
@@ -96,8 +97,7 @@ D3d9Device::~D3d9Device()
 HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVICE &create)
 {
     AV_SCOPE("D3d9Device::initialize");
-    char set[4] = {};
-    traced_ = GetEnvironmentVariableA("AV_D3D9_TRACE", set, sizeof(set)) != 0u ? 0u : trace_none;
+    traced_ = GuestSetting("AV_D3D9_TRACE").value().on() ? 0u : trace_none;
     LARGE_INTEGER now = {};
     QueryPerformanceCounter(&now);
     trace("device", static_cast<uint32_t>(reinterpret_cast<uintptr_t>(this)), create.Version, create.Flags.Value,

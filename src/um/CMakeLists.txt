@@ -19,6 +19,9 @@ file(GLOB_RECURSE AVTEST_SOURCES CONFIGURE_DEPENDS
 # The ICDs' shims, avvkprobe.exe's and avinspect.exe's are their own
 # targets below.
 list(FILTER AVTEST_SOURCES EXCLUDE REGEX "/um/(common|vulkan|opengl|opencl|d3d|probe|inspect|sample)/")
+# Except the directory the trace services and the crash file write to, which
+# every guest binary shares.
+list(APPEND AVTEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/common/diagnostics_directory.cpp)
 # Of the generated tree, only the guest's encoders: the av scenarios send real
 # Vulkan and OpenCL streams (044), and the host-loss scenario Direct3D 11's.
 # The server dispatch is the host's, and the OpenGL client does not link

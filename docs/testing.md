@@ -1313,6 +1313,30 @@ against the section headers the PDB itself carries
 (`llvm-pdbutil dump --section-headers --publics`). Disassemble the bytes read
 out of guest memory, not the pinned file.
 
+### Knobs
+
+Every debug knob is read once, by the process it steers, and judged by one
+rule on both sides of the guest boundary (`SettingText`, read through
+`EnvSetting` on the host and `GuestSetting` in a guest driver): a **switch** is
+on when it is set and starts with `1`, so `0` turns nothing on; a **number** is
+the decimal digits it starts with. A guest-wide knob is a flag file in
+`C:\ProgramData\av` (`DiagnosticsDirectory`), which is also where every guest
+log, call trace, event file and crash file goes for the runner to collect.
+
+| Knob | Where | Kind | What it does |
+|---|---|---|---|
+| `AV_PERFETTO` | host env | switch | the device's and executor's timelines for Perfetto, and the clock pairs that line them up |
+| `AV_TRACE_SCOPES` | host env | switch | binds the host trace table without a Perfetto recording |
+| `AV_TRACE_DEPTH` | host env | number | how deep a scope is still recorded; 0 records everything (default: the outer calls under Perfetto) |
+| `AV_TRACE_ONLY` | host env | list | the only scopes recorded, comma-separated |
+| `AV_PTRACE` | host env | switch | lets a profiler attach to a QEMU this shell did not start (Yama ptrace_scope 1) |
+| `AV_VK_SUBMIT_TIMING` | host env | switch | times each Vulkan submission on the host |
+| `AV_D3D_PATH` | host env | path | the directory DXVK's and vkd3d-proton's libraries load from |
+| `AV_D3D11_TRACE` | guest env | number, or `skip+count` | avumd writes the runtime's calls to `avumd-calls-<pid>.log` ("Probes from an application's calls") |
+| `AV_D3D9_TRACE` | guest env | switch | avumd's Direct3D 9 devices write their present, frame and wait lines to the driver's log |
+| `perfetto` | guest flag file | `<events per slot> <depth> <scopes>`, each optional | a guest process's timeline to `events-<module>-<pid>.bin` |
+| `trace-scopes` | guest flag file | present or not | binds a guest process's trace table without a timeline |
+
 The application suites join with the drivers they test: Vulkan with the CTS,
 vkd3d-proton and DXVK samples in feature 048, OpenGL and OpenCL conformance in
 054, and Direct3D through the Microsoft runtime in 059.

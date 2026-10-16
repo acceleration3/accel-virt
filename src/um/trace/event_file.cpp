@@ -8,7 +8,7 @@
 
 namespace av {
 
-EventFile::EventFile() : region_(nullptr), bytes_(0u)
+EventFile::EventFile() : directory_(), region_(nullptr), bytes_(0u)
 {
     AV_SCOPE("EventFile::EventFile");
 }
@@ -16,7 +16,7 @@ EventFile::EventFile() : region_(nullptr), bytes_(0u)
 bool EventFile::wanted() const
 {
     AV_SCOPE("EventFile::wanted");
-    return GetFileAttributesW(L"C:\\ProgramData\\av\\perfetto") != INVALID_FILE_ATTRIBUTES;
+    return directory_.flagged(L"perfetto");
 }
 
 /* The flag file's text, "<events per slot> <depth> <scope,scope,...>", every
@@ -25,7 +25,9 @@ void EventFile::read_flag(char *text, uint32_t capacity) const
 {
     AV_SCOPE("EventFile::read_flag");
     text[0] = '\0';
-    const HANDLE file = CreateFileW(L"C:\\ProgramData\\av\\perfetto", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+    wchar_t path[MAX_PATH] = {};
+    if (directory_.place(L"perfetto", path, MAX_PATH) == 0u) return;
+    const HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
                                     nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) return;
     DWORD read = 0u;
@@ -91,15 +93,18 @@ Status EventFile::open(const char *module, uint32_t process, size_t bytes)
 {
     AV_SCOPE("EventFile::open");
     if (region_ != nullptr) return Status::invalid_state;
-    char       narrow[96] = {};
+    char       narrow[78] = {};
     TextBuffer name(narrow, sizeof narrow);
-    name.append("C:\\ProgramData\\av\\events-");
+    name.append("events-");
     name.append(module);
     name.append("-");
     name.append_decimal(process);
     name.append(".bin");
-    wchar_t wide[96] = {};
-    for (size_t index = 0u; index + 1u < sizeof narrow && narrow[index] != '\0'; index++) wide[index] = static_cast<wchar_t>(static_cast<unsigned char>(narrow[index]));
+    wchar_t widened[sizeof narrow] = {};
+    for (size_t index = 0u; index + 1u < sizeof narrow && narrow[index] != '\0'; index++)
+        widened[index] = static_cast<wchar_t>(static_cast<unsigned char>(narrow[index]));
+    wchar_t wide[DiagnosticsDirectory::prefix_chars + sizeof narrow] = {};
+    if (directory_.place(widened, wide, sizeof wide / sizeof wide[0]) == 0u) return Status::invalid_parameter;
     const HANDLE file = CreateFileW(wide, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
                                     CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) return Status::no_memory;
