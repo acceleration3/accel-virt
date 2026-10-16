@@ -1,6 +1,7 @@
 #include "executor/d3d/d3d12_pipeline_builder.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/d3d/d3d12_pipeline_job.hpp"
 #include "executor/d3d/d3d12_root_layout.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
 #include "executor/d3d/dxbc_container.hpp"
@@ -17,7 +18,6 @@ namespace {
 
 constexpr uint32_t max_parameters = 64u;
 constexpr uint32_t max_samplers = 64u;
-constexpr uint32_t max_elements = 32u;
 constexpr uint32_t most_topology_type = 4u;
 constexpr uint32_t most_samples = 32u;
 constexpr uint32_t most_parameter_type = 4u;
@@ -141,16 +141,18 @@ ID3D12RootSignature *D3d12PipelineBuilder::root_signature(uint32_t flags, const 
 
 bool D3d12PipelineBuilder::container(uint32_t stage, const uint8_t *code, uint64_t size,
                                      const d3d12proto::SignatureEntry *signatures, uint32_t signature_count,
-                                     WireArena &scratch, D3D12_SHADER_BYTECODE &out) const
+                                     D3d12PipelineJob &job, D3D12_SHADER_BYTECODE &out) const
 {
     AV_SCOPE("D3d12PipelineBuilder::container");
     out = {nullptr, 0u};
     if (size == 0u) return true;
     if (code == nullptr) return false;
     if (is_container(code, size)) {
-        out = {code, static_cast<SIZE_T>(size)};
-        return true;
+        const uint8_t *const kept = job.keep(code, size);
+        out = {kept, kept == nullptr ? 0u : static_cast<SIZE_T>(size)};
+        return kept != nullptr;
     }
+    WireArena &scratch = job.memory();
     const size_t capacity = static_cast<size_t>(size) + container_slack;
     uint8_t *const buffer = scratch.allocate<uint8_t>(capacity);
     d3dproto::SignatureEntry *const entries = scratch.allocate<d3dproto::SignatureEntry>(signature_count + 1u);
@@ -217,25 +219,24 @@ bool D3d12PipelineBuilder::state_holds(const d3d12proto::GraphicsState &state) c
     return true;
 }
 
-ID3D12PipelineState *D3d12PipelineBuilder::graphics(uint32_t root, const d3d12proto::GraphicsState &state,
-                                                    const d3d12proto::InputElement *elements, uint32_t element_count,
-                                                    const d3d12proto::SignatureEntry *signatures,
-                                                    uint32_t signature_count, const uint8_t *const *code,
-                                                    const uint64_t *code_size, WireArena &scratch) const
+bool D3d12PipelineBuilder::graphics(uint32_t id, uint32_t root, const d3d12proto::GraphicsState &state,
+                                    const d3d12proto::InputElement *elements, uint32_t element_count,
+                                    const d3d12proto::SignatureEntry *signatures, uint32_t signature_count,
+                                    const uint8_t *const *code, const uint64_t *code_size, D3d12PipelineJob &job) const
 {
     AV_SCOPE("D3d12PipelineBuilder::graphics");
     ID3D12RootSignature *const signature =
         static_cast<ID3D12RootSignature *>(static_cast<void *>(objects_.find(root, D3dObjectKind::root_signature12)));
-    if (device_ == nullptr || signature == nullptr || element_count > max_elements || !state_holds(state))
-        return nullptr;
+    if (device_ == nullptr || signature == nullptr || element_count > D3d12PipelineJob::max_elements || !state_holds(state))
+        return false;
     D3D12_SHADER_BYTECODE stages[stage_count] = {};
     for (uint32_t stage = 0u; stage < stage_count; stage++)
-        if (!container(stage, code[stage], code_size[stage], signatures, signature_count, scratch, stages[stage]))
-            return nullptr;
-    if (stages[stage_vertex].BytecodeLength == 0u) return nullptr;
-    D3D12_INPUT_ELEMENT_DESC made_elements[max_elements] = {};
+        if (!container(stage, code[stage], code_size[stage], signatures, signature_count, job, stages[stage]))
+            return false;
+    if (stages[stage_vertex].BytecodeLength == 0u) return false;
+    D3D12_INPUT_ELEMENT_DESC made_elements[D3d12PipelineJob::max_elements] = {};
     if (!layout(elements, element_count, stages[stage_vertex], signatures, signature_count, made_elements))
-        return nullptr;
+        return false;
     D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
     desc.pRootSignature = signature;
     desc.VS = stages[0];
@@ -295,30 +296,24 @@ ID3D12PipelineState *D3d12PipelineBuilder::graphics(uint32_t root, const d3d12pr
     desc.SampleDesc = {state.sample_count, state.sample_quality};
     desc.NodeMask = 0u;
     desc.Flags = static_cast<D3D12_PIPELINE_STATE_FLAGS>(state.flags);
-    ID3D12PipelineState *made = nullptr;
-    if (FAILED(device_->device()->CreateGraphicsPipelineState(&desc, __uuidof(ID3D12PipelineState),
-                                                              reinterpret_cast<void **>(&made))))
-        return nullptr;
-    return made;
+    job.describe(id, signature, desc);
+    return true;
 }
 
-ID3D12PipelineState *D3d12PipelineBuilder::compute(uint32_t root, const uint8_t *code, uint64_t code_size,
-                                                   WireArena &scratch) const
+bool D3d12PipelineBuilder::compute(uint32_t id, uint32_t root, const uint8_t *code, uint64_t code_size,
+                                   D3d12PipelineJob &job) const
 {
     AV_SCOPE("D3d12PipelineBuilder::compute");
     ID3D12RootSignature *const signature =
         static_cast<ID3D12RootSignature *>(static_cast<void *>(objects_.find(root, D3dObjectKind::root_signature12)));
-    if (device_ == nullptr || signature == nullptr) return nullptr;
+    if (device_ == nullptr || signature == nullptr) return false;
     D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {};
     desc.pRootSignature = signature;
     /* A compute shader has no signature to write: its inputs are system values. */
-    if (!container(stage_count, code, code_size, nullptr, 0u, scratch, desc.CS) || desc.CS.BytecodeLength == 0u)
-        return nullptr;
-    ID3D12PipelineState *made = nullptr;
-    if (FAILED(device_->device()->CreateComputePipelineState(&desc, __uuidof(ID3D12PipelineState),
-                                                             reinterpret_cast<void **>(&made))))
-        return nullptr;
-    return made;
+    if (!container(stage_count, code, code_size, nullptr, 0u, job, desc.CS) || desc.CS.BytecodeLength == 0u)
+        return false;
+    job.describe(id, signature, desc);
+    return true;
 }
 
 }  // namespace av

@@ -10,8 +10,9 @@
  * gives as registers too, gets the names the vertex shader's input signature
  * has for those registers - the application's, or those invented ones.
  *
- * Containers are written into the decoding command's arena and live only as
- * long as the call: vkd3d-proton has compiled them before it returns. */
+ * A pipeline is described, not made: into a D3d12PipelineJob, whose memory
+ * holds a copy of every stage's code and the containers made of it, for
+ * D3d12PipelineCompiles to compile while the session goes on. */
 #ifndef AV_D3D12_PIPELINE_BUILDER_HPP
 #define AV_D3D12_PIPELINE_BUILDER_HPP
 
@@ -20,7 +21,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-struct ID3D12PipelineState;
 struct ID3D12RootSignature;
 struct D3D12_SHADER_BYTECODE;
 struct D3D12_INPUT_ELEMENT_DESC;
@@ -28,8 +28,8 @@ struct D3D12_INPUT_ELEMENT_DESC;
 namespace av {
 
 class D3d12HostDevice;
+class D3d12PipelineJob;
 class D3dObjectTable;
-class WireArena;
 
 class D3d12PipelineBuilder {
 public:
@@ -47,20 +47,23 @@ public:
                                         uint32_t parameter_count, const d3d12proto::DescriptorRange *ranges,
                                         uint32_t range_count, const d3d12proto::StaticSampler *samplers,
                                         uint32_t sampler_count) const;
-    /* A graphics pipeline from the stages' code, in order vertex, hull,
-     * domain, geometry, pixel; an empty stage is one the pipeline has not
-     * got. `scratch` holds the containers for the call's length. */
-    ID3D12PipelineState *graphics(uint32_t root, const d3d12proto::GraphicsState &state,
-                                  const d3d12proto::InputElement *elements, uint32_t element_count,
-                                  const d3d12proto::SignatureEntry *signatures, uint32_t signature_count,
-                                  const uint8_t *const *code, const uint64_t *code_size, WireArena &scratch) const;
-    ID3D12PipelineState *compute(uint32_t root, const uint8_t *code, uint64_t code_size, WireArena &scratch) const;
+    /* The graphics pipeline `id` from the stages' code, in order vertex,
+     * hull, domain, geometry, pixel, described into `job`; an empty stage is
+     * one the pipeline has not got. False, with `job` to be cleared, for a
+     * description that does not hold together or does not fit. */
+    [[nodiscard]] bool graphics(uint32_t id, uint32_t root, const d3d12proto::GraphicsState &state,
+                                const d3d12proto::InputElement *elements, uint32_t element_count,
+                                const d3d12proto::SignatureEntry *signatures, uint32_t signature_count,
+                                const uint8_t *const *code, const uint64_t *code_size, D3d12PipelineJob &job) const;
+    [[nodiscard]] bool compute(uint32_t id, uint32_t root, const uint8_t *code, uint64_t code_size,
+                               D3d12PipelineJob &job) const;
 
 private:
-    /* One stage's code as a container vkd3d-proton reads; false for code that
-     * is none of the three shapes, or a container that does not fit. */
+    /* One stage's code as a container vkd3d-proton reads, in `job`'s memory;
+     * false for code that is none of the three shapes, or a container that
+     * does not fit. */
     bool container(uint32_t stage, const uint8_t *code, uint64_t size, const d3d12proto::SignatureEntry *signatures,
-                   uint32_t signature_count, WireArena &scratch, D3D12_SHADER_BYTECODE &out) const;
+                   uint32_t signature_count, D3d12PipelineJob &job, D3D12_SHADER_BYTECODE &out) const;
     /* The input layout, named after the vertex shader's input signature. */
     bool layout(const d3d12proto::InputElement *elements, uint32_t count, const D3D12_SHADER_BYTECODE &vertex,
                 const d3d12proto::SignatureEntry *signatures, uint32_t signature_count,

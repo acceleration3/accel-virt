@@ -141,7 +141,7 @@ D3d12Session::D3d12Session(const GuestBytes &guest, D3dObjectTable &objects, Wak
     : d3d12proto::ServerDispatch(guest), imports_(nullptr), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
       joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks),
       progress_(fence_wake, blocks), views_(objects_, addresses_),
-      pipelines_(objects_), presentation_(lines), tile_update_(), arena_(nullptr), removed_(0u), lines_(lines), refusal_(lines_), clock_()
+      pipelines_(objects_), compiles_(blocks), presentation_(lines), tile_update_(), removed_(0u), lines_(lines), refusal_(lines_), clock_()
 {
     AV_SCOPE("D3d12Session::D3d12Session");
 }
@@ -165,6 +165,14 @@ void D3d12Session::initialize(const ImportTable &imports, D3d12HostDevice *devic
 void D3d12Session::shut_down()
 {
     AV_SCOPE("D3d12Session::shut_down");
+    /* What is compiling finishes; what is not yet is never compiled, and
+     * nothing compiled is kept: the session's objects all go below. */
+    compiles_.stop();
+    for (D3d12PipelineJob *job = compiles_.oldest(); job != nullptr; job = compiles_.oldest()) {
+        ID3D12PipelineState *const made = compiles_.collect(*job);
+        if (made != nullptr) made->Release();
+    }
+    compiles_.bind(nullptr);
     drain();
     presentation_.bind(nullptr, nullptr, nullptr);
     progress_.clear();
@@ -195,9 +203,7 @@ bool D3d12Session::knows(uint32_t command_id) const
 bool D3d12Session::run(uint32_t command_id, WireReader &payload, WireWriter &reply, WireArena &arena)
 {
     AV_SCOPE("D3d12Session::run");
-    arena_ = &arena;
     const bool ran = d3d12proto::dispatch_command(*this, command_id, payload, reply, arena);
-    arena_ = nullptr;
     if (ran) return true;
     if (!refusal_.removes(d3d12proto::command_name(command_id), only_device, removed_ != 0u)) return false;
     if (removed_ == 0u) removed_ = blocks_.refusal(static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR));
@@ -339,6 +345,7 @@ bool D3d12Session::on_OpenDevice12(uint32_t, uint32_t &hresult)
         joined_ = true;
         views_.bind(device_->device());
         pipelines_.bind(device_);
+        compiles_.bind(device_->device());
         presentation_.bind(device_, shown_by_, shares_);
     }
     hresult = static_cast<uint32_t>(S_OK);
@@ -367,6 +374,7 @@ bool D3d12Session::on_QueryCaps12(uint32_t &hresult, d3d12proto::Caps12 &caps, u
 bool D3d12Session::on_Destroy12(uint32_t id)
 {
     AV_SCOPE("D3d12Session::on_Destroy12");
+    if (D3d12PipelineJob *const job = compiles_.pending(id)) static_cast<void>(settle(*job));
     D3dObjectKind kind = D3dObjectKind::none;
     if (objects_.find_any(id, kind) == nullptr || kind < D3dObjectKind::heap12 ||
         kind > D3dObjectKind::command_signature12)
@@ -380,6 +388,8 @@ bool D3d12Session::on_Destroy12(uint32_t id)
 bool D3d12Session::on_Finish12(uint32_t &hresult)
 {
     AV_SCOPE("D3d12Session::on_Finish12");
+    /* The verdict covers every pipeline asked for so far. */
+    settle_pipelines();
     hresult = removed_;
     if (device_ == nullptr) return true;
     drain();
@@ -662,19 +672,67 @@ bool D3d12Session::on_CreateGraphicsPipeline12(uint32_t pipeline, uint32_t root,
                                                uint64_t ps_size)
 {
     AV_SCOPE("D3d12Session::on_CreateGraphicsPipeline12");
-    if (arena_ == nullptr) return false;
     const uint8_t *const code[D3d12PipelineBuilder::stage_count] = {vs, hs, ds, gs, ps};
     const uint64_t sizes[D3d12PipelineBuilder::stage_count] = {vs_size, hs_size, ds_size, gs_size, ps_size};
-    return kept(pipeline, D3dObjectKind::pipeline12,
-                pipelines_.graphics(root, state, elements, element_count, signatures, signature_count, code, sizes,
-                                    *arena_));
+    D3d12PipelineJob *const job = vacant_job();
+    if (job == nullptr) return false;
+    if (!pipelines_.graphics(pipeline, root, state, elements, element_count, signatures, signature_count, code, sizes,
+                             *job)) {
+        job->clear();
+        return false;
+    }
+    compiles_.start(*job);
+    return true;
 }
 
 bool D3d12Session::on_CreateComputePipeline12(uint32_t pipeline, uint32_t root, const uint8_t *cs, uint64_t cs_size)
 {
     AV_SCOPE("D3d12Session::on_CreateComputePipeline12");
-    if (arena_ == nullptr) return false;
-    return kept(pipeline, D3dObjectKind::pipeline12, pipelines_.compute(root, cs, cs_size, *arena_));
+    D3d12PipelineJob *const job = vacant_job();
+    if (job == nullptr) return false;
+    if (!pipelines_.compute(pipeline, root, cs, cs_size, *job)) {
+        job->clear();
+        return false;
+    }
+    compiles_.start(*job);
+    return true;
+}
+
+ID3D12PipelineState *D3d12Session::pipeline(uint32_t id)
+{
+    AV_SCOPE("D3d12Session::pipeline");
+    if (D3d12PipelineJob *const job = compiles_.pending(id)) static_cast<void>(settle(*job));
+    return objects_.find_as<ID3D12PipelineState>(id, D3dObjectKind::pipeline12);
+}
+
+D3d12PipelineJob *D3d12Session::vacant_job()
+{
+    AV_SCOPE("D3d12Session::vacant_job");
+    for (D3d12PipelineJob *job = compiles_.vacant(); job == nullptr; job = compiles_.vacant()) {
+        D3d12PipelineJob *const oldest = compiles_.oldest();
+        if (oldest == nullptr) return nullptr;
+        static_cast<void>(settle(*oldest));
+    }
+    return compiles_.vacant();
+}
+
+bool D3d12Session::settle(D3d12PipelineJob &job)
+{
+    AV_SCOPE("D3d12Session::settle");
+    const uint32_t id = job.id();
+    const uint32_t command = job.graphics() ? d3d12proto::kCmd_CreateGraphicsPipeline12
+                                            : d3d12proto::kCmd_CreateComputePipeline12;
+    if (kept(id, D3dObjectKind::pipeline12, compiles_.collect(job))) return true;
+    if (refusal_.removes(d3d12proto::command_name(command), only_device, removed_ != 0u) && removed_ == 0u)
+        removed_ = static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR);
+    return false;
+}
+
+void D3d12Session::settle_pipelines()
+{
+    AV_SCOPE("D3d12Session::settle_pipelines");
+    for (D3d12PipelineJob *job = compiles_.oldest(); job != nullptr; job = compiles_.oldest())
+        static_cast<void>(settle(*job));
 }
 
 // ---------------------------------------------------------------- queues and lists
@@ -719,7 +777,7 @@ bool D3d12Session::on_CreateCommandList12(uint32_t id, uint32_t allocator, uint3
 {
     AV_SCOPE("D3d12Session::on_CreateCommandList12");
     ID3D12CommandAllocator *const with = objects_.find_as<ID3D12CommandAllocator>(allocator, D3dObjectKind::allocator12);
-    ID3D12PipelineState    *const initial = objects_.find_as<ID3D12PipelineState>(pipeline, D3dObjectKind::pipeline12);
+    ID3D12PipelineState    *const initial = pipeline == 0u ? nullptr : this->pipeline(pipeline);
     if (device_ == nullptr || with == nullptr || (pipeline != 0u && initial == nullptr)) return false;
     ID3D12GraphicsCommandList *made = nullptr;
     if (FAILED(device_->device()->CreateCommandList(0u, static_cast<D3D12_COMMAND_LIST_TYPE>(type), with, initial,
@@ -734,7 +792,7 @@ bool D3d12Session::on_ResetCommandList12(uint32_t id, uint32_t allocator, uint32
     AV_SCOPE("D3d12Session::on_ResetCommandList12");
     ID3D12GraphicsCommandList *const recorded = list(id);
     ID3D12CommandAllocator    *const with = objects_.find_as<ID3D12CommandAllocator>(allocator, D3dObjectKind::allocator12);
-    ID3D12PipelineState       *const initial = objects_.find_as<ID3D12PipelineState>(pipeline, D3dObjectKind::pipeline12);
+    ID3D12PipelineState       *const initial = pipeline == 0u ? nullptr : this->pipeline(pipeline);
     if (recorded == nullptr || with == nullptr || (pipeline != 0u && initial == nullptr)) return false;
     return SUCCEEDED(recorded->Reset(with, initial));
 }
@@ -804,7 +862,7 @@ bool D3d12Session::on_CreateQueryHeap12(uint32_t heap, uint32_t type, uint32_t c
 bool D3d12Session::invariants_hold() const
 {
     AV_SCOPE("D3d12Session::invariants_hold");
-    return objects_.invariants_hold() && addresses_.invariants_hold() &&
+    return objects_.invariants_hold() && addresses_.invariants_hold() && compiles_.invariants_hold() &&
            (device_ != nullptr ||
             objects_.count_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12) == 0u);
 }

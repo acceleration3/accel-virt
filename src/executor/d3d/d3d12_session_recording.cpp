@@ -67,7 +67,7 @@ bool D3d12Session::on_SetPipelineState12(uint32_t id, uint32_t pipeline)
 {
     AV_SCOPE("D3d12Session::on_SetPipelineState12");
     ID3D12GraphicsCommandList *const recorded = list(id);
-    ID3D12PipelineState       *const state = objects_.find_as<ID3D12PipelineState>(pipeline, D3dObjectKind::pipeline12);
+    ID3D12PipelineState       *const state = this->pipeline(pipeline);
     if (recorded == nullptr || state == nullptr) return false;
     recorded->SetPipelineState(state);
     return true;

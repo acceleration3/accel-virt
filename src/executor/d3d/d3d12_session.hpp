@@ -19,6 +19,7 @@
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/d3d12_address_map.hpp"
 #include "executor/d3d/d3d12_pipeline_builder.hpp"
+#include "executor/d3d/d3d12_pipeline_compiles.hpp"
 #include "executor/d3d/d3d12_queue_progress.hpp"
 #include "executor/d3d/d3d12_tile_update.hpp"
 #include "executor/d3d/d3d12_view_writer.hpp"
@@ -32,6 +33,7 @@
 
 struct ID3D12Fence;
 struct ID3D12GraphicsCommandList;
+struct ID3D12PipelineState;
 struct IUnknown;
 struct ID3D12Heap;
 struct ID3D12Resource;
@@ -188,6 +190,16 @@ private:
     /* Every queue of the session has finished what was executed on it; one
      * that has not in 5 s removes the device. */
     void                       drain();
+    /* The pipeline `id` names, collected first if it is still compiling. */
+    ID3D12PipelineState       *pipeline(uint32_t id);
+    /* A job for the next pipeline: the oldest collected while none is free;
+     * null when none can be. */
+    D3d12PipelineJob          *vacant_job();
+    /* `job`'s pipeline into the table, once compiled; one the runtime
+     * refused removes the device, as a create refused at once would have. */
+    bool                       settle(D3d12PipelineJob &job);
+    /* Every pipeline still compiling, settled. */
+    void                       settle_pipelines();
 
     /* The session's imports; null between sessions. */
     const ImportTable     *imports_;
@@ -204,11 +216,10 @@ private:
     D3d12QueueProgress     progress_;
     D3d12ViewWriter        views_;
     D3d12PipelineBuilder   pipelines_;
+    D3d12PipelineCompiles  compiles_;
     D3d12Presentation      presentation_;
     /* The update UpdateTileMappings12 is building. */
     D3d12TileUpdate        tile_update_;
-    /* The decoding command's arena, which containers are written into. */
-    WireArena             *arena_;
     uint32_t               removed_;
     /* Where the host log is read when a guest's command fails. */
     DriverLog             &lines_;
