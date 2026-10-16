@@ -7,6 +7,7 @@
 #ifndef AV_UM_D3D9_RECORDS_HPP
 #define AV_UM_D3D9_RECORDS_HPP
 
+#include "icd/d3d/present_count.hpp"
 #include "um/d3d/d3d9_ddi.hpp"
 
 #include <stddef.h>
@@ -59,7 +60,7 @@ struct D3d9Resource {
     uint32_t             allocation_pitch;
     uint64_t             shared_key;
     /* Each present of the resource, counted from 1 (PresentPointRecord). */
-    uint32_t             presents;
+    d3d::PresentCount    presents;
 };
 
 struct D3d9Query {

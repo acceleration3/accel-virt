@@ -60,9 +60,9 @@ uint32_t query_bytes(D3DDDIQUERYTYPE type)
 
 D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d9HostCaps &caps,
                        d3d::UmdAdapter &adapter)
-    : session_(session), memory_(memory), log_(log), lines_(memory, log, "avumd: "), removal_(), caps_(caps), adapter_(adapter), lock_(), channel_(), paging_(),
+    : session_(session), memory_(memory), log_(log), lines_(memory, log, "avumd: "), removal_(), caps_(caps), adapter_(adapter), lock_(), channel_(),
       follower_(), resources_(memory), queries_(memory), blocks_(memory), recording_(nullptr), batch_(), shadow_(),
-      callbacks_{}, kernel_(), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
+      callbacks_{}, kernel_(), allocations_(kernel_, lines_), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
       user_index_bytes_(0u), bound_indices_(0u), vertex_ring_{}, index16_ring_{}, index32_ring_{},
       readback_(nullptr), readback_bytes_(0u), traced_(trace_none), failures_(0u),
@@ -93,7 +93,6 @@ D3d9Device::~D3d9Device()
     }
     if (readback_ != nullptr) memory_.release(readback_);
     if (follower_.constructed()) follower_.destroy();
-    if (paging_.constructed()) paging_.destroy();
     kernel_.destroy_context(context_);
 }
 
@@ -109,8 +108,7 @@ HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVIC
     if (create.pCallbacks == nullptr || create.pDeviceFuncs == nullptr) return E_INVALIDARG;
     callbacks_ = *create.pCallbacks;
     kernel_.bind(&callbacks_, create.hDevice);
-    static_cast<void>(paging_.construct(kernel_.callbacks(), kernel_.runtime()));
-    const HRESULT context = make_context();
+    const HRESULT context = allocations_.make_context(context_);
     if (FAILED(context)) return context;
     const HRESULT joined = session_.join(kmt_adapter);
     if (FAILED(joined)) return joined;

@@ -24,14 +24,6 @@
 
 namespace av::d3d9 {
 
-HRESULT D3d9Device::make_context()
-{
-    AV_SCOPE("D3d9Device::make_context");
-    const HRESULT made = kernel_.make_context(context_);
-    if (FAILED(made)) lines_.write("the kernel refused the Direct3D 9 device's context");
-    return made;
-}
-
 HRESULT D3d9Device::follow_host()
 {
     AV_SCOPE("D3d9Device::follow_host");
@@ -62,15 +54,11 @@ HRESULT D3d9Device::allocate(D3d9Resource &resource)
     /* An allocation of its own, made long after the runtime made the
      * resource: it belongs to no kernel resource. */
     D3DKMT_HANDLE allocation = 0u;
-    const HRESULT made = kernel_.allocate(surface, nullptr, allocation);
+    const HRESULT made = allocations_.make(surface, nullptr, allocation);
     if (FAILED(made)) return made;
     resource.allocation = allocation;
     resource.allocation_pitch = surface.pitch();
     resource.shared_key = surface.key();
-    /* A blt names the allocation in a DMA buffer, which dxgkrnl refuses
-     * unless it was asked to be resident (PagingQueue). */
-    const HRESULT resident = paging_.object().make_resident(allocation);
-    if (FAILED(resident)) log_.write("avumd: the kernel would not keep a presented Direct3D 9 buffer resident");
     return S_OK;
 }
 
@@ -89,17 +77,12 @@ HRESULT D3d9Device::allocate_primary(D3d9Resource &resource, const D3DDDIARG_CRE
                                              create.RefreshRate.Denominator));
     if (surface.make() != Status::ok) return E_INVALIDARG;
     D3DKMT_HANDLE allocation = 0u;
-    const HRESULT made = kernel_.allocate(surface, create.hResource, allocation);
-    if (FAILED(made)) {
-        LogLine(lines_).text("the kernel refused a Direct3D 9 primary's allocation ").hex(static_cast<uint32_t>(made), 8u).write();
-        return made;
-    }
+    const HRESULT made = allocations_.make(surface, create.hResource, allocation);
+    if (FAILED(made)) return made;
     resource.allocation = allocation;
     resource.allocation_resource = create.hResource;
     resource.allocation_pitch = surface.pitch();
     resource.shared_key = surface.key();
-    const HRESULT resident = paging_.object().make_resident(allocation);
-    if (FAILED(resident)) log_.write("avumd: the kernel would not keep a Direct3D 9 primary resident");
     /* DWM may open the key as soon as the kernel hands it the handle: the
      * host keeps something under it from the start. */
     return resource.shared_key != 0u ? show_primary(resource, 0u) : S_OK;
@@ -140,13 +123,12 @@ HRESULT D3d9Device::publish_point(D3d9Resource &resource, uint32_t index)
     if (!caps_.present_snapshots() || resource.shared_key == 0u || !staged_format ||
         !surface_of(resource, index, id, subresource))
         return publish(resource, index);
-    /* Never 0, which names no frame: past 2^32 presents it wraps to 1. */
-    resource.presents = resource.presents + 1u == 0u ? 1u : resource.presents + 1u;
-    if (!d3d9proto::av_d3d9_PresentPoint9(wire(), id, subresource, resource.shared_key, resource.presents) ||
+    const uint32_t point = resource.presents.next();
+    if (!d3d9proto::av_d3d9_PresentPoint9(wire(), id, subresource, resource.shared_key, point) ||
         wire().flush() != Status::ok)
         return lost(__func__);
     uint8_t      record[NextPointRecord::encoded_size] = {};
-    const Status named = NextPointRecord(resource.shared_key, resource.presents).encode(record, sizeof record) ==
+    const Status named = NextPointRecord(resource.shared_key, point).encode(record, sizeof record) ==
                                  Status::ok
                              ? session_.escape(record, sizeof record)
                              : Status::invalid_parameter;

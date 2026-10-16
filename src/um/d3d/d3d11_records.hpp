@@ -9,6 +9,7 @@
 #define AV_UM_D3D11_RECORDS_HPP
 
 #include "icd/d3d/buffer_slices.hpp"
+#include "icd/d3d/present_count.hpp"
 #include "icd/d3d/record_stamp.hpp"
 #include "icd/d3d/swap_chain_buffer.hpp"
 
@@ -53,7 +54,7 @@ struct ResourceRecord {
     uint64_t shared_key;
     /* The presents of this surface so far: the point the last one published
      * on it (docs/shared-surfaces.md). Moves with shared_key. */
-    uint32_t presents;
+    d3d::PresentCount presents;
     void    *runtime_resource; /* D3D10DDI_HRTRESOURCE.handle */
     uint8_t *shadow;
     size_t   shadow_bytes;

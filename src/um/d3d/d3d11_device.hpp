@@ -39,7 +39,7 @@
 #include "um/d3d/d3d11_records.hpp"
 #include "um/d3d/watched_shadows.hpp"
 #include "um/d3d/batch_follower.hpp"
-#include "um/d3d/paging_queue.hpp"
+#include "um/d3d/presented_allocations.hpp"
 
 #include <stdint.h>
 
@@ -211,7 +211,6 @@ private:
      * the runtime's own, signaled on the contexts a driver made - with none, a
      * signal is refused, and a compositor waiting on the fence (DWM, taking a
      * frame from another adapter) waits for good. */
-    HRESULT make_context();
     /* The host's pixels of `resource` into its allocation, for the kernel. */
     HRESULT publish(ResourceRecord &resource, uint32_t subresource);
     /* A surface GDI draws into from the guest's CPU (a window's redirection
@@ -228,6 +227,11 @@ private:
      * it is now: in its pages for one no host texture is shared from, under
      * its key otherwise, with the batch that drew it on its way. */
     HRESULT stage_plane(ResourceRecord &source, uint32_t subresource);
+    /* Stages each enabled plane of a multiplane present, in the order it came,
+     * and answers each plane's allocation (0 for a turned-off one) and whether
+     * any is a flip-model buffer. `Plane` is either DDI's plane description. */
+    template <typename Plane>
+    HRESULT stage_planes(const Plane *planes, UINT count, D3DKMT_HANDLE *allocations, bool &flipped);
     HRESULT present_surface(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
                             void *dxgi_context);
     HRESULT present_pages(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
@@ -274,6 +278,7 @@ private:
     D3D10DDI_HRTDEVICE     runtime_;
     D3D10DDI_HRTCORELAYER  core_layer_;
     d3d::KernelDevice                           kernel_;
+    d3d::PresentedAllocations                   allocations_;
     const D3D11DDI_CORELAYER_DEVICECALLBACKS   *core_;
     const DXGI_DDI_BASE_CALLBACKS              *dxgi_;
     ObjectStorage<d3d::D3dDeviceChannel> channel_;
@@ -291,7 +296,6 @@ private:
     ObjectStorage<d3d::D3dCommandStream>  recording_;
     ObjectStorage<d3d::CommandRecording>  recorded_;
     HANDLE    context_;
-    ObjectStorage<PagingQueue> paging_;
     ObjectStorage<d3d::BatchFollower> follower_;
     /* What the session's transport waits for after this device's flip-model
      * present (KmtTransport::hold): the kernel context's queue. */

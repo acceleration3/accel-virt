@@ -31,7 +31,7 @@
 #include "um/d3d/d3d9_ddi.hpp"
 #include "um/d3d/kernel_device.hpp"
 #include "um/d3d/d3d9_records.hpp"
-#include "um/d3d/paging_queue.hpp"
+#include "um/d3d/presented_allocations.hpp"
 #include "um/d3d/reentrant_call_lock.hpp"
 
 #include <stdint.h>
@@ -214,7 +214,6 @@ private:
 
     /* The kernel: the context presents go on, a buffer's allocation, and its
      * pixels read back into it for a present the kernel copies from pages. */
-    HRESULT make_context();
     HRESULT allocate(D3d9Resource &resource);
     HRESULT allocate_primary(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create);
     HRESULT show_primary(D3d9Resource &primary, uint32_t index);
@@ -236,7 +235,6 @@ private:
     d3d::UmdAdapter                     &adapter_;
     ReentrantCallLock                    lock_;
     ObjectStorage<d3d::D3dDeviceChannel> channel_;
-    ObjectStorage<d3d11::PagingQueue>    paging_;
     ObjectStorage<d3d::BatchFollower>    follower_;
     ObjectPool<D3d9Resource>             resources_;
     ObjectPool<D3d9Query>                queries_;
@@ -249,6 +247,7 @@ private:
      * points at it once made. */
     D3DDDI_DEVICECALLBACKS               callbacks_;
     d3d::KernelDevice                    kernel_;
+    d3d::PresentedAllocations            allocations_;
     HANDLE                               context_;
     D3DDDIARG_VIEWPORTINFO               viewport_;
     D3DDDIARG_ZRANGE                     z_range_;

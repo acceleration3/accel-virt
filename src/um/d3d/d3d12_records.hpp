@@ -10,6 +10,7 @@
 #ifndef AV_UM_D3D12_RECORDS_HPP
 #define AV_UM_D3D12_RECORDS_HPP
 
+#include "icd/d3d/present_count.hpp"
 #include "icd/d3d/record_stamp.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
 #include "um/d3d/d3d12_ddi.hpp"
@@ -79,7 +80,7 @@ struct ResourceRecord {
     D3DKMT_HANDLE allocation;
     /* The presents of it so far: the point the last one published on its
      * surface (docs/shared-surfaces.md). */
-    uint32_t      presents;
+    d3d::PresentCount presents;
     HANDLE        runtime_resource;
     /* A reserved resource - tiles with no memory of their own, mapped to
      * heaps' by the queue - and, once the host has been asked, how it tiled

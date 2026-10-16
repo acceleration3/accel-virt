@@ -40,39 +40,15 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
                                          : d3d::KernelSurface(resource.width, resource.height, resource.format);
     if (surface.make() != Status::ok) return E_INVALIDARG;
     D3DKMT_HANDLE allocation = 0u;
-    const HRESULT made = kernel_.allocate(surface, runtime.handle, allocation);
-    if (FAILED(made)) {
-        log_.write("avumd: the kernel refused a presented resource's allocation");
-        return made;
-    }
+    const HRESULT made = allocations_.make(surface, runtime.handle, allocation);
+    if (FAILED(made)) return made;
     resource.shared_key = surface.key();
-    if (resource.shared_key == 0u)
-        log_.write("avumd: the miniport minted no identity for a presented resource; nothing can open it");
     resource.allocation = allocation;
     resource.allocation_owned = 1u;
     resource.allocation_pitch = surface.pitch();
-    /* A blt present names this allocation in a DMA buffer, which dxgkrnl
-     * refuses - and puts the device in error for - unless it was asked to be
-     * resident (PagingQueue). A flip never names it, so a refusal is logged
-     * and the resource still made. */
-    const HRESULT resident = paging_.object().make_resident(allocation);
-    if (FAILED(resident)) {
-        LogLine(lines_)
-            .text("the kernel would not keep a presented resource resident ")
-            .hex(static_cast<uint32_t>(resident), 8u)
-            .write();
-    }
     resource.present_model = d3d::SwapChainBuffer(primary, create.MiscFlags).model();
     resource.vidpn_source = primary ? create.pPrimaryDesc->VidPnSourceId : 0u;
     return S_OK;
-}
-
-HRESULT D3d11Device::make_context()
-{
-    AV_SCOPE("D3d11Device::make_context");
-    const HRESULT made = kernel_.make_context(context_);
-    if (FAILED(made)) lines_.write("the kernel refused the device's context");
-    return made;
 }
 
 HRESULT D3d11Device::publish(ResourceRecord &resource, uint32_t subresource)
@@ -169,14 +145,13 @@ HRESULT D3d11Device::present_point(ResourceRecord &source, uint32_t subresource,
 {
     AV_SCOPE("D3d11Device::present_point");
     if (source.allocation == 0u) return E_INVALIDARG;
-    /* Never 0, which names no frame: past 2^32 presents it wraps to 1. */
-    source.presents = source.presents + 1u == 0u ? 1u : source.presents + 1u;
-    if (!d3dproto::av_d3d_PresentPoint(wire(), source.stamp.id(), subresource, source.presents) ||
+    const uint32_t point = source.presents.next();
+    if (!d3dproto::av_d3d_PresentPoint(wire(), source.stamp.id(), subresource, point) ||
         wire().flush() != Status::ok) {
         set_error(D3DDDIERR_DEVICEREMOVED);
         return DXGI_ERROR_DEVICE_REMOVED;
     }
-    return present_to_kernel(source, destination, dxgi_context, source.presents);
+    return present_to_kernel(source, destination, dxgi_context, point);
 }
 
 HRESULT D3d11Device::present_to_kernel(ResourceRecord &source, ResourceRecord *destination, void *dxgi_context,
@@ -297,6 +272,22 @@ HRESULT D3d11Device::stage_plane(ResourceRecord &source, uint32_t subresource)
     return S_OK;
 }
 
+template <typename Plane>
+HRESULT D3d11Device::stage_planes(const Plane *planes, UINT count, D3DKMT_HANDLE *allocations, bool &flipped)
+{
+    AV_SCOPE("D3d11Device::stage_planes");
+    for (UINT index = 0u; index < count; index++) {
+        const Plane &plane = planes[index];
+        if (!plane.Enabled || plane.hResource == 0u) continue;
+        ResourceRecord &source = record(plane.hResource);
+        const HRESULT staged = stage_plane(source, plane.SubResourceIndex);
+        if (FAILED(staged)) return staged;
+        allocations[index] = source.allocation;
+        flipped = flipped || source.present_model == d3d::SwapChainBuffer::Model::flip;
+    }
+    return S_OK;
+}
+
 /* Every plane the present names is handed to the kernel in the order it came,
  * a turned-off one too: the runtime pairs them with the planes it built from
  * the same call (NDXGI::CDevice::PresentMultiplaneOverlay1CBImpl, d3d11.dll)
@@ -313,19 +304,14 @@ HRESULT D3d11Device::present_multiplane_overlay1(DXGI1_6_1_DDI_ARG_PRESENTMULTIP
     DXGIDDI_MULTIPLANE_OVERLAY_PLANE_INFO  planes[DXGI_DDI_MAX_MULTIPLANE_OVERLAY_ALLOCATIONS] = {};
     DXGIDDI_MULTIPLANE_OVERLAY_PLANE_INFO *plane_list[DXGI_DDI_MAX_MULTIPLANE_OVERLAY_ALLOCATIONS] = {};
     bool                                   flipped = false;
+    const HRESULT staged = stage_planes(args->pPresentPlanes, args->PresentPlaneCount, allocations, flipped);
+    if (FAILED(staged)) return staged;
     for (UINT index = 0u; index < args->PresentPlaneCount; index++) {
-        const DXGI_DDI_PRESENT_MULTIPLANE_OVERLAY1 &plane = args->pPresentPlanes[index];
         plane_list[index] = &planes[index];
         contexts[index] = context_;
         planes[index].ContextCount = 1u;
         planes[index].pContextList = &contexts[index];
         planes[index].pAllocationList = &allocations[index];
-        if (!plane.Enabled || plane.hResource == 0u) continue;
-        ResourceRecord &source = record(plane.hResource);
-        const HRESULT staged = stage_plane(source, plane.SubResourceIndex);
-        if (FAILED(staged)) return staged;
-        allocations[index] = source.allocation;
-        flipped = flipped || source.present_model == d3d::SwapChainBuffer::Model::flip;
     }
     const HRESULT followed = follow_host();
     if (FAILED(followed)) return followed;
@@ -352,17 +338,13 @@ HRESULT D3d11Device::present_multiplane_overlay(DXGI_DDI_ARG_PRESENTMULTIPLANEOV
     DXGIDDICB_PRESENT_MULTIPLANE_OVERLAY present = {};
     present.pDXGIContext = args->pDXGIContext;
     present.hContext = context_;
-    bool flipped = false;
+    D3DKMT_HANDLE allocations[DXGI_DDI_MAX_MULTIPLANE_OVERLAY_ALLOCATIONS] = {};
+    bool          flipped = false;
+    const HRESULT staged = stage_planes(args->pPresentPlanes, args->PresentPlaneCount, allocations, flipped);
+    if (FAILED(staged)) return staged;
     for (UINT index = 0u; index < args->PresentPlaneCount; index++) {
-        const DXGI_DDI_PRESENT_MULTIPLANE_OVERLAY &plane = args->pPresentPlanes[index];
-        DXGIDDI_MULTIPLANE_OVERLAY_ALLOCATION_INFO &info = present.AllocationInfo[index];
-        info.SubResourceIndex = plane.SubResourceIndex;
-        if (!plane.Enabled || plane.hResource == 0u) continue;
-        ResourceRecord &source = record(plane.hResource);
-        const HRESULT staged = stage_plane(source, plane.SubResourceIndex);
-        if (FAILED(staged)) return staged;
-        info.PresentAllocation = source.allocation;
-        flipped = flipped || source.present_model == d3d::SwapChainBuffer::Model::flip;
+        present.AllocationInfo[index].SubResourceIndex = args->pPresentPlanes[index].SubResourceIndex;
+        present.AllocationInfo[index].PresentAllocation = allocations[index];
     }
     present.AllocationInfoCount = args->PresentPlaneCount;
     const HRESULT followed = follow_host();

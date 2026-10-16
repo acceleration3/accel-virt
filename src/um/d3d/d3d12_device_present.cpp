@@ -90,13 +90,12 @@ void D3d12Device::present(D3D12DDI_HCOMMANDQUEUE queue_handle, const D3D12DDIARG
         lost("a present of a buffer with no kernel allocation");
         return;
     }
-    /* Never 0, which names no frame: past 2^32 presents it wraps to 1. */
-    source->presents = source->presents + 1u == 0u ? 1u : source->presents + 1u;
-    if (!sent(d3d12proto::av_d3d12_PresentResource12(wire(), queue.header.stamp.id(), source->header.stamp.id(), source->presents),
+    const uint32_t point = source->presents.next();
+    if (!sent(d3d12proto::av_d3d12_PresentResource12(wire(), queue.header.stamp.id(), source->header.stamp.id(), point),
               "PresentResource12"))
         return;
     if (args->pPrivateDriverData != nullptr && args->PrivateDriverDataSize >= PresentPointRecord::encoded_size)
-        static_cast<void>(PresentPointRecord(source->presents)
+        static_cast<void>(PresentPointRecord(point)
                               .encode(static_cast<uint8_t *>(args->pPrivateDriverData), args->PrivateDriverDataSize));
     if (wire().flush() != Status::ok) {
         lost("a present could not be sent");

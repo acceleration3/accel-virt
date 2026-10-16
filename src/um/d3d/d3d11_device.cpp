@@ -34,9 +34,9 @@ constexpr uint32_t copy_discard = 0x2u;
 
 D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps,
                          D3d11CallTrace &trace, const d3d::SharedRowsRequest &rows)
-    : session_(session), memory_(memory), shadows_(memory), maps_(memory), log_(log), lines_(memory, log, "avumd: "), caps_(caps), runtime_{}, core_layer_{}, kernel_(),
+    : session_(session), memory_(memory), shadows_(memory), maps_(memory), log_(log), lines_(memory, log, "avumd: "), caps_(caps), runtime_{}, core_layer_{}, kernel_(), allocations_(kernel_, lines_),
       core_(nullptr), dxgi_(nullptr), channel_(), slices_(), parent_(nullptr), recording_lock_(), calls_(), recording_(),
-      recorded_(), context_(nullptr), paging_(), follower_(), gate_(), feature_level_(0u),
+      recorded_(), context_(nullptr), follower_(), gate_(), feature_level_(0u),
       guest_surfaces_(memory, Pool::paged), guest_lock_refused_(), present_refused_(), present_flags_(~0u), follow_refused_(), token_refused_(), frame_(1u),
       trace_(trace), rows_(rows), context_number_(trace.number_context())
 {
@@ -58,7 +58,6 @@ D3d11Device::~D3d11Device()
         channel_.destroy();
         session_.leave();
     }
-    if (paging_.constructed()) paging_.destroy();
     follower_.destroy();
     if (gate_.constructed()) session_.transport().forget(gate_.object());
     gate_.destroy();
@@ -73,9 +72,8 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
     kernel_.bind(create.pKTCallbacks, runtime_.handle);
     core_ = create.p11UMCallbacks;
     dxgi_ = create.DXGIBaseDDI.pDXGIBaseCallbacks;
-    static_cast<void>(paging_.construct(kernel_.callbacks(), kernel_.runtime()));
     static_cast<void>(follower_.construct(kernel_.callbacks(), kernel_.runtime(), session_.transport()));
-    const HRESULT context = make_context();
+    const HRESULT context = allocations_.make_context(context_);
     if (FAILED(context)) return context;
     static_cast<void>(gate_.construct(kernel_.callbacks(), kernel_.runtime(), context_, lines_));
     const uint32_t level = D3D11DDI_EXTRACT_3DPIPELINELEVEL_FROM_FLAGS(create.Flags);
