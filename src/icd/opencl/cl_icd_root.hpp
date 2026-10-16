@@ -737,6 +737,12 @@ private:
     /* The object `mem` is over a Direct3D 11 resource as, or null. */
     D3d11Object     *d3d11_object_of(ClObject &mem);
     /* A drain, unless the queue is known idle; idle after one (ClObject). */
+    /* `queue` known idle, and its context's retired memory given back when
+     * every queue of it is (GuestClContext::reclaim). */
+    void             drained_queue(ClObject &queue);
+    /* A released buffer's arena block or lent pages: given back now when no
+     * queue of `context` may still run work over them, retired otherwise. */
+    void             let_go_of_memory(GuestClContext &context, ClObject &buffer);
     [[nodiscard]] cl_int drain_unless_idle(ClientTransport &wire, ClObject &queue);
     /* The queue, looked up for a command that leaves work on it: it is no
      * longer known idle. */

@@ -43,7 +43,7 @@ cl_int ClIcdRoot::settle(ClientTransport &wire, ClObject &queue, const ClWaitLis
     /* Not known idle afterwards on a queue that was: the marker is work of
      * its own until the wait has seen it complete, which it then has. */
     const cl_int drained = drain(wire, queue.wire(), context->wakes(), listed, kept);
-    if (drained == CL_SUCCESS) queue.idle();
+    if (drained == CL_SUCCESS) drained_queue(queue);
     return drained;
 }
 

@@ -6,7 +6,7 @@
 namespace av::clicd {
 
 ClArenaBlocks::ClArenaBlocks(BlockSource &memory, icd::ThreadLock &lock)
-    : lock_(lock), base_(nullptr), bytes_(0u), blocks_(memory, alignment)
+    : lock_(lock), base_(nullptr), bytes_(0u), blocks_(memory, alignment), retired_(memory, Pool::paged)
 {
     AV_SCOPE("ClArenaBlocks::ClArenaBlocks");
 }
@@ -20,6 +20,7 @@ void ClArenaBlocks::lend(uint8_t *base, uint64_t bytes)
     base_ = bytes == 0u ? nullptr : base;
     bytes_ = base_ == nullptr ? 0u : bytes;
     blocks_.reset(0u, bytes_);
+    retired_.reclaim([](uint64_t) {});
 }
 
 bool ClArenaBlocks::ready() const
@@ -43,6 +44,20 @@ void ClArenaBlocks::give_back(uint64_t offset)
     AV_SCOPE("ClArenaBlocks::give_back");
     const icd::ThreadLockHold held(lock_);
     static_cast<void>(blocks_.remove(offset));
+}
+
+void ClArenaBlocks::retire(uint64_t offset)
+{
+    AV_SCOPE("ClArenaBlocks::retire");
+    const icd::ThreadLockHold held(lock_);
+    if (retired_.add(offset) != Status::ok) static_cast<void>(blocks_.remove(offset));
+}
+
+void ClArenaBlocks::reclaim()
+{
+    AV_SCOPE("ClArenaBlocks::reclaim");
+    const icd::ThreadLockHold held(lock_);
+    retired_.reclaim([this](uint64_t offset) { static_cast<void>(blocks_.remove(offset)); });
 }
 
 uint8_t *ClArenaBlocks::at(uint64_t offset, uint64_t bytes) const

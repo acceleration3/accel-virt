@@ -106,6 +106,18 @@ uint32_t ClObjectTable::live_of(ClObject::Kind kind) const
     return counted;
 }
 
+bool ClObjectTable::queues_idle(const GuestClContext *context) const
+{
+    AV_SCOPE("ClObjectTable::queues_idle");
+    const icd::ThreadLockHold held(lock_);
+    bool idle = true;
+    tree_.nodes().for_each([&idle, context](const ClObject &object) {
+        if (object.kind() == ClObject::Kind::command_queue && object.context() == context && !object.known_idle())
+            idle = false;
+    });
+    return idle;
+}
+
 void ClObjectTable::report(StateWriter &writer) const
 {
     AV_SCOPE("ClObjectTable::report");

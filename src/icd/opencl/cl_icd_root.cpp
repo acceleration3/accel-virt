@@ -723,6 +723,9 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
         if (wire != nullptr) {
             switch (kind) {
             case ClObject::Kind::command_queue: {
+                /* Work it still holds is no longer any queue's to wait for:
+                 * memory let go of under it waits for the context. */
+                if (!held->known_idle()) context->orphan_work();
                 /* Reads queued on it will never be waited for now, and their
                  * destinations are memory the application is about to reuse.
                  * The markers the ICD made for them go back with them. */
@@ -743,16 +746,15 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
                 refusals_.note_released_mapped(context->give_back_mappings_of(wire_handle));
                 if (context->external().give_back(*wire, wire_handle)) break;
                 give_back_to_host(*wire, kind, wire_handle);
-                /* A buffer made over the arena gives its block back with it,
-                 * so the next buffer can have that memory. After the host
-                 * has let go, not before: the device's cl_mem is still over
-                 * those bytes until it does. */
-                if (held->backed() && held->sliced_from() == nullptr)
-                    context->blocks().give_back(held->backing_offset());
-                /* Lent pages likewise, which become the application's
-                 * own RAM again holding what the buffer last held. */
-                if (held->lent() != nullptr && held->sliced_from() == nullptr)
-                    context->give_back_lent(*held->lent());
+                /* A buffer made over the arena gives its block back, and
+                 * one over lent pages gives them back - which become the
+                 * application's own RAM again holding what the buffer last
+                 * held. Not before the host has let go, nor before the work
+                 * its queues hold over the buffer is done: a released
+                 * cl_mem lives on in the kernels queued over it, and the
+                 * next buffer would be given memory they still write. */
+                if (held->sliced_from() == nullptr && (held->backed() || held->lent() != nullptr))
+                    let_go_of_memory(*context, *held);
                 break;
             default:
                 give_back_to_host(*wire, kind, wire_handle);
@@ -2119,8 +2121,28 @@ cl_int ClIcdRoot::drain_unless_idle(ClientTransport &wire, ClObject &queue)
     if (queue.known_idle()) return CL_SUCCESS;
     const GuestClContext *const context = queue.context();
     const cl_int drained = drain(wire, queue.wire(), context != nullptr && context->wakes(), nullptr, 0u);
-    if (drained == CL_SUCCESS) queue.idle();
+    if (drained == CL_SUCCESS) drained_queue(queue);
     return drained;
+}
+
+void ClIcdRoot::drained_queue(ClObject &queue)
+{
+    AV_SCOPE("ClIcdRoot::drained_queue");
+    queue.idle();
+    GuestClContext *const context = queue.context();
+    if (context != nullptr && objects_.queues_idle(context)) context->reclaim();
+}
+
+void ClIcdRoot::let_go_of_memory(GuestClContext &context, ClObject &buffer)
+{
+    AV_SCOPE("ClIcdRoot::let_go_of_memory");
+    const uint64_t block = buffer.backing_offset();
+    if (!objects_.queues_idle(&context)) {
+        context.retire(buffer.backed() ? &block : nullptr, buffer.lent());
+        return;
+    }
+    if (buffer.backed()) context.blocks().give_back(block);
+    if (buffer.lent() != nullptr) context.give_back_lent(*buffer.lent());
 }
 
 cl_int ClIcdRoot::marker_event(ClientTransport &wire, ClObject &queue, cl_event *event)

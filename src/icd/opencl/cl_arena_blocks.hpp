@@ -18,6 +18,7 @@
 #define AV_CLICD_CL_ARENA_BLOCKS_HPP
 
 #include "icd/common/range_table.hpp"
+#include "icd/common/retire_list.hpp"
 
 #include <stdint.h>
 
@@ -53,6 +54,13 @@ public:
     [[nodiscard]] bool take(uint64_t bytes, uint64_t &offset);
     /* Forgets the block at `offset`. An offset no block holds is ignored. */
     void               give_back(uint64_t offset);
+    /* The block at `offset`, let go of by its buffer while the host may still
+     * run work over it, kept out of use until reclaim. Given back at once
+     * only when there is no memory to note it, which is the one time the
+     * rule gives. */
+    void               retire(uint64_t offset);
+    /* Every retired block given back: the host's work over them is done. */
+    void               reclaim();
 
     /* The guest's view of `bytes` at `offset`, or null unless one live block
      * begins there and is long enough. */
@@ -70,6 +78,8 @@ private:
     uint64_t                         bytes_;
     /* The blocks, first fit over the arena (RangeTable). */
     icd::RangeTable                  blocks_;
+    /* Blocks let go of while the host may still run work over them. */
+    icd::RetireList<uint64_t>        retired_;
 };
 
 }  // namespace av::clicd

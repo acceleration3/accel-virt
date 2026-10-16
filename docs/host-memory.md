@@ -226,6 +226,15 @@ GPU memory where they are: the device lays a source allocation under them.
    in the process's pages. Only then does the kernel unlock them - whatever
    the device answered, since a process may not end holding locked pages.
 
+**Memory is given back only after the host's work over it is done.** An
+API whose objects can be released with work still queued over them keeps
+the memory out of use until it knows that work finished: OpenCL retires a
+released buffer's arena block and its lent pages (`ClArenaBlocks::retire`,
+`HostChannel::retire_memory`, both on `RetireList`) and reclaims them when
+every queue of the context has drained; a queue released with work
+unfinished holds them until the context ends. Direct3D 12 needs no list: an
+application may not destroy a heap the GPU still uses.
+
 A page lies under one blob at a time (`LentPages`, one set per device): a
 second overlay would copy the first blob's memory into its own, and the
 first's restore would take the page from under it. Two of a process's ranges

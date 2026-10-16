@@ -137,6 +137,18 @@ public:
     [[nodiscard]] Status lend(void *address, uint64_t bytes, HostAllocation *&made);
     /* What lend made, given back once the host's buffer over it is gone. */
     void                 give_back_lent(HostAllocation &lent);
+    /* A buffer's memory - its arena block at `block`, or what it was `lent`
+     * (null for none) - let go of while the host's queues may still run work
+     * over it: kept out of use until reclaim (docs/host-memory.md,
+     * "Application memory"). */
+    void                 retire(const uint64_t *block, HostAllocation *lent);
+    /* Every retired buffer's memory given back: the host's queues of this
+     * context have finished what was sent to them. Nothing, for good, once a
+     * queue was released with work unfinished - only the context's end
+     * knows that work is over. */
+    void                 reclaim();
+    /* A queue of this context was released before its work was known done. */
+    void                 orphan_work();
     /* The blocks this context's buffers are carved out of its blob arena.
      * Empty of blocks, and not ready, where the capset offered no
      * host-visible memory - which is what makes a buffer staged instead. */
@@ -212,6 +224,8 @@ private:
     bool                wakes_;
     icd::HostChannel                     channel_;
     ClArenaBlocks                        blocks_;
+    /* Whether a queue went with work unfinished (orphan_work). */
+    bool                                 orphaned_work_;
     ClArenaBlocks                        staging_;
     SvmTable                             svm_;
     ClExternalMemory                     external_;

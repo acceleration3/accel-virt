@@ -22,7 +22,7 @@ HostChannel::HostChannel(BlockSource &memory, LogSink &log, const char *prefix, 
     : memory_(memory), lines_(log, prefix), lock_(lock), sub_api_(shape.sub_api_), ring_order_(shape.ring_order_),
       reply_bytes_(shape.reply_bytes_), staging_bytes_(shape.staging_bytes_), batch_bytes_(shape.batch_bytes_),
       arena_bytes_(shape.arena_bytes_), staging_(nullptr), batch_block_(nullptr), transport_(), locked_(), arena_(),
-      device_(nullptr), memories_(memory)
+      device_(nullptr), memories_(memory), retired_(memory, Pool::paged)
 {
     AV_SCOPE("HostChannel::HostChannel");
 }
@@ -86,6 +86,9 @@ void HostChannel::close(bool lost)
     AV_SCOPE("HostChannel::close");
     /* What was sent last still reaches the host before its context goes. */
     if (!lost && transport_.constructed()) static_cast<void>(transport_.object().flush());
+    /* Retired or not, every allocation goes with the context: the host's work
+     * over them goes with it too. */
+    retired_.reclaim([](HostAllocation *) {});
     close_memories(lost);
     device_ = nullptr;
     if (arena_.constructed()) {
@@ -155,6 +158,32 @@ Status HostChannel::close_memory(HostAllocation &allocation)
     const Status released = faulted() ? allocation.abandon() : allocation.close();
     static_cast<void>(memories_.destroy(kept));
     return released;
+}
+
+void HostChannel::retire_memory(HostAllocation &allocation)
+{
+    AV_SCOPE("HostChannel::retire_memory");
+    {
+        const ThreadLockHold held(lock_);
+        if (retired_.add(&allocation) == Status::ok) return;
+    }
+    lines_.write("more memory let go of than can wait for the host; closed at once");
+    static_cast<void>(close_memory(allocation));
+}
+
+/* Taken out of the list one at a time under the lock and closed after it: a
+ * close takes the lock itself. */
+void HostChannel::reclaim_retired()
+{
+    AV_SCOPE("HostChannel::reclaim_retired");
+    for (;;) {
+        HostAllocation *next = nullptr;
+        {
+            const ThreadLockHold held(lock_);
+            if (!retired_.take_last(next)) return;
+        }
+        static_cast<void>(close_memory(*next));
+    }
 }
 
 HostAllocation *HostChannel::find_memory(uint64_t handle)

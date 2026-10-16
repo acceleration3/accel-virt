@@ -21,7 +21,7 @@ GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memo
       link_(connection), gl_share_(0u), wakes_(false),
       channel_(memory, log, "avcl: ", icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes),
                send_lock),
-      blocks_(memory, blocks_lock), staging_(memory, blocks_lock),
+      blocks_(memory, blocks_lock), orphaned_work_(false), staging_(memory, blocks_lock),
       svm_(memory), external_(handles, memory, log), d3d11_(memory), mappings_(memory, Pool::paged), properties_(), notify_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
@@ -154,6 +154,27 @@ void GuestClContext::give_back_lent(HostAllocation &lent)
 {
     AV_SCOPE("GuestClContext::give_back_lent");
     static_cast<void>(channel_.close_memory(lent));
+}
+
+void GuestClContext::retire(const uint64_t *block, HostAllocation *lent)
+{
+    AV_SCOPE("GuestClContext::retire");
+    if (block != nullptr) blocks_.retire(*block);
+    if (lent != nullptr) channel_.retire_memory(*lent);
+}
+
+void GuestClContext::reclaim()
+{
+    AV_SCOPE("GuestClContext::reclaim");
+    if (__atomic_load_n(&orphaned_work_, __ATOMIC_ACQUIRE)) return;
+    blocks_.reclaim();
+    channel_.reclaim_retired();
+}
+
+void GuestClContext::orphan_work()
+{
+    AV_SCOPE("GuestClContext::orphan_work");
+    __atomic_store_n(&orphaned_work_, true, __ATOMIC_RELEASE);
 }
 
 ClientTransport *GuestClContext::wire()

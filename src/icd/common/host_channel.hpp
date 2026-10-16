@@ -31,6 +31,7 @@
 #include "core/support/status.hpp"
 #include "guest/transport/kmt_blob_arena.hpp"
 #include "guest/transport/kmt_transport.hpp"
+#include "icd/common/retire_list.hpp"
 #include "icd/common/locked_transport.hpp"
 #include "core/log/driver_log.hpp"
 #include "proto/context/gl_context_options.hpp"
@@ -139,6 +140,14 @@ public:
      * context frees it on the host. The release's refusal, if any; the
      * allocation is gone either way. */
     [[nodiscard]] Status close_memory(HostAllocation &allocation);
+    /* What open_memory or adopt_memory made, which work the host queued may
+     * still read or write, closed only once the API says that work is done
+     * (reclaim_retired); with no memory to note it, closed now, and logged.
+     * The rule every API's application memory keeps (docs/host-memory.md,
+     * "Application memory"). */
+    void                 retire_memory(HostAllocation &allocation);
+    /* Every retired allocation closed: the host's work over them is done. */
+    void                 reclaim_retired();
     /* The allocation the host named `handle`, or null. */
     HostAllocation      *find_memory(uint64_t handle);
     uint32_t             memories() const;
@@ -182,6 +191,8 @@ private:
      * opened on too; null while closed. */
     GuestConnection                *device_;
     ObjectPool<ObjectStorage<HostAllocation>> memories_;
+    /* What was let go of while the host may still use it (retire_memory). */
+    RetireList<HostAllocation *>              retired_;
 };
 
 }  // namespace av::icd
