@@ -75,10 +75,12 @@ struct AvContextTableProbe {
         std::uint32_t id = 0u;
         static_cast<void>(table.ids_.take(id));
     }
-    static void take_every_id(AvContextTable &table)
+    /* The id bitmap made, holding no id: what an earlier open leaves behind. */
+    static void grow_ids(AvContextTable &table)
     {
         std::uint32_t id = 0u;
-        while (table.ids_.take(id) == Status::ok) {}
+        static_cast<void>(table.ids_.take(id));
+        table.ids_.give_back(id);
     }
     static const Allocation *swap_name(AvContextTable &table, std::uint32_t slot, const Allocation *name)
     {
@@ -1203,7 +1205,11 @@ TEST(av_context_table_window_chunk, a_step_that_fails_is_undone_in_reverse)
       if (one.refuse != 0u) host.refuse_next(one.refuse);
       host.answer_map_with(one.map_info);
       if (one.no_view) fixture.platform().fail_process_map_at(1u);
-      if (one.no_memory) fixture.platform().fail_allocation_at(1u);
+      /* The chunk's memory, not the id bitmap's, is what runs out. */
+      if (one.no_memory) {
+          AvContextTableProbe::grow_ids(fixture.table());
+          fixture.platform().fail_allocation_at(1u);
+      }
       HostWindowRecord answer;
       CHECK_STATUS(open_window(fixture, &first_context, 2u * page, answer), one.expected);
       CHECK_EQ(answer.resource_id(), 0u);
@@ -1295,29 +1301,39 @@ TEST(av_context_table_window_chunk, a_create_the_device_never_answers_keeps_its_
   CHECK(fixture.platform().maps_into_process(windowed.address(), window_base + page, page));
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
-/* One context may hold a quarter of the device's ids, so no process takes
- * them all; and with every id taken nothing is placed. Neither asks the
- * device anything or takes pages. Reaching either limit for real is 4096
- * opens, so the counts are set where they stand at it. */
-TEST(av_context_table_window_chunk, a_context_at_its_limit_or_a_device_out_of_ids_refuses_the_next)
+/* No count of chunks bounds a context: one holding more than the quarter of
+ * the old 16384 ids it was once allowed opens the next. Reaching that for
+ * real is thousands of opens, so the count is set where it would stand; the
+ * table's invariant rightly calls that broken on the way in and out. */
+TEST(av_context_table_window_chunk, a_context_past_the_old_per_process_quota_opens_the_next)
 { Fixture fixture;
   Host host(fixture.mapped());
   bind_with_window(fixture);
-  CHECK_EQ(AvContextTable::max_chunks_per_context, HostBlobId::count / 4u);
+  AvContextTableProbe::set_held(fixture.table(), 0u, 4097u);
+  HostWindowRecord answer;
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
+  CHECK_EQ(answer.resource_id(), chunk_base);
+  CHECK(fixture.platform().claim(Violation::broken_invariant));
+  CHECK(fixture.platform().claim(Violation::broken_invariant));
+  AvContextTableProbe::set_held(fixture.table(), 0u, 1u);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* A device whose ids cannot be noted - the bitmap has no memory to grow -
+ * places nothing, asks the device nothing and takes no pages. */
+TEST(av_context_table_window_chunk, ids_that_cannot_be_noted_refuse_the_open_as_out_of_memory)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  bind_with_window(fixture);
   const std::uint32_t asked = host.queue().requests();
   HostWindowRecord answer;
-  /* The count says the limit with no chunks behind it, which the table's
-   * invariant rightly calls broken on the way in and out. */
-  AvContextTableProbe::set_held(fixture.table(), 0u, AvContextTable::max_chunks_per_context);
-  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::no_space);
-  CHECK(fixture.platform().claim(Violation::broken_invariant));
-  CHECK(fixture.platform().claim(Violation::broken_invariant));
-  AvContextTableProbe::set_held(fixture.table(), 0u, 0u);
-  AvContextTableProbe::take_every_id(fixture.table());
-  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::no_space);
+  fixture.platform().fail_allocation_at(1u);
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::no_memory);
   CHECK_EQ(host.queue().requests(), asked);
   CHECK_EQ(fixture.window().pages_in_use(), 0u);
   CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(open_window(fixture, &first_context, page, answer), Status::ok);
+  CHECK_EQ(answer.resource_id(), chunk_base);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
 /* Two contexts share the device's ids: the second's first chunk takes the

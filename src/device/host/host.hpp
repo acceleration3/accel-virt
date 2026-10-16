@@ -5,10 +5,15 @@
  *
  * The contract: virtqueue state and device lifecycle belong to the main loop,
  * under QEMU's big lock; decoding and execution belong to workers and never run
- * on the main loop. Every public method states which side it runs on. */
+ * on the main loop. Every public method states which side it runs on.
+ *
+ * The host is where the device core's memory comes from, as a BlockSource, so
+ * the core's growable tables take it as they take a platform: any thread,
+ * zeroed, and with no pools or IRQL to honour. */
 #ifndef AV_HOST_HPP
 #define AV_HOST_HPP
 
+#include "core/platform/block_source.hpp"
 #include "core/support/status.hpp"
 
 #include <stddef.h>
@@ -27,7 +32,7 @@ namespace av {
 
 using HostRoutine = void (*)(void *context);
 
-class Host {
+class Host : public BlockSource {
 public:
     virtual void log(const char *message) = 0;
     /* A violation is logged in QEMU and recorded by the mock. */
@@ -84,10 +89,6 @@ public:
      * sharing the CPU's last-level cache, a host-cached type included, so the
      * guest saw an answer before the bytes it answered for. */
     virtual void     fence_stores() = 0;
-
-    /* Any thread: zeroed memory, or null. */
-    virtual void *allocate(size_t bytes) = 0;
-    virtual void  release(void *block) = 0;
 
     /* Main loop. Guest physical memory mapped for the device, valid until
      * unmapped, from any thread: null when nothing is there. `length` shrinks at
@@ -228,8 +229,6 @@ public:
 protected:
     Host() = default;
     ~Host() = default;
-    Host(const Host &) = delete;
-    Host &operator=(const Host &) = delete;
 };
 
 }  // namespace av

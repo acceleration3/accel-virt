@@ -1,5 +1,5 @@
-/* The ids host blobs take: exactly `count` of them from `first`, so the
- * device indexes its table by them and refuses every other id. */
+/* The ids host blobs take: every id from `first` up, and no id below it, so
+ * the device refuses a transport blob's, a scanout's or the cursor's. */
 #include "harness/framework/test_registry.hpp"
 #include "proto/resources/host_blob_id.hpp"
 
@@ -7,14 +7,13 @@
 
 using av::HostBlobId;
 
-TEST(host_blob_id, the_range_is_valid_from_its_first_to_its_last_and_each_is_its_own_slot)
+TEST(host_blob_id, every_id_from_the_first_to_the_last_a_resource_names_is_valid)
 { CHECK(HostBlobId(HostBlobId::first).valid());
-  CHECK_EQ(HostBlobId(HostBlobId::first).slot(), 0u);
-  CHECK(HostBlobId(HostBlobId::first + HostBlobId::count - 1u).valid());
-  CHECK_EQ(HostBlobId(HostBlobId::first + HostBlobId::count - 1u).slot(), HostBlobId::count - 1u);
-  CHECK_EQ(HostBlobId(HostBlobId::first + 77u).slot(), 77u); }
+  CHECK(HostBlobId(HostBlobId::first + 16384u).valid());
+  CHECK(HostBlobId(0xFFFFFFFFu).valid());
+  CHECK_EQ(HostBlobId::most, 0xFF000000u);
+  CHECK_EQ(HostBlobId::first + (HostBlobId::most - 1u), 0xFFFFFFFFu); }
 
-TEST(host_blob_id, an_id_just_outside_the_range_or_far_from_it_is_refused)
-{ const std::uint32_t refused[] = {0u, 1u, HostBlobId::first - 1u, HostBlobId::first + HostBlobId::count,
-                                   0xFFFFFFFFu};
+TEST(host_blob_id, an_id_below_the_range_is_refused)
+{ const std::uint32_t refused[] = {0u, 1u, 0x1000u, HostBlobId::first - 1u};
   for (const std::uint32_t id : refused) CHECK(!HostBlobId(id).valid()); }

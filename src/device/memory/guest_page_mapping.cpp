@@ -64,7 +64,7 @@ Status GuestPageMapping::map_entry(uint64_t address, uint64_t length)
 Status GuestPageMapping::reserve(uint32_t capacity)
 {
     AV_SCOPE("GuestPageMapping::reserve");
-    void *const block = host_.allocate(capacity * (sizeof(void *) + sizeof(uint64_t)));
+    void *const block = host_.allocate(capacity * (sizeof(void *) + sizeof(uint64_t)), Pool::paged);
     if (block == nullptr) return Status::no_memory;
     auto *const pointers = static_cast<void **>(block);
     auto *const lengths = static_cast<uint64_t *>(static_cast<void *>(pointers + capacity));

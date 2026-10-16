@@ -65,8 +65,9 @@ public:
     Status   read_file(const char *path, char *buffer, std::size_t capacity, std::size_t &length) override;
     /* The names directly under `path` of the files add_file was given. */
     Status   list_directory(const char *path, char *buffer, std::size_t capacity, std::size_t &length) override;
-    void    *allocate(std::size_t bytes) override;
+    void    *allocate(std::size_t bytes, Pool pool) override;
     void     release(void *block) override;
+    void     require_irql_at_most(Irql ceiling, const char *function) override;
     void    *map_guest(std::uint64_t address, std::uint64_t &length, bool &direct) override;
     void     unmap_guest(void *pointer, std::uint64_t length) override;
     Status   reserve_range(std::uint64_t bytes, void *&base) override;

@@ -187,7 +187,7 @@ bool ExportConnection::room_for_one()
     AV_SCOPE("ExportConnection::room_for_one");
     if (held_ < room_) return true;
     const uint32_t  grown = room_ == 0u ? first_room : room_ * 2u;
-    uint64_t *const list = static_cast<uint64_t *>(host_.allocate(grown * sizeof(uint64_t)));
+    uint64_t *const list = static_cast<uint64_t *>(host_.allocate(grown * sizeof(uint64_t), Pool::paged));
     if (list == nullptr) return false;
     for (uint32_t index = 0u; index < held_; index++) list[index] = surfaces_[index];
     if (surfaces_ != nullptr) host_.release(surfaces_);

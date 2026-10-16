@@ -56,9 +56,6 @@ class AvContextTable {
 public:
     /* One per doorbell page. */
     static constexpr uint32_t max_contexts = RingSubmitter::doorbell_pages;
-    /* Chunks one context may hold at once: a quarter of the device's ids, so
-     * no one process can take them all. */
-    static constexpr uint32_t max_chunks_per_context = HostBlobId::count / 4u;
 
     /* `window` is the device's host window, which window chunks are placed in
      * and which must outlive the table. */
@@ -145,11 +142,11 @@ public:
      * `record`. A close unmaps the process's view, has the device unmap and
      * release the blob, and only then frees the pages and the id. Nothing
      * falls back to guest RAM: invalid_parameter for a context not live or a
-     * resource that is none of its chunks; no_space when the context holds
-     * max_chunks_per_context, every id is taken, or the window has no run
-     * that long; not_supported with no window; no_memory when the process
-     * cannot be given a view; the device's refusal otherwise. Nothing is held
-     * on a failed open. */
+     * resource that is none of its chunks; no_space when every host blob id
+     * is taken or the window has no run that long - the window's pages, not
+     * a count of chunks, are what bounds them; not_supported with no window;
+     * no_memory when the ids cannot be noted or the process cannot be given a
+     * view; the device's refusal otherwise. Nothing is held on a failed open. */
     [[nodiscard]] Status window_chunk(void *context, HostWindowRecord &record, VirtioGpuDevice &device);
     uint32_t             bound() const;
     /* DISPATCH. Whether the table still holds `context`. Destroying an

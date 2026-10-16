@@ -99,6 +99,18 @@ TEST(blob_import, import_sends_the_contracts_request_and_holds_the_hosts_memory)
   CHECK_STATUS(import.release(), Status::ok);
   CHECK_EQ(transport.sends(), 2u); }
 
+/* A host out of memory to keep the import in is the caller's out of memory,
+ * not a refusal it could fix by asking differently. */
+TEST(blob_import, a_host_with_no_room_is_out_of_memory)
+{ MockTransport transport;
+  BlobImport import(transport);
+  const Answer no_room(BlobImportAnswer::no_room, 0u, 0u);
+  transport.set_reply(no_room.bytes(), BlobImportAnswer::encoded_size);
+  CHECK_STATUS(import.import(chunk_resource), Status::no_memory);
+  CHECK(import.invariants_hold());
+  CHECK_EQ(import.host_status(), static_cast<std::uint32_t>(BlobImportAnswer::no_room));
+  CHECK_EQ(import.memory(), 0u); }
+
 /* A refusal is the host's status with no memory; the object can import again,
  * and a later import it takes clears the refusal. */
 TEST(blob_import, a_refusal_keeps_the_hosts_status_and_holds_nothing)

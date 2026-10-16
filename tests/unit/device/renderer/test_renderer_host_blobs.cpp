@@ -20,7 +20,7 @@ using av::Status;
 namespace {
 
 constexpr std::uint32_t first = HostBlobId::first;
-constexpr std::uint32_t last = HostBlobId::first + HostBlobId::count - 1u;
+constexpr std::uint32_t last = 0xFFFFFFFFu;
 
 }  // namespace
 
@@ -47,11 +47,40 @@ TEST(renderer_host_blobs_adopt, refuses_an_id_outside_the_range_context_zero_or_
   CHECK_STATUS(blobs.adopt(first, 3u), Status::invalid_parameter);   /* before initialize */
   CHECK_STATUS(blobs.initialize(), Status::ok);
   CHECK_STATUS(blobs.adopt(first - 1u, 3u), Status::invalid_parameter);
-  CHECK_STATUS(blobs.adopt(last + 1u, 3u), Status::invalid_parameter);
   CHECK_STATUS(blobs.adopt(0u, 3u), Status::invalid_parameter);
   CHECK_STATUS(blobs.adopt(first, 0u), Status::invalid_parameter);
   CHECK_EQ(blobs.live(), 0u);
   CHECK(!blobs.owns(0u, first)); }
+
+/* The 16384 ids the renderer once kept owners for are no bound: owners well
+ * past them are kept and answered, and given up one by one. */
+TEST(renderer_host_blobs_adopt, keeps_owners_well_past_the_old_range)
+{ MockHost host;
+  RendererHostBlobs blobs(host);
+  CHECK_STATUS(blobs.initialize(), Status::ok);
+  constexpr std::uint32_t many = 40000u;
+  for (std::uint32_t index = 0u; index < many; index++)
+      CHECK_STATUS(blobs.adopt(first + index * 3u, 1u + index % 7u), Status::ok);
+  CHECK_EQ(blobs.live(), many);
+  for (std::uint32_t index = 0u; index < many; index++) CHECK(blobs.owns(1u + index % 7u, first + index * 3u));
+  CHECK(!blobs.owns(1u, first + 1u));
+  for (std::uint32_t index = 0u; index < many; index += 2u) blobs.forget(first + index * 3u);
+  CHECK_EQ(blobs.live(), many / 2u);
+  CHECK(!blobs.owns(1u, first));
+  CHECK(blobs.owns(2u, first + 3u)); }
+
+/* An owner there is no memory to note is refused as out of memory, so the
+ * memory it would name is never handed out; the next is kept. */
+TEST(renderer_host_blobs_adopt, an_owner_with_nowhere_to_be_kept_is_out_of_memory)
+{ MockHost host;
+  RendererHostBlobs blobs(host);
+  CHECK_STATUS(blobs.initialize(), Status::ok);
+  host.fail_allocation_at(1u);
+  CHECK_STATUS(blobs.adopt(first, 3u), Status::no_memory);
+  CHECK(!blobs.owns(3u, first));
+  CHECK_EQ(blobs.live(), 0u);
+  CHECK_STATUS(blobs.adopt(first, 3u), Status::ok);
+  CHECK(blobs.owns(3u, first)); }
 
 TEST(renderer_host_blobs_forget, drops_one_owner_or_every_one)
 { MockHost host;

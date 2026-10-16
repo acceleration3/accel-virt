@@ -565,7 +565,7 @@ TEST(renderer_service_allocate_memory, memory_it_cannot_hand_over_is_answered_as
   CHECK(!rig.allocated().allocated());
   CHECK_EQ(rig.answer_descriptor(), -1);
   CHECK_EQ(rig.ops().memory_frees(), 0u);
-  const std::uint64_t not_blobs[] = {5u, av::HostBlobId::first + av::HostBlobId::count,
+  const std::uint64_t not_blobs[] = {5u, av::HostBlobId::first - 1u,
                                      std::uint64_t{1} << 32 | av::HostBlobId::first};
   std::uint32_t frees = 0u;
   for (const std::uint64_t key : not_blobs) {

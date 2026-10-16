@@ -61,7 +61,7 @@ Status GatheredCommand::append(const uint8_t *body, size_t length)
     if (used_ + length > capacity_) {
         size_t bytes = capacity_ > least_block ? capacity_ : least_block;
         while (bytes < used_ + length) bytes = bytes > ~size_t{0} / 2u ? used_ + length : bytes * 2u;
-        auto *const grown = static_cast<uint8_t *>(host_.allocate(bytes));
+        auto *const grown = static_cast<uint8_t *>(host_.allocate(bytes, Pool::paged));
         if (grown == nullptr) {
             clear();
             return Status::no_memory;

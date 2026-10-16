@@ -139,7 +139,7 @@ TEST(blob_import_command_run, every_refusal_is_its_own_status_with_no_handle_and
                                                       run.answer().status());
       CHECK_EQ(run.answer().device_memory(), 0u);
   }
-  rig.host().fail_allocation_at(1u);   /* the first import takes the context's table */
+  rig.host().fail_allocation_at(1u);   /* the first import grows the context's table */
   CHECK_EQ(import(rig, ImportBody(rig.blob(0u))).answer().status(), BlobImportAnswer::no_room);
   rig.ops().refuse_import_at(1u);
   CHECK_EQ(import(rig, ImportBody(rig.blob(0u))).answer().status(), BlobImportAnswer::executor_refused);
@@ -148,21 +148,24 @@ TEST(blob_import_command_run, every_refusal_is_its_own_status_with_no_handle_and
   /* After all of that, the context imports as if nothing happened. */
   CHECK_EQ(import(rig, ImportBody(rig.blob(0u))).answer().status(), BlobImportAnswer::imported); }
 
-TEST(blob_import_command_run, a_context_with_no_room_for_another_import_answers_no_room)
+/* A context past the 4096 imports its table once held is answered imported:
+ * no_room is the host out of memory, never a count. */
+TEST(blob_import_command_run, a_context_past_the_old_table_still_imports)
 { Chunked chunked;
   ImportRig &rig = chunked.rig();
   /* Filled on the worker directly: a Run per import would judge the whole
-   * table's invariants 4096 times over. */
+   * table's invariants thousands of times over. */
   Status filled = Status::ok;
   rig.on_worker([&] {
       std::uint64_t handle = 0u;
-      for (std::uint32_t index = 0u; index < av::BlobImports::max_imports && filled == Status::ok; index++)
+      for (std::uint32_t index = 0u; index < 5000u && filled == Status::ok; index++)
           filled = rig.imports().import(rig.blob(0u), handle);
   });
   CHECK_STATUS(filled, Status::ok);
-  const Run full = import(rig, ImportBody(rig.blob(0u)));
-  CHECK_STATUS(full.status(), Status::ok);
-  CHECK_EQ(full.answer().status(), BlobImportAnswer::no_room); }
+  const Run more = import(rig, ImportBody(rig.blob(0u)));
+  CHECK_STATUS(more.status(), Status::ok);
+  CHECK_EQ(more.answer().status(), BlobImportAnswer::imported);
+  CHECK(more.answer().device_memory() != 0u); }
 
 TEST(blob_import_command_run, a_body_of_the_wrong_length_is_framing_and_answers_nothing)
 { Chunked chunked;

@@ -777,7 +777,7 @@ std::uint32_t MockHost::run_main_loop()
     }
 }
 
-void *MockHost::allocate(std::size_t bytes)
+void *MockHost::allocate(std::size_t bytes, Pool)
 {
     StateLock lock(state_);
     if (fail_now(fail_allocation_)) return nullptr;
@@ -802,6 +802,8 @@ void MockHost::release(void *block)
     }
     record(HostViolation::unknown_handle, "MockHost::release");
 }
+
+void MockHost::require_irql_at_most(Irql, const char *) {}
 
 MockHost::GuestRegion *MockHost::region_of(std::uint64_t address)
 {

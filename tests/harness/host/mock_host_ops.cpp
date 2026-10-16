@@ -70,7 +70,7 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     table_.list_directory = [](void *opaque, const char *path, char *buffer, std::size_t size, std::size_t *length) {
         return host_of(opaque).list_directory(path, buffer, size, *length) == Status::ok ? 0 : 1;
     };
-    table_.allocate = [](void *opaque, std::size_t size) { return host_of(opaque).allocate(size); };
+    table_.allocate = [](void *opaque, std::size_t size) { return host_of(opaque).allocate(size, av::Pool::paged); };
     table_.release = [](void *opaque, void *block) { host_of(opaque).release(block); };
     table_.map_guest = [](void *opaque, std::uint64_t address, std::uint64_t *length, int *direct) {
         bool from_ram = false;

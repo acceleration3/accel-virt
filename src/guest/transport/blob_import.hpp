@@ -21,8 +21,9 @@ public:
     BlobImport(const BlobImport &) = delete;
     BlobImport &operator=(const BlobImport &) = delete;
 
-    /* Chunk `resource_id`, whole. ok: memory() is the host's handle. invalid_parameter: the
-     * host refused, host_status() says with what. not_supported: an empty
+    /* Chunk `resource_id`, whole. ok: memory() is the host's handle. no_memory:
+     * the host had no memory to keep the import in. invalid_parameter: the
+     * host refused otherwise, host_status() says with what. not_supported: an empty
      * answer, which is what a device that does not know the command leaves.
      * malformed: any other answer the contract does not allow. invalid_state:
      * the call failed, or this already holds an import. */

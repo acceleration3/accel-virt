@@ -26,18 +26,19 @@ using av::Status;
 namespace av {
 
 struct BlobImportsProbe {
-    static std::uint64_t swap_handle(BlobImports &imports, std::uint32_t slot, std::uint64_t handle)
+    /* An import kept under the handle no import is named by. */
+    static void name_one_zero(BlobImports &imports, std::uint64_t blob_id)
     {
-        const std::uint64_t kept = imports.device_memory_[slot];
-        imports.device_memory_[slot] = handle;
-        return kept;
+        std::uint32_t slot = 0u;
+        static_cast<void>(imports.blob_ids_.insert(0u, blob_id, slot));
     }
-    static std::uint64_t handle(BlobImports &imports, std::uint32_t slot) { return imports.device_memory_[slot]; }
+    static void forget_zero(BlobImports &imports) { static_cast<void>(imports.blob_ids_.erase(0u)); }
     static std::uint64_t swap_blob_id(BlobImports &imports, std::uint64_t blob_id)
     {
-        const std::uint64_t kept = imports.blob_ids_[0];
-        imports.blob_ids_[0] = blob_id;
-        return kept;
+        std::uint64_t *const kept = imports.blob_ids_.at(0u);
+        const std::uint64_t  previous = *kept;
+        *kept = blob_id;
+        return previous;
     }
 };
 
@@ -110,6 +111,7 @@ TEST(blob_imports_import, a_blob_this_context_did_not_open_is_not_found_and_asks
   CHECK_STATUS(rig.create_host_blob(rig.blob(1u), ImportRig::other_context), Status::ok);
   CHECK_STATUS(rig.create_host_blob(rig.blob(2u), ImportRig::context), Status::ok);
   CHECK_STATUS(rig.host_blobs().release(rig.blob(2u)), Status::ok);
+  const std::uint32_t allocations = rig.host().live_allocations();
   std::uint64_t device_memory = 7u;
   CHECK_STATUS(import(rig, rig.blob(1u), device_memory), Status::not_found);
   CHECK_EQ(device_memory, 0u);
@@ -119,7 +121,7 @@ TEST(blob_imports_import, a_blob_this_context_did_not_open_is_not_found_and_asks
   CHECK_STATUS(import(rig, 0u, device_memory), Status::not_found);
   CHECK_EQ(rig.ops().imported(), 0u);
   CHECK_EQ(rig.imports().imports(), 0u);
-  CHECK_EQ(rig.host().live_allocations(), 0u);   /* no table was taken for a refusal */ }
+  CHECK_EQ(rig.host().live_allocations(), allocations);   /* no table was taken for a refusal */ }
 
 /* The library keeps the memory for as long as the import holds it, whatever
  * the guest releases meanwhile. */
@@ -160,40 +162,42 @@ TEST(blob_imports_import, an_executor_that_refuses_names_nothing_or_names_two_im
   CHECK_STATUS(import(unexecuted, unexecuted.blob(0u), device_memory), Status::not_supported);
   CHECK_EQ(unexecuted.imports().imports(), 0u); }
 
-TEST(blob_imports_import, a_context_holding_every_import_it_may_has_no_space)
+/* The 4096 imports a context's table once held are no bound: a context
+ * imports past them, each by a handle of its own, and lets each go. */
+TEST(blob_imports_import, a_context_imports_well_past_the_old_table)
 { ImportRig rig;
   CHECK_STATUS(rig.create_host_blob(rig.blob(5u), ImportRig::context), Status::ok);
-  static std::uint64_t handles[BlobImports::max_imports] = {};
-  Status               failed = Status::ok;
+  constexpr std::uint32_t many = 6000u;
+  static std::uint64_t    handles[many] = {};
+  Status                  failed = Status::ok;
   rig.on_worker([&] {
-      for (std::uint32_t index = 0u; index < BlobImports::max_imports && failed == Status::ok; index++)
+      for (std::uint32_t index = 0u; index < many && failed == Status::ok; index++)
           failed = rig.imports().import(rig.blob(5u), handles[index]);
   });
   CHECK_STATUS(failed, Status::ok);
-  CHECK_EQ(rig.imports().imports(), BlobImports::max_imports);
+  CHECK_EQ(rig.imports().imports(), many);
+  CHECK_EQ(rig.ops().live_imports(), many);
   CHECK(rig.imports().invariants_hold());
-  std::uint64_t device_memory = 0u;
-  CHECK_STATUS(import(rig, rig.blob(5u), device_memory), Status::no_space);
-  CHECK_EQ(rig.ops().imported(), BlobImports::max_imports);   /* the executor was not asked */
-  release(rig, handles[100]);
-  CHECK_STATUS(import(rig, rig.blob(5u), device_memory), Status::ok);
-  CHECK_EQ(rig.imports().imports(), BlobImports::max_imports); }
+  for (std::uint32_t index = 0u; index < many; index++) release(rig, handles[index]);
+  CHECK_EQ(rig.imports().imports(), 0u);
+  CHECK_EQ(rig.ops().live_imports(), 0u); }
 
-/* The table is the host's memory, taken by the first import: a host with none
- * refuses that import and the next one tries again. */
-TEST(blob_imports_import, a_host_with_no_memory_for_the_table_has_no_space_and_nothing_is_held)
+/* The table is the host's memory, taken as the imports grow: a host with none
+ * refuses that import as out of memory before the executor is asked, holds
+ * nothing for it, and the next one tries again. */
+TEST(blob_imports_import, a_host_with_no_memory_for_the_table_is_out_of_memory_and_nothing_is_held)
 { ImportRig rig;
   CHECK_STATUS(rig.create_host_blob(rig.blob(5u), ImportRig::context), Status::ok);
   const std::uint32_t allocations = rig.host().live_allocations();
   std::uint64_t device_memory = 0u;
   rig.host().fail_allocation_at(1u);
-  CHECK_STATUS(import(rig, rig.blob(5u), device_memory), Status::no_space);
+  CHECK_STATUS(import(rig, rig.blob(5u), device_memory), Status::no_memory);
+  CHECK_EQ(device_memory, 0u);
   CHECK_EQ(rig.host().live_allocations(), allocations);
   CHECK_EQ(rig.ops().imported(), 0u);
   CHECK_STATUS(import(rig, rig.blob(5u), device_memory), Status::ok);
-  CHECK_EQ(rig.host().live_allocations(), allocations + 1u);
-  CHECK_STATUS(import(rig, rig.blob(5u), device_memory), Status::ok);
-  CHECK_EQ(rig.host().live_allocations(), allocations + 1u); }
+  CHECK(rig.host().live_allocations() > allocations);
+  CHECK_EQ(rig.ops().imported(), 1u); }
 
 TEST(blob_imports_release, lets_go_of_the_import_its_handle_names_and_only_that)
 { ImportRig rig;
@@ -235,7 +239,7 @@ TEST(blob_imports, the_table_goes_with_the_context)
       std::uint64_t first = 0u;
       rig.on_worker([&] { CHECK_STATUS(context.import(rig.blob(8u), first), Status::ok); });
       CHECK_EQ(context.imports(), 1u);
-      CHECK_EQ(rig.host().live_allocations(), allocations + 1u);
+      CHECK(rig.host().live_allocations() > allocations);
   }
   CHECK_EQ(rig.host().live_allocations(), allocations);
   { BlobImports unused(rig.host(), rig.host_blobs(), rig.executor(), rig.recorder(), ImportRig::context); }
@@ -257,10 +261,9 @@ TEST(blob_imports_invariants, each_rule_is_detected)
   std::uint64_t device_memory = 0u;
   CHECK_STATUS(import(rig, rig.blob(10u), device_memory), Status::ok);
   CHECK_STATUS(import(rig, rig.blob(10u), device_memory), Status::ok);
-  const std::uint64_t kept_handle =
-      av::BlobImportsProbe::swap_handle(rig.imports(), 1u, av::BlobImportsProbe::handle(rig.imports(), 0u));
-  CHECK(!rig.imports().invariants_hold());   /* two imports answering to one handle */
-  static_cast<void>(av::BlobImportsProbe::swap_handle(rig.imports(), 1u, kept_handle));
+  av::BlobImportsProbe::name_one_zero(rig.imports(), 1u);
+  CHECK(!rig.imports().invariants_hold());   /* an import named by no handle */
+  av::BlobImportsProbe::forget_zero(rig.imports());
   CHECK(rig.imports().invariants_hold());
   const std::uint64_t kept_id = av::BlobImportsProbe::swap_blob_id(rig.imports(), 0u);
   CHECK(!rig.imports().invariants_hold());   /* an id the device never hands out */

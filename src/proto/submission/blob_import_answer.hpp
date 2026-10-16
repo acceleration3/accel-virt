@@ -24,7 +24,7 @@ public:
         unknown_resource = 2u,
         /* No executor, or one whose API will not take the memory. */
         executor_refused = 3u,
-        /* Every import the context may hold, or no host memory to hold them in. */
+        /* No host memory to keep the import in. */
         no_room = 4u,
     };
 

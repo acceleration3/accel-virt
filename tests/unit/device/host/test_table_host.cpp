@@ -205,7 +205,7 @@ TEST(table_host, checks_the_threading_contract_against_the_big_lock)
 
 TEST(table_host, forwards_memory_hostmem_and_requests)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
-  void *const block = host.allocate(8u);
+  void *const block = host.allocate(8u, av::Pool::paged);
   CHECK(block != nullptr);
   host.release(block);
   mock.add_guest_ram(0x1000u, 0x1000u);

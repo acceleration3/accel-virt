@@ -45,7 +45,7 @@ Status BlobImportCommand::import(uint8_t *reply, size_t capacity, size_t &produc
     case Status::ok: answer = BlobImportAnswer::imported; break;
     case Status::invalid_parameter: answer = BlobImportAnswer::refused_request; break;
     case Status::not_found: answer = BlobImportAnswer::unknown_resource; break;
-    case Status::no_space: answer = BlobImportAnswer::no_room; break;
+    case Status::no_memory: answer = BlobImportAnswer::no_room; break;
     default: break;
     }
     produced = BlobImportAnswer::encoded_size;

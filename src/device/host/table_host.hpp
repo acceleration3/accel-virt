@@ -33,8 +33,9 @@ public:
     Status   gpu_pci_address(uint32_t index, PciAddress &address) override;
     Status   read_file(const char *path, char *buffer, size_t capacity, size_t &length) override;
     Status   list_directory(const char *path, char *buffer, size_t capacity, size_t &length) override;
-    void    *allocate(size_t bytes) override;
+    void    *allocate(size_t bytes, Pool pool) override;
     void     release(void *block) override;
+    void     require_irql_at_most(Irql ceiling, const char *function) override;
     void    *map_guest(uint64_t address, uint64_t &length, bool &direct) override;
     void     unmap_guest(void *pointer, uint64_t length) override;
     Status   reserve_range(uint64_t bytes, void *&base) override;

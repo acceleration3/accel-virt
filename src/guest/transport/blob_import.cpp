@@ -45,7 +45,8 @@ Status BlobImport::judge(WireReader &answer)
     if (decoded.decode(bytes, sizeof bytes) != Status::ok) return Status::malformed;
     host_status_ = decoded.status();
     memory_ = decoded.device_memory();
-    return host_status_ == BlobImportAnswer::imported ? Status::ok : Status::invalid_parameter;
+    if (host_status_ == BlobImportAnswer::imported) return Status::ok;
+    return host_status_ == BlobImportAnswer::no_room ? Status::no_memory : Status::invalid_parameter;
 }
 
 Status BlobImport::release()

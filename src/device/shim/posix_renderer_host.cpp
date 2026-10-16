@@ -396,7 +396,7 @@ void PosixRendererHost::fence_stores()
     __builtin_ia32_sfence();
 }
 
-void *PosixRendererHost::allocate(size_t bytes)
+void *PosixRendererHost::allocate(size_t bytes, Pool)
 {
     AV_SCOPE("PosixRendererHost::allocate");
     return calloc(1u, bytes);
@@ -406,6 +406,12 @@ void PosixRendererHost::release(void *block)
 {
     AV_SCOPE("PosixRendererHost::release");
     free(block);
+}
+
+/* The renderer's threads have no IRQL: every ceiling holds. */
+void PosixRendererHost::require_irql_at_most(Irql, const char *)
+{
+    AV_SCOPE("PosixRendererHost::require_irql_at_most");
 }
 
 /* An extent QEMU encoded lies inside one region, so the mapping is whole or

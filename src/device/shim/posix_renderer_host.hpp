@@ -79,8 +79,9 @@ public:
     uint64_t monotonic_nanoseconds() override;
     void     fence_stores() override;
 
-    void *allocate(size_t bytes) override;
+    void *allocate(size_t bytes, Pool pool) override;
     void  release(void *block) override;
+    void  require_irql_at_most(Irql ceiling, const char *function) override;
 
     void                *map_guest(uint64_t address, uint64_t &length, bool &direct) override;
     void                 unmap_guest(void *pointer, uint64_t length) override;

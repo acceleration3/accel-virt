@@ -72,9 +72,8 @@ TEST(host_blob_table_create, allocates_the_memory_asked_for_the_context_under_th
 TEST(host_blob_table_create, refuses_an_id_outside_the_range_or_one_already_live)
 { Fixture fixture;
   CHECK_STATUS(fixture.table().create(first - 1u, context, upload(), page), Status::not_found);
-  CHECK_STATUS(fixture.table().create(first + HostBlobId::count, context, upload(), page), Status::not_found);
   CHECK_STATUS(fixture.table().create(0u, context, upload(), page), Status::not_found);
-  CHECK_STATUS(fixture.table().create(first + HostBlobId::count - 1u, context, upload(), page), Status::ok);
+  CHECK_STATUS(fixture.table().create(0xFFFFFFFFu, context, upload(), page), Status::ok);
   CHECK_STATUS(fixture.table().create(first, context, upload(), page), Status::ok);
   CHECK_STATUS(fixture.table().create(first, context, upload(), page), Status::conflict);
   CHECK_EQ(fixture.plane().memory_allocations(), 2u);   /* nothing asked for a refused id */
@@ -92,6 +91,69 @@ TEST(host_blob_table_create, refuses_a_request_or_size_no_blob_can_have_before_a
   CHECK_EQ(fixture.table().live(), 0u);
   CHECK_STATUS(fixture.table().create(first, context, HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u), page),
                Status::ok); }
+
+/* The 16384 blobs the device once kept are no bound: blobs well past them
+ * are made, found by their ids wherever in the range they fall, placed in any
+ * order without one landing on another, and released. */
+TEST(host_blob_table_create, keeps_blobs_well_past_the_old_range)
+{ MockHost              host;
+  RecordingContextPlane plane;
+  HostBlobTable         table(host);
+  host.set_hostmem_size(400u * page);
+  CHECK_STATUS(table.initialize(plane), Status::ok);
+  constexpr std::uint32_t many = 20000u;
+  for (std::uint32_t index = 0u; index < many; index++)
+      CHECK_STATUS(table.create(first + index * 7u, context + index % 5u, upload(), page), Status::ok);
+  CHECK_EQ(table.live(), many);
+  CHECK(table.invariants_hold());
+  CHECK(table.owns(context + (many - 1u) % 5u, first + (many - 1u) * 7u));
+  CHECK(!table.contains(first + 1u));
+  std::uint32_t caching = 0u;
+  for (std::uint32_t placed = 0u; placed < 200u; placed++) {
+      const std::uint32_t at = (placed * 37u) % 200u;
+      CHECK_STATUS(table.map(first + placed * 7u, std::uint64_t{at} * 2u * page, caching), Status::ok);
+  }
+  CHECK(table.invariants_hold());
+  CHECK_STATUS(table.map(first + 300u * 7u, 2u * page, caching), Status::invalid_parameter);   /* on another */
+  CHECK_STATUS(table.map(first + 300u * 7u, 3u * page, caching), Status::ok);                  /* between two */
+  CHECK_STATUS(table.unmap(first + 300u * 7u), Status::ok);
+  CHECK_EQ(host.live_placements(), 200u);
+  table.release_all();
+  CHECK_EQ(table.live(), 0u);
+  CHECK_EQ(host.live_placements(), 0u);
+  CHECK(table.invariants_hold()); }
+
+/* A host with no memory to keep one more blob in refuses the create as out of
+ * memory before the library is asked, and the next create is kept. */
+TEST(host_blob_table_create, a_table_that_cannot_grow_is_out_of_memory_before_the_library_is_asked)
+{ Fixture fixture;
+  fixture.host().fail_allocation_at(1u);
+  CHECK_STATUS(fixture.table().create(first, context, upload(), page), Status::no_memory);
+  CHECK_EQ(fixture.plane().memory_allocations(), 0u);
+  CHECK(!fixture.table().contains(first));
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().create(first, context, upload(), page), Status::ok);
+  CHECK(fixture.table().contains(first)); }
+
+/* The pool the blob lives in can be the one thing short of memory: the
+ * library's memory is closed and freed under the id, and nothing is kept. */
+TEST(host_blob_table_create, a_blob_with_nowhere_to_live_gives_the_library_s_memory_back)
+{ Fixture fixture;
+  /* A pool chunk holds 64: the 65th blob takes a second chunk, which goes
+   * back when it is released, while the id table keeps its room - so the
+   * next 65th needs a chunk and nothing else. */
+  for (std::uint32_t index = 0u; index <= 64u; index++)
+      CHECK_STATUS(fixture.table().create(first + index, context, upload(), page), Status::ok);
+  CHECK_STATUS(fixture.table().release(first + 64u), Status::ok);
+  CHECK_EQ(fixture.table().live(), 64u);
+  fixture.host().fail_allocation_at(1u);
+  CHECK_STATUS(fixture.table().create(first + 64u, context, upload(), page), Status::no_memory);
+  CHECK_EQ(fixture.plane().memory_allocations(), 66u);
+  CHECK_EQ(fixture.plane().freed_count(), 2u);
+  CHECK_EQ(fixture.plane().freed(1u), first + 64u);
+  CHECK(!fixture.table().contains(first + 64u));
+  CHECK_EQ(fixture.table().live(), 64u);
+  CHECK(fixture.table().invariants_hold()); }
 
 TEST(host_blob_table_create, memory_the_library_refuses_is_out_of_memory_and_leaves_nothing)
 { Fixture fixture;
@@ -183,6 +245,20 @@ TEST(host_blob_table_map, a_host_that_cannot_map_it_is_out_of_memory_and_it_can_
   CHECK_EQ(fixture.host().live_placements(), 0u);
   CHECK_STATUS(fixture.table().map(first, 0u, caching), Status::ok); }
 
+/* A placement there is no memory to note is never made: the host is not
+ * asked to place it, and the blob can be placed once memory is back. */
+TEST(host_blob_table_map, a_placement_that_cannot_be_noted_is_out_of_memory_and_not_made)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.table().create(first, context, upload(), page), Status::ok);
+  fixture.host().fail_allocation_at(1u);
+  std::uint32_t caching = 77u;
+  CHECK_STATUS(fixture.table().map(first, 0u, caching), Status::no_memory);
+  CHECK_EQ(caching, 77u);
+  CHECK_EQ(fixture.host().live_placements(), 0u);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().map(first, 0u, caching), Status::ok);
+  CHECK_EQ(fixture.host().live_placements(), 1u); }
+
 TEST(host_blob_table_unmap, takes_a_placement_out_and_frees_its_pages_for_another)
 { Fixture fixture;
   CHECK_STATUS(fixture.table().create(first, context, upload(), page), Status::ok);
@@ -266,7 +342,7 @@ TEST(host_blob_table_owns, answers_only_for_a_live_blob_of_that_context)
   CHECK(!fixture.table().owns(context, first - 1u));
   CHECK(!fixture.table().owns(context, 0u));
   CHECK(!fixture.table().contains(first - 1u));
-  CHECK(!fixture.table().contains(first + HostBlobId::count));
+  CHECK(!fixture.table().contains(0xFFFFFFFFu));
   CHECK(!fixture.table().contains(first + 1u));
   CHECK(fixture.table().contains(first));
   CHECK_STATUS(fixture.table().release(first), Status::ok);
@@ -333,10 +409,10 @@ TEST(host_blob_table, creates_places_and_releases_on_the_main_loop_only)
                    [](void *context_pointer) {
                        auto *const   c = static_cast<Call *>(context_pointer);
                        std::uint32_t caching = 0u;
-                       c->created = c->table->create(first + 50000u, context, upload(), page);
-                       c->mapped = c->table->map(first + 50000u, 0u, caching);
-                       c->unmapped = c->table->unmap(first + 50000u);
-                       c->released = c->table->release(first + 50000u);
+                       c->created = c->table->create(first - 1u, context, upload(), page);
+                       c->mapped = c->table->map(first - 1u, 0u, caching);
+                       c->unmapped = c->table->unmap(first - 1u);
+                       c->released = c->table->release(first - 1u);
                        c->table->release_all();
                        static_cast<void>(c->table->owns(context, first));   /* any thread */
                    },
@@ -388,6 +464,23 @@ TEST(host_blob_table_invariants, overlapping_placements_are_detected)
   av::HostBlobTableProbe(fixture.table()).place(first + 1u, page, 3u * page);
   CHECK(fixture.host().claim(HostViolation::overlapping_placement));
   CHECK(!fixture.table().invariants_hold()); }
+
+TEST(host_blob_table_invariants, placements_out_of_order_or_apart_from_their_blobs_are_detected)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.table().create(first, context, upload(), page), Status::ok);
+  CHECK_STATUS(fixture.table().create(first + 1u, context, upload(), page), Status::ok);
+  std::uint32_t caching = 0u;
+  CHECK_STATUS(fixture.table().map(first, 2u * page, caching), Status::ok);
+  CHECK_STATUS(fixture.table().map(first + 1u, 4u * page, caching), Status::ok);
+  CHECK(fixture.table().invariants_hold());
+  av::HostBlobTableProbe(fixture.table()).misplace(1u, page);
+  CHECK(!fixture.table().invariants_hold());   /* before the one it follows */
+  av::HostBlobTableProbe(fixture.table()).misplace(1u, 5u * page);
+  CHECK(!fixture.table().invariants_hold());   /* noted where its blob is not */
+  av::HostBlobTableProbe(fixture.table()).misplace(1u, 4u * page);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().unmap(first + 1u), Status::ok);
+  CHECK(fixture.table().invariants_hold()); }
 
 TEST(host_blob_table_invariants, a_blob_without_the_lock_is_detected)
 { MockHost host;

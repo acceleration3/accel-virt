@@ -186,7 +186,7 @@ TEST(blob_commands_create, refuses_what_the_protocol_does_not_allow)
       {create_host(0u, 0x1000u), err_invalid_resource_id},
       {create_host(50u, 0x1000u), err_invalid_resource_id},                           /* a base-class 2D resource */
       {create_host(5u, 0x1000u), err_invalid_resource_id},                            /* not a host blob id */
-      {create_host(HostBlobId::first + HostBlobId::count, 0x1000u), err_invalid_resource_id},
+      {create_host(HostBlobId::first - 1u, 0x1000u), err_invalid_resource_id},          /* just below the range */
       {create_blob(1u, guest, 0u, 1u, 7u, 0x1000u), err_invalid_parameter},           /* names a context object */
       {create_blob(host_blob, host3d_guest, mappable, 0u, 0u, 0x1000u).context(context), err_invalid_parameter},
       {create_blob(host_blob, host3d, 0u, 0u, upload, 0x1000u).context(context), err_invalid_parameter},

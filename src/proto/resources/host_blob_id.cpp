@@ -12,13 +12,7 @@ HostBlobId::HostBlobId(uint32_t id) : id_(id)
 bool HostBlobId::valid() const
 {
     AV_SCOPE("HostBlobId::valid");
-    return id_ >= first && id_ - first < count;
-}
-
-uint32_t HostBlobId::slot() const
-{
-    AV_SCOPE("HostBlobId::slot");
-    return id_ - first;
+    return id_ >= first;
 }
 
 }  // namespace av

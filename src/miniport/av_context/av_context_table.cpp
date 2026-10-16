@@ -26,6 +26,7 @@
 #include "proto/context/sub_api.hpp"
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/escape/host_window_record.hpp"
+#include "proto/resources/host_blob_id.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
 
@@ -35,7 +36,7 @@ AvContextTable::AvContextTable(Platform &platform, DxgkrnlInterface &dxgkrnl, Al
                                  HostWindow &window)
     : platform_(platform), dxgkrnl_(dxgkrnl), allocations_(allocations), window_(window),
       lock_(platform, LockRank::av_context_slots),
-      reader_(platform), bindings_(), contexts_{}, names_{}, memories_(), chunks_(platform), ids_(), held_chunks_{}, orders_{},
+      reader_(platform), bindings_(), contexts_{}, names_{}, memories_(), chunks_(platform), ids_(platform, HostBlobId::most), held_chunks_{}, orders_{},
       wakes_{}, raised_{}, told_lost_{}, generations_{}, live_{}, request_{}, requests_(platform, LockRank::av_control_requests)
       {
           AV_SCOPE("AvContextTable::AvContextTable");
@@ -325,9 +326,9 @@ Status AvContextTable::wake_on_raise(void *context, uint64_t handle)
 Status AvContextTable::open_window(uint32_t slot, HostWindowRecord &record, VirtioGpuDevice &device)
 {
     AV_SCOPE("AvContextTable::open_window");
-    if (held_chunks_[slot] == max_chunks_per_context) return Status::no_space;
-    uint32_t resource = 0u;
-    if (ids_.take(resource) != Status::ok) return Status::no_space;
+    uint32_t     resource = 0u;
+    const Status taken = ids_.take(resource);
+    if (taken != Status::ok) return taken;
     return place_in_window(slot, resource, record, device);
 }
 

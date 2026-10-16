@@ -24,10 +24,10 @@ Status BatchStaging::allocate(uint64_t payload_capacity, uint64_t reply_capacity
     host_.require_main_loop("BatchStaging::allocate");
     if (payload_ != nullptr) return Status::invalid_state;
     const size_t reply_bytes = static_cast<size_t>(reply_capacity < max_reply ? reply_capacity : max_reply);
-    payload_ = static_cast<uint8_t *>(host_.allocate(static_cast<size_t>(payload_capacity)));
+    payload_ = static_cast<uint8_t *>(host_.allocate(static_cast<size_t>(payload_capacity), Pool::paged));
     if (payload_ == nullptr) return Status::no_memory;
     ScopeExit release_payload([this] { release(); });
-    reply_ = reply_bytes != 0u ? static_cast<uint8_t *>(host_.allocate(reply_bytes)) : nullptr;
+    reply_ = reply_bytes != 0u ? static_cast<uint8_t *>(host_.allocate(reply_bytes, Pool::paged)) : nullptr;
     if (reply_bytes != 0u && reply_ == nullptr) return Status::no_memory;
     release_payload.dismiss();
     payload_capacity_ = static_cast<size_t>(payload_capacity);

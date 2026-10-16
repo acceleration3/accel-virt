@@ -556,7 +556,7 @@ TEST(posix_renderer_host, its_clock_moves_forward_and_its_memory_is_zeroed)
   ::usleep(1000u);
   const std::uint64_t after = rig.host().monotonic_nanoseconds();
   CHECK(after >= before + 1000000u);
-  auto *const block = static_cast<std::uint8_t *>(rig.host().allocate(64u));
+  auto *const block = static_cast<std::uint8_t *>(rig.host().allocate(64u, av::Pool::paged));
   CHECK(block != nullptr);
   bool zeroed = true;
   for (std::uint32_t index = 0u; block != nullptr && index < 64u; index++) zeroed = zeroed && block[index] == 0u;

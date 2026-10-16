@@ -189,7 +189,7 @@ Status TableHost::list_directory(const char *path, char *buffer, size_t capacity
     return Status::ok;
 }
 
-void *TableHost::allocate(size_t bytes)
+void *TableHost::allocate(size_t bytes, Pool)
 {
     AV_SCOPE("TableHost::allocate");
     return ops_.allocate(ops_.opaque, bytes);
@@ -199,6 +199,12 @@ void TableHost::release(void *block)
 {
     AV_SCOPE("TableHost::release");
     ops_.release(ops_.opaque, block);
+}
+
+/* QEMU's threads have no IRQL: every ceiling holds. */
+void TableHost::require_irql_at_most(Irql, const char *)
+{
+    AV_SCOPE("TableHost::require_irql_at_most");
 }
 
 void *TableHost::map_guest(uint64_t address, uint64_t &length, bool &direct)
