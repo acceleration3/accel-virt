@@ -1,6 +1,8 @@
 #include "icd/opengl/manual_calls.hpp"
 
+#include "icd/common/host_completion_wait.hpp"
 #include "icd/opengl/gl_external_objects.hpp"
+#include "icd/opengl/sync_wait_probe.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 
 #include "proto/client/gl_icd_support.hpp"
@@ -58,7 +60,7 @@ uint32_t access_bits(uint32_t access)
 
 }  // namespace
 
-ManualCalls::ManualCalls(CurrentContexts &currents) : currents_(currents)
+ManualCalls::ManualCalls(CurrentContexts &currents, const Kmt &kmt) : currents_(currents), kmt_(kmt)
 {
     AV_SCOPE("ManualCalls::ManualCalls");
 }
@@ -582,14 +584,18 @@ void ManualCalls::flush()
     context->end_frame();
 }
 
-/* GL_WAIT_FAILED (0x911D) with nothing to wait on. */
+/* GL_WAIT_FAILED (0x911D) with nothing to wait on. GL_TIMEOUT_IGNORED is
+ * SlicedWait::forever, which never passes. */
 uint32_t ManualCalls::client_wait_sync(void *sync, uint32_t flags, uint64_t timeout)
 {
     AV_SCOPE("ManualCalls::client_wait_sync");
     static constexpr uint32_t wait_failed = 0x911Du;
     GuestGlContext *const context = sending();
     if (context == nullptr) return wait_failed;
-    return glproto::av_glClientWaitSync(*context->wire(), address_of(sync), flags, timeout);
+    SyncWaitProbe           probe(*context->wire(), address_of(sync), flags);
+    icd::HostCompletionWait wait(kmt_, timeout);
+    static_cast<void>(wait.run(probe));
+    return probe.result();
 }
 
 /* The host's debug messages are not carried back yet: the callback is kept

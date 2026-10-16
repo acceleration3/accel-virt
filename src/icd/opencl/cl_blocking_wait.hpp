@@ -42,9 +42,6 @@ class ClEventWatcher;
 
 class ClBlockingWait {
 public:
-    /* How long a wait asks back to back before it asks once a millisecond:
-     * a second's fraction, 1 ms. */
-    static constexpr uint64_t spin_per_second = 1000u;
     /* `watcher` is the thread the driver's wake ends, which tells this. */
     ClBlockingWait(Kmt &kmt, ClEventWatcher &watcher);
     ClBlockingWait(const ClBlockingWait &) = delete;
@@ -81,11 +78,6 @@ public:
     uint64_t raises_asked() const;
 
 private:
-    /* Whether all of them are complete. `answer` carries what to return when
-     * this says the wait is over, and `pending` the first that is not. */
-    bool settled(ClientTransport &wire, const uint64_t *events, uint32_t count, cl_int &answer,
-                 uint32_t &pending);
-
     Kmt            &kmt_;
     ClEventWatcher &watcher_;
     uint64_t        rounds_;

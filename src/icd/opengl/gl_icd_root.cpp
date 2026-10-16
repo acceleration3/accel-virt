@@ -132,7 +132,7 @@ GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::
       extensions_(reported_extensions, reported_count, reported_wgl_extensions, reported_wgl_count),
       shared_handles_(kmt, lock, memory),
       contexts_(memory, connection_, send_lock, log, extensions_, shared_handles_),
-      manual_(currents_), callbacks_{}, callback_count_(0u), proc_table_(), pending_(memory, Pool::paged), sync_tokens_(0u), profile_noted_(false)
+      manual_(currents_, kmt), callbacks_{}, callback_count_(0u), proc_table_(), pending_(memory, Pool::paged), sync_tokens_(0u), profile_noted_(false)
 {
     AV_SCOPE("GlIcdRoot::GlIcdRoot");
     generated::fill_proc_table(proc_table_);

@@ -26,7 +26,9 @@
 #include "icd/vulkan/memory_allocate_chain.hpp"
 #include "icd/vulkan/memory_type_table.hpp"
 #include "icd/vulkan/physical_device_view.hpp"
-#include "icd/common/counter_wait.hpp"
+#include "icd/common/host_completion_wait.hpp"
+#include "icd/vulkan/fence_wait_probe.hpp"
+#include "icd/vulkan/semaphore_wait_probe.hpp"
 #include "icd/common/sliced_wait.hpp"
 #include "icd/common/thread_lock.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
@@ -1684,14 +1686,10 @@ VkResult IcdRoot::wait_for_fences(VkDevice device, uint32_t count, const VkFence
         return VK_ERROR_DEVICE_LOST;
     }
     if (lost(*made->connection(), "vkWaitForFences")) return VK_ERROR_DEVICE_LOST;
-    CounterWait wait(kmt_, timeout);
-    uint64_t    slice = 0u;
-    while (wait.next(slice)) {
-        const VkResult result = vkproto::av_vkWaitForFences(made->connection()->transport(), device, count, fences,
-                                                             wait_all, slice);
-        if (result != VK_TIMEOUT) return result;
-    }
-    return VK_TIMEOUT;
+    FenceWaitProbe     probe(made->connection()->transport(), device, count, fences, wait_all);
+    HostCompletionWait wait(kmt_, timeout);
+    static_cast<void>(wait.run(probe));
+    return probe.result();
 }
 
 VkResult IcdRoot::wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *info, uint64_t timeout)
@@ -1703,13 +1701,10 @@ VkResult IcdRoot::wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *in
         return VK_ERROR_DEVICE_LOST;
     }
     if (lost(*made->connection(), "vkWaitSemaphores")) return VK_ERROR_DEVICE_LOST;
-    CounterWait wait(kmt_, timeout);
-    uint64_t    slice = 0u;
-    while (wait.next(slice)) {
-        const VkResult result = vkproto::av_vkWaitSemaphores(made->connection()->transport(), device, info, slice);
-        if (result != VK_TIMEOUT) return result;
-    }
-    return VK_TIMEOUT;
+    SemaphoreWaitProbe probe(made->connection()->transport(), device, info);
+    HostCompletionWait wait(kmt_, timeout);
+    static_cast<void>(wait.run(probe));
+    return probe.result();
 }
 
 /* The host's own vkQueueWaitIdle has no timeout, so it could hold the context's

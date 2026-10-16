@@ -16,6 +16,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+namespace av {
+class Kmt;
+}  // namespace av
+
 namespace av::glicd {
 
 class CurrentContexts;
@@ -32,7 +36,7 @@ public:
         gl_texture_depth = 0x8071u, gl_texture_compressed_image_size = 0x86A0u,
     };
 
-    explicit ManualCalls(CurrentContexts &currents);
+    ManualCalls(CurrentContexts &currents, const Kmt &kmt);
     ManualCalls(const ManualCalls &) = delete;
     ManualCalls &operator=(const ManualCalls &) = delete;
 
@@ -235,6 +239,8 @@ private:
                                 const void *data);
 
     CurrentContexts &currents_;
+    /* Whose performance counter times a sync wait. */
+    const Kmt       &kmt_;
 };
 
 }  // namespace av::glicd
