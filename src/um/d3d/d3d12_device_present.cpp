@@ -58,7 +58,7 @@ HRESULT D3d12Device::show(ResourceRecord &resource, D3D12DDI_HRTRESOURCE runtime
      * as the surface it is, which a blt of it is staged by, and makes the
      * compositor's view of it only if something opens it - so D3D9On12, which
      * shares every texture it makes, costs the host no more than that. */
-    if (!sent(d3d12proto::av_d3d12_ShareResource12(wire(), resource.header.id, key), "ShareResource12"))
+    if (!sent(d3d12proto::av_d3d12_ShareResource12(wire(), resource.header.stamp.id(), key), "ShareResource12"))
         return E_OUTOFMEMORY;
     /* DWM may open it as soon as the kernel hands it the handle, on a stream
      * of its own: the host must have shown it by then. */
@@ -92,7 +92,7 @@ void D3d12Device::present(D3D12DDI_HCOMMANDQUEUE queue_handle, const D3D12DDIARG
     }
     /* Never 0, which names no frame: past 2^32 presents it wraps to 1. */
     source->presents = source->presents + 1u == 0u ? 1u : source->presents + 1u;
-    if (!sent(d3d12proto::av_d3d12_PresentResource12(wire(), queue.header.id, source->header.id, source->presents),
+    if (!sent(d3d12proto::av_d3d12_PresentResource12(wire(), queue.header.stamp.id(), source->header.stamp.id(), source->presents),
               "PresentResource12"))
         return;
     if (args->pPrivateDriverData != nullptr && args->PrivateDriverDataSize >= PresentPointRecord::encoded_size)

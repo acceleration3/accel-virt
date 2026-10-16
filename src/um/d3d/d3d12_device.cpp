@@ -117,7 +117,7 @@ d3d::D3dDeviceChannel &D3d12Device::wire()
 uint32_t D3d12Device::id_of(const void *block) const
 {
     AV_SCOPE("D3d12Device::id_of");
-    return block == nullptr ? 0u : static_cast<const RecordHeader *>(block)->id;
+    return block == nullptr ? 0u : static_cast<const RecordHeader *>(block)->stamp.id();
 }
 
 void D3d12Device::lost(const char *what)
@@ -135,11 +135,10 @@ uint32_t D3d12Device::next_id()
     return session_.next_id();
 }
 
-void D3d12Device::stamp(RecordHeader &header, uint32_t magic, uint32_t id)
+void D3d12Device::stamp(RecordHeader &header, uint32_t tag, uint32_t id)
 {
     AV_SCOPE("D3d12Device::stamp");
-    header.magic = magic;
-    header.id = id;
+    header.stamp = d3d::RecordStamp(tag, id);
     header.device = this;
     header.recorder = &recorder_;
 }
@@ -291,7 +290,7 @@ HRESULT D3d12Device::create_command_queue(const D3D12DDIARG_CREATECOMMANDQUEUE_0
         return E_OUTOFMEMORY;
     }
     queue.context = context.hContext;
-    if (!sent(d3d12proto::av_d3d12_CreateCommandQueue12(wire(), queue.header.id, queue.type, 0u, 0u),
+    if (!sent(d3d12proto::av_d3d12_CreateCommandQueue12(wire(), queue.header.stamp.id(), queue.type, 0u, 0u),
               "CreateCommandQueue12"))
         return E_OUTOFMEMORY;
     return S_OK;
@@ -303,7 +302,7 @@ VOID D3d12Device::destroy_command_queue(D3D12DDI_HCOMMANDQUEUE handle)
     QueueRecord &queue = *static_cast<QueueRecord *>(handle.pDrvPrivate);
     /* The queue's context is D3D12Core's to destroy with the queue: its
      * device-level DestroyContextCb refuses a queue's context. */
-    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), queue.header.id), "Destroy12"));
+    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), queue.header.stamp.id()), "Destroy12"));
     queue = QueueRecord{};
 }
 
@@ -317,7 +316,7 @@ VOID D3d12Device::execute_command_lists(D3D12DDI_HCOMMANDQUEUE handle, UINT coun
         uint32_t   ids[most_lists] = {};
         const auto batch = static_cast<UINT>(pieces.count());
         for (UINT index = 0u; index < batch; index++) ids[index] = id_of(lists[pieces.offset() + index].pDrvPrivate);
-        if (!sent(d3d12proto::av_d3d12_ExecuteCommandLists12(wire(), queue.header.id, batch, ids),
+        if (!sent(d3d12proto::av_d3d12_ExecuteCommandLists12(wire(), queue.header.stamp.id(), batch, ids),
                   "ExecuteCommandLists12"))
             return;
     }
@@ -388,7 +387,7 @@ VOID D3d12Device::destroy_command_pool(D3D12DDI_HCOMMANDPOOL_0040 handle)
 {
     AV_SCOPE("D3d12Device::destroy_command_pool");
     PoolRecord &pool = *static_cast<PoolRecord *>(handle.pDrvPrivate);
-    if (pool.made != 0u) static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), pool.header.id), "Destroy12"));
+    if (pool.made != 0u) static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), pool.header.stamp.id()), "Destroy12"));
     pool = PoolRecord{};
 }
 
@@ -397,7 +396,7 @@ VOID D3d12Device::reset_command_pool(D3D12DDI_HCOMMANDPOOL_0040 handle)
     AV_SCOPE("D3d12Device::reset_command_pool");
     const PoolRecord &pool = *static_cast<const PoolRecord *>(handle.pDrvPrivate);
     if (pool.made == 0u) return;
-    static_cast<void>(sent(d3d12proto::av_d3d12_ResetCommandAllocator12(wire(), pool.header.id),
+    static_cast<void>(sent(d3d12proto::av_d3d12_ResetCommandAllocator12(wire(), pool.header.stamp.id()),
                            "ResetCommandAllocator12"));
 }
 
@@ -458,7 +457,7 @@ VOID D3d12Device::destroy_command_list(D3D12DDI_HCOMMANDLIST handle)
 {
     AV_SCOPE("D3d12Device::destroy_command_list");
     ListRecord &list = *static_cast<ListRecord *>(handle.pDrvPrivate);
-    if (list.made != 0u) static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), list.header.id), "Destroy12"));
+    if (list.made != 0u) static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), list.header.stamp.id()), "Destroy12"));
     list = ListRecord{};
 }
 
@@ -502,7 +501,7 @@ HRESULT D3d12Device::create_query_heap(const D3D12DDIARG_CREATE_QUERY_HEAP_0001 
     heap = ObjectRecord{};
     stamp(heap.header, ObjectRecord::tag, next_id());
     heap.kind = static_cast<uint32_t>(args->Type);
-    if (!sent(d3d12proto::av_d3d12_CreateQueryHeap12(wire(), heap.header.id, heap.kind, args->Count),
+    if (!sent(d3d12proto::av_d3d12_CreateQueryHeap12(wire(), heap.header.stamp.id(), heap.kind, args->Count),
               "CreateQueryHeap12"))
         return E_OUTOFMEMORY;
     return S_OK;
@@ -512,7 +511,7 @@ VOID D3d12Device::destroy_query_heap(D3D12DDI_HQUERYHEAP handle)
 {
     AV_SCOPE("D3d12Device::destroy_query_heap");
     ObjectRecord &heap = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
-    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), heap.header.id), "Destroy12"));
+    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), heap.header.stamp.id()), "Destroy12"));
     heap = ObjectRecord{};
 }
 

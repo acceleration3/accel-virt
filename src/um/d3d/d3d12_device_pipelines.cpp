@@ -54,7 +54,7 @@ const ShaderRecord *shader_of(D3D12DDI_HSHADER handle)
 {
     AV_SCOPE("shader_of");
     const ShaderRecord *const shader = static_cast<const ShaderRecord *>(handle.pDrvPrivate);
-    return shader != nullptr && shader->header.magic == ShaderRecord::tag ? shader : nullptr;
+    return shader != nullptr && shader->header.stamp.holds(ShaderRecord::tag) ? shader : nullptr;
 }
 
 const uint8_t *code_of(const ShaderRecord *shader)
@@ -379,7 +379,7 @@ HRESULT D3d12Device::create_root_signature(const D3D12DDIARG_CREATE_ROOT_SIGNATU
     ObjectRecord &root = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
     root = ObjectRecord{};
     stamp(root.header, ObjectRecord::tag, next_id());
-    if (!sent(d3d12proto::av_d3d12_CreateRootSignature12(wire(), root.header.id, static_cast<uint32_t>(desc.Flags),
+    if (!sent(d3d12proto::av_d3d12_CreateRootSignature12(wire(), root.header.stamp.id(), static_cast<uint32_t>(desc.Flags),
                                                           desc.NumParameters, parameters, range_count, ranges,
                                                           desc.NumStaticSamplers, samplers),
               "CreateRootSignature12"))
@@ -391,7 +391,7 @@ VOID D3d12Device::destroy_root_signature(D3D12DDI_HROOTSIGNATURE handle)
 {
     AV_SCOPE("D3d12Device::destroy_root_signature");
     ObjectRecord &root = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
-    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), root.header.id), "Destroy12"));
+    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), root.header.stamp.id()), "Destroy12"));
     root = ObjectRecord{};
 }
 
@@ -416,7 +416,7 @@ HRESULT D3d12Device::create_command_signature(const D3D12DDIARG_CREATE_COMMAND_S
     ObjectRecord &signature = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
     signature = ObjectRecord{};
     stamp(signature.header, ObjectRecord::tag, next_id());
-    if (!sent(d3d12proto::av_d3d12_CreateCommandSignature12(wire(), signature.header.id,
+    if (!sent(d3d12proto::av_d3d12_CreateCommandSignature12(wire(), signature.header.stamp.id(),
                                                              id_of(args->hRootSignature.pDrvPrivate), args->ByteStride,
                                                              args->NumArgumentDescs, arguments),
               "CreateCommandSignature12"))
@@ -428,7 +428,7 @@ VOID D3d12Device::destroy_command_signature(D3D12DDI_HCOMMANDSIGNATURE handle)
 {
     AV_SCOPE("D3d12Device::destroy_command_signature");
     ObjectRecord &signature = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
-    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), signature.header.id), "Destroy12"));
+    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), signature.header.stamp.id()), "Destroy12"));
     signature = ObjectRecord{};
 }
 
@@ -513,7 +513,7 @@ HRESULT D3d12Device::create_pipeline_state(const D3D12DDIARG_CREATE_PIPELINE_STA
     const uint32_t root = id_of(args->hRootSignature.pDrvPrivate);
     if (const ShaderRecord *const compute = shader_of(args->hComputeShader); compute != nullptr) {
         pipeline.kind = 1u;
-        return sent(d3d12proto::av_d3d12_CreateComputePipeline12(wire(), pipeline.header.id, root, code_of(compute),
+        return sent(d3d12proto::av_d3d12_CreateComputePipeline12(wire(), pipeline.header.stamp.id(), root, code_of(compute),
                                                                   code_size_of(compute)),
                     "CreateComputePipeline12")
                    ? S_OK
@@ -535,7 +535,7 @@ HRESULT D3d12Device::create_pipeline_state(const D3D12DDIARG_CREATE_PIPELINE_STA
     const LayoutRecord *const layout = static_cast<const LayoutRecord *>(args->hElementLayout.pDrvPrivate);
     const uint32_t            elements = layout == nullptr ? 0u : layout->count;
     if (!sent(d3d12proto::av_d3d12_CreateGraphicsPipeline12(
-                  wire(), pipeline.header.id, root, state, elements, layout == nullptr ? nullptr : layout->elements,
+                  wire(), pipeline.header.stamp.id(), root, state, elements, layout == nullptr ? nullptr : layout->elements,
                   signature_count, signatures, code_of(stages[0]), code_size_of(stages[0]), code_of(stages[1]),
                   code_size_of(stages[1]), code_of(stages[2]), code_size_of(stages[2]), code_of(stages[3]),
                   code_size_of(stages[3]), code_of(stages[4]), code_size_of(stages[4])),
@@ -548,7 +548,7 @@ VOID D3d12Device::destroy_pipeline_state(D3D12DDI_HPIPELINESTATE handle)
 {
     AV_SCOPE("D3d12Device::destroy_pipeline_state");
     ObjectRecord &pipeline = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
-    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), pipeline.header.id), "Destroy12"));
+    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), pipeline.header.stamp.id()), "Destroy12"));
     pipeline = ObjectRecord{};
 }
 

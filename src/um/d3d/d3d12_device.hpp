@@ -102,7 +102,7 @@ public:
 
 private:
     uint32_t next_id();
-    void     stamp(RecordHeader &header, uint32_t magic, uint32_t id);
+    void     stamp(RecordHeader &header, uint32_t tag, uint32_t id);
     bool     sent(bool sent_ok, const char *what);
     /* A packet on `queue`'s context behind the batch its execute sent; false,
      * with the device lost, when the runtime refuses it. */

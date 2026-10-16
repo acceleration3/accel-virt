@@ -134,7 +134,7 @@ HRESULT D3d11Device::show_flip(const ResourceRecord &source, uint32_t subresourc
     const bool flip = source.present_model == d3d::SwapChainBuffer::Model::flip &&
                       (source.bind & D3D10_DDI_BIND_PRESENT) != 0u;
     if (!flip && source.present_model != d3d::SwapChainBuffer::Model::scanout) return S_OK;
-    if (d3dproto::av_d3d_PresentPoint(wire(), source.id, subresource, 0u)) return S_OK;
+    if (d3dproto::av_d3d_PresentPoint(wire(), source.stamp.id(), subresource, 0u)) return S_OK;
     set_error(D3DDDIERR_DEVICEREMOVED);
     return DXGI_ERROR_DEVICE_REMOVED;
 }
@@ -171,7 +171,7 @@ HRESULT D3d11Device::present_point(ResourceRecord &source, uint32_t subresource,
     if (source.allocation == 0u) return E_INVALIDARG;
     /* Never 0, which names no frame: past 2^32 presents it wraps to 1. */
     source.presents = source.presents + 1u == 0u ? 1u : source.presents + 1u;
-    if (!d3dproto::av_d3d_PresentPoint(wire(), source.id, subresource, source.presents) ||
+    if (!d3dproto::av_d3d_PresentPoint(wire(), source.stamp.id(), subresource, source.presents) ||
         wire().flush() != Status::ok) {
         set_error(D3DDDIERR_DEVICEREMOVED);
         return DXGI_ERROR_DEVICE_REMOVED;
@@ -382,8 +382,8 @@ HRESULT D3d11Device::blt(DXGI_DDI_ARG_BLT *args)
     /* A stretch is copied at the destination's size from the source's corner:
      * DXGI asks for one only when a mode does not match its buffers. */
     const d3dproto::Box region = {0u, 0u, 0u, args->DstRight - args->DstLeft, args->DstBottom - args->DstTop, 1u};
-    return d3dproto::av_d3d_CopySubresourceRegion(wire(), to.id, args->DstSubresource, args->DstLeft, args->DstTop, 0u,
-                                                   from.id, args->SrcSubresource, 1u, region, 0u)
+    return d3dproto::av_d3d_CopySubresourceRegion(wire(), to.stamp.id(), args->DstSubresource, args->DstLeft, args->DstTop, 0u,
+                                                   from.stamp.id(), args->SrcSubresource, 1u, region, 0u)
                ? S_OK
                : E_OUTOFMEMORY;
 }
@@ -394,8 +394,8 @@ HRESULT D3d11Device::blt1(DXGI_DDI_ARG_BLT1 *args)
     const ResourceRecord &to = record(args->hDstResource);
     const ResourceRecord &from = record(args->hSrcResource);
     const d3dproto::Box region = {args->SrcLeft, args->SrcTop, 0u, args->SrcRight, args->SrcBottom, 1u};
-    return d3dproto::av_d3d_CopySubresourceRegion(wire(), to.id, args->DstSubresource, args->DstLeft, args->DstTop, 0u,
-                                                   from.id, args->SrcSubresource, 1u, region, 0u)
+    return d3dproto::av_d3d_CopySubresourceRegion(wire(), to.stamp.id(), args->DstSubresource, args->DstLeft, args->DstTop, 0u,
+                                                   from.stamp.id(), args->SrcSubresource, 1u, region, 0u)
                ? S_OK
                : E_OUTOFMEMORY;
 }
@@ -413,7 +413,7 @@ HRESULT D3d11Device::rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDE
     constexpr UINT max_rotation = 16u;
     if (args->Resources > max_rotation) return E_INVALIDARG;
     uint32_t ids[max_rotation] = {};
-    for (UINT index = 0u; index < args->Resources; index++) ids[index] = record(args->pResources[index]).id;
+    for (UINT index = 0u; index < args->Resources; index++) ids[index] = record(args->pResources[index]).stamp.id();
     if (!d3dproto::av_d3d_RotateResources11(wire(), args->Resources, ids)) return E_OUTOFMEMORY;
     const ResourceRecord first = record(args->pResources[0]);
     for (UINT index = 0u; index < args->Resources; index++) {
@@ -502,7 +502,7 @@ bool D3d11Device::open_guest_surface(ResourceRecord &resource, const D3D10DDIARG
     desc.sample_count = 1u;
     desc.usage = D3D10_DDI_USAGE_DEFAULT;
     desc.bind_flags = resource.bind;
-    if (!d3dproto::av_d3d_CreateResource(wire(), resource.id, desc, 0u)) return false;
+    if (!d3dproto::av_d3d_CreateResource(wire(), resource.stamp.id(), desc, 0u)) return false;
     const size_t bytes = static_cast<size_t>(resource.allocation_pitch) * resource.height;
     resource.shadow = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
     resource.shadow_watched = 0u;
@@ -541,7 +541,7 @@ void D3d11Device::refresh_bound_guest_surfaces(const D3D10DDI_HSHADERRESOURCEVIE
         if (view == nullptr) continue;
         for (uint32_t index = 0u; index < guest_surfaces_.size(); index++) {
             ResourceRecord &surface = *guest_surfaces_.at(index);
-            if (surface.id != view->resource || surface.refreshed == frame_) continue;
+            if (surface.stamp.id() != view->resource || surface.refreshed == frame_) continue;
             surface.refreshed = frame_;
             refresh_guest_surface(surface);
         }

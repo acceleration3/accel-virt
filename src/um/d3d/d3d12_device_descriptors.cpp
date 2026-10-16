@@ -46,10 +46,10 @@ HRESULT D3d12Device::create_descriptor_heap(const D3D12DDIARG_CREATE_DESCRIPTOR_
     heap.increment = descriptor_bytes;
     uint8_t *const slots = static_cast<uint8_t *>(handle.pDrvPrivate) + sizeof(DescriptorHeapRecord);
     for (uint32_t index = 0u; index < heap.count; index++) {
-        const DescriptorSlot slot = {heap.header.id, index};
+        const DescriptorSlot slot = {heap.header.stamp.id(), index};
         __builtin_memcpy(slots + static_cast<size_t>(index) * descriptor_bytes, &slot, sizeof(slot));
     }
-    if (!sent(d3d12proto::av_d3d12_CreateDescriptorHeap12(wire(), heap.header.id, heap.type, heap.count, heap.flags),
+    if (!sent(d3d12proto::av_d3d12_CreateDescriptorHeap12(wire(), heap.header.stamp.id(), heap.type, heap.count, heap.flags),
               "CreateDescriptorHeap12"))
         return E_OUTOFMEMORY;
     return S_OK;
@@ -59,7 +59,7 @@ VOID D3d12Device::destroy_descriptor_heap(D3D12DDI_HDESCRIPTORHEAP handle)
 {
     AV_SCOPE("D3d12Device::destroy_descriptor_heap");
     DescriptorHeapRecord &heap = *static_cast<DescriptorHeapRecord *>(handle.pDrvPrivate);
-    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), heap.header.id), "Destroy12"));
+    static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), heap.header.stamp.id()), "Destroy12"));
     heap = DescriptorHeapRecord{};
 }
 
@@ -274,7 +274,7 @@ VOID D3d12Device::create_depth_stencil_view(const D3D12DDIARG_CREATE_DEPTH_STENC
     if (args == nullptr || args->hDrvResource.pDrvPrivate == nullptr) return;
     const ResourceRecord &resource = *static_cast<const ResourceRecord *>(args->hDrvResource.pDrvPrivate);
     d3d12proto::ViewDesc  view = {};
-    view.resource = resource.header.id;
+    view.resource = resource.header.stamp.id();
     view.format = static_cast<uint32_t>(args->Format);
     view.flags = static_cast<uint32_t>(args->Flags);
     const bool array = resource.depth_or_array > 1u || args->ResourceDimension == D3D12DDI_RD_TEXTURECUBE;

@@ -59,7 +59,7 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
                                                                      : 0u;
     /* Refused before the application is handed memory: a write the unmap
      * could not find would never reach the host. */
-    if (type != D3D10_DDI_MAP_READ && maps_.open(resource.id, subresource, flags) != Status::ok) {
+    if (type != D3D10_DDI_MAP_READ && maps_.open(resource.stamp.id(), subresource, flags) != Status::ok) {
         lines_.once("a map the device had no memory to hold open for writing");
         set_error(E_OUTOFMEMORY);
         return;
@@ -93,7 +93,7 @@ void D3d11Device::unmap(D3D10DDI_HRESOURCE handle, UINT subresource)
     uint32_t        flags = 0u;
     /* What the application wrote is already where the host GPU reads it. */
     if (resource.on_slice != 0u) return;
-    if (resource.shadow == nullptr || !maps_.close(resource.id, subresource, flags)) return;
+    if (resource.shadow == nullptr || !maps_.close(resource.stamp.id(), subresource, flags)) return;
     if (resource.shadow_watched != 0u && upload_written(resource, flags)) return;
     uint32_t width = 0u, height = 0u, depth = 0u;
     extent(resource, subresource, width, height, depth);
@@ -272,7 +272,7 @@ bool D3d11Device::own_shadow(ResourceRecord &resource)
 void D3d11Device::forget_copy(ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::forget_copy");
-    maps_.forget(resource.id);
+    maps_.forget(resource.stamp.id());
     if (resource.shadow_local != 0u) shadows_.release(resource.shadow, resource.shadow_watched != 0u);
     resource = ResourceRecord{};
 }
@@ -297,7 +297,7 @@ bool D3d11Device::leave_slice_for_copies(ResourceRecord &resource)
 bool D3d11Device::bind_slice(const ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::bind_slice");
-    return d3dproto::av_d3d_BindBufferSlice(wire(), resource.id, session_.slice_memory(), resource.slice.offset_,
+    return d3dproto::av_d3d_BindBufferSlice(wire(), resource.stamp.id(), session_.slice_memory(), resource.slice.offset_,
                                             resource.slice.bytes_);
 }
 

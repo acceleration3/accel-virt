@@ -4,545 +4,545 @@
  * handle it was given and nothing else, so each thunk is one line into the
  * device the handle's block names. */
 #include "core/trace/function_scope.hpp"
+#include "icd/d3d/device_block.hpp"
 #include "icd/d3d/umd_binding.hpp"
 #include "icd/d3d/umd_root.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d11_dxgi_thunks.hpp"
 #include "um/d3d/device_call.hpp"
-#include "um/d3d/device_handle.hpp"
 
 namespace av::d3d11 {
 
 namespace {
 
 extern "C" VOID APIENTRY avumd_d3d11_DefaultConstantBufferUpdateSubresourceUP(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, const D3D10_DDI_BOX * a3, const void * a4, UINT a5, UINT a6, UINT a7)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DefaultConstantBufferUpdateSubresourceUP", &D3d11Device::default_constant_buffer_update_subresource_up, a1, a2, a3, a4, a5, a6, a7); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DefaultConstantBufferUpdateSubresourceUP", &D3d11Device::default_constant_buffer_update_subresource_up, a1, a2, a3, a4, a5, a6, a7); }
 
 extern "C" VOID APIENTRY avumd_d3d11_VsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("VsSetConstantBuffers", &D3d11Device::vs_set_constant_buffers, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("VsSetConstantBuffers", &D3d11Device::vs_set_constant_buffers, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_PsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("PsSetShaderResources", &D3d11Device::ps_set_shader_resources, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("PsSetShaderResources", &D3d11Device::ps_set_shader_resources, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_PsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("PsSetShader", &D3d11Device::ps_set_shader, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("PsSetShader", &D3d11Device::ps_set_shader, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_PsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("PsSetSamplers", &D3d11Device::ps_set_samplers, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("PsSetSamplers", &D3d11Device::ps_set_samplers, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_VsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("VsSetShader", &D3d11Device::vs_set_shader, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("VsSetShader", &D3d11Device::vs_set_shader, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DrawIndexed(D3D10DDI_HDEVICE device, UINT a1, UINT a2, INT a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DrawIndexed", &D3d11Device::draw_indexed, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DrawIndexed", &D3d11Device::draw_indexed, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_Draw(D3D10DDI_HDEVICE device, UINT a1, UINT a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("Draw", &D3d11Device::draw, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("Draw", &D3d11Device::draw, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DynamicIABufferMapNoOverwrite(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DynamicIABufferMapNoOverwrite", &D3d11Device::dynamic_ia_buffer_map_no_overwrite, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DynamicIABufferMapNoOverwrite", &D3d11Device::dynamic_ia_buffer_map_no_overwrite, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DynamicIABufferUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DynamicIABufferUnmap", &D3d11Device::dynamic_ia_buffer_unmap, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DynamicIABufferUnmap", &D3d11Device::dynamic_ia_buffer_unmap, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DynamicConstantBufferMapDiscard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DynamicConstantBufferMapDiscard", &D3d11Device::dynamic_constant_buffer_map_discard, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DynamicConstantBufferMapDiscard", &D3d11Device::dynamic_constant_buffer_map_discard, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DynamicIABufferMapDiscard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DynamicIABufferMapDiscard", &D3d11Device::dynamic_ia_buffer_map_discard, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DynamicIABufferMapDiscard", &D3d11Device::dynamic_ia_buffer_map_discard, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DynamicConstantBufferUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DynamicConstantBufferUnmap", &D3d11Device::dynamic_constant_buffer_unmap, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DynamicConstantBufferUnmap", &D3d11Device::dynamic_constant_buffer_unmap, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_PsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("PsSetConstantBuffers", &D3d11Device::ps_set_constant_buffers, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("PsSetConstantBuffers", &D3d11Device::ps_set_constant_buffers, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_IaSetInputLayout(D3D10DDI_HDEVICE device, D3D10DDI_HELEMENTLAYOUT a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("IaSetInputLayout", &D3d11Device::ia_set_input_layout, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("IaSetInputLayout", &D3d11Device::ia_set_input_layout, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_IaSetVertexBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("IaSetVertexBuffers", &D3d11Device::ia_set_vertex_buffers, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("IaSetVertexBuffers", &D3d11Device::ia_set_vertex_buffers, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_IaSetIndexBuffer(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, DXGI_FORMAT a2, UINT a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("IaSetIndexBuffer", &D3d11Device::ia_set_index_buffer, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("IaSetIndexBuffer", &D3d11Device::ia_set_index_buffer, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DrawIndexedInstanced(D3D10DDI_HDEVICE device, UINT a1, UINT a2, UINT a3, INT a4, UINT a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DrawIndexedInstanced", &D3d11Device::draw_indexed_instanced, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DrawIndexedInstanced", &D3d11Device::draw_indexed_instanced, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DrawInstanced(D3D10DDI_HDEVICE device, UINT a1, UINT a2, UINT a3, UINT a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DrawInstanced", &D3d11Device::draw_instanced, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DrawInstanced", &D3d11Device::draw_instanced, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DynamicResourceMapDiscard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DynamicResourceMapDiscard", &D3d11Device::dynamic_resource_map_discard, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DynamicResourceMapDiscard", &D3d11Device::dynamic_resource_map_discard, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DynamicResourceUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DynamicResourceUnmap", &D3d11Device::dynamic_resource_unmap, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DynamicResourceUnmap", &D3d11Device::dynamic_resource_unmap, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_GsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("GsSetConstantBuffers", &D3d11Device::gs_set_constant_buffers, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("GsSetConstantBuffers", &D3d11Device::gs_set_constant_buffers, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_GsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("GsSetShader", &D3d11Device::gs_set_shader, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("GsSetShader", &D3d11Device::gs_set_shader, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_IaSetTopology(D3D10DDI_HDEVICE device, D3D10_DDI_PRIMITIVE_TOPOLOGY a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("IaSetTopology", &D3d11Device::ia_set_topology, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("IaSetTopology", &D3d11Device::ia_set_topology, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_StagingResourceMap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("StagingResourceMap", &D3d11Device::staging_resource_map, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("StagingResourceMap", &D3d11Device::staging_resource_map, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_StagingResourceUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("StagingResourceUnmap", &D3d11Device::staging_resource_unmap, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("StagingResourceUnmap", &D3d11Device::staging_resource_unmap, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_VsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("VsSetShaderResources", &D3d11Device::vs_set_shader_resources, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("VsSetShaderResources", &D3d11Device::vs_set_shader_resources, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_VsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("VsSetSamplers", &D3d11Device::vs_set_samplers, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("VsSetSamplers", &D3d11Device::vs_set_samplers, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_GsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("GsSetShaderResources", &D3d11Device::gs_set_shader_resources, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("GsSetShaderResources", &D3d11Device::gs_set_shader_resources, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_GsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("GsSetSamplers", &D3d11Device::gs_set_samplers, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("GsSetSamplers", &D3d11Device::gs_set_samplers, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_SetRenderTargets(D3D10DDI_HDEVICE device, const D3D10DDI_HRENDERTARGETVIEW * a1, UINT a2, UINT a3, D3D10DDI_HDEPTHSTENCILVIEW a4, const D3D11DDI_HUNORDEREDACCESSVIEW * a5, const UINT * a6, UINT a7, UINT a8, UINT a9, UINT a10)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("SetRenderTargets", &D3d11Device::set_render_targets, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("SetRenderTargets", &D3d11Device::set_render_targets, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ShaderResourceViewReadAfterWriteHazard(D3D10DDI_HDEVICE device, D3D10DDI_HSHADERRESOURCEVIEW a1, D3D10DDI_HRESOURCE a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ShaderResourceViewReadAfterWriteHazard", &D3d11Device::shader_resource_view_read_after_write_hazard, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ShaderResourceViewReadAfterWriteHazard", &D3d11Device::shader_resource_view_read_after_write_hazard, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ResourceReadAfterWriteHazard(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ResourceReadAfterWriteHazard", &D3d11Device::resource_read_after_write_hazard, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ResourceReadAfterWriteHazard", &D3d11Device::resource_read_after_write_hazard, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_SetBlendState(D3D10DDI_HDEVICE device, D3D10DDI_HBLENDSTATE a1, const FLOAT * a2, UINT a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("SetBlendState", &D3d11Device::set_blend_state, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("SetBlendState", &D3d11Device::set_blend_state, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_SetDepthStencilState(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILSTATE a1, UINT a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("SetDepthStencilState", &D3d11Device::set_depth_stencil_state, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("SetDepthStencilState", &D3d11Device::set_depth_stencil_state, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_SetRasterizerState(D3D10DDI_HDEVICE device, D3D10DDI_HRASTERIZERSTATE a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("SetRasterizerState", &D3d11Device::set_rasterizer_state, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("SetRasterizerState", &D3d11Device::set_rasterizer_state, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_QueryEnd(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("QueryEnd", &D3d11Device::query_end, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("QueryEnd", &D3d11Device::query_end, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_QueryBegin(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("QueryBegin", &D3d11Device::query_begin, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("QueryBegin", &D3d11Device::query_begin, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ResourceCopyRegion(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, UINT a3, UINT a4, UINT a5, D3D10DDI_HRESOURCE a6, UINT a7, const D3D10_DDI_BOX * a8, UINT a9)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ResourceCopyRegion", &D3d11Device::resource_copy_region, a1, a2, a3, a4, a5, a6, a7, a8, a9); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ResourceCopyRegion", &D3d11Device::resource_copy_region, a1, a2, a3, a4, a5, a6, a7, a8, a9); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ResourceUpdateSubresourceUP(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, const D3D10_DDI_BOX * a3, const void * a4, UINT a5, UINT a6, UINT a7)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ResourceUpdateSubresourceUP", &D3d11Device::resource_update_subresource_up, a1, a2, a3, a4, a5, a6, a7); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ResourceUpdateSubresourceUP", &D3d11Device::resource_update_subresource_up, a1, a2, a3, a4, a5, a6, a7); }
 
 extern "C" VOID APIENTRY avumd_d3d11_SoSetTargets(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("SoSetTargets", &D3d11Device::so_set_targets, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("SoSetTargets", &D3d11Device::so_set_targets, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DrawAuto(D3D10DDI_HDEVICE device)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DrawAuto", &D3d11Device::draw_auto); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DrawAuto", &D3d11Device::draw_auto); }
 
 extern "C" VOID APIENTRY avumd_d3d11_SetViewports(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10_DDI_VIEWPORT * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("SetViewports", &D3d11Device::set_viewports, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("SetViewports", &D3d11Device::set_viewports, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_SetScissorRects(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10_DDI_RECT * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("SetScissorRects", &D3d11Device::set_scissor_rects, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("SetScissorRects", &D3d11Device::set_scissor_rects, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ClearRenderTargetView(D3D10DDI_HDEVICE device, D3D10DDI_HRENDERTARGETVIEW a1, FLOAT * a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ClearRenderTargetView", &D3d11Device::clear_render_target_view, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ClearRenderTargetView", &D3d11Device::clear_render_target_view, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ClearDepthStencilView(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILVIEW a1, UINT a2, FLOAT a3, UINT8 a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ClearDepthStencilView", &D3d11Device::clear_depth_stencil_view, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ClearDepthStencilView", &D3d11Device::clear_depth_stencil_view, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_SetPredication(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1, BOOL a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("SetPredication", &D3d11Device::set_predication, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("SetPredication", &D3d11Device::set_predication, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_QueryGetData(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1, void * a2, UINT a3, UINT a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("QueryGetData", &D3d11Device::query_get_data, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("QueryGetData", &D3d11Device::query_get_data, a1, a2, a3, a4); }
 
 extern "C" BOOL APIENTRY avumd_d3d11_Flush(D3D10DDI_HDEVICE device, UINT a1, UINT a2)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("Flush", &D3d11Device::flush, a1, a2); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("Flush", &D3d11Device::flush, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_GenMips(D3D10DDI_HDEVICE device, D3D10DDI_HSHADERRESOURCEVIEW a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("GenMips", &D3d11Device::gen_mips, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("GenMips", &D3d11Device::gen_mips, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ResourceCopy(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, D3D10DDI_HRESOURCE a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ResourceCopy", &D3d11Device::resource_copy, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ResourceCopy", &D3d11Device::resource_copy, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ResourceResolveSubresource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10DDI_HRESOURCE a3, UINT a4, DXGI_FORMAT a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ResourceResolveSubresource", &D3d11Device::resource_resolve_subresource, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ResourceResolveSubresource", &D3d11Device::resource_resolve_subresource, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ResourceMap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ResourceMap", &D3d11Device::resource_map, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ResourceMap", &D3d11Device::resource_map, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ResourceUnmap(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ResourceUnmap", &D3d11Device::resource_unmap, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ResourceUnmap", &D3d11Device::resource_unmap, a1, a2); }
 
 extern "C" BOOL APIENTRY avumd_d3d11_ResourceIsStagingBusy(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ResourceIsStagingBusy", &D3d11Device::resource_is_staging_busy, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ResourceIsStagingBusy", &D3d11Device::resource_is_staging_busy, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_RelocateDeviceFuncs(D3D10DDI_HDEVICE device, struct D3DWDDM2_6DDI_DEVICEFUNCS * a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("RelocateDeviceFuncs", &D3d11Device::relocate_device_funcs, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("RelocateDeviceFuncs", &D3d11Device::relocate_device_funcs, a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateResourceSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATERESOURCE * a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateResourceSize", &D3d11Device::calc_private_resource_size, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateResourceSize", &D3d11Device::calc_private_resource_size, a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateOpenedResourceSize(D3D10DDI_HDEVICE device, const D3D10DDIARG_OPENRESOURCE * a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateOpenedResourceSize", &D3d11Device::calc_private_opened_resource_size, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateOpenedResourceSize", &D3d11Device::calc_private_opened_resource_size, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateResource(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATERESOURCE * a1, D3D10DDI_HRESOURCE a2, D3D10DDI_HRTRESOURCE a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateResource", &D3d11Device::create_resource, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateResource", &D3d11Device::create_resource, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_OpenResource(D3D10DDI_HDEVICE device, const D3D10DDIARG_OPENRESOURCE * a1, D3D10DDI_HRESOURCE a2, D3D10DDI_HRTRESOURCE a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("OpenResource", &D3d11Device::open_resource, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("OpenResource", &D3d11Device::open_resource, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroyResource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).announced("DestroyResource", &D3d11Device::destroy_resource, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).announced("DestroyResource", &D3d11Device::destroy_resource, a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateShaderResourceViewSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATESHADERRESOURCEVIEW * a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateShaderResourceViewSize", &D3d11Device::calc_private_shader_resource_view_size, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateShaderResourceViewSize", &D3d11Device::calc_private_shader_resource_view_size, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateShaderResourceView(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATESHADERRESOURCEVIEW * a1, D3D10DDI_HSHADERRESOURCEVIEW a2, D3D10DDI_HRTSHADERRESOURCEVIEW a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateShaderResourceView", &D3d11Device::create_shader_resource_view, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateShaderResourceView", &D3d11Device::create_shader_resource_view, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroyShaderResourceView(D3D10DDI_HDEVICE device, D3D10DDI_HSHADERRESOURCEVIEW a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).announced("DestroyShaderResourceView", &D3d11Device::destroy_shader_resource_view, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).announced("DestroyShaderResourceView", &D3d11Device::destroy_shader_resource_view, a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateRenderTargetViewSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATERENDERTARGETVIEW * a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateRenderTargetViewSize", &D3d11Device::calc_private_render_target_view_size, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateRenderTargetViewSize", &D3d11Device::calc_private_render_target_view_size, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateRenderTargetView(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATERENDERTARGETVIEW * a1, D3D10DDI_HRENDERTARGETVIEW a2, D3D10DDI_HRTRENDERTARGETVIEW a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateRenderTargetView", &D3d11Device::create_render_target_view, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateRenderTargetView", &D3d11Device::create_render_target_view, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroyRenderTargetView(D3D10DDI_HDEVICE device, D3D10DDI_HRENDERTARGETVIEW a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).announced("DestroyRenderTargetView", &D3d11Device::destroy_render_target_view, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).announced("DestroyRenderTargetView", &D3d11Device::destroy_render_target_view, a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateDepthStencilViewSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEPTHSTENCILVIEW * a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateDepthStencilViewSize", &D3d11Device::calc_private_depth_stencil_view_size, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateDepthStencilViewSize", &D3d11Device::calc_private_depth_stencil_view_size, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateDepthStencilView(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEPTHSTENCILVIEW * a1, D3D10DDI_HDEPTHSTENCILVIEW a2, D3D10DDI_HRTDEPTHSTENCILVIEW a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateDepthStencilView", &D3d11Device::create_depth_stencil_view, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateDepthStencilView", &D3d11Device::create_depth_stencil_view, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroyDepthStencilView(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILVIEW a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).announced("DestroyDepthStencilView", &D3d11Device::destroy_depth_stencil_view, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).announced("DestroyDepthStencilView", &D3d11Device::destroy_depth_stencil_view, a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateElementLayoutSize(D3D10DDI_HDEVICE device, const D3D10DDIARG_CREATEELEMENTLAYOUT * a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateElementLayoutSize", &D3d11Device::calc_private_element_layout_size, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateElementLayoutSize", &D3d11Device::calc_private_element_layout_size, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateElementLayout(D3D10DDI_HDEVICE device, const D3D10DDIARG_CREATEELEMENTLAYOUT * a1, D3D10DDI_HELEMENTLAYOUT a2, D3D10DDI_HRTELEMENTLAYOUT a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateElementLayout", &D3d11Device::create_element_layout, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateElementLayout", &D3d11Device::create_element_layout, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroyElementLayout(D3D10DDI_HDEVICE device, D3D10DDI_HELEMENTLAYOUT a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).announced("DestroyElementLayout", &D3d11Device::destroy_element_layout, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).announced("DestroyElementLayout", &D3d11Device::destroy_element_layout, a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateBlendStateSize(D3D10DDI_HDEVICE device, const D3D11_1_DDI_BLEND_DESC * a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateBlendStateSize", &D3d11Device::calc_private_blend_state_size, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateBlendStateSize", &D3d11Device::calc_private_blend_state_size, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateBlendState(D3D10DDI_HDEVICE device, const D3D11_1_DDI_BLEND_DESC * a1, D3D10DDI_HBLENDSTATE a2, D3D10DDI_HRTBLENDSTATE a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateBlendState", &D3d11Device::create_blend_state, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateBlendState", &D3d11Device::create_blend_state, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroyBlendState(D3D10DDI_HDEVICE device, D3D10DDI_HBLENDSTATE a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).announced("DestroyBlendState", &D3d11Device::destroy_blend_state, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).announced("DestroyBlendState", &D3d11Device::destroy_blend_state, a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateDepthStencilStateSize(D3D10DDI_HDEVICE device, const D3D10_DDI_DEPTH_STENCIL_DESC * a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateDepthStencilStateSize", &D3d11Device::calc_private_depth_stencil_state_size, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateDepthStencilStateSize", &D3d11Device::calc_private_depth_stencil_state_size, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateDepthStencilState(D3D10DDI_HDEVICE device, const D3D10_DDI_DEPTH_STENCIL_DESC * a1, D3D10DDI_HDEPTHSTENCILSTATE a2, D3D10DDI_HRTDEPTHSTENCILSTATE a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateDepthStencilState", &D3d11Device::create_depth_stencil_state, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateDepthStencilState", &D3d11Device::create_depth_stencil_state, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroyDepthStencilState(D3D10DDI_HDEVICE device, D3D10DDI_HDEPTHSTENCILSTATE a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).announced("DestroyDepthStencilState", &D3d11Device::destroy_depth_stencil_state, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).announced("DestroyDepthStencilState", &D3d11Device::destroy_depth_stencil_state, a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateRasterizerStateSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDI_RASTERIZER_DESC * a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateRasterizerStateSize", &D3d11Device::calc_private_rasterizer_state_size, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateRasterizerStateSize", &D3d11Device::calc_private_rasterizer_state_size, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateRasterizerState(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDI_RASTERIZER_DESC * a1, D3D10DDI_HRASTERIZERSTATE a2, D3D10DDI_HRTRASTERIZERSTATE a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateRasterizerState", &D3d11Device::create_rasterizer_state, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateRasterizerState", &D3d11Device::create_rasterizer_state, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroyRasterizerState(D3D10DDI_HDEVICE device, D3D10DDI_HRASTERIZERSTATE a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).announced("DestroyRasterizerState", &D3d11Device::destroy_rasterizer_state, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).announced("DestroyRasterizerState", &D3d11Device::destroy_rasterizer_state, a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateShaderSize(D3D10DDI_HDEVICE device, const UINT * a1, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a2)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateShaderSize", &D3d11Device::calc_private_shader_size, a1, a2); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateShaderSize", &D3d11Device::calc_private_shader_size, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateVertexShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateVertexShader", &D3d11Device::create_vertex_shader, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateVertexShader", &D3d11Device::create_vertex_shader, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateGeometryShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateGeometryShader", &D3d11Device::create_geometry_shader, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateGeometryShader", &D3d11Device::create_geometry_shader, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreatePixelShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreatePixelShader", &D3d11Device::create_pixel_shader, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreatePixelShader", &D3d11Device::create_pixel_shader, a1, a2, a3, a4); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateGeometryShaderWithStreamOutput(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT * a1, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a2)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateGeometryShaderWithStreamOutput", &D3d11Device::calc_private_geometry_shader_with_stream_output, a1, a2); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateGeometryShaderWithStreamOutput", &D3d11Device::calc_private_geometry_shader_with_stream_output, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateGeometryShaderWithStreamOutput(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_STAGE_IO_SIGNATURES * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateGeometryShaderWithStreamOutput", &D3d11Device::create_geometry_shader_with_stream_output, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateGeometryShaderWithStreamOutput", &D3d11Device::create_geometry_shader_with_stream_output, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroyShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).announced("DestroyShader", &D3d11Device::destroy_shader, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).announced("DestroyShader", &D3d11Device::destroy_shader, a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateSamplerSize(D3D10DDI_HDEVICE device, const D3D10_DDI_SAMPLER_DESC * a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateSamplerSize", &D3d11Device::calc_private_sampler_size, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateSamplerSize", &D3d11Device::calc_private_sampler_size, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateSampler(D3D10DDI_HDEVICE device, const D3D10_DDI_SAMPLER_DESC * a1, D3D10DDI_HSAMPLER a2, D3D10DDI_HRTSAMPLER a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateSampler", &D3d11Device::create_sampler, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateSampler", &D3d11Device::create_sampler, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroySampler(D3D10DDI_HDEVICE device, D3D10DDI_HSAMPLER a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).announced("DestroySampler", &D3d11Device::destroy_sampler, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).announced("DestroySampler", &D3d11Device::destroy_sampler, a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateQuerySize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEQUERY * a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateQuerySize", &D3d11Device::calc_private_query_size, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateQuerySize", &D3d11Device::calc_private_query_size, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateQuery(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEQUERY * a1, D3D10DDI_HQUERY a2, D3D10DDI_HRTQUERY a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateQuery", &D3d11Device::create_query, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateQuery", &D3d11Device::create_query, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroyQuery(D3D10DDI_HDEVICE device, D3D10DDI_HQUERY a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).announced("DestroyQuery", &D3d11Device::destroy_query, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).announced("DestroyQuery", &D3d11Device::destroy_query, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CheckFormatSupport(D3D10DDI_HDEVICE device, DXGI_FORMAT a1, UINT * a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CheckFormatSupport", &D3d11Device::check_format_support, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CheckFormatSupport", &D3d11Device::check_format_support, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CheckMultisampleQualityLevels(D3D10DDI_HDEVICE device, DXGI_FORMAT a1, UINT a2, UINT a3, UINT * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CheckMultisampleQualityLevels", &D3d11Device::check_multisample_quality_levels, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CheckMultisampleQualityLevels", &D3d11Device::check_multisample_quality_levels, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CheckCounterInfo(D3D10DDI_HDEVICE device, D3D10DDI_COUNTER_INFO * a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CheckCounterInfo", &D3d11Device::check_counter_info, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CheckCounterInfo", &D3d11Device::check_counter_info, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CheckCounter(D3D10DDI_HDEVICE device, D3D10DDI_QUERY a1, D3D10DDI_COUNTER_TYPE * a2, UINT * a3, LPSTR a4, UINT * a5, LPSTR a6, UINT * a7, LPSTR a8, UINT * a9)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CheckCounter", &D3d11Device::check_counter, a1, a2, a3, a4, a5, a6, a7, a8, a9); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CheckCounter", &D3d11Device::check_counter, a1, a2, a3, a4, a5, a6, a7, a8, a9); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroyDevice(D3D10DDI_HDEVICE device)
 { d3d::umd_binding.root().destroy_device(device.pDrvPrivate); }
 
 extern "C" VOID APIENTRY avumd_d3d11_SetTextFilterSize(D3D10DDI_HDEVICE device, UINT a1, UINT a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("SetTextFilterSize", &D3d11Device::set_text_filter_size, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("SetTextFilterSize", &D3d11Device::set_text_filter_size, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ResourceConvert(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, D3D10DDI_HRESOURCE a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ResourceConvert", &D3d11Device::resource_convert, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ResourceConvert", &D3d11Device::resource_convert, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ResourceConvertRegion(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, UINT a3, UINT a4, UINT a5, D3D10DDI_HRESOURCE a6, UINT a7, const D3D10_DDI_BOX * a8, UINT a9)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ResourceConvertRegion", &D3d11Device::resource_convert_region, a1, a2, a3, a4, a5, a6, a7, a8, a9); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ResourceConvertRegion", &D3d11Device::resource_convert_region, a1, a2, a3, a4, a5, a6, a7, a8, a9); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DrawIndexedInstancedIndirect(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DrawIndexedInstancedIndirect", &D3d11Device::draw_indexed_instanced_indirect, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DrawIndexedInstancedIndirect", &D3d11Device::draw_indexed_instanced_indirect, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DrawInstancedIndirect(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DrawInstancedIndirect", &D3d11Device::draw_instanced_indirect, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DrawInstancedIndirect", &D3d11Device::draw_instanced_indirect, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CommandListExecute(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CommandListExecute", &D3d11Device::command_list_execute, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CommandListExecute", &D3d11Device::command_list_execute, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_HsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("HsSetShaderResources", &D3d11Device::hs_set_shader_resources, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("HsSetShaderResources", &D3d11Device::hs_set_shader_resources, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_HsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("HsSetShader", &D3d11Device::hs_set_shader, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("HsSetShader", &D3d11Device::hs_set_shader, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_HsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("HsSetSamplers", &D3d11Device::hs_set_samplers, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("HsSetSamplers", &D3d11Device::hs_set_samplers, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_HsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("HsSetConstantBuffers", &D3d11Device::hs_set_constant_buffers, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("HsSetConstantBuffers", &D3d11Device::hs_set_constant_buffers, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DsSetShaderResources", &D3d11Device::ds_set_shader_resources, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DsSetShaderResources", &D3d11Device::ds_set_shader_resources, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DsSetShader", &D3d11Device::ds_set_shader, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DsSetShader", &D3d11Device::ds_set_shader, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DsSetSamplers", &D3d11Device::ds_set_samplers, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DsSetSamplers", &D3d11Device::ds_set_samplers, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DsSetConstantBuffers", &D3d11Device::ds_set_constant_buffers, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DsSetConstantBuffers", &D3d11Device::ds_set_constant_buffers, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateHullShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateHullShader", &D3d11Device::create_hull_shader, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateHullShader", &D3d11Device::create_hull_shader, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateDomainShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3, const D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateDomainShader", &D3d11Device::create_domain_shader, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateDomainShader", &D3d11Device::create_domain_shader, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CheckDeferredContextHandleSizes(D3D10DDI_HDEVICE device, UINT * a1, D3D11DDI_HANDLESIZE * a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CheckDeferredContextHandleSizes", &D3d11Device::check_deferred_context_handle_sizes, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CheckDeferredContextHandleSizes", &D3d11Device::check_deferred_context_handle_sizes, a1, a2); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcDeferredContextHandleSize(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcDeferredContextHandleSize", &D3d11Device::calc_deferred_context_handle_size, a1, a2); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcDeferredContextHandleSize", &D3d11Device::calc_deferred_context_handle_size, a1, a2); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateDeferredContextSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CALCPRIVATEDEFERREDCONTEXTSIZE * a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateDeferredContextSize", &D3d11Device::calc_private_deferred_context_size, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateDeferredContextSize", &D3d11Device::calc_private_deferred_context_size, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateDeferredContext(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEFERREDCONTEXT * a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateDeferredContext", &D3d11Device::create_deferred_context, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateDeferredContext", &D3d11Device::create_deferred_context, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_AbandonCommandList(D3D10DDI_HDEVICE device)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("AbandonCommandList", &D3d11Device::abandon_command_list); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("AbandonCommandList", &D3d11Device::abandon_command_list); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateCommandListSize(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATECOMMANDLIST * a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateCommandListSize", &D3d11Device::calc_private_command_list_size, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateCommandListSize", &D3d11Device::calc_private_command_list_size, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateCommandList(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATECOMMANDLIST * a1, D3D11DDI_HCOMMANDLIST a2, D3D11DDI_HRTCOMMANDLIST a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateCommandList", &D3d11Device::create_command_list, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateCommandList", &D3d11Device::create_command_list, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroyCommandList(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).announced("DestroyCommandList", &D3d11Device::destroy_command_list, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).announced("DestroyCommandList", &D3d11Device::destroy_command_list, a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateTessellationShaderSize(D3D10DDI_HDEVICE device, const UINT * a1, const D3D11_1DDIARG_TESSELLATION_IO_SIGNATURES * a2)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateTessellationShaderSize", &D3d11Device::calc_private_tessellation_shader_size, a1, a2); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateTessellationShaderSize", &D3d11Device::calc_private_tessellation_shader_size, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_PsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("PsSetShaderWithIfaces", &D3d11Device::ps_set_shader_with_ifaces, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("PsSetShaderWithIfaces", &D3d11Device::ps_set_shader_with_ifaces, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_VsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("VsSetShaderWithIfaces", &D3d11Device::vs_set_shader_with_ifaces, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("VsSetShaderWithIfaces", &D3d11Device::vs_set_shader_with_ifaces, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_GsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("GsSetShaderWithIfaces", &D3d11Device::gs_set_shader_with_ifaces, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("GsSetShaderWithIfaces", &D3d11Device::gs_set_shader_with_ifaces, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_HsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("HsSetShaderWithIfaces", &D3d11Device::hs_set_shader_with_ifaces, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("HsSetShaderWithIfaces", &D3d11Device::hs_set_shader_with_ifaces, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DsSetShaderWithIfaces", &D3d11Device::ds_set_shader_with_ifaces, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DsSetShaderWithIfaces", &D3d11Device::ds_set_shader_with_ifaces, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CsSetShaderWithIfaces(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const UINT * a3, const D3D11DDIARG_POINTERDATA * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CsSetShaderWithIfaces", &D3d11Device::cs_set_shader_with_ifaces, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CsSetShaderWithIfaces", &D3d11Device::cs_set_shader_with_ifaces, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateComputeShader(D3D10DDI_HDEVICE device, const UINT * a1, D3D10DDI_HSHADER a2, D3D10DDI_HRTSHADER a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateComputeShader", &D3d11Device::create_compute_shader, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateComputeShader", &D3d11Device::create_compute_shader, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CsSetShader(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CsSetShader", &D3d11Device::cs_set_shader, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CsSetShader", &D3d11Device::cs_set_shader, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CsSetShaderResources(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSHADERRESOURCEVIEW * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CsSetShaderResources", &D3d11Device::cs_set_shader_resources, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CsSetShaderResources", &D3d11Device::cs_set_shader_resources, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CsSetSamplers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HSAMPLER * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CsSetSamplers", &D3d11Device::cs_set_samplers, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CsSetSamplers", &D3d11Device::cs_set_samplers, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CsSetConstantBuffers(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D10DDI_HRESOURCE * a3, const UINT * a4, const UINT * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CsSetConstantBuffers", &D3d11Device::cs_set_constant_buffers, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CsSetConstantBuffers", &D3d11Device::cs_set_constant_buffers, a1, a2, a3, a4, a5); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateUnorderedAccessViewSize(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEUNORDEREDACCESSVIEW * a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateUnorderedAccessViewSize", &D3d11Device::calc_private_unordered_access_view_size, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateUnorderedAccessViewSize", &D3d11Device::calc_private_unordered_access_view_size, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateUnorderedAccessView(D3D10DDI_HDEVICE device, const D3DWDDM2_0DDIARG_CREATEUNORDEREDACCESSVIEW * a1, D3D11DDI_HUNORDEREDACCESSVIEW a2, D3D11DDI_HRTUNORDEREDACCESSVIEW a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateUnorderedAccessView", &D3d11Device::create_unordered_access_view, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateUnorderedAccessView", &D3d11Device::create_unordered_access_view, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroyUnorderedAccessView(D3D10DDI_HDEVICE device, D3D11DDI_HUNORDEREDACCESSVIEW a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).announced("DestroyUnorderedAccessView", &D3d11Device::destroy_unordered_access_view, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).announced("DestroyUnorderedAccessView", &D3d11Device::destroy_unordered_access_view, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ClearUnorderedAccessViewUint(D3D10DDI_HDEVICE device, D3D11DDI_HUNORDEREDACCESSVIEW a1, const UINT * a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ClearUnorderedAccessViewUint", &D3d11Device::clear_unordered_access_view_uint, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ClearUnorderedAccessViewUint", &D3d11Device::clear_unordered_access_view_uint, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ClearUnorderedAccessViewFloat(D3D10DDI_HDEVICE device, D3D11DDI_HUNORDEREDACCESSVIEW a1, const FLOAT * a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ClearUnorderedAccessViewFloat", &D3d11Device::clear_unordered_access_view_float, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ClearUnorderedAccessViewFloat", &D3d11Device::clear_unordered_access_view_float, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CsSetUnorderedAccessViews(D3D10DDI_HDEVICE device, UINT a1, UINT a2, const D3D11DDI_HUNORDEREDACCESSVIEW * a3, const UINT * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CsSetUnorderedAccessViews", &D3d11Device::cs_set_unordered_access_views, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CsSetUnorderedAccessViews", &D3d11Device::cs_set_unordered_access_views, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_Dispatch(D3D10DDI_HDEVICE device, UINT a1, UINT a2, UINT a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("Dispatch", &D3d11Device::dispatch, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("Dispatch", &D3d11Device::dispatch, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DispatchIndirect(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DispatchIndirect", &D3d11Device::dispatch_indirect, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DispatchIndirect", &D3d11Device::dispatch_indirect, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_SetResourceMinLOD(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, FLOAT a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("SetResourceMinLOD", &D3d11Device::set_resource_min_lod, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("SetResourceMinLOD", &D3d11Device::set_resource_min_lod, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CopyStructureCount(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D11DDI_HUNORDEREDACCESSVIEW a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CopyStructureCount", &D3d11Device::copy_structure_count, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CopyStructureCount", &D3d11Device::copy_structure_count, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_RecycleCommandList(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("RecycleCommandList", &D3d11Device::recycle_command_list, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("RecycleCommandList", &D3d11Device::recycle_command_list, a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d11_RecycleCreateCommandList(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATECOMMANDLIST * a1, D3D11DDI_HCOMMANDLIST a2, D3D11DDI_HRTCOMMANDLIST a3)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("RecycleCreateCommandList", &D3d11Device::recycle_create_command_list, a1, a2, a3); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("RecycleCreateCommandList", &D3d11Device::recycle_create_command_list, a1, a2, a3); }
 
 extern "C" HRESULT APIENTRY avumd_d3d11_RecycleCreateDeferredContext(D3D10DDI_HDEVICE device, const D3D11DDIARG_CREATEDEFERREDCONTEXT * a1)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("RecycleCreateDeferredContext", &D3d11Device::recycle_create_deferred_context, a1); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("RecycleCreateDeferredContext", &D3d11Device::recycle_create_deferred_context, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_RecycleDestroyCommandList(D3D10DDI_HDEVICE device, D3D11DDI_HCOMMANDLIST a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("RecycleDestroyCommandList", &D3d11Device::recycle_destroy_command_list, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("RecycleDestroyCommandList", &D3d11Device::recycle_destroy_command_list, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_Discard(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2, const D3D10_DDI_RECT * a3, UINT a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("Discard", &D3d11Device::discard, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("Discard", &D3d11Device::discard, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_AssignDebugBinary(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, UINT a2, const void * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("AssignDebugBinary", &D3d11Device::assign_debug_binary, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("AssignDebugBinary", &D3d11Device::assign_debug_binary, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DynamicConstantBufferMapNoOverwrite(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3D10_DDI_MAP a3, UINT a4, D3D10DDI_MAPPED_SUBRESOURCE * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("DynamicConstantBufferMapNoOverwrite", &D3d11Device::dynamic_constant_buffer_map_no_overwrite, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("DynamicConstantBufferMapNoOverwrite", &D3d11Device::dynamic_constant_buffer_map_no_overwrite, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CheckDirectFlipSupport(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, D3D10DDI_HRESOURCE a2, UINT a3, BOOL * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CheckDirectFlipSupport", &D3d11Device::check_direct_flip_support, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CheckDirectFlipSupport", &D3d11Device::check_direct_flip_support, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ClearView(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2, const FLOAT * a3, const D3D10_DDI_RECT * a4, UINT a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ClearView", &D3d11Device::clear_view, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ClearView", &D3d11Device::clear_view, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_UpdateTileMappings(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a3, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a4, D3D10DDI_HRESOURCE a5, UINT a6, const UINT * a7, const UINT * a8, const UINT * a9, UINT a10)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("UpdateTileMappings", &D3d11Device::update_tile_mappings, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("UpdateTileMappings", &D3d11Device::update_tile_mappings, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CopyTileMappings(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a2, D3D10DDI_HRESOURCE a3, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a4, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a5, UINT a6)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CopyTileMappings", &D3d11Device::copy_tile_mappings, a1, a2, a3, a4, a5, a6); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CopyTileMappings", &D3d11Device::copy_tile_mappings, a1, a2, a3, a4, a5, a6); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CopyTiles(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a2, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a3, D3D10DDI_HRESOURCE a4, UINT64 a5, UINT a6)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CopyTiles", &D3d11Device::copy_tiles, a1, a2, a3, a4, a5, a6); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CopyTiles", &D3d11Device::copy_tiles, a1, a2, a3, a4, a5, a6); }
 
 extern "C" VOID APIENTRY avumd_d3d11_UpdateTiles(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, const D3DWDDM1_3DDI_TILED_RESOURCE_COORDINATE * a2, const D3DWDDM1_3DDI_TILE_REGION_SIZE * a3, const void * a4, UINT a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("UpdateTiles", &D3d11Device::update_tiles, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("UpdateTiles", &D3d11Device::update_tiles, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_TiledResourceBarrier(D3D10DDI_HDEVICE device, D3D11DDI_HANDLETYPE a1, void * a2, D3D11DDI_HANDLETYPE a3, void * a4)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("TiledResourceBarrier", &D3d11Device::tiled_resource_barrier, a1, a2, a3, a4); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("TiledResourceBarrier", &D3d11Device::tiled_resource_barrier, a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d11_GetMipPacking(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT * a2, UINT * a3)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("GetMipPacking", &D3d11Device::get_mip_packing, a1, a2, a3); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("GetMipPacking", &D3d11Device::get_mip_packing, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ResizeTilePool(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT64 a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ResizeTilePool", &D3d11Device::resize_tile_pool, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ResizeTilePool", &D3d11Device::resize_tile_pool, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_SetMarker(D3D10DDI_HDEVICE device)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("SetMarker", &D3d11Device::set_marker); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("SetMarker", &D3d11Device::set_marker); }
 
 extern "C" VOID APIENTRY avumd_d3d11_SetMarkerMode(D3D10DDI_HDEVICE device, D3DWDDM1_3DDI_MARKER_TYPE a1, UINT a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("SetMarkerMode", &D3d11Device::set_marker_mode, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("SetMarkerMode", &D3d11Device::set_marker_mode, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_SetHardwareProtection(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, BOOL a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("SetHardwareProtection", &D3d11Device::set_hardware_protection, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("SetHardwareProtection", &D3d11Device::set_hardware_protection, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_GetResourceLayout(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3DKMT_HANDLE * a3, D3DWDDM2_0DDI_TEXTURE_LAYOUT * a4, UINT * a5, D3DWDDM2_0DDI_SUBRESOURCE_LAYOUT * a6)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("GetResourceLayout", &D3d11Device::get_resource_layout, a1, a2, a3, a4, a5, a6); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("GetResourceLayout", &D3d11Device::get_resource_layout, a1, a2, a3, a4, a5, a6); }
 
 extern "C" HRESULT APIENTRY avumd_d3d11_RetrieveShaderComment(D3D10DDI_HDEVICE device, D3D10DDI_HSHADER a1, WCHAR * a2, SIZE_T * a3)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("RetrieveShaderComment", &D3d11Device::retrieve_shader_comment, a1, a2, a3); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("RetrieveShaderComment", &D3d11Device::retrieve_shader_comment, a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d11_SetHardwareProtectionState(D3D10DDI_HDEVICE device, BOOL a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("SetHardwareProtectionState", &D3d11Device::set_hardware_protection_state, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("SetHardwareProtectionState", &D3d11Device::set_hardware_protection_state, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_AcquireResource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, HANDLE a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("AcquireResource", &D3d11Device::acquire_resource, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("AcquireResource", &D3d11Device::acquire_resource, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_ReleaseResource(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, HANDLE a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("ReleaseResource", &D3d11Device::release_resource, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("ReleaseResource", &D3d11Device::release_resource, a1, a2); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d11_CalcPrivateShaderCacheSessionSize(D3D10DDI_HDEVICE device)
-{ return d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CalcPrivateShaderCacheSessionSize", &D3d11Device::calc_private_shader_cache_session_size); }
+{ return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CalcPrivateShaderCacheSessionSize", &D3d11Device::calc_private_shader_cache_session_size); }
 
 extern "C" VOID APIENTRY avumd_d3d11_CreateShaderCacheSession(D3D10DDI_HDEVICE device, D3DWDDM2_2DDI_HCACHESESSION a1, D3DWDDM2_2DDI_HRTCACHESESSION a2)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("CreateShaderCacheSession", &D3d11Device::create_shader_cache_session, a1, a2); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("CreateShaderCacheSession", &D3d11Device::create_shader_cache_session, a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroyShaderCacheSession(D3D10DDI_HDEVICE device, D3DWDDM2_2DDI_HCACHESESSION a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).announced("DestroyShaderCacheSession", &D3d11Device::destroy_shader_cache_session, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).announced("DestroyShaderCacheSession", &D3d11Device::destroy_shader_cache_session, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_SetShaderCacheSession(D3D10DDI_HDEVICE device, D3DWDDM2_2DDI_HCACHESESSION a1)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("SetShaderCacheSession", &D3d11Device::set_shader_cache_session, a1); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("SetShaderCacheSession", &D3d11Device::set_shader_cache_session, a1); }
 
 extern "C" VOID APIENTRY avumd_d3d11_QueryScanoutCaps(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3DDDI_VIDEO_PRESENT_SOURCE_ID a3, UINT a4, D3DWDDM2_6DDI_SCANOUT_FLAGS * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("QueryScanoutCaps", &D3d11Device::query_scanout_caps, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("QueryScanoutCaps", &D3d11Device::query_scanout_caps, a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d11_PrepareScanoutTransformation(D3D10DDI_HDEVICE device, D3D10DDI_HRESOURCE a1, UINT a2, D3DDDI_VIDEO_PRESENT_SOURCE_ID a3, UINT a4, D3D10_DDI_RECT * a5)
-{ d3d::DeviceCall<D3d11Device>(DeviceHandle(device.pDrvPrivate).device()).traced("PrepareScanoutTransformation", &D3d11Device::prepare_scanout_transformation, a1, a2, a3, a4, a5); }
+{ d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(device.pDrvPrivate).device()).traced("PrepareScanoutTransformation", &D3d11Device::prepare_scanout_transformation, a1, a2, a3, a4, a5); }
 
 }  // namespace
 

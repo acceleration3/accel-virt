@@ -1,6 +1,7 @@
 #include "um/d3d/d3d11_call_trace.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/d3d/record_stamp.hpp"
 
 #include <windows.h>
 
@@ -115,12 +116,12 @@ void D3d11CallTrace::Line::signed_number(int64_t value)
     body_.append_decimal(value < 0 ? 0u - static_cast<uint64_t>(value) : static_cast<uint64_t>(value));
 }
 
-/* Every record starts with a magic and the id (d3d11_records.hpp). */
+/* Every record starts with its stamp (d3d11_records.hpp). */
 void D3d11CallTrace::Line::object(const void *block)
 {
     AV_SCOPE("D3d11CallTrace::Line::object");
     body_.append(" #");
-    body_.append_decimal(block == nullptr ? 0u : static_cast<const uint32_t *>(block)[1]);
+    body_.append_decimal(block == nullptr ? 0u : static_cast<const d3d::RecordStamp *>(block)->id());
 }
 
 void D3d11CallTrace::Line::pointer(const void *address)

@@ -201,7 +201,7 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
         return S_OK;
     }
     const uint64_t memory = heap.memory != nullptr ? heap.memory->handle() : 0u;
-    if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.id, properties_of(heap.type), heap.flags,
+    if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.stamp.id(), properties_of(heap.type), heap.flags,
                                                  heap.size, args.Alignment, memory),
               "CreateHeap12"))
         return E_OUTOFMEMORY;
@@ -222,12 +222,12 @@ HRESULT D3d12Device::make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, 
     resource.placed_in = &heap;
     resource.heap_offset = offset;
     if (heap.made == 0u) {
-        made = d3d12proto::av_d3d12_CreateCommittedResource12(wire(), resource.header.id, properties_of(heap_default),
+        made = d3d12proto::av_d3d12_CreateCommittedResource12(wire(), resource.header.stamp.id(), properties_of(heap_default),
                                                                heap.flags & heap_shared, desc, state, value,
                                                                resource.address);
     } else {
-        resource.heap = heap.header.id;
-        made = d3d12proto::av_d3d12_CreatePlacedResource12(wire(), resource.header.id, heap.header.id, offset, desc,
+        resource.heap = heap.header.stamp.id();
+        made = d3d12proto::av_d3d12_CreatePlacedResource12(wire(), resource.header.stamp.id(), heap.header.stamp.id(), offset, desc,
                                                              state, value, resource.address);
     }
     return sent(made, "CreateResource12") ? S_OK : E_OUTOFMEMORY;
@@ -342,9 +342,9 @@ HRESULT D3d12Device::place_resource(D3D12DDI_HHEAP heap_handle, const D3D12DDIAR
     if (heap_handle.pDrvPrivate == nullptr && spanning == nullptr)
         return reserve_resource(*args, clear, *static_cast<ResourceRecord *>(handle.pDrvPrivate));
     HeapRecord *const in = heap_handle.pDrvPrivate != nullptr ? static_cast<HeapRecord *>(heap_handle.pDrvPrivate)
-                           : spanning != nullptr && spanning->header.magic == ResourceRecord::tag ? spanning->placed_in
+                           : spanning != nullptr && spanning->header.stamp.holds(ResourceRecord::tag) ? spanning->placed_in
                                                                                                   : nullptr;
-    if (in == nullptr || in->header.magic != HeapRecord::tag) return E_INVALIDARG;
+    if (in == nullptr || !in->header.stamp.holds(HeapRecord::tag)) return E_INVALIDARG;
     const uint64_t offset = (spanning != nullptr ? spanning->heap_offset : 0u) + at.Offset;
     return make_resource(*args, clear, *in, offset, *static_cast<ResourceRecord *>(handle.pDrvPrivate));
 }
@@ -354,14 +354,14 @@ VOID D3d12Device::destroy_heap_and_resource(D3D12DDI_HHEAP heap_handle, D3D12DDI
     AV_SCOPE("D3d12Device::destroy_heap_and_resource");
     if (handle.pDrvPrivate != nullptr) {
         ResourceRecord &resource = *static_cast<ResourceRecord *>(handle.pDrvPrivate);
-        if (resource.header.magic == ResourceRecord::tag)
-            static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), resource.header.id), "Destroy12"));
+        if (resource.header.stamp.holds(ResourceRecord::tag))
+            static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), resource.header.stamp.id()), "Destroy12"));
         resource = ResourceRecord{};
     }
     if (heap_handle.pDrvPrivate == nullptr) return;
     HeapRecord &heap = *static_cast<HeapRecord *>(heap_handle.pDrvPrivate);
-    if (heap.header.magic != HeapRecord::tag) return;
-    if (heap.made != 0u) static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), heap.header.id), "Destroy12"));
+    if (!heap.header.stamp.holds(HeapRecord::tag)) return;
+    if (heap.made != 0u) static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), heap.header.stamp.id()), "Destroy12"));
     if (heap.memory != nullptr) session_.close_memory(*heap.memory);
     heap = HeapRecord{};
 }

@@ -56,11 +56,11 @@ D3DKMT_HANDLE D3d12Residency::allocation_of(const D3D12DDI_HANDLE_AND_TYPE &obje
     if (object.Handle == nullptr) return 0u;
     if (object.Type == D3D12DDI_HT_HEAP) {
         const auto &heap = *static_cast<const HeapRecord *>(object.Handle);
-        return heap.header.magic == HeapRecord::tag ? heap.allocation : 0u;
+        return heap.header.stamp.holds(HeapRecord::tag) ? heap.allocation : 0u;
     }
     if (object.Type == D3D12DDI_HT_0012_RESOURCE) {
         const auto &resource = *static_cast<const ResourceRecord *>(object.Handle);
-        return resource.header.magic == ResourceRecord::tag ? resource.allocation : 0u;
+        return resource.header.stamp.holds(ResourceRecord::tag) ? resource.allocation : 0u;
     }
     return 0u;
 }

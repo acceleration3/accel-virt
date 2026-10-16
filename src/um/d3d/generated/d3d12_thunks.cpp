@@ -5,9 +5,9 @@
  * handle's block names, or the answer a driver without the slot's feature
  * gives. */
 #include "core/trace/function_scope.hpp"
+#include "icd/d3d/device_block.hpp"
 #include "um/d3d/d3d12_ddi.hpp"
 #include "um/d3d/d3d12_device.hpp"
-#include "um/d3d/d3d12_device_handle.hpp"
 #include "um/d3d/d3d12_record_handle.hpp"
 #include "um/d3d/d3d12_recorder.hpp"
 #include "um/d3d/d3d12_tables.hpp"
@@ -17,334 +17,334 @@ namespace av::d3d12 {
 namespace {
 
 extern "C" VOID APIENTRY avumd_d3d12_CheckFormatSupport(D3D12DDI_HDEVICE handle, DXGI_FORMAT a1, UINT * a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().check_format_support(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().check_format_support(a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CheckMultisampleQualityLevels(D3D12DDI_HDEVICE handle, DXGI_FORMAT a1, UINT a2, D3D12DDI_MULTISAMPLE_QUALITY_LEVEL_FLAGS a3, UINT * a4)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().check_multisample_quality_levels(a1, a2, a3, a4); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().check_multisample_quality_levels(a1, a2, a3, a4); }
 
 extern "C" VOID APIENTRY avumd_d3d12_GetMipPacking(D3D12DDI_HDEVICE handle, D3D12DDI_HRESOURCE a1, UINT * a2, UINT * a3)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().get_mip_packing(a1, a2, a3); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().get_mip_packing(a1, a2, a3); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateElementLayoutSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATEELEMENTLAYOUT_0010 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_element_layout_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_element_layout_size(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateElementLayout(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATEELEMENTLAYOUT_0010 * a1, D3D12DDI_HELEMENTLAYOUT a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_element_layout(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_element_layout(a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyElementLayout(D3D12DDI_HDEVICE handle, D3D12DDI_HELEMENTLAYOUT a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_element_layout(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_element_layout(a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateBlendStateSize(D3D12DDI_HDEVICE handle, const D3D12DDI_BLEND_DESC_0010 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_blend_state_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_blend_state_size(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateBlendState(D3D12DDI_HDEVICE handle, const D3D12DDI_BLEND_DESC_0010 * a1, D3D12DDI_HBLENDSTATE a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_blend_state(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_blend_state(a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyBlendState(D3D12DDI_HDEVICE handle, D3D12DDI_HBLENDSTATE a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_blend_state(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_blend_state(a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateDepthStencilStateSize(D3D12DDI_HDEVICE handle, const D3D12DDI_DEPTH_STENCIL_DESC_0095 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_depth_stencil_state_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_depth_stencil_state_size(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateDepthStencilState(D3D12DDI_HDEVICE handle, const D3D12DDI_DEPTH_STENCIL_DESC_0095 * a1, D3D12DDI_HDEPTHSTENCILSTATE a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_depth_stencil_state(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_depth_stencil_state(a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyDepthStencilState(D3D12DDI_HDEVICE handle, D3D12DDI_HDEPTHSTENCILSTATE a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_depth_stencil_state(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_depth_stencil_state(a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateRasterizerStateSize(D3D12DDI_HDEVICE handle, const D3D12DDI_RASTERIZER_DESC_0102 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_rasterizer_state_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_rasterizer_state_size(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateRasterizerState(D3D12DDI_HDEVICE handle, const D3D12DDI_RASTERIZER_DESC_0102 * a1, D3D12DDI_HRASTERIZERSTATE a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_rasterizer_state(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_rasterizer_state(a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyRasterizerState(D3D12DDI_HDEVICE handle, D3D12DDI_HRASTERIZERSTATE a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_rasterizer_state(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_rasterizer_state(a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateShaderSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_0026 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_shader_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_shader_size(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateVertexShader(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_0026 * a1, D3D12DDI_HSHADER a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_vertex_shader(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_vertex_shader(a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreatePixelShader(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_0026 * a1, D3D12DDI_HSHADER a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_pixel_shader(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_pixel_shader(a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateGeometryShader(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_0026 * a1, D3D12DDI_HSHADER a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_geometry_shader(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_geometry_shader(a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateComputeShader(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_0026 * a1, D3D12DDI_HSHADER a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_compute_shader(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_compute_shader(a1, a2); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateGeometryShaderWithStreamOutput(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026 * a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateGeometryShaderWithStreamOutput"); return SIZE_T{}; }
+{ static_cast<void>(a1); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateGeometryShaderWithStreamOutput"); return SIZE_T{}; }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateGeometryShaderWithStreamOutput(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026 * a1, D3D12DDI_HSHADER a2)
-{ static_cast<void>(a1); static_cast<void>(a2); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCreateGeometryShaderWithStreamOutput"); }
+{ static_cast<void>(a1); static_cast<void>(a2); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCreateGeometryShaderWithStreamOutput"); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateTessellationShaderSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_0026 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_tessellation_shader_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_tessellation_shader_size(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateHullShader(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_0026 * a1, D3D12DDI_HSHADER a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_hull_shader(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_hull_shader(a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateDomainShader(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_0026 * a1, D3D12DDI_HSHADER a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_domain_shader(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_domain_shader(a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyShader(D3D12DDI_HDEVICE handle, D3D12DDI_HSHADER a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_shader(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_shader(a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateCommandQueueSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATECOMMANDQUEUE_0050 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_command_queue_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_command_queue_size(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreateCommandQueue(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATECOMMANDQUEUE_0050 * a1, D3D12DDI_HCOMMANDQUEUE a2, D3D12DDI_HRTCOMMANDQUEUE a3)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateCommandQueue", device.create_command_queue(a1, a2, a3)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("CreateCommandQueue", device.create_command_queue(a1, a2, a3)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyCommandQueue(D3D12DDI_HDEVICE handle, D3D12DDI_HCOMMANDQUEUE a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_command_queue(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_command_queue(a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateCommandPoolSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_POOL_0040 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_command_pool_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_command_pool_size(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreateCommandPool(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_POOL_0040 * a1, D3D12DDI_HCOMMANDPOOL_0040 a2)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateCommandPool", device.create_command_pool(a1, a2)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("CreateCommandPool", device.create_command_pool(a1, a2)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyCommandPool(D3D12DDI_HDEVICE handle, D3D12DDI_HCOMMANDPOOL_0040 a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_command_pool(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_command_pool(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12_ResetCommandPool(D3D12DDI_HDEVICE handle, D3D12DDI_HCOMMANDPOOL_0040 a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().reset_command_pool(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().reset_command_pool(a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivatePipelineStateSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_PIPELINE_STATE_0099 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_pipeline_state_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_pipeline_state_size(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreatePipelineState(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_PIPELINE_STATE_0099 * a1, D3D12DDI_HPIPELINESTATE a2, D3D12DDI_HRTPIPELINESTATE a3)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreatePipelineState", device.create_pipeline_state(a1, a2, a3)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("CreatePipelineState", device.create_pipeline_state(a1, a2, a3)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyPipelineState(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINESTATE a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_pipeline_state(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_pipeline_state(a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateCommandListSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_LIST_0040 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_command_list_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_command_list_size(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreateCommandList(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_LIST_0040 * a1, D3D12DDI_HCOMMANDLIST a2, D3D12DDI_HRTCOMMANDLIST a3)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateCommandList", device.create_command_list(a1, a2, a3)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("CreateCommandList", device.create_command_list(a1, a2, a3)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyCommandList(D3D12DDI_HDEVICE handle, D3D12DDI_HCOMMANDLIST a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_command_list(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_command_list(a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateFenceSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_FENCE * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_fence_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_fence_size(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreateFence(D3D12DDI_HDEVICE handle, D3D12DDI_HFENCE a1, const D3D12DDIARG_CREATE_FENCE * a2)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateFence", device.create_fence(a1, a2)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("CreateFence", device.create_fence(a1, a2)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyFence(D3D12DDI_HDEVICE handle, D3D12DDI_HFENCE a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_fence(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_fence(a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateDescriptorHeapSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_DESCRIPTOR_HEAP_0001 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_descriptor_heap_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_descriptor_heap_size(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreateDescriptorHeap(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_DESCRIPTOR_HEAP_0001 * a1, D3D12DDI_HDESCRIPTORHEAP a2)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateDescriptorHeap", device.create_descriptor_heap(a1, a2)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("CreateDescriptorHeap", device.create_descriptor_heap(a1, a2)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyDescriptorHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HDESCRIPTORHEAP a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_descriptor_heap(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_descriptor_heap(a1); }
 
 extern "C" UINT APIENTRY avumd_d3d12_GetDescriptorSizeInBytes(D3D12DDI_HDEVICE handle, D3D12DDI_DESCRIPTOR_HEAP_TYPE a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().get_descriptor_size_in_bytes(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().get_descriptor_size_in_bytes(a1); }
 
 extern "C" D3D12DDI_CPU_DESCRIPTOR_HANDLE APIENTRY avumd_d3d12_GetCPUDescriptorHandleForHeapStart(D3D12DDI_HDEVICE handle, D3D12DDI_HDESCRIPTORHEAP a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().get_cpu_descriptor_handle_for_heap_start(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().get_cpu_descriptor_handle_for_heap_start(a1); }
 
 extern "C" D3D12DDI_GPU_DESCRIPTOR_HANDLE APIENTRY avumd_d3d12_GetGPUDescriptorHandleForHeapStart(D3D12DDI_HDEVICE handle, D3D12DDI_HDESCRIPTORHEAP a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().get_gpu_descriptor_handle_for_heap_start(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().get_gpu_descriptor_handle_for_heap_start(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateShaderResourceView(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_RESOURCE_VIEW_0002 * a1, D3D12DDI_CPU_DESCRIPTOR_HANDLE a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_shader_resource_view(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_shader_resource_view(a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateConstantBufferView(D3D12DDI_HDEVICE handle, const D3D12DDI_CONSTANT_BUFFER_VIEW_DESC * a1, D3D12DDI_CPU_DESCRIPTOR_HANDLE a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_constant_buffer_view(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_constant_buffer_view(a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateSampler(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SAMPLER_0096 * a1, D3D12DDI_CPU_DESCRIPTOR_HANDLE a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_sampler(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_sampler(a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateUnorderedAccessView(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_UNORDERED_ACCESS_VIEW_0002 * a1, D3D12DDI_CPU_DESCRIPTOR_HANDLE a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_unordered_access_view(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_unordered_access_view(a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateRenderTargetView(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_RENDER_TARGET_VIEW_0002 * a1, D3D12DDI_CPU_DESCRIPTOR_HANDLE a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_render_target_view(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_render_target_view(a1, a2); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateDepthStencilView(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_DEPTH_STENCIL_VIEW * a1, D3D12DDI_CPU_DESCRIPTOR_HANDLE a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().create_depth_stencil_view(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().create_depth_stencil_view(a1, a2); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateRootSignatureSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0100 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_root_signature_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_root_signature_size(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreateRootSignature(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0100 * a1, D3D12DDI_HROOTSIGNATURE a2)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateRootSignature", device.create_root_signature(a1, a2)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("CreateRootSignature", device.create_root_signature(a1, a2)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyRootSignature(D3D12DDI_HDEVICE handle, D3D12DDI_HROOTSIGNATURE a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_root_signature(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_root_signature(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_MapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP a1, void ** a2)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("MapHeap", device.map_heap(a1, a2)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("MapHeap", device.map_heap(a1, a2)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_UnmapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().unmap_heap(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unmap_heap(a1); }
 
 extern "C" D3D12DDI_HEAP_AND_RESOURCE_SIZES APIENTRY avumd_d3d12_CalcPrivateHeapAndResourceSizes(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATEHEAP_0001 * a1, const D3D12DDIARG_CREATERESOURCE_0109 * a2, D3D12DDI_HPROTECTEDRESOURCESESSION_0030 a3)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_heap_and_resource_sizes(a1, a2, a3); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_heap_and_resource_sizes(a1, a2, a3); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATEHEAP_0001 * a1, D3D12DDI_HHEAP a2, D3D12DDI_HRTRESOURCE a3, const D3D12DDIARG_CREATERESOURCE_0109 * a4, const D3D12DDI_CLEAR_VALUES * a5, D3D12DDI_HPROTECTEDRESOURCESESSION_0030 a6, D3D12DDI_HRESOURCE a7)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateHeapAndResource", device.create_heap_and_resource(a1, a2, a3, a4, a5, a6, a7)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("CreateHeapAndResource", device.create_heap_and_resource(a1, a2, a3, a4, a5, a6, a7)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyHeapAndResource(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP a1, D3D12DDI_HRESOURCE a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_heap_and_resource(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_heap_and_resource(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_MakeResident(D3D12DDI_HDEVICE handle, D3D12DDIARG_MAKERESIDENT_0001 * a1)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("MakeResident", device.make_resident(a1)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("MakeResident", device.make_resident(a1)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_Evict(D3D12DDI_HDEVICE handle, const D3D12DDIARG_EVICT * a1)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("Evict", device.evict(a1)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("Evict", device.evict(a1)); }
 
 extern "C" D3D12DDI_HEAP_AND_RESOURCE_SIZES APIENTRY avumd_d3d12_CalcPrivateOpenedHeapAndResourceSizes(D3D12DDI_HDEVICE handle, const D3D12DDIARG_OPENHEAP_0003 * a1, D3D12DDI_HPROTECTEDRESOURCESESSION_0030 a2)
-{ static_cast<void>(a1); static_cast<void>(a2); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateOpenedHeapAndResourceSizes"); return D3D12DDI_HEAP_AND_RESOURCE_SIZES{}; }
+{ static_cast<void>(a1); static_cast<void>(a2); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateOpenedHeapAndResourceSizes"); return D3D12DDI_HEAP_AND_RESOURCE_SIZES{}; }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_OpenHeapAndResource(D3D12DDI_HDEVICE handle, const D3D12DDIARG_OPENHEAP_0003 * a1, D3D12DDI_HHEAP a2, D3D12DDI_HRTRESOURCE a3, D3D12DDI_HPROTECTEDRESOURCESESSION_0030 a4, D3D12DDI_HRESOURCE a5)
-{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); static_cast<void>(a5); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnOpenHeapAndResource"); return E_NOTIMPL; }
+{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); static_cast<void>(a5); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnOpenHeapAndResource"); return E_NOTIMPL; }
 
 extern "C" VOID APIENTRY avumd_d3d12_CopyDescriptors(D3D12DDI_HDEVICE handle, UINT a1, const D3D12DDI_CPU_DESCRIPTOR_HANDLE * a2, const UINT * a3, UINT a4, const D3D12DDI_CPU_DESCRIPTOR_HANDLE * a5, const UINT * a6, D3D12DDI_DESCRIPTOR_HEAP_TYPE a7)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().copy_descriptors(a1, a2, a3, a4, a5, a6, a7); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().copy_descriptors(a1, a2, a3, a4, a5, a6, a7); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CopyDescriptorsSimple(D3D12DDI_HDEVICE handle, UINT a1, D3D12DDI_CPU_DESCRIPTOR_HANDLE a2, D3D12DDI_CPU_DESCRIPTOR_HANDLE a3, D3D12DDI_DESCRIPTOR_HEAP_TYPE a4)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().copy_descriptors_simple(a1, a2, a3, a4); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().copy_descriptors_simple(a1, a2, a3, a4); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateQueryHeapSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_QUERY_HEAP_0001 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_query_heap_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_query_heap_size(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreateQueryHeap(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_QUERY_HEAP_0001 * a1, D3D12DDI_HQUERYHEAP a2)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateQueryHeap", device.create_query_heap(a1, a2)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("CreateQueryHeap", device.create_query_heap(a1, a2)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyQueryHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HQUERYHEAP a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_query_heap(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_query_heap(a1); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateCommandSignatureSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_SIGNATURE_0001 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_command_signature_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_command_signature_size(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreateCommandSignature(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_SIGNATURE_0001 * a1, D3D12DDI_HCOMMANDSIGNATURE a2)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateCommandSignature", device.create_command_signature(a1, a2)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("CreateCommandSignature", device.create_command_signature(a1, a2)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyCommandSignature(D3D12DDI_HDEVICE handle, D3D12DDI_HCOMMANDSIGNATURE a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_command_signature(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_command_signature(a1); }
 
 extern "C" D3D12DDI_GPU_VIRTUAL_ADDRESS APIENTRY avumd_d3d12_CheckResourceVirtualAddress(D3D12DDI_HDEVICE handle, D3D12DDI_HRESOURCE a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().check_resource_virtual_address(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().check_resource_virtual_address(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CheckResourceAllocationInfo(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATERESOURCE_0109 * a1, D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS a2, UINT32 a3, UINT a4, D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 * a5)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().check_resource_allocation_info(a1, a2, a3, a4, a5); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().check_resource_allocation_info(a1, a2, a3, a4, a5); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CheckSubresourceInfo(D3D12DDI_HDEVICE handle, D3D12DDI_HRESOURCE a1, UINT a2, D3D12DDI_SUBRESOURCE_INFO * a3)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().check_subresource_info(a1, a2, a3); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().check_subresource_info(a1, a2, a3); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CheckExistingResourceAllocationInfo(D3D12DDI_HDEVICE handle, D3D12DDI_HRESOURCE a1, D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 * a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().check_existing_resource_allocation_info(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().check_existing_resource_allocation_info(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_OfferResources(D3D12DDI_HDEVICE handle, const D3D12DDIARG_OFFERRESOURCES * a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnOfferResources"); return E_NOTIMPL; }
+{ static_cast<void>(a1); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnOfferResources"); return E_NOTIMPL; }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_ReclaimResources(D3D12DDI_HDEVICE handle, D3D12DDIARG_RECLAIMRESOURCES_0001 * a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnReclaimResources"); return E_NOTIMPL; }
+{ static_cast<void>(a1); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnReclaimResources"); return E_NOTIMPL; }
 
 extern "C" UINT APIENTRY avumd_d3d12_GetImplicitPhysicalAdapterMask(D3D12DDI_HDEVICE handle)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().get_implicit_physical_adapter_mask(); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().get_implicit_physical_adapter_mask(); }
 
 extern "C" UINT APIENTRY avumd_d3d12_GetPresentPrivateDriverDataSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_PRESENT_0001 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().get_present_private_driver_data_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().get_present_private_driver_data_size(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12_QueryNodeMap(D3D12DDI_HDEVICE handle, UINT a1, UINT * a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().query_node_map(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().query_node_map(a1, a2); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_RetrieveShaderComment(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINESTATE a1, WCHAR * a2, SIZE_T * a3)
-{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnRetrieveShaderComment"); return E_NOTIMPL; }
+{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnRetrieveShaderComment"); return E_NOTIMPL; }
 
 extern "C" D3DKMT_HANDLE APIENTRY avumd_d3d12_CheckResourceAllocationHandle(D3D12DDI_HDEVICE handle, D3D10DDI_HRESOURCE a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCheckResourceAllocationHandle"); return D3DKMT_HANDLE{}; }
+{ static_cast<void>(a1); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCheckResourceAllocationHandle"); return D3DKMT_HANDLE{}; }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivatePipelineLibrarySize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_pipeline_library_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_pipeline_library_size(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreatePipelineLibrary(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 * a1, D3D12DDI_HPIPELINELIBRARY a2)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreatePipelineLibrary", device.create_pipeline_library(a1, a2)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("CreatePipelineLibrary", device.create_pipeline_library(a1, a2)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyPipelineLibrary(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINELIBRARY a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_pipeline_library(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_pipeline_library(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_AddPipelineStateToLibrary(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINELIBRARY a1, D3D12DDI_HPIPELINESTATE a2, UINT a3)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("AddPipelineStateToLibrary", device.add_pipeline_state_to_library(a1, a2, a3)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("AddPipelineStateToLibrary", device.add_pipeline_state_to_library(a1, a2, a3)); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcSerializedLibrarySize(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINELIBRARY a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_serialized_library_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_serialized_library_size(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_SerializeLibrary(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINELIBRARY a1, void * a2)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("SerializeLibrary", device.serialize_library(a1, a2)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("SerializeLibrary", device.serialize_library(a1, a2)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_GetDebugAllocationInfo(D3D12DDI_HDEVICE handle, D3D12DDI_HANDLE_AND_TYPE a1, UINT * a2, D3D12DDI_DEBUG_VIRTUAL_ADDRESS_ALLOCATION_INFO_0012 * a3, UINT * a4, D3D12DDI_DEBUG_KMT_ALLOCATION_INFO_0014 * a5)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().get_debug_allocation_info(a1, a2, a3, a4, a5); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().get_debug_allocation_info(a1, a2, a3, a4, a5); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateCommandRecorderSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_RECORDER_0040 * a1)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_command_recorder_size(a1); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().calc_private_command_recorder_size(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreateCommandRecorder(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_COMMAND_RECORDER_0040 * a1, D3D12DDI_HCOMMANDRECORDER_0040 a2)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreateCommandRecorder", device.create_command_recorder(a1, a2)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("CreateCommandRecorder", device.create_command_recorder(a1, a2)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyCommandRecorder(D3D12DDI_HDEVICE handle, D3D12DDI_HCOMMANDRECORDER_0040 a1)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_command_recorder(a1); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().destroy_command_recorder(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CommandRecorderSetCommandPoolAsTarget(D3D12DDI_HDEVICE handle, D3D12DDI_HCOMMANDRECORDER_0040 a1, D3D12DDI_HCOMMANDPOOL_0040 a2)
-{ D3d12DeviceHandle(handle.pDrvPrivate).device().command_recorder_set_command_pool_as_target(a1, a2); }
+{ d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().command_recorder_set_command_pool_as_target(a1, a2); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateSchedulingGroupSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATESCHEDULINGGROUP_0050 * a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateSchedulingGroupSize"); return SIZE_T{}; }
+{ static_cast<void>(a1); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateSchedulingGroupSize"); return SIZE_T{}; }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreateSchedulingGroup(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATESCHEDULINGGROUP_0050 * a1, D3D12DDI_HSCHEDULINGGROUP_0050 a2, D3D12DDI_HRTSCHEDULINGGROUP_0050 a3)
-{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCreateSchedulingGroup"); return E_NOTIMPL; }
+{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCreateSchedulingGroup"); return E_NOTIMPL; }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroySchedulingGroup(D3D12DDI_HDEVICE handle, D3D12DDI_HSCHEDULINGGROUP_0050 a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnDestroySchedulingGroup"); }
+{ static_cast<void>(a1); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnDestroySchedulingGroup"); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_EnumerateMetaCommands(D3D12DDI_HDEVICE handle, UINT * a1, D3D12DDIARG_META_COMMAND_DESC * a2)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("EnumerateMetaCommands", device.enumerate_meta_commands(a1, a2)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("EnumerateMetaCommands", device.enumerate_meta_commands(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_EnumerateMetaCommandParameters(D3D12DDI_HDEVICE handle, GUID a1, D3D12DDI_META_COMMAND_PARAMETER_STAGE a2, UINT * a3, D3D12DDIARG_META_COMMAND_PARAMETER_DESC * a4)
-{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnEnumerateMetaCommandParameters"); return E_NOTIMPL; }
+{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnEnumerateMetaCommandParameters"); return E_NOTIMPL; }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateMetaCommandSize(D3D12DDI_HDEVICE handle, GUID a1, UINT a2, const void * a3, SIZE_T a4)
-{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateMetaCommandSize"); return SIZE_T{}; }
+{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateMetaCommandSize"); return SIZE_T{}; }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreateMetaCommand(D3D12DDI_HDEVICE handle, GUID a1, UINT a2, const void * a3, SIZE_T a4, D3D12DDI_HMETACOMMAND_0052 a5, D3D12DDI_HRTMETACOMMAND_0052 a6)
-{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); static_cast<void>(a5); static_cast<void>(a6); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCreateMetaCommand"); return E_NOTIMPL; }
+{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); static_cast<void>(a5); static_cast<void>(a6); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCreateMetaCommand"); return E_NOTIMPL; }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyMetaCommand(D3D12DDI_HDEVICE handle, D3D12DDI_HMETACOMMAND_0052 a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnDestroyMetaCommand"); }
+{ static_cast<void>(a1); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnDestroyMetaCommand"); }
 
 extern "C" VOID APIENTRY avumd_d3d12_GetMetaCommandRequiredParameterInfo(D3D12DDI_HMETACOMMAND_0052 handle, D3D12DDI_META_COMMAND_PARAMETER_STAGE a1, UINT a2, D3D12DDIARG_META_COMMAND_REQUIRED_PARAMETER_INFO * a3)
 { static_cast<void>(handle); static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateStateObjectSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_STATE_OBJECT_0054 * a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateStateObjectSize"); return SIZE_T{}; }
+{ static_cast<void>(a1); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateStateObjectSize"); return SIZE_T{}; }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreateStateObject(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_STATE_OBJECT_0054 * a1, D3D12DDI_HSTATEOBJECT_0054 a2, D3D12DDI_HRTSTATEOBJECT_0054 a3)
-{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCreateStateObject"); return E_NOTIMPL; }
+{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCreateStateObject"); return E_NOTIMPL; }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyStateObject(D3D12DDI_HDEVICE handle, D3D12DDI_HSTATEOBJECT_0054 a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnDestroyStateObject"); }
+{ static_cast<void>(a1); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnDestroyStateObject"); }
 
 extern "C" VOID APIENTRY avumd_d3d12_GetRaytracingAccelerationStructurePrebuildInfo(D3D12DDI_HDEVICE handle, const D3D12DDI_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS_0054 * a1, D3D12DDI_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO_0054 * a2)
-{ static_cast<void>(a1); static_cast<void>(a2); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnGetRaytracingAccelerationStructurePrebuildInfo"); }
+{ static_cast<void>(a1); static_cast<void>(a2); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnGetRaytracingAccelerationStructurePrebuildInfo"); }
 
 extern "C" D3D12DDI_DRIVER_MATCHING_IDENTIFIER_STATUS APIENTRY avumd_d3d12_CheckDriverMatchingIdentifier(D3D12DDI_HDEVICE handle, D3D12DDI_SERIALIZED_DATA_TYPE a1, const D3D12DDI_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER_0054 * a2)
-{ return D3d12DeviceHandle(handle.pDrvPrivate).device().check_driver_matching_identifier(a1, a2); }
+{ return d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().check_driver_matching_identifier(a1, a2); }
 
 extern "C" void * APIENTRY avumd_d3d12_GetShaderIdentifier(D3D12DDI_HSTATEOBJECT_0054 handle, LPCWSTR a1)
 { static_cast<void>(handle); static_cast<void>(a1); return nullptr; }
@@ -359,28 +359,28 @@ extern "C" VOID APIENTRY avumd_d3d12_SetPipelineStackSize(D3D12DDI_HSTATEOBJECT_
 { static_cast<void>(handle); static_cast<void>(a1); }
 
 extern "C" VOID APIENTRY avumd_d3d12_SetBackgroundProcessingMode(D3D12DDI_HDEVICE handle, D3D12DDI_BACKGROUND_PROCESSING_MODE_0062 a1, D3D12DDI_MEASUREMENTS_ACTION_0062 a2, BOOL * a3)
-{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnSetBackgroundProcessingMode"); }
+{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnSetBackgroundProcessingMode"); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateAddToStateObjectSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_ADD_TO_STATE_OBJECT_0072 * a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateAddToStateObjectSize"); return SIZE_T{}; }
+{ static_cast<void>(a1); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateAddToStateObjectSize"); return SIZE_T{}; }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_AddToStateObject(D3D12DDI_HDEVICE handle, const D3D12DDIARG_ADD_TO_STATE_OBJECT_0072 * a1, D3D12DDI_HSTATEOBJECT_0054 a2, D3D12DDI_HRTSTATEOBJECT_0054 a3)
-{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnAddToStateObject"); return E_NOTIMPL; }
+{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnAddToStateObject"); return E_NOTIMPL; }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateSamplerFeedbackUnorderedAccessView(D3D12DDI_HDEVICE handle, D3D12DDI_HRESOURCE a1, D3D12DDI_HRESOURCE a2, D3D12DDI_CPU_DESCRIPTOR_HANDLE a3)
-{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCreateSamplerFeedbackUnorderedAccessView"); }
+{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCreateSamplerFeedbackUnorderedAccessView"); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateAmplificationShader(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_0026 * a1, D3D12DDI_HSHADER a2)
-{ static_cast<void>(a1); static_cast<void>(a2); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCreateAmplificationShader"); }
+{ static_cast<void>(a1); static_cast<void>(a2); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCreateAmplificationShader"); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CreateMeshShader(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_0026 * a1, D3D12DDI_HSHADER a2)
-{ static_cast<void>(a1); static_cast<void>(a2); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCreateMeshShader"); }
+{ static_cast<void>(a1); static_cast<void>(a2); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCreateMeshShader"); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivateMeshShaderSize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_0026 * a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateMeshShaderSize"); return SIZE_T{}; }
+{ static_cast<void>(a1); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateMeshShaderSize"); return SIZE_T{}; }
 
 extern "C" VOID APIENTRY avumd_d3d12_ImplicitShaderCacheControl(D3D12DDI_HDEVICE handle, D3D12DDI_IMPLICIT_SHADER_CACHE_CONTROL_FLAGS_0080 a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnImplicitShaderCacheControl"); }
+{ static_cast<void>(a1); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnImplicitShaderCacheControl"); }
 
 extern "C" D3D12DDI_PROGRAM_IDENTIFIER_0108 APIENTRY avumd_d3d12_GetProgramIdentifier(D3D12DDI_HSTATEOBJECT_0054 handle, LPCWSTR a1)
 { static_cast<void>(handle); static_cast<void>(a1); return D3D12DDI_PROGRAM_IDENTIFIER_0108{}; }
@@ -404,16 +404,16 @@ extern "C" VOID APIENTRY avumd_d3d12q_WaitForFence(D3D12DDI_HCOMMANDQUEUE handle
 { D3d12RecordHandle(handle.pDrvPrivate).device().wait_for_fence(handle, a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12x_GetSupportedExtendedFeatures(D3D12DDI_HDEVICE handle, D3D12DDI_FEATURE_0020 a1, UINT32 * a2, D3D12DDI_FEATURE_0020 * a3)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("GetSupportedExtendedFeatures", device.get_supported_extended_features(a1, a2, a3)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("GetSupportedExtendedFeatures", device.get_supported_extended_features(a1, a2, a3)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12x_GetSupportedExtendedFeatureVersions(D3D12DDI_HDEVICE handle, D3D12DDI_FEATURE_0020 a1, UINT32 * a2, UINT32 * a3)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("GetSupportedExtendedFeatureVersions", device.get_supported_extended_feature_versions(a1, a2, a3)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("GetSupportedExtendedFeatureVersions", device.get_supported_extended_feature_versions(a1, a2, a3)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12x_EnableExtendedFeature(D3D12DDI_HDEVICE handle, D3D12DDI_FEATURE_0020 a1, UINT32 a2)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("EnableExtendedFeature", device.enable_extended_feature(a1, a2)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("EnableExtendedFeature", device.enable_extended_feature(a1, a2)); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12x_SetExtendedFeatureCallbacks(D3D12DDI_HDEVICE handle, D3D12DDI_TABLE_TYPE a1, const void * a2, SIZE_T a3)
-{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("SetExtendedFeatureCallbacks", device.set_extended_feature_callbacks(a1, a2, a3)); }
+{ D3d12Device &device = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); return device.answered("SetExtendedFeatureCallbacks", device.set_extended_feature_callbacks(a1, a2, a3)); }
 
 extern "C" VOID APIENTRY avumd_d3d12l_CloseCommandList(D3D12DDI_HCOMMANDLIST handle)
 { D3d12RecordHandle(handle.pDrvPrivate).recorder().close_command_list(handle); }

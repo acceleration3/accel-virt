@@ -3,13 +3,14 @@
  * how much), so these are plain records written by assignment, never objects
  * constructed there - as for Direct3D 11 (d3d11_records.hpp).
  *
- * Every record starts with the same header: the magic that says what the
- * block holds, the 32-bit id the host knows the object by, and the device
- * that made it - which is how a queue's or command list's slot, called with
+ * Every record starts with the same header: its stamp (RecordStamp), which
+ * says what the block holds and the 32-bit id the host knows the object by,
+ * and the device that made it - which is how a queue's or command list's slot, called with
  * nothing but the handle, finds its device. */
 #ifndef AV_UM_D3D12_RECORDS_HPP
 #define AV_UM_D3D12_RECORDS_HPP
 
+#include "icd/d3d/record_stamp.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
 #include "um/d3d/d3d12_ddi.hpp"
 
@@ -26,8 +27,7 @@ class D3d12Device;
 class D3d12Recorder;
 
 struct RecordHeader {
-    uint32_t       magic;
-    uint32_t       id;
+    d3d::RecordStamp stamp;
     D3d12Device   *device;
     D3d12Recorder *recorder;
 };

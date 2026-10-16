@@ -76,8 +76,7 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
     if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ResourceRecord))) return;
     ResourceRecord &resource = record(handle);
     resource = ResourceRecord{};
-    resource.magic = ResourceRecord::tag;
-    resource.id = next_id();
+    resource.stamp = d3d::RecordStamp(ResourceRecord::tag, next_id());
     resource.dimension = static_cast<uint32_t>(args->ResourceDimension);
     resource.usage = args->Usage;
     resource.bind = args->BindFlags;
@@ -135,7 +134,7 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
         const HRESULT allocated = allocate(resource, *args, runtime);
         if (FAILED(allocated)) set_error(allocated);
     }
-    if (!d3dproto::av_d3d_CreateResource(wire(), resource.id, desc, resource.shared_key)) {
+    if (!d3dproto::av_d3d_CreateResource(wire(), resource.stamp.id(), desc, resource.shared_key)) {
         set_error(E_OUTOFMEMORY);
         return;
     }
@@ -198,7 +197,7 @@ void D3d11Device::publish_shared(const ResourceRecord &resource)
     AV_SCOPE("D3d11Device::publish_shared");
     const uint64_t   bytes = d3d::KernelSurface(resource.width, resource.height, resource.format).bytes();
     SharedObjectCall call(wire());
-    if (call.share(resource.shared_key, SharedObjectKind::memory, bytes, resource.id) == Status::ok) return;
+    if (call.share(resource.shared_key, SharedObjectKind::memory, bytes, resource.stamp.id()) == Status::ok) return;
     LogLine(lines_)
         .text("a shared texture of format ")
         .number(resource.format)
@@ -214,8 +213,7 @@ VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_H
     if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ResourceRecord))) return;
     ResourceRecord &resource = record(handle);
     resource = ResourceRecord{};
-    resource.magic = ResourceRecord::tag;
-    resource.id = next_id();
+    resource.stamp = d3d::RecordStamp(ResourceRecord::tag, next_id());
     resource.runtime_resource = runtime.handle;
     if (args->NumAllocations != 0u) resource.allocation = args->pOpenAllocationInfo2[0].hAllocation;
     /* The key is the identity the miniport minted over the creator's
@@ -235,7 +233,7 @@ VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_H
     constexpr uint32_t open_attempts = 64u;
     bool sent = key != 0u;
     for (uint32_t attempt = 0u; sent && found == 0u && attempt < open_attempts; attempt++)
-        sent = d3dproto::av_d3d_OpenResource(wire(), resource.id, key, &found, &desc);
+        sent = d3dproto::av_d3d_OpenResource(wire(), resource.stamp.id(), key, &found, &desc);
     if (!sent || found == 0u) {
         LogLine line(lines_);
         line.text("a shared resource no Direct3D session on the host made: key ")
@@ -276,8 +274,8 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
         return;
     }
     forget_guest_surface(resource);
-    maps_.forget(resource.id);
-    destroy_object(resource.id);
+    maps_.forget(resource.stamp.id());
+    destroy_object(resource.stamp.id());
     if (resource.slice.bytes_ != 0u) leave_slice(resource);
     else if (resource.shadow != nullptr) shadows_.release(resource.shadow, resource.shadow_watched != 0u);
     /* Keyed or not: a presented, scanned-out or shared resource's allocation
@@ -303,9 +301,9 @@ VOID D3d11Device::create_shader_resource_view(const D3DWDDM2_0DDIARG_CREATESHADE
     if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     const ResourceRecord &resource = record(args->hDrvResource);
     ObjectRecord &view = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
-    view = ObjectRecord{ObjectRecord::tag, next_id(), 0u, resource.id};
+    view = ObjectRecord{d3d::RecordStamp(ObjectRecord::tag, next_id()), 0u, resource.stamp.id()};
     d3dproto::ViewDesc desc = {};
-    desc.resource = resource.id;
+    desc.resource = resource.stamp.id();
     desc.format = static_cast<uint32_t>(args->Format);
     switch (args->ResourceDimension) {
     case D3D10DDIRESOURCE_BUFFER:
@@ -356,7 +354,7 @@ VOID D3d11Device::create_shader_resource_view(const D3DWDDM2_0DDIARG_CREATESHADE
         desc.args[3] = args->TexCube.NumCubes;
         break;
     }
-    if (!d3dproto::av_d3d_CreateShaderResourceView(wire(), view.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateShaderResourceView(wire(), view.stamp.id(), desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_shader_resource_view(D3D10DDI_HSHADERRESOURCEVIEW handle)
@@ -380,9 +378,9 @@ VOID D3d11Device::create_render_target_view(const D3DWDDM2_0DDIARG_CREATERENDERT
     if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     const ResourceRecord &resource = record(args->hDrvResource);
     ObjectRecord &view = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
-    view = ObjectRecord{ObjectRecord::tag, next_id(), 0u, resource.id};
+    view = ObjectRecord{d3d::RecordStamp(ObjectRecord::tag, next_id()), 0u, resource.stamp.id()};
     d3dproto::ViewDesc desc = {};
-    desc.resource = resource.id;
+    desc.resource = resource.stamp.id();
     desc.format = static_cast<uint32_t>(args->Format);
     const bool array = resource.layers > 1u;
     switch (args->ResourceDimension) {
@@ -423,7 +421,7 @@ VOID D3d11Device::create_render_target_view(const D3DWDDM2_0DDIARG_CREATERENDERT
         break;
     }
     }
-    if (!d3dproto::av_d3d_CreateRenderTargetView(wire(), view.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateRenderTargetView(wire(), view.stamp.id(), desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_render_target_view(D3D10DDI_HRENDERTARGETVIEW handle)
@@ -447,9 +445,9 @@ VOID D3d11Device::create_depth_stencil_view(const D3D11DDIARG_CREATEDEPTHSTENCIL
     if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     const ResourceRecord &resource = record(args->hDrvResource);
     ObjectRecord &view = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
-    view = ObjectRecord{ObjectRecord::tag, next_id(), 0u, resource.id};
+    view = ObjectRecord{d3d::RecordStamp(ObjectRecord::tag, next_id()), 0u, resource.stamp.id()};
     d3dproto::ViewDesc desc = {};
-    desc.resource = resource.id;
+    desc.resource = resource.stamp.id();
     desc.format = static_cast<uint32_t>(args->Format);
     desc.flags = args->Flags;
     const bool array = resource.layers > 1u;
@@ -468,7 +466,7 @@ VOID D3d11Device::create_depth_stencil_view(const D3D11DDIARG_CREATEDEPTHSTENCIL
         desc.args[1] = args->Tex2D.FirstArraySlice;
         desc.args[2] = args->Tex2D.ArraySize;
     }
-    if (!d3dproto::av_d3d_CreateDepthStencilView(wire(), view.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateDepthStencilView(wire(), view.stamp.id(), desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_depth_stencil_view(D3D10DDI_HDEPTHSTENCILVIEW handle)
@@ -492,9 +490,9 @@ VOID D3d11Device::create_unordered_access_view(const D3DWDDM2_0DDIARG_CREATEUNOR
     if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     const ResourceRecord &resource = record(args->hDrvResource);
     ObjectRecord &view = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
-    view = ObjectRecord{ObjectRecord::tag, next_id(), 0u, resource.id};
+    view = ObjectRecord{d3d::RecordStamp(ObjectRecord::tag, next_id()), 0u, resource.stamp.id()};
     d3dproto::ViewDesc desc = {};
-    desc.resource = resource.id;
+    desc.resource = resource.stamp.id();
     desc.format = static_cast<uint32_t>(args->Format);
     const bool array = resource.layers > 1u;
     switch (args->ResourceDimension) {
@@ -523,7 +521,7 @@ VOID D3d11Device::create_unordered_access_view(const D3DWDDM2_0DDIARG_CREATEUNOR
         desc.args[2] = args->Tex2D.ArraySize;
         break;
     }
-    if (!d3dproto::av_d3d_CreateUnorderedAccessView(wire(), view.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateUnorderedAccessView(wire(), view.stamp.id(), desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_unordered_access_view(D3D11DDI_HUNORDEREDACCESSVIEW handle)
@@ -544,7 +542,7 @@ void D3d11Device::create_shader(uint32_t stage, const UINT *code, D3D10DDI_HSHAD
 {
     AV_SCOPE("D3d11Device::create_shader");
     ObjectRecord &record_of = *static_cast<ObjectRecord *>(shader.pDrvPrivate);
-    record_of = ObjectRecord{ObjectRecord::tag, next_id(), stage, 0u};
+    record_of = ObjectRecord{d3d::RecordStamp(ObjectRecord::tag, next_id()), stage, 0u};
     constexpr uint32_t max_entries = 128u;
     d3dproto::SignatureEntry signatures[3][max_entries] = {};
     const D3D11_1DDIARG_SIGNATURE_ENTRY2 *const sources[3] = {inputs, outputs, patch};
@@ -576,7 +574,7 @@ void D3d11Device::create_shader(uint32_t stage, const UINT *code, D3D10DDI_HSHAD
     const size_t bytes = static_cast<size_t>(code[1]) * sizeof(UINT);
     if (!wire().make_room_for(bytes))
         log_.write("avumd: a shader larger than the arena");
-    if (!d3dproto::av_d3d_CreateShader(wire(), record_of.id, stage, counts[0], signatures[0], counts[1],
+    if (!d3dproto::av_d3d_CreateShader(wire(), record_of.stamp.id(), stage, counts[0], signatures[0], counts[1],
                                         signatures[1], counts[2], signatures[2], declared, declaration, strides_count,
                                         strides, rasterized, code, bytes))
         set_error(E_OUTOFMEMORY);
@@ -716,7 +714,7 @@ VOID D3d11Device::create_element_layout(const D3D10DDIARG_CREATEELEMENTLAYOUT *a
     AV_SCOPE("D3d11Device::create_element_layout");
     if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     ObjectRecord &layout = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
-    layout = ObjectRecord{ObjectRecord::tag, next_id(), 0u, 0u};
+    layout = ObjectRecord{d3d::RecordStamp(ObjectRecord::tag, next_id()), 0u, 0u};
     constexpr uint32_t max_elements = 32u;
     d3dproto::InputElement elements[max_elements] = {};
     const uint32_t count = args->NumElements > max_elements ? max_elements : args->NumElements;
@@ -727,7 +725,7 @@ VOID D3d11Device::create_element_layout(const D3D10DDIARG_CREATEELEMENTLAYOUT *a
                                                  static_cast<uint32_t>(element.InputSlotClass),
                                                  element.InstanceDataStepRate, element.InputRegister};
     }
-    if (!d3dproto::av_d3d_CreateInputLayout(wire(), layout.id, count, elements)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateInputLayout(wire(), layout.stamp.id(), count, elements)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_element_layout(D3D10DDI_HELEMENTLAYOUT handle)
@@ -750,7 +748,7 @@ VOID D3d11Device::create_blend_state(const D3D11_1_DDI_BLEND_DESC *args, D3D10DD
     AV_SCOPE("D3d11Device::create_blend_state");
     if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     ObjectRecord &state = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
-    state = ObjectRecord{ObjectRecord::tag, next_id(), 0u, 0u};
+    state = ObjectRecord{d3d::RecordStamp(ObjectRecord::tag, next_id()), 0u, 0u};
     d3dproto::BlendDesc desc = {};
     desc.alpha_to_coverage = args->AlphaToCoverageEnable != FALSE;
     desc.independent_blend = args->IndependentBlendEnable != FALSE;
@@ -763,7 +761,7 @@ VOID D3d11Device::create_blend_state(const D3D11_1_DDI_BLEND_DESC *args, D3D10DD
             static_cast<uint32_t>(in.DestBlendAlpha),      static_cast<uint32_t>(in.BlendOpAlpha),
             static_cast<uint32_t>(in.LogicOp),             in.RenderTargetWriteMask};
     }
-    if (!d3dproto::av_d3d_CreateBlendState(wire(), state.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateBlendState(wire(), state.stamp.id(), desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_blend_state(D3D10DDI_HBLENDSTATE handle)
@@ -786,7 +784,7 @@ VOID D3d11Device::create_depth_stencil_state(const D3D10_DDI_DEPTH_STENCIL_DESC 
     AV_SCOPE("D3d11Device::create_depth_stencil_state");
     if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     ObjectRecord &state = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
-    state = ObjectRecord{ObjectRecord::tag, next_id(), 0u, 0u};
+    state = ObjectRecord{d3d::RecordStamp(ObjectRecord::tag, next_id()), 0u, 0u};
     d3dproto::DepthStencilDesc desc = {};
     desc.depth_enable = args->DepthEnable != FALSE;
     desc.depth_write_mask = static_cast<uint32_t>(args->DepthWriteMask);
@@ -802,7 +800,7 @@ VOID D3d11Device::create_depth_stencil_state(const D3D10_DDI_DEPTH_STENCIL_DESC 
                                     static_cast<uint32_t>(args->BackFace.StencilDepthFailOp),
                                     static_cast<uint32_t>(args->BackFace.StencilPassOp),
                                     static_cast<uint32_t>(args->BackFace.StencilFunc)};
-    if (!d3dproto::av_d3d_CreateDepthStencilState(wire(), state.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateDepthStencilState(wire(), state.stamp.id(), desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_depth_stencil_state(D3D10DDI_HDEPTHSTENCILSTATE handle)
@@ -825,7 +823,7 @@ VOID D3d11Device::create_rasterizer_state(const D3DWDDM2_0DDI_RASTERIZER_DESC *a
     AV_SCOPE("D3d11Device::create_rasterizer_state");
     if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     ObjectRecord &state = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
-    state = ObjectRecord{ObjectRecord::tag, next_id(), 0u, 0u};
+    state = ObjectRecord{d3d::RecordStamp(ObjectRecord::tag, next_id()), 0u, 0u};
     const d3dproto::RasterizerDesc desc = {static_cast<uint32_t>(args->FillMode),
                                            static_cast<uint32_t>(args->CullMode),
                                            static_cast<uint32_t>(args->FrontCounterClockwise != FALSE),
@@ -838,7 +836,7 @@ VOID D3d11Device::create_rasterizer_state(const D3DWDDM2_0DDI_RASTERIZER_DESC *a
                                            static_cast<uint32_t>(args->AntialiasedLineEnable != FALSE),
                                            args->ForcedSampleCount,
                                            static_cast<uint32_t>(args->ConservativeRasterizationMode)};
-    if (!d3dproto::av_d3d_CreateRasterizerState(wire(), state.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateRasterizerState(wire(), state.stamp.id(), desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_rasterizer_state(D3D10DDI_HRASTERIZERSTATE handle)
@@ -860,7 +858,7 @@ VOID D3d11Device::create_sampler(const D3D10_DDI_SAMPLER_DESC *args, D3D10DDI_HS
     AV_SCOPE("D3d11Device::create_sampler");
     if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ObjectRecord))) return;
     ObjectRecord &sampler = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
-    sampler = ObjectRecord{ObjectRecord::tag, next_id(), 0u, 0u};
+    sampler = ObjectRecord{d3d::RecordStamp(ObjectRecord::tag, next_id()), 0u, 0u};
     d3dproto::SamplerDesc desc = {};
     desc.filter = static_cast<uint32_t>(args->Filter);
     desc.address_u = static_cast<uint32_t>(args->AddressU);
@@ -872,7 +870,7 @@ VOID D3d11Device::create_sampler(const D3D10_DDI_SAMPLER_DESC *args, D3D10DDI_HS
     for (uint32_t index = 0u; index < 4u; index++) desc.border_color[index] = args->BorderColor[index];
     desc.min_lod = args->MinLOD;
     desc.max_lod = args->MaxLOD;
-    if (!d3dproto::av_d3d_CreateSampler(wire(), sampler.id, desc)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateSampler(wire(), sampler.stamp.id(), desc)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_sampler(D3D10DDI_HSAMPLER handle)
@@ -899,13 +897,13 @@ VOID D3d11Device::create_query(const D3DWDDM2_0DDIARG_CREATEQUERY *args, D3D10DD
      * predicate's BOOL, the stream-output statistics. */
     constexpr uint32_t sizes[] = {4u, 8u, 8u, 16u, 88u, 4u, 16u, 4u, 16u, 16u, 16u, 16u, 4u, 4u, 4u, 4u};
     const uint32_t type = static_cast<uint32_t>(args->Query);
-    query = QueryRecord{QueryRecord::tag, next_id(), type, type < sizeof(sizes) / sizeof(sizes[0]) ? sizes[type] : 0u,
+    query = QueryRecord{d3d::RecordStamp(QueryRecord::tag, next_id()), type, type < sizeof(sizes) / sizeof(sizes[0]) ? sizes[type] : 0u,
                         0u, 0u, 0u, 0u};
     if (query.data_bytes == 0u) {
         set_error(E_INVALIDARG);
         return;
     }
-    if (!d3dproto::av_d3d_CreateQuery(wire(), query.id, type, args->MiscFlags)) set_error(E_OUTOFMEMORY);
+    if (!d3dproto::av_d3d_CreateQuery(wire(), query.stamp.id(), type, args->MiscFlags)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::destroy_query(D3D10DDI_HQUERY handle)

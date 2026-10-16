@@ -3,12 +3,13 @@
  * how much), so these are plain records written by assignment, never objects
  * constructed there.
  *
- * Every object is named on the wire by the 32-bit id in its record, which the
- * device hands out; the host never sees a runtime handle. */
+ * Every object is named on the wire by the 32-bit id in its record's stamp,
+ * which the device hands out; the host never sees a runtime handle. */
 #ifndef AV_UM_D3D11_RECORDS_HPP
 #define AV_UM_D3D11_RECORDS_HPP
 
 #include "icd/d3d/buffer_slices.hpp"
+#include "icd/d3d/record_stamp.hpp"
 #include "icd/d3d/swap_chain_buffer.hpp"
 
 #include <stddef.h>
@@ -24,8 +25,7 @@ namespace av::d3d11 {
 struct ResourceRecord {
     static constexpr uint32_t tag = 0x52524B56u; /* "VKRR" */
 
-    uint32_t magic;
-    uint32_t id;
+    d3d::RecordStamp stamp;
     uint32_t dimension;  /* D3D10DDIRESOURCE_TYPE */
     uint32_t usage;      /* D3D10_DDI_RESOURCE_USAGE */
     uint32_t bind;       /* D3D10_DDI_RESOURCE_BIND_FLAG */
@@ -70,8 +70,7 @@ struct ResourceRecord {
 struct ObjectRecord {
     static constexpr uint32_t tag = 0x4F524B56u; /* "VKRO" */
 
-    uint32_t magic;
-    uint32_t id;
+    d3d::RecordStamp stamp;
     uint32_t kind; /* the shader stage, for a shader */
     uint32_t resource; /* a view's resource id */
 };
@@ -80,8 +79,7 @@ struct ObjectRecord {
 struct QueryRecord {
     static constexpr uint32_t tag = 0x00515641u; /* "AVQ" */
 
-    uint32_t magic;
-    uint32_t id;
+    d3d::RecordStamp stamp;
     uint32_t type;
     uint32_t data_bytes;
     /* The session's count of the query's last end; 0 before any. */
@@ -101,8 +99,7 @@ struct QueryRecord {
 struct CommandListRecord {
     static constexpr uint32_t tag = 0x004C5641u; /* "AVL" */
 
-    uint32_t magic;
-    uint32_t reserved;
+    d3d::RecordStamp stamp;
     uint8_t *commands;
     size_t   length;
 };

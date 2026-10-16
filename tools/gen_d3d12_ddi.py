@@ -118,9 +118,9 @@ IMPLEMENTED = {
 # How each table's slots find the object that answers them from their first
 # parameter, and the class that is.
 TABLES = [
-    (DEVICE_TABLE, "D3D12DDI_HDEVICE", "d3d12", "D3d12DeviceHandle({h}.pDrvPrivate).device()", "device"),
+    (DEVICE_TABLE, "D3D12DDI_HDEVICE", "d3d12", "d3d::DeviceBlock<D3d12Device>({h}.pDrvPrivate).device()", "device"),
     (QUEUE_TABLE, "D3D12DDI_HCOMMANDQUEUE", "d3d12q", "D3d12RecordHandle({h}.pDrvPrivate).device()", "device"),
-    (EXTENDED_TABLE, "D3D12DDI_HDEVICE", "d3d12x", "D3d12DeviceHandle({h}.pDrvPrivate).device()", "device"),
+    (EXTENDED_TABLE, "D3D12DDI_HDEVICE", "d3d12x", "d3d::DeviceBlock<D3d12Device>({h}.pDrvPrivate).device()", "device"),
     (LIST_TABLE, "D3D12DDI_HCOMMANDLIST", "d3d12l", "D3d12RecordHandle({h}.pDrvPrivate).recorder()", "recorder"),
 ]
 
@@ -215,8 +215,8 @@ def thunks(tables):
              " * was given and nothing else, so each thunk is one line into the object the",
              " * handle's block names, or the answer a driver without the slot's feature",
              " * gives. */",
-             '#include "core/trace/function_scope.hpp"', '#include "um/d3d/d3d12_ddi.hpp"',
-             '#include "um/d3d/d3d12_device.hpp"', '#include "um/d3d/d3d12_device_handle.hpp"', '#include "um/d3d/d3d12_record_handle.hpp"',
+             '#include "core/trace/function_scope.hpp"', '#include "icd/d3d/device_block.hpp"', '#include "um/d3d/d3d12_ddi.hpp"',
+             '#include "um/d3d/d3d12_device.hpp"', '#include "um/d3d/d3d12_record_handle.hpp"',
              '#include "um/d3d/d3d12_recorder.hpp"', '#include "um/d3d/d3d12_tables.hpp"', "", "namespace av::d3d12 {", "", "namespace {", ""]
     fills = []
     for table, first, prefix, target, _owner in TABLES:

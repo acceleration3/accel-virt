@@ -43,7 +43,7 @@ D3d12Recorder::D3d12Recorder(D3d12Device &device) : device_(device)
 uint32_t D3d12Recorder::list(D3D12DDI_HCOMMANDLIST handle) const
 {
     AV_SCOPE("D3d12Recorder::list");
-    return static_cast<const ListRecord *>(handle.pDrvPrivate)->header.id;
+    return static_cast<const ListRecord *>(handle.pDrvPrivate)->header.stamp.id();
 }
 
 void D3d12Recorder::sent(bool sent_ok, const char *what)
@@ -76,16 +76,16 @@ VOID D3d12Recorder::reset_command_list(D3D12DDI_HCOMMANDLIST handle, const D3D12
     if (pool->made == 0u) {
         pool->type = made.type;
         pool->made = 1u;
-        sent(av_d3d12_CreateCommandAllocator12(device_.wire(), pool->header.id, pool->type),
+        sent(av_d3d12_CreateCommandAllocator12(device_.wire(), pool->header.stamp.id(), pool->type),
              "CreateCommandAllocator12");
     }
     if (made.made == 0u) {
         made.made = 1u;
-        sent(av_d3d12_CreateCommandList12(device_.wire(), made.header.id, pool->header.id, made.type, 0u),
+        sent(av_d3d12_CreateCommandList12(device_.wire(), made.header.stamp.id(), pool->header.stamp.id(), made.type, 0u),
              "CreateCommandList12");
         return;
     }
-    sent(av_d3d12_ResetCommandList12(device_.wire(), made.header.id, pool->header.id, 0u), "ResetCommandList12");
+    sent(av_d3d12_ResetCommandList12(device_.wire(), made.header.stamp.id(), pool->header.stamp.id(), 0u), "ResetCommandList12");
 }
 
 VOID D3d12Recorder::clear_root_arguments(D3D12DDI_HCOMMANDLIST)

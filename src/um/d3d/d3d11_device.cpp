@@ -14,7 +14,7 @@
 #include "um/d3d/d3d11_dxgi_thunks.hpp"
 #include "um/d3d/d3d11_host_caps.hpp"
 #include "um/d3d/d3d_session.hpp"
-#include "um/d3d/device_handle.hpp"
+#include "icd/d3d/device_block.hpp"
 
 extern "C" VOID APIENTRY avumd_d3d11_DestroyDeferredContext(D3D10DDI_HDEVICE device);
 
@@ -111,9 +111,8 @@ uint32_t D3d11Device::id_of(const void *object_block) const
 {
     AV_SCOPE("D3d11Device::id_of");
     if (object_block == nullptr) return 0u;
-    /* Every record starts with a magic and the id: resource, object and query
-     * alike. */
-    return static_cast<const uint32_t *>(object_block)[1];
+    /* Every record starts with its stamp: resource, object and query alike. */
+    return static_cast<const d3d::RecordStamp *>(object_block)->id();
 }
 
 uint32_t D3d11Device::next_id()
@@ -293,7 +292,7 @@ void D3d11Device::upload(const ResourceRecord &resource, uint32_t subresource, c
     const d3d::TextureUpload upload(layout, region, row_pitch, depth_pitch, piece_bytes());
     /* An empty box uploads nothing, and is no error. */
     if (upload.bytes() == 0u) return;
-    UpdateWriter writer(*this, resource.id, subresource, copy_flags);
+    UpdateWriter writer(*this, resource.stamp.id(), subresource, copy_flags);
     if (!upload.send(writer, static_cast<const uint8_t *>(data)))
         lines_.once("an upload whose rows are closer together than a row of them");
 }
@@ -327,7 +326,7 @@ bool D3d11Device::read_back(const ResourceRecord &resource, uint32_t subresource
     if (!wire().make_room_for(capacity)) return false;
     uint32_t hresult = 1u, row_pitch = 0u, depth_pitch = 0u;
     uint64_t read = 0u;
-    if (!d3dproto::av_d3d_ReadSubresource(wire(), resource.id, subresource, &hresult, &row_pitch, &depth_pitch, out,
+    if (!d3dproto::av_d3d_ReadSubresource(wire(), resource.stamp.id(), subresource, &hresult, &row_pitch, &depth_pitch, out,
                                            capacity, &read))
         return false;
     return hresult == 0u && read <= capacity;
@@ -513,7 +512,7 @@ VOID D3d11Device::command_list_execute(D3D11DDI_HCOMMANDLIST handle)
 {
     AV_SCOPE("D3d11Device::command_list_execute");
     const auto &list = *static_cast<const CommandListRecord *>(handle.pDrvPrivate);
-    if (list.magic != CommandListRecord::tag) {
+    if (!list.stamp.holds(CommandListRecord::tag)) {
         set_error(E_INVALIDARG);
         return;
     }
@@ -589,7 +588,7 @@ VOID D3d11Device::create_deferred_context(const D3D11DDIARG_CREATEDEFERREDCONTEX
         set_error(made);
         return;
     }
-    DeviceHandle(args->hDrvContext.pDrvPrivate).bind(*context);
+    d3d::DeviceBlock<D3d11Device>(args->hDrvContext.pDrvPrivate).bind(*context);
     fill_device_funcs(*args->pWDDM2_6ContextFuncs);
     args->pWDDM2_6ContextFuncs->pfnDestroyDevice = &avumd_d3d11_DestroyDeferredContext;
 }
@@ -614,12 +613,12 @@ VOID D3d11Device::create_command_list(const D3D11DDIARG_CREATECOMMANDLIST *args,
 {
     AV_SCOPE("D3d11Device::create_command_list");
     auto &list = *static_cast<CommandListRecord *>(handle.pDrvPrivate);
-    list = CommandListRecord{0u, 0u, nullptr, 0u};
+    list = CommandListRecord{d3d::RecordStamp(), nullptr, 0u};
     if (args == nullptr) {
         set_error(E_INVALIDARG);
         return;
     }
-    D3d11Device   &context = DeviceHandle(args->hDeferredContext.pDrvPrivate).device();
+    D3d11Device   &context = d3d::DeviceBlock<D3d11Device>(args->hDeferredContext.pDrvPrivate).device();
     const size_t   bytes = context.wire().recorded_bytes();
     uint8_t *const commands = bytes == 0u ? nullptr : static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
     if (bytes != 0u && commands == nullptr) {
@@ -634,16 +633,16 @@ VOID D3d11Device::create_command_list(const D3D11DDIARG_CREATECOMMANDLIST *args,
         set_error(took == Status::no_space ? E_OUTOFMEMORY : D3DDDIERR_DEVICEREMOVED);
         return;
     }
-    list = CommandListRecord{CommandListRecord::tag, 0u, commands, taken};
+    list = CommandListRecord{d3d::RecordStamp(CommandListRecord::tag, 0u), commands, taken};
 }
 
 VOID D3d11Device::destroy_command_list(D3D11DDI_HCOMMANDLIST handle)
 {
     AV_SCOPE("D3d11Device::destroy_command_list");
     auto &list = *static_cast<CommandListRecord *>(handle.pDrvPrivate);
-    if (list.magic != CommandListRecord::tag) return;
+    if (!list.stamp.holds(CommandListRecord::tag)) return;
     if (list.commands != nullptr) memory_.release(list.commands);
-    list = CommandListRecord{0u, 0u, nullptr, 0u};
+    list = CommandListRecord{d3d::RecordStamp(), nullptr, 0u};
 }
 
 VOID D3d11Device::recycle_command_list(D3D11DDI_HCOMMANDLIST)
@@ -656,7 +655,7 @@ HRESULT D3d11Device::recycle_create_command_list(const D3D11DDIARG_CREATECOMMAND
 {
     AV_SCOPE("D3d11Device::recycle_create_command_list");
     create_command_list(args, handle, runtime);
-    return static_cast<const CommandListRecord *>(handle.pDrvPrivate)->magic == CommandListRecord::tag ? S_OK
+    return static_cast<const CommandListRecord *>(handle.pDrvPrivate)->stamp.holds(CommandListRecord::tag) ? S_OK
                                                                                                          : E_OUTOFMEMORY;
 }
 
@@ -667,7 +666,7 @@ HRESULT D3d11Device::recycle_create_deferred_context(const D3D11DDIARG_CREATEDEF
     AV_SCOPE("D3d11Device::recycle_create_deferred_context");
     if (args == nullptr || args->hDrvContext.pDrvPrivate == nullptr || args->pWDDM2_6ContextFuncs == nullptr)
         return E_INVALIDARG;
-    D3d11Device *const held = &DeviceHandle(args->hDrvContext.pDrvPrivate).device();
+    D3d11Device *const held = &d3d::DeviceBlock<D3d11Device>(args->hDrvContext.pDrvPrivate).device();
     session_.lock().acquire();
     D3d11Device *const live = session_.contexts().find(held);
     session_.lock().release();
@@ -681,7 +680,7 @@ HRESULT D3d11Device::recycle_create_deferred_context(const D3D11DDIARG_CREATEDEF
         return S_OK;
     }
     create_deferred_context(args);
-    return DeviceHandle(args->hDrvContext.pDrvPrivate).device().parent_ == this ? S_OK : E_OUTOFMEMORY;
+    return d3d::DeviceBlock<D3d11Device>(args->hDrvContext.pDrvPrivate).device().parent_ == this ? S_OK : E_OUTOFMEMORY;
 }
 
 VOID D3d11Device::recycle_destroy_command_list(D3D11DDI_HCOMMANDLIST handle)

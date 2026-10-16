@@ -591,7 +591,7 @@ VOID D3d11Device::query_end(D3D10DDI_HQUERY query)
     QueryRecord &record = *static_cast<QueryRecord *>(query.pDrvPrivate);
     record.last_end = session_.query_results().ended();
     record.first_miss = 0u;
-    static_cast<void>(d3dproto::av_d3d_EndQuery(wire(), record.id));
+    static_cast<void>(d3dproto::av_d3d_EndQuery(wire(), record.stamp.id()));
     if (record.waited_on != 0u && wire().flush() != Status::ok) set_error(D3DDDIERR_DEVICEREMOVED);
 }
 
@@ -606,7 +606,7 @@ VOID D3d11Device::query_get_data(D3D10DDI_HQUERY handle, void *data, UINT size, 
      * query sharing it, a full host list - is asked about the old way, once
      * it has been behind longer than any GPU wait a frame makes. */
     constexpr int64_t patience_per_second = 500;
-    if (session_.query_results().read(query.id, query.last_end, data, size < query.data_bytes ? size : query.data_bytes))
+    if (session_.query_results().read(query.stamp.id(), query.last_end, data, size < query.data_bytes ? size : query.data_bytes))
         return;
     LARGE_INTEGER now = {};
     LARGE_INTEGER frequency = {};
@@ -623,7 +623,7 @@ VOID D3d11Device::query_get_data(D3D10DDI_HQUERY handle, void *data, UINT size, 
     uint8_t answer[128] = {};
     uint32_t ready = 0u;
     uint64_t answered = 0u;
-    if (!d3dproto::av_d3d_GetQueryData(wire(), query.id, flags, &ready, answer, sizeof(answer), &answered)) {
+    if (!d3dproto::av_d3d_GetQueryData(wire(), query.stamp.id(), flags, &ready, answer, sizeof(answer), &answered)) {
         set_error(D3DDDIERR_DEVICEREMOVED);
         return;
     }

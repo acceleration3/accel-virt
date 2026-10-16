@@ -5,7 +5,7 @@
 #include "core/log/log_sink.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
 #include "icd/d3d/ddi/d3d12ddiarg_create_device_record.hpp"
-#include "um/d3d/d3d12_device_handle.hpp"
+#include "icd/d3d/device_block.hpp"
 #include "um/d3d/d3d12_tables.hpp"
 
 namespace av::d3d12 {
@@ -64,7 +64,7 @@ d3d::Hresult D3d12Driver::build(d3d::D3d12ddiargCreateDeviceRecord &create, uint
         lines_.note("Direct3D 12 device refused, HRESULT", static_cast<uint32_t>(opened));
         return static_cast<d3d::Hresult>(opened);
     }
-    D3d12DeviceHandle(create.hDrvDevice).bind(*device);
+    d3d::DeviceBlock<D3d12Device>(create.hDrvDevice).bind(*device);
     lines_.note("Direct3D 12 device made at interface", arguments.Interface);
     return d3d::hr_ok;
 }
@@ -102,7 +102,7 @@ d3d::Hresult D3d12Driver::fill_table(uint32_t table_type, void *table, size_t by
 void D3d12Driver::tear_down(void *block)
 {
     AV_SCOPE("D3d12Driver::tear_down");
-    D3d12Device &device = D3d12DeviceHandle(block).device();
+    D3d12Device &device = d3d::DeviceBlock<D3d12Device>(block).device();
     static_cast<void>(devices_.destroy(&device));
 }
 

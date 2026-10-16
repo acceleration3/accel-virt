@@ -6,7 +6,7 @@
 #include "icd/d3d/ddi/d3d10ddiarg_create_device_record.hpp"
 #include "core/log/log_sink.hpp"
 #include "um/d3d/d3d11_dxgi_thunks.hpp"
-#include "um/d3d/device_handle.hpp"
+#include "icd/d3d/device_block.hpp"
 
 namespace av::d3d11 {
 
@@ -60,7 +60,7 @@ d3d::Hresult D3d11Driver::build(d3d::UmdDevice &, d3d::D3d10ddiargCreateDeviceRe
         static_cast<void>(devices_.destroy(device));
         return static_cast<d3d::Hresult>(opened);
     }
-    DeviceHandle(create.hDrvDevice).bind(*device);
+    d3d::DeviceBlock<D3d11Device>(create.hDrvDevice).bind(*device);
     fill_device_funcs(*arguments.pWDDM2_6DeviceFuncs);
     fill_dxgi_funcs(*arguments.DXGIBaseDDI.pDXGIDDIBaseFunctions6_1);
     return d3d::hr_ok;
@@ -75,7 +75,7 @@ d3d::SharedRowsRequest &D3d11Driver::rows()
 void D3d11Driver::tear_down(void *block)
 {
     AV_SCOPE("D3d11Driver::tear_down");
-    D3d11Device &device = DeviceHandle(block).device();
+    D3d11Device &device = d3d::DeviceBlock<D3d11Device>(block).device();
     static_cast<void>(devices_.destroy(&device));
 }
 
@@ -84,4 +84,4 @@ void D3d11Driver::tear_down(void *block)
 /* A deferred context's DestroyDevice slot: its block holds no device cookie,
  * so the table's root would not find it; the context goes back to its pool. */
 extern "C" VOID APIENTRY avumd_d3d11_DestroyDeferredContext(D3D10DDI_HDEVICE device)
-{ av::d3d11::DeviceHandle(device.pDrvPrivate).device().retire(); }
+{ av::d3d::DeviceBlock<av::d3d11::D3d11Device>(device.pDrvPrivate).device().retire(); }

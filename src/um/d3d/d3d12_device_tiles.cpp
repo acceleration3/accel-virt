@@ -37,7 +37,7 @@ HRESULT D3d12Device::reserve_resource(const D3D12DDIARG_CREATERESOURCE_0109 &arg
         }
     }
     const bool made = d3d12proto::av_d3d12_CreateReservedResource12(
-        wire(), resource.header.id, desc, initial_state(args, heap_default), clear_value(clear), resource.address);
+        wire(), resource.header.stamp.id(), desc, initial_state(args, heap_default), clear_value(clear), resource.address);
     return sent(made, "CreateReservedResource12") ? S_OK : E_OUTOFMEMORY;
 }
 
@@ -46,7 +46,7 @@ const ResourceRecord &D3d12Device::tiling(ResourceRecord &resource)
     AV_SCOPE("D3d12Device::tiling");
     if (resource.reserved == 0u || resource.tiling_known != 0u) return resource;
     uint32_t tiles = 0u, packed_mips = 0u, packed_tiles = 0u;
-    if (!sent(d3d12proto::av_d3d12_ResourceTiling12(wire(), resource.header.id, &tiles, &packed_mips, &packed_tiles),
+    if (!sent(d3d12proto::av_d3d12_ResourceTiling12(wire(), resource.header.stamp.id(), &tiles, &packed_mips, &packed_tiles),
               "ResourceTiling12"))
         return resource;
     resource.tiles = tiles;
@@ -83,7 +83,7 @@ VOID D3d12Device::update_tile_mappings(D3D12DDI_HCOMMANDQUEUE queue_handle, D3D1
     icd::TilePieces     pieces(source);
     const uint32_t      heap = id_of(heap_handle.pDrvPrivate);
     while (pieces.next())
-        if (!sent(d3d12proto::av_d3d12_UpdateTileMappings12(wire(), queue.header.id, resource.header.id,
+        if (!sent(d3d12proto::av_d3d12_UpdateTileMappings12(wire(), queue.header.stamp.id(), resource.header.stamp.id(),
                                                             pieces.region_count(), pieces.regions(), heap,
                                                             pieces.range_count(), pieces.ranges(),
                                                             static_cast<uint32_t>(mapping)),
@@ -106,7 +106,7 @@ VOID D3d12Device::copy_tile_mappings(D3D12DDI_HCOMMANDQUEUE queue_handle, D3D12D
         DdiTileSource(1u, destination_start, size, 0u, nullptr, nullptr, nullptr, 0u).region(0u);
     const d3d12proto::TileRegion from =
         DdiTileSource(1u, source_start, size, 0u, nullptr, nullptr, nullptr, 0u).region(0u);
-    static_cast<void>(sent(d3d12proto::av_d3d12_CopyTileMappings12(wire(), queue.header.id,
+    static_cast<void>(sent(d3d12proto::av_d3d12_CopyTileMappings12(wire(), queue.header.stamp.id(),
                                                                     id_of(destination.pDrvPrivate), to.start,
                                                                     id_of(source.pDrvPrivate), from.start, to.size,
                                                                     static_cast<uint32_t>(mapping)),
