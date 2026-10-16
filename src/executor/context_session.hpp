@@ -95,7 +95,9 @@ public:
      * for an id never imported, one released, and memory the guest already
      * freed. */
     uint64_t imported_handle(uint64_t blob_id);
-    uint32_t imports() const;
+    /* What this session imported, which its backend finds the imports its
+     * commands name in: bound to it as the session opens. */
+    ImportTable &imports();
     /* For tests: the host device this session runs on made lost
      * (SessionBackend::lose_device). AV_EXECUTED, or AV_UNKNOWN where the
      * host cannot, or with no backend. */

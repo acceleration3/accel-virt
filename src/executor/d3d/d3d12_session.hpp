@@ -49,7 +49,7 @@ class D3d12HostDevice;
 class EventfdWake;
 class WakeSignal;
 class GuestRegion;
-class ImportedMemories;
+class ImportTable;
 
 class D3d12Session final : public d3d12proto::ServerDispatch {
 public:
@@ -57,21 +57,21 @@ public:
      * reads upload heaps, bulk data and published fences through. */
     /* `objects` is the session's table, which the guest names every object
      * of from one id space: Direct3D 12's share it with 11's and 9's. */
-    /* `imported` is the memory the session imported besides its region: a
-     * CPU-visible heap is one of them (docs/host-memory.md). */
     /* `tenant` is what wakes the session's worker should the GPU's Direct3D
      * 12 device, which it joins as it opens it, be lost (DeviceTenants);
      * `fence_wake` what wakes it when the GPU reaches a mark a queue left. */
     /* `blocks` is what the session's tables grow in. */
-    D3d12Session(GuestRegion &region, ImportedMemories &imported, D3dObjectTable &objects, WakeSignal &tenant,
+    D3d12Session(GuestRegion &region, D3dObjectTable &objects, WakeSignal &tenant,
                  EventfdWake &fence_wake, WatchedBlocks &blocks);
 
     /* Binds the session to its GPU's device, which must outlive it; null is a
-     * GPU with none, on which every command is refused. Swap chain buffers are
+     * GPU with none, on which every command is refused. A CPU-visible heap is
+     * memory the session imported, found in `imports` (docs/host-memory.md). Swap chain buffers are
      * shown through `shown_by`, the GPU's Direct3D 11 device; with none, a
      * share or a present is refused. A present publishes its point on
      * `surfaces`, and stages its frame where that asks (SharedSurfaces). */
-    void               initialize(D3d12HostDevice *device, D3d11HostDevice *shown_by = nullptr,
+    void               initialize(const ImportTable &imports, D3d12HostDevice *device,
+                                  D3d11HostDevice *shown_by = nullptr,
                                   SharedSurfaces *surfaces = nullptr, SessionShares *shares = nullptr);
     /* Waits for the GPU to finish with everything, then lets it all go. */
     void               shut_down();
@@ -192,7 +192,8 @@ private:
     void                       drain();
 
     GuestRegion           &region_;
-    ImportedMemories      &imported_;
+    /* The session's imports; null between sessions. */
+    const ImportTable     *imports_;
     D3d12HostDevice       *device_;
     D3d11HostDevice       *shown_by_;
     SessionShares         *shares_;

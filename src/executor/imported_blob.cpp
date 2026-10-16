@@ -4,7 +4,7 @@
 
 namespace av {
 
-ImportedBlob::ImportedBlob() : id_(0u), memory_(nullptr), object_(0u), wire_handle_(0u)
+ImportedBlob::ImportedBlob() : id_(0u), memory_(nullptr), handle_(0u)
 {
     AV_SCOPE("ImportedBlob::ImportedBlob");
 }
@@ -15,8 +15,7 @@ Status ImportedBlob::take(uint64_t blob_id, SourceMemory &memory)
     if (memory_ != nullptr) return Status::invalid_state;
     id_ = blob_id;
     memory_ = &memory;
-    object_ = 0u;
-    wire_handle_ = 0u;
+    handle_ = 0u;
     return Status::ok;
 }
 
@@ -26,8 +25,7 @@ SourceMemory *ImportedBlob::give_back()
     SourceMemory *const held = memory_;
     id_ = 0u;
     memory_ = nullptr;
-    object_ = 0u;
-    wire_handle_ = 0u;
+    handle_ = 0u;
     return held;
 }
 
@@ -55,30 +53,23 @@ const SourceMemory &ImportedBlob::memory() const
     return *memory_;
 }
 
-void ImportedBlob::record(uint64_t object, uint64_t wire_handle)
+uint64_t ImportedBlob::handle() const
+{
+    AV_SCOPE("ImportedBlob::handle");
+    return handle_;
+}
+
+void ImportedBlob::record(uint64_t handle)
 {
     AV_SCOPE("ImportedBlob::record");
-    object_ = object;
-    wire_handle_ = wire_handle;
-}
-
-uint64_t ImportedBlob::object() const
-{
-    AV_SCOPE("ImportedBlob::object");
-    return object_;
-}
-
-uint64_t ImportedBlob::wire_handle() const
-{
-    AV_SCOPE("ImportedBlob::wire_handle");
-    return wire_handle_;
+    handle_ = handle;
 }
 
 /* A free slot is all zeros: nothing of a previous import may look live. */
 bool ImportedBlob::invariants_hold() const
 {
     AV_SCOPE("ImportedBlob::invariants_hold");
-    return memory_ != nullptr || (id_ == 0u && object_ == 0u && wire_handle_ == 0u);
+    return memory_ != nullptr || (id_ == 0u && handle_ == 0u);
 }
 
 }  // namespace av

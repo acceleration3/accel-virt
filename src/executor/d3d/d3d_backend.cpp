@@ -16,7 +16,7 @@
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/d3d/resource_misc.hpp"
 #include "proto/resources/pitched_extent.hpp"
-#include "executor/imported_blob.hpp"
+#include "executor/import_table.hpp"
 #include "executor/poll_budget.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
@@ -117,7 +117,7 @@ D3dBackend::D3dBackend()
     : device11_(nullptr), surfaces_(nullptr), shares_(nullptr), wake_(), fence_wake_(), clock_(), admitted_(false), held_(false), heap_(),
       blocks_(heap_), remade_(blocks_, Pool::paged), states_(blocks_), sink_(stderr),
       lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(blocks_), region_(),
-      imported_(), d3d12_(region_, imported_, objects_, wake_, fence_wake_, blocks_), d3d9_(region_, objects_, blocks_),
+      imports_(nullptr), d3d12_(region_, objects_, wake_, fence_wake_, blocks_), d3d9_(region_, objects_, blocks_),
       published_(blocks_), progress11_(fence_wake_), constants_(blocks_), slice_storage_(), slice_memory_(nullptr),
       slice_storage_refused_(false),
       missed_key_(0u), mark_refused_(false), show_refused_(false), lost_(false)
@@ -125,8 +125,8 @@ D3dBackend::D3dBackend()
     AV_SCOPE("D3dBackend::D3dBackend");
 }
 
-bool D3dBackend::initialize(SessionShares &shares, D3d11HostDevice *device11, D3d12HostDevice *device12,
-                            SharedSurfaces *surfaces, D3d9HostDevice *device9)
+bool D3dBackend::initialize(SessionShares &shares, ImportTable &imports, D3d11HostDevice *device11,
+                            D3d12HostDevice *device12, SharedSurfaces *surfaces, D3d9HostDevice *device9)
 {
     AV_SCOPE("D3dBackend::initialize");
     if (device11 == nullptr || !device11->admit(wake_)) return false;
@@ -134,7 +134,8 @@ bool D3dBackend::initialize(SessionShares &shares, D3d11HostDevice *device11, D3
     device11_ = device11;
     surfaces_ = surfaces;
     shares_ = &shares;
-    d3d12_.initialize(device12, device11, surfaces, &shares);
+    imports_ = &imports;
+    d3d12_.initialize(imports, device12, device11, surfaces, &shares);
     d3d9_.initialize(device9, surfaces, device11, &shares);
     lost_ = false;
     return true;
@@ -173,7 +174,7 @@ void D3dBackend::shut_down()
     device11_ = nullptr;
     shares_ = nullptr;
     slice_storage_refused_ = false;
-    imported_.forget_all();
+    imports_ = nullptr;
 }
 
 bool D3dBackend::knows(uint32_t command_id) const
@@ -289,30 +290,25 @@ bool D3dBackend::lose_device()
     return device11_ != nullptr && device11_->lose();
 }
 
-bool D3dBackend::adopt(ImportedBlob &blob)
+bool D3dBackend::adopt(const SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("D3dBackend::adopt");
-    /* The session's region is the first memory it imports - its arena,
-     * opened with the session - and everything after is an object's own. */
-    if (region_.memory() == nullptr) return region_.adopt(blob);
-    return imported_.adopt(blob);
+    if (region_.memory() == nullptr) return region_.adopt(memory, handle);
+    handle = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&memory));
+    return true;
 }
 
-void D3dBackend::abandon(ImportedBlob &blob)
+void D3dBackend::abandon(const SourceMemory &memory, uint64_t)
 {
     AV_SCOPE("D3dBackend::abandon");
-    if (blob.object() == 0u) return;
-    if (&blob.memory() == slice_memory_ && device11_ != nullptr) {
+    if (&memory == slice_memory_ && device11_ != nullptr) {
         device11_->lock(nullptr);
         release_slice_storage();
         device11_->unlock();
     }
-    if (&blob.memory() != region_.memory()) {
-        imported_.abandon(blob);
-        return;
-    }
+    if (!region_.is(memory)) return;
     published_.unbind();
-    region_.abandon(blob);
+    region_.abandon(memory);
 }
 
 /* A texture the guest shared is made over memory other APIs can open: as rows
@@ -1775,13 +1771,13 @@ bool D3dBackend::on_BindBufferSlice(uint32_t resource, uint64_t memory, uint64_t
 {
     AV_SCOPE("D3dBackend::on_BindBufferSlice");
     ID3D11Resource *const     found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
-    const SourceMemory *const store = imported_.find(memory);
-    if (!ready() || found == nullptr || store == nullptr) return false;
-    if (offset > store->size() || bytes > store->size() - offset) return false;
+    const SourceMemory *const store = imports_ != nullptr ? imports_->named(memory) : nullptr;
+    uint8_t *const            slice = store != nullptr ? store->at(offset, bytes) : nullptr;
+    if (!ready() || found == nullptr || slice == nullptr) return false;
     if (!dynamic_buffer(found) || !slice_storage_for(*store)) return false;
     auto *const buffer = static_cast<ID3D11Buffer *>(found);
     constants_.release(device11_->context(), states_.selected_id(), resource, buffer);
-    return device11_->bind_storage(buffer, slice_storage_, offset, bytes, store->pointer() + offset);
+    return device11_->bind_storage(buffer, slice_storage_, offset, bytes, slice);
 }
 
 bool D3dBackend::dynamic_buffer(ID3D11Resource *resource) const

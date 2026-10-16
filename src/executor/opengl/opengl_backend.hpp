@@ -29,6 +29,7 @@ namespace av {
 class SharedImageShape;
 
 class GlDisplay;
+class SourceMemory;
 
 class OpenGlBackend final : public SessionBackend {
 public:
@@ -61,8 +62,8 @@ public:
     /* Its commands finish as they run: nothing to wake the worker for. */
     void bind_signal(void (*signal)(void *context), void *context) override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
-    [[nodiscard]] bool adopt(ImportedBlob &blob) override;
-    void abandon(ImportedBlob &blob) override;
+    [[nodiscard]] bool adopt(const SourceMemory &memory, uint64_t &handle) override;
+    void abandon(const SourceMemory &memory, uint64_t handle) override;
 
     /* This API exports no descriptor (feature 053,
      * contracts/wire_additions.md): nothing in OpenGL hands one out, so a
@@ -104,7 +105,7 @@ public:
 
 private:
     /* An import after the arena: lent pages, as a memory object. */
-    [[nodiscard]] bool lend(ImportedBlob &blob);
+    [[nodiscard]] bool lend(const SourceMemory &memory, uint64_t &handle);
     /* The table's hooks into this backend: its fences and its region. */
     void install_hooks();
     /* The oldest fence retired if the GPU has passed it. */

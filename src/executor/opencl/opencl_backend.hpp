@@ -21,7 +21,6 @@
 #include "executor/opencl/direct_gl_sharing.hpp"
 #include "executor/guest_region.hpp"
 #include "executor/host_object_registry.hpp"
-#include "executor/imported_memories.hpp"
 #include "executor/opencl/host_svm_ranges.hpp"
 #include "executor/opencl/kernel_pacer.hpp"
 #include "executor/opencl/staging_bytes.hpp"
@@ -44,7 +43,9 @@ class SharedImageShape;
 class OpenGlBackend;
 
 class GlDisplay;
+class ImportTable;
 class OpenClDevice;
+class SourceMemory;
 /* What the tests reach the backend's private state through: the copy path
  * taken on a host whose OpenCL would have shared, and the arena's refusal. */
 struct OpenClBackendProbe;
@@ -82,8 +83,12 @@ public:
      * share objects with (cl_khr_gl_sharing), or null. With one, the vehicle
      * shares its lists, so a GL name the guest hands clCreateFromGLBuffer is
      * the same object here; and a context with no vehicle is refused, since
-     * the guest asked for nothing else. */
-    [[nodiscard]] bool initialize(const OpenClDevice *device, const GlDisplay *display, const OpenGlBackend *share);
+     * the guest asked for nothing else.
+     *
+     * `imports` is the session's: a buffer over lent pages names the import
+     * it is made over. */
+    [[nodiscard]] bool initialize(const OpenClDevice *device, const GlDisplay *display, const OpenGlBackend *share,
+                                  const ImportTable &imports);
 
     bool knows(uint32_t command_id) const override;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
@@ -94,8 +99,12 @@ public:
     void end_batch() override;
     bool poll() override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
-    [[nodiscard]] bool adopt(ImportedBlob &blob) override;
-    void abandon(ImportedBlob &blob) override;
+    /* The context's arena first; every import after is pages the
+     * application lent the device, which its CL_MEM_USE_HOST_PTR buffers are
+     * made over (docs/host-memory.md, "Application memory"), named by their
+     * memory's own address. */
+    [[nodiscard]] bool adopt(const SourceMemory &memory, uint64_t &handle) override;
+    void abandon(const SourceMemory &memory, uint64_t handle) override;
 
     /* This API exports no descriptor (feature 053,
      * contracts/wire_additions.md): only Vulkan does, so a guest asking this
@@ -410,10 +419,8 @@ private:
     HostSvmRanges    mapped_;
     /* A context's first import: its blob arena. */
     GuestRegion      arena_;
-    /* Every import after it: pages the application lent the device, which
-     * its CL_MEM_USE_HOST_PTR buffers are made over (docs/host-memory.md,
-     * "Application memory"). */
-    ImportedMemories application_memory_;
+    /* The session's imports; null between sessions. */
+    const ImportTable *imported_;
     ClEventSignals   events_;
     ClReadAhead      read_ahead_;
     /* Rectangles read into the arena where the host will not read into it. */

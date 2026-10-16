@@ -10,7 +10,6 @@
 #ifndef AV_VULKAN_BACKEND_HPP
 #define AV_VULKAN_BACKEND_HPP
 
-#include "executor/vulkan/adopted_blobs.hpp"
 #include "core/support/extension_names.hpp"
 #include "executor/vulkan/host_exported_fds.hpp"
 #include "executor/vulkan/vulkan_object_kind.hpp"
@@ -31,7 +30,8 @@ class SharedImageShape;
 
 class HostGpu;
 class HostMemorySource;
-class ImportedBlob;
+class ImportTable;
+class SourceMemory;
 
 class VulkanBackend final : public vkproto::RealVulkanDispatch, public SessionBackend {
 public:
@@ -42,8 +42,9 @@ public:
 
     /* Binds this context to the GPU the device is bound to, which must outlive
      * it: the one physical device an enumeration answers, and the memory
-     * source the guest's host-visible memory comes from (null: none). */
-    void initialize(const HostGpu &gpu, HostMemorySource *source);
+     * source the guest's host-visible memory comes from (null: none); and to
+     * its session's imports, which memory the guest frees is looked up in. */
+    void initialize(const HostGpu &gpu, HostMemorySource *source, ImportTable &imports);
 
     bool knows(uint32_t command_id) const override;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
@@ -192,8 +193,8 @@ public:
      * the blob asks for - refused for a kind this device does not import, and
      * for a type the driver will not import that handle into - and makes the
      * memory a handle the guest may name. */
-    [[nodiscard]] bool adopt(ImportedBlob &blob) override;
-    void abandon(ImportedBlob &blob) override;
+    [[nodiscard]] bool adopt(const SourceMemory &memory, uint64_t &handle) override;
+    void abandon(const SourceMemory &memory, uint64_t handle) override;
 
     /* One host object shared with every other context of this device (feature
      * 053). Vulkan is the only API here that exports anything, so this is the
@@ -354,7 +355,9 @@ private:
      * (found by tests/fuzz/fuzz_executor_vulkan.cpp on its first run, in
      * vkDestroyInstance). */
     HostObjectRegistry<uint64_t, VulkanObjectKind, uint64_t> handles_;
-    AdoptedBlobs     adopted_;
+    /* The session's imports: a VkDeviceMemory one names is the import's to
+     * release, not the guest's free. Null between sessions. */
+    ImportTable     *imports_;
     VulkanMemoryImport import_;
     GuestMemoryTypes types_;
     bool             types_learnt_;

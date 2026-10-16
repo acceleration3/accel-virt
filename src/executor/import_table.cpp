@@ -4,7 +4,8 @@
 
 namespace av {
 
-ImportTable::ImportTable(BlockSource &blocks) : blobs_(blocks), ids_(blocks, Pool::paged)
+ImportTable::ImportTable(BlockSource &blocks)
+    : blobs_(blocks), ids_(blocks, Pool::paged), handles_(blocks, Pool::paged)
 {
     AV_SCOPE("ImportTable::ImportTable");
 }
@@ -14,7 +15,8 @@ Status ImportTable::take(uint64_t blob_id, SourceMemory &memory, ImportedBlob *&
     AV_SCOPE("ImportTable::take");
     taken = nullptr;
     if (ids_.find(blob_id) != nullptr) return Status::conflict;
-    const Status room = ids_.reserve(ids_.count() + 1u);
+    Status room = ids_.reserve(ids_.count() + 1u);
+    if (room == Status::ok) room = handles_.reserve(ids_.count() + 1u);
     if (room != Status::ok) return room;
     ImportedBlob *made = nullptr;
     const Status  created = blobs_.create(made);
@@ -34,11 +36,40 @@ ImportedBlob *ImportTable::find(uint64_t blob_id)
     return found != nullptr ? *found : nullptr;
 }
 
+/* The room take made means the insert fails for a taken handle alone. */
+Status ImportTable::name(ImportedBlob &blob, uint64_t handle)
+{
+    AV_SCOPE("ImportTable::name");
+    if (handle == 0u || blob.handle() != 0u) return Status::invalid_parameter;
+    uint32_t     slot = 0u;
+    const Status named = handles_.insert(handle, &blob, slot);
+    if (named != Status::ok) return named;
+    blob.record(handle);
+    return Status::ok;
+}
+
+const SourceMemory *ImportTable::named(uint64_t handle) const
+{
+    AV_SCOPE("ImportTable::named");
+    if (handle == 0u) return nullptr;
+    ImportedBlob *const *const found = handles_.find(handle);
+    return found != nullptr ? &(*found)->memory() : nullptr;
+}
+
+void ImportTable::unname(uint64_t handle)
+{
+    AV_SCOPE("ImportTable::unname");
+    ImportedBlob *blob = nullptr;
+    if (handle == 0u || !handles_.take(handle, blob)) return;
+    blob->record(0u);
+}
+
 SourceMemory *ImportTable::forget(uint64_t blob_id)
 {
     AV_SCOPE("ImportTable::forget");
     ImportedBlob *blob = nullptr;
     if (!ids_.take(blob_id, blob)) return nullptr;
+    unname(blob->handle());
     SourceMemory *const memory = blob->give_back();
     static_cast<void>(blobs_.destroy(blob));
     return memory;
@@ -57,14 +88,20 @@ uint32_t ImportTable::count() const
     return ids_.count();
 }
 
+/* Every name is a live blob's own, and a named blob is under its name. */
 bool ImportTable::invariants_hold() const
 {
     AV_SCOPE("ImportTable::invariants_hold");
-    bool holds = blobs_.live() == ids_.count();
-    ids_.for_each([&holds](uint64_t id, ImportedBlob *const &blob) {
+    bool     holds = blobs_.live() == ids_.count() && handles_.count() <= ids_.count();
+    uint32_t named = 0u;
+    ids_.for_each([&holds, &named, this](uint64_t id, ImportedBlob *const &blob) {
         holds = holds && blob->invariants_hold() && blob->holds(id);
+        if (blob->handle() == 0u) return;
+        named++;
+        ImportedBlob *const *const under = handles_.find(blob->handle());
+        holds = holds && under != nullptr && *under == blob;
     });
-    return holds;
+    return holds && named == handles_.count();
 }
 
 }  // namespace av

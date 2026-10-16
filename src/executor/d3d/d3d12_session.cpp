@@ -3,7 +3,7 @@
 #include "executor/sharing/session_shares.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/source_memory.hpp"
-#include "executor/imported_memories.hpp"
+#include "executor/import_table.hpp"
 
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
@@ -138,9 +138,9 @@ StagedFrame *PresentedResource::stage()
 
 }  // namespace
 
-D3d12Session::D3d12Session(GuestRegion &region, ImportedMemories &imported, D3dObjectTable &objects,
-                           WakeSignal &tenant, EventfdWake &fence_wake, WatchedBlocks &blocks)
-    : region_(region), imported_(imported), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
+D3d12Session::D3d12Session(GuestRegion &region, D3dObjectTable &objects, WakeSignal &tenant,
+                           EventfdWake &fence_wake, WatchedBlocks &blocks)
+    : region_(region), imports_(nullptr), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
       joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks),
       progress_(fence_wake, blocks), views_(objects_, addresses_),
       pipelines_(objects_), presentation_(), tile_update_(), arena_(nullptr), removed_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "), refusal_(lines_), clock_()
@@ -148,10 +148,11 @@ D3d12Session::D3d12Session(GuestRegion &region, ImportedMemories &imported, D3dO
     AV_SCOPE("D3d12Session::D3d12Session");
 }
 
-void D3d12Session::initialize(D3d12HostDevice *device, D3d11HostDevice *shown_by, SharedSurfaces *surfaces,
-                              SessionShares *shares)
+void D3d12Session::initialize(const ImportTable &imports, D3d12HostDevice *device, D3d11HostDevice *shown_by,
+                              SharedSurfaces *surfaces, SessionShares *shares)
 {
     AV_SCOPE("D3d12Session::initialize");
+    imports_ = &imports;
     device_ = device != nullptr && device->placed() ? device : nullptr;
     shown_by_ = shown_by;
     shares_ = shares;
@@ -178,6 +179,7 @@ void D3d12Session::shut_down()
     device_ = nullptr;
     shown_by_ = nullptr;
     shares_ = nullptr;
+    imports_ = nullptr;
 }
 
 bool D3d12Session::lost() const
@@ -416,7 +418,7 @@ bool D3d12Session::on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperti
         size > max_heap_bytes)
         return false;
     if (cpu_visible(properties)) {
-        const SourceMemory *const backing = imported_.find(memory);
+        const SourceMemory *const backing = imports_ != nullptr ? imports_->named(memory) : nullptr;
         if (backing == nullptr || size > backing->size()) {
             LogLine(lines_).text("a heap of ").number(size).text(" bytes names no memory that holds it").write();
             return false;

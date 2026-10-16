@@ -21,7 +21,8 @@
 #include "core/trace/function_scope.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/opencl/cl_event_registration.hpp"
-#include "executor/imported_blob.hpp"
+#include "executor/import_table.hpp"
+#include "executor/source_memory.hpp"
 #include "proto/d3d/dxgi_format.hpp"
 #include "proto/resources/cl_blob_backing.hpp"
 #include "executor/shim/opencl_device.hpp"
@@ -86,15 +87,17 @@ OpenClBackend::OpenClBackend(BlockSource &blocks)
       vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
       direct_(blocks, vehicle_, renderbuffer_textures_), copied_(blocks, object_bytes_, renderbuffer_textures_),
       gl_(nullptr), reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(blocks),
-      svm_(blocks), mapped_(blocks), events_(blocks), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
+      svm_(blocks), mapped_(blocks), imported_(nullptr), events_(blocks), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
       lost_(false)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
 }
 
-bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *display, const OpenGlBackend *share)
+bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *display, const OpenGlBackend *share,
+                               const ImportTable &imports)
 {
     AV_SCOPE("OpenClBackend::initialize");
+    imported_ = &imports;
     bound_ = device;
     if (bound_ == nullptr) return false;
     /* A device that will not describe itself seals no binary and opens
@@ -406,25 +409,23 @@ bool OpenClBackend::lost() const
     return lost_;
 }
 
-bool OpenClBackend::adopt(ImportedBlob &blob)
+/* Buffers over either are made over the source's own mapping with
+ * CL_MEM_USE_HOST_PTR, which needs no extension on any platform; memory with
+ * no mapping is refused, and the guest copies. */
+bool OpenClBackend::adopt(const SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("OpenClBackend::adopt");
-    /* The context's arena is its first import, and every one after is pages
-     * the application lent. Buffers over either are made over the source's
-     * own mapping with CL_MEM_USE_HOST_PTR, which needs no extension on any
-     * platform. */
-    if (arena_.memory() == nullptr) return arena_.adopt(blob);
-    return application_memory_.adopt(blob);
+    if (arena_.memory() == nullptr) return arena_.adopt(memory, handle);
+    handle = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&memory));
+    return memory.pointer() != nullptr;
 }
 
-void OpenClBackend::abandon(ImportedBlob &blob)
+/* Lent pages go with their import: a buffer still made over them was retired
+ * by the guest first (docs/host-memory.md). */
+void OpenClBackend::abandon(const SourceMemory &memory, uint64_t)
 {
     AV_SCOPE("OpenClBackend::abandon");
-    if (&blob.memory() == arena_.memory()) {
-        arena_.abandon(blob);
-        return;
-    }
-    application_memory_.abandon(blob);
+    arena_.abandon(memory);
 }
 
 void *OpenClBackend::lent_for(uint64_t offset, uint64_t bytes) const
@@ -447,9 +448,11 @@ cl_mem OpenClBackend::on_clCreateBufferWithProperties(cl_context context,
     /* The offset is the guest's, so the arena - or the import it names -
      * judges it before it is a pointer. A buffer made over memory that is not
      * the guest's would let the guest choose what the host writes into. */
-    uint8_t *const at = backing.memory() == 0u
-                            ? arena_.at(backing.offset(), static_cast<uint64_t>(size))
-                            : application_memory_.at(backing.memory(), backing.offset(), static_cast<uint64_t>(size));
+    const SourceMemory *const lent =
+        backing.memory() != 0u && imported_ != nullptr ? imported_->named(backing.memory()) : nullptr;
+    uint8_t *const at = backing.memory() == 0u ? arena_.at(backing.offset(), static_cast<uint64_t>(size))
+                        : lent != nullptr      ? lent->at(backing.offset(), static_cast<uint64_t>(size))
+                                               : nullptr;
     if (at == nullptr) {
         if (errcode_ret != nullptr) *errcode_ret = CL_INVALID_VALUE;
         return nullptr;
@@ -621,6 +624,7 @@ void OpenClBackend::shut_down()
     close_vehicle();
     reaches_gl_ = false;
     bound_ = nullptr;
+    imported_ = nullptr;
     ran_ = 0u;
     lost_ = false;
 }

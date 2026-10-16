@@ -1,7 +1,7 @@
 /* One import a session holds: memory of its GPU's memory source
- * (docs/host-memory.md), named by the id the device gave the import, and what
- * the session's host API made of it. The session holds a reference to the
- * memory for as long as the import lives. */
+ * (docs/host-memory.md), named by the id the device gave the import, and the
+ * number the guest names what the session's host API made of it by. The
+ * session holds a reference to the memory for as long as the import lives. */
 #ifndef AV_IMPORTED_BLOB_HPP
 #define AV_IMPORTED_BLOB_HPP
 
@@ -31,25 +31,24 @@ public:
     uint64_t            id() const;
     /* What is imported; only on a live slot. */
     const SourceMemory &memory() const;
-
-    /* What the host API made of it - a VkDeviceMemory, a heap, a buffer - as
-     * the one number every API's handle fits in, and the number the guest
-     * names it by in that API's commands, 0 where it names it by nothing. The
-     * backend records both when it adopts the import and records none when it
-     * gives them back. */
-    void     record(uint64_t object, uint64_t wire_handle);
-    uint64_t object() const;
-    uint64_t wire_handle() const;
+    /* What the host API made of it - a VkDeviceMemory, a heap's memory, a GL
+     * memory object - as the number the guest names it by in that API's
+     * commands; 0 while it is named by nothing: before the backend adopted
+     * it, and after the guest freed what was made. */
+    uint64_t            handle() const;
 
     bool invariants_hold() const;
 
 private:
+    friend class ImportTable;
     friend struct ImportedBlobProbe;
+
+    /* Only ImportTable names a blob, since it keeps the index by name. */
+    void record(uint64_t handle);
 
     uint64_t      id_;
     SourceMemory *memory_;
-    uint64_t      object_;
-    uint64_t      wire_handle_;
+    uint64_t      handle_;
 };
 
 }  // namespace av

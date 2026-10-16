@@ -22,7 +22,6 @@
 #include "executor/d3d/guest_devices.hpp"
 #include "executor/d3d/watched_blocks.hpp"
 #include "executor/guest_region.hpp"
-#include "executor/imported_memories.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "executor/shim/vulkan_buffer.hpp"
 #include "executor/d3d/constant_ring.hpp"
@@ -51,6 +50,8 @@ struct D3dBackendProbe;
 class D3d11HostDevice;
 class D3d12HostDevice;
 class D3d9HostDevice;
+class ImportTable;
+class SourceMemory;
 class SessionShares;
 class SharedSurfaces;
 
@@ -67,7 +68,7 @@ public:
      * its Direct3D 9, and to the surfaces its presents publish
      * (SharedSurfaces); all must outlive it. False for a GPU with no
      * Direct3D 11 device: that is what says Direct3D is served at all. */
-    [[nodiscard]] bool initialize(SessionShares &shares, D3d11HostDevice *device11,
+    [[nodiscard]] bool initialize(SessionShares &shares, ImportTable &imports, D3d11HostDevice *device11,
                                   D3d12HostDevice *device12 = nullptr, SharedSurfaces *surfaces = nullptr,
                                   D3d9HostDevice *device9 = nullptr);
     void               shut_down() override;
@@ -86,8 +87,11 @@ public:
     bool poll() override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
     void bind_signal(void (*signal)(void *context), void *context) override;
-    [[nodiscard]] bool adopt(ImportedBlob &blob) override;
-    void abandon(ImportedBlob &blob) override;
+    /* The session's region first, its arena; every import after is an
+     * object's own memory - a Direct3D 12 heap's, the slice store - named by
+     * its own address. */
+    [[nodiscard]] bool adopt(const SourceMemory &memory, uint64_t &handle) override;
+    void abandon(const SourceMemory &memory, uint64_t handle) override;
     /* A shared texture's memory, which other APIs import (feature 053);
      * Direct3D imports nothing, as it opens what it shares by id. */
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
@@ -292,9 +296,9 @@ private:
     WireArena              *arena_;
     D3dObjectTable          objects_;
     GuestRegion             region_;
-    /* What the session imported besides its region: Direct3D 12's
-     * CPU-visible heaps. */
-    ImportedMemories        imported_;
+    /* What the session imported: its region, Direct3D 12's CPU-visible
+     * heaps and the slice store. Null between sessions. */
+    ImportTable            *imports_;
     /* Direct3D 12's half of the session, sharing its blob arena. */
     D3d12Session            d3d12_;
     /* Direct3D 9's, sharing it too. */

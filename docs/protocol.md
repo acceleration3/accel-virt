@@ -368,15 +368,17 @@ reference to the memory, so `RESOURCE_UNREF` of a host blob is never refused:
 the window range and the blob go, and the memory stays until RELEASE_BLOB,
 `CTX_DESTROY` or a reset ends the import.
 
-An OpenGL context imports once (feature 050): its guest ICD opens one
-`readback` chunk as its blob arena and imports it, and the OpenGL backend
-adopts that memory as the context's region - bulk data a GL command names by
-offset into the arena (a `glReadPixels` destination, a texture upload, a
-buffer map's copy) is read and written there in place. A second import into
-the same context is refused; the wire handle it answers is the region's
-address, which no GL command names. A Direct3D session's first import is its
-arena, adopted the same way; every later one is a CPU-visible Direct3D 12 heap
-or the slice store, kept apart from the region (`ImportedMemories`).
+An OpenGL context's first import (feature 050) is the `readback` chunk its
+guest ICD opens as its blob arena, and the OpenGL backend adopts that memory
+as the context's region - bulk data a GL command names by offset into the
+arena (a `glReadPixels` destination, a texture upload, a buffer map's copy)
+is read and written there in place. The wire handle it answers is the
+region's address, which no GL command names; every later import is pages the
+application lent, a GL memory object named by its name. A Direct3D or OpenCL
+session's first import is its arena, adopted the same way; every later one -
+a CPU-visible Direct3D 12 heap, the slice store, an OpenCL buffer's lent
+pages - is named by its memory's address. Every backend finds the import a
+command names in its session's `ImportTable` (`ImportTable::named`).
 
 A body of any length but its command's is command framing, fault 5, as for a
 NOP with a body. Every other refusal is an answer, and the context runs on:

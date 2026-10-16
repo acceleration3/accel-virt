@@ -42,10 +42,7 @@ void ContextSession::release()
     /* An import exists only while there is a backend - import_blob needs one
      * and this is the only place that drops it - so every blob here has one to
      * go back to. */
-    for (ImportedBlob *blob = imports_.any(); blob != nullptr; blob = imports_.any()) {
-        backend_->abandon(*blob);
-        source_->release(*imports_.forget(blob->id()));
-    }
+    for (ImportedBlob *blob = imports_.any(); blob != nullptr; blob = imports_.any()) release_blob(blob->id());
     /* After the imports: a backend shut down has nothing left to give them
      * back to. */
     if (backend_ != nullptr) backend_->shut_down();
@@ -187,9 +184,16 @@ uint32_t ContextSession::import_blob(uint64_t blob_id, uint64_t memory_key)
         lines_.note("a blob the import table would not take, id", blob_id);
         return AV_UNDECODABLE;
     }
-    if (!backend_->adopt(*taken)) {
+    uint64_t handle = 0u;
+    if (!backend_->adopt(*memory, handle)) {
         /* An API that will not take this memory is not a fault: the device is
          * told no and the guest copies instead. */
+        source_->release(*imports_.forget(blob_id));
+        return AV_UNDECODABLE;
+    }
+    if (imports_.name(*taken, handle) != Status::ok) {
+        lines_.note("an import answered a handle another import is named by, handle", handle);
+        backend_->abandon(*memory, handle);
         source_->release(*imports_.forget(blob_id));
         return AV_UNDECODABLE;
     }
@@ -207,7 +211,8 @@ void ContextSession::release_blob(uint64_t blob_id)
     AV_SCOPE("ContextSession::release_blob");
     ImportedBlob *const blob = imports_.find(blob_id);
     if (blob == nullptr) return;
-    backend_->abandon(*blob);
+    /* Named by nothing: the guest already freed what the backend made. */
+    if (blob->handle() != 0u) backend_->abandon(blob->memory(), blob->handle());
     source_->release(*imports_.forget(blob_id));
 }
 
@@ -215,13 +220,13 @@ uint64_t ContextSession::imported_handle(uint64_t blob_id)
 {
     AV_SCOPE("ContextSession::imported_handle");
     const ImportedBlob *const blob = imports_.find(blob_id);
-    return blob != nullptr ? blob->wire_handle() : 0u;
+    return blob != nullptr ? blob->handle() : 0u;
 }
 
-uint32_t ContextSession::imports() const
+ImportTable &ContextSession::imports()
 {
     AV_SCOPE("ContextSession::imports");
-    return imports_.count();
+    return imports_;
 }
 
 size_t ContextSession::starved() const

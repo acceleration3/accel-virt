@@ -245,7 +245,8 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
      * GL object (feature 053, T019). A host with no display shares nothing
      * and runs everything else. */
     case AV_EXECUTOR_SUB_API_OPENCL:
-        return opencl_[slot].initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()), share);
+        return opencl_[slot].initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()), share,
+                                        sessions_[slot].imports());
     case AV_EXECUTOR_SUB_API_OPENGL:
         return opengl_[slot].initialize(apis_->gl_display(gpu.index()), &options, share);
     case AV_EXECUTOR_SUB_API_D3D: {
@@ -255,10 +256,10 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
         constexpr uint32_t renew_wait_ms = 2000u;
         D3d11HostDevice *const device11 = apis_->d3d11_device(gpu.index());
         if (device11 == nullptr || !device11->renew(renew_wait_ms)) return false;
-        return d3d_[slot].initialize(shares_[slot], device11, apis_->d3d12_device(gpu.index()),
+        return d3d_[slot].initialize(shares_[slot], sessions_[slot].imports(), device11, apis_->d3d12_device(gpu.index()),
                                      apis_->surfaces(gpu.index()), apis_->d3d9_device(gpu.index()));
     }
-    default: vulkan_[slot].initialize(gpu, apis_->memory_source(gpu.index())); return true;
+    default: vulkan_[slot].initialize(gpu, apis_->memory_source(gpu.index()), sessions_[slot].imports()); return true;
     }
 }
 

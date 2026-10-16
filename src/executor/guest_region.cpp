@@ -1,37 +1,35 @@
 #include "executor/guest_region.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "executor/imported_blob.hpp"
 #include "executor/source_memory.hpp"
 
 namespace av {
 
-GuestRegion::GuestRegion() : memory_(nullptr), base_(nullptr), length_(0u)
+GuestRegion::GuestRegion() : memory_(nullptr)
 {
     AV_SCOPE("GuestRegion::GuestRegion");
 }
 
-bool GuestRegion::adopt(ImportedBlob &blob)
+bool GuestRegion::adopt(const SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("GuestRegion::adopt");
-    const SourceMemory &memory = blob.memory();
+    handle = 0u;
     if (memory_ != nullptr || memory.pointer() == nullptr || memory.size() == 0u) return false;
     memory_ = &memory;
-    base_ = memory.pointer();
-    length_ = memory.size();
-    const uint64_t address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(base_));
-    blob.record(address, address);
+    handle = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(memory.pointer()));
     return true;
 }
 
-void GuestRegion::abandon(ImportedBlob &blob)
+void GuestRegion::abandon(const SourceMemory &memory)
 {
     AV_SCOPE("GuestRegion::abandon");
-    if (memory_ == nullptr || &blob.memory() != memory_) return;
-    memory_ = nullptr;
-    base_ = nullptr;
-    length_ = 0u;
-    blob.record(0u, 0u);
+    if (is(memory)) memory_ = nullptr;
+}
+
+bool GuestRegion::is(const SourceMemory &memory) const
+{
+    AV_SCOPE("GuestRegion::is");
+    return memory_ == &memory;
 }
 
 const SourceMemory *GuestRegion::memory() const
@@ -43,21 +41,16 @@ const SourceMemory *GuestRegion::memory() const
 uint8_t *GuestRegion::at(uint64_t offset, uint64_t bytes) const
 {
     AV_SCOPE("GuestRegion::at");
-    if (base_ == nullptr) return nullptr;
-    if (offset > length_) return nullptr;
-    /* Subtraction rather than `offset + bytes`, which is what a guest would
-     * pick the numbers to wrap. */
-    if (bytes > length_ - offset) return nullptr;
-    return base_ + offset;
+    return memory_ != nullptr ? memory_->at(offset, bytes) : nullptr;
 }
 
 bool GuestRegion::holds(const void *bytes) const
 {
     AV_SCOPE("GuestRegion::holds");
-    if (base_ == nullptr) return false;
+    if (memory_ == nullptr) return false;
     /* As integers: the pointer may be into any other object. One below the
      * region wraps to an offset past it. */
-    return reinterpret_cast<uintptr_t>(bytes) - reinterpret_cast<uintptr_t>(base_) < length_;
+    return reinterpret_cast<uintptr_t>(bytes) - reinterpret_cast<uintptr_t>(memory_->pointer()) < memory_->size();
 }
 
 bool GuestRegion::publish(uint64_t offset, uint64_t value)
@@ -77,13 +70,15 @@ bool GuestRegion::publish(uint64_t offset, uint64_t value)
 uint64_t GuestRegion::length() const
 {
     AV_SCOPE("GuestRegion::length");
-    return length_;
+    return memory_ != nullptr ? memory_->size() : 0u;
 }
 
+/* Only memory the source maps is a region: one with none could answer no
+ * offset. */
 bool GuestRegion::invariants_hold() const
 {
     AV_SCOPE("GuestRegion::invariants_hold");
-    return (memory_ != nullptr) == (base_ != nullptr) && (base_ != nullptr || length_ == 0u);
+    return memory_ == nullptr || (memory_->pointer() != nullptr && memory_->size() != 0u);
 }
 
 }  // namespace av

@@ -16,8 +16,7 @@
 namespace av {
 
 class SharedImageShape;
-
-class ImportedBlob;
+class SourceMemory;
 class WireArena;
 class WireReader;
 class WireWriter;
@@ -62,13 +61,16 @@ public:
      * its command returns; nothing for one whose work finishes with it. */
     virtual void bind_signal(void (*signal)(void *context), void *context) = 0;
 
-    /* Turns a checked handle into whatever this API holds memory as, recording
-     * it on the blob. False for a handle this API cannot take - which is not a
-     * fault, only a blob the guest will have to be copied through. */
-    [[nodiscard]] virtual bool adopt(ImportedBlob &blob) = 0;
-    /* Gives back whatever adopt made. Called for every blob still held when a
-     * session ends, so a guest that never releases leaks nothing. */
-    virtual void abandon(ImportedBlob &blob) = 0;
+    /* Makes `memory`, imported, into whatever this API holds memory as,
+     * answering the number the guest names it by in this API's commands -
+     * not 0, and no other live import's - which the session's ImportTable
+     * finds it by from then on. False for memory this API cannot take, which
+     * is not a fault, only memory the guest will have to be copied through. */
+    [[nodiscard]] virtual bool adopt(const SourceMemory &memory, uint64_t &handle) = 0;
+    /* Gives back what adopt made of `memory` and answered as `handle`. Called
+     * for every import still named when a session ends, so a guest that never
+     * releases leaks nothing. */
+    virtual void abandon(const SourceMemory &memory, uint64_t handle) = 0;
 
     /* A descriptor for the object `wire_handle` names in this API's commands,
      * so HostShares can publish it for every context to open (feature 053):

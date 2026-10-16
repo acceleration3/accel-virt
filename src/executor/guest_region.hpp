@@ -13,7 +13,6 @@
 
 namespace av {
 
-class ImportedBlob;
 class SourceMemory;
 
 class GuestRegion {
@@ -24,11 +23,14 @@ public:
 
     /* A session's arena, which is its region: one at a time, since a second
      * would leave the first unreachable with what was made over it. The
-     * region's address names the import on the wire. False, with the blob
-     * untouched, while a region is held or for memory with no mapping. */
-    [[nodiscard]] bool adopt(ImportedBlob &blob);
-    /* The region given back, if `blob` is the one it was adopted as. */
-    void               abandon(ImportedBlob &blob);
+     * region's address is `handle`, what the import is named by on the wire.
+     * False while a region is held or for memory with no mapping. */
+    [[nodiscard]] bool adopt(const SourceMemory &memory, uint64_t &handle);
+    /* The region given back, if it is `memory`. */
+    void               abandon(const SourceMemory &memory);
+    /* Whether the region is `memory`: the import a backend's first adopt made
+     * of it, rather than an object's own. */
+    bool               is(const SourceMemory &memory) const;
     /* The memory the region is, for an API that imports it on the GPU; null
      * for no region. */
     const SourceMemory *memory() const;
@@ -51,8 +53,6 @@ private:
     friend struct GuestRegionProbe;
 
     const SourceMemory *memory_;
-    uint8_t            *base_;
-    uint64_t            length_;
 };
 
 }  // namespace av

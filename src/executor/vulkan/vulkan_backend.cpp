@@ -7,7 +7,7 @@
 #include "core/trace/function_scope.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/host_gpu.hpp"
-#include "executor/imported_blob.hpp"
+#include "executor/import_table.hpp"
 #include "proto/vulkan/descriptor_template_layout.hpp"
 #include "proto/generated/vulkan/vk_command_names.h"
 #include "proto/generated/vulkan/vk_dispatch_server.h"
@@ -61,17 +61,18 @@ VulkanBackend::VulkanBackend() : VulkanBackend(heap_)
 VulkanBackend::VulkanBackend(BlockSource &blocks)
     : heap_(), blocks_(blocks), gpu_(nullptr), source_(nullptr), listed_(), extensions_(blocks, Pool::paged),
       application_(), device_(VK_NULL_HANDLE), physical_(VK_NULL_HANDLE),
-      memory_import_(false), handles_(blocks), adopted_(), import_(), types_(), types_learnt_(false), parent_(0u),
+      memory_import_(false), handles_(blocks), imports_(nullptr), import_(), types_(), types_learnt_(false), parent_(0u),
       ran_(0u)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
 }
 
-void VulkanBackend::initialize(const HostGpu &gpu, HostMemorySource *source)
+void VulkanBackend::initialize(const HostGpu &gpu, HostMemorySource *source, ImportTable &imports)
 {
     AV_SCOPE("VulkanBackend::initialize");
     gpu_ = &gpu;
     source_ = source;
+    imports_ = &imports;
 }
 
 VkPhysicalDevice VulkanBackend::bound_device(VkInstance instance)
@@ -645,14 +646,16 @@ void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallba
 void VulkanBackend::on_vkFreeMemory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *)
 {
     AV_SCOPE("VulkanBackend::on_vkFreeMemory");
-    ImportedBlob *const imported = adopted_.find(reinterpret_cast<uint64_t>(memory));
+    const uint64_t            handle = reinterpret_cast<uint64_t>(memory);
+    const SourceMemory *const imported = imports_ != nullptr ? imports_->named(handle) : nullptr;
     if (imported == nullptr) {
         RealVulkanDispatch::on_vkFreeMemory(device, memory, nullptr);
         return;
     }
     /* The blob stays the device's until it releases it; only what this
      * library made of it goes, so that the release finds nothing to free. */
-    abandon(*imported);
+    abandon(*imported, handle);
+    imports_->unname(handle);
 }
 
 VkResult VulkanBackend::on_vkGetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR *pGetFdInfo, int *pFd)
@@ -741,29 +744,28 @@ VkResult VulkanBackend::imported(VkResult answered, int fd)
  * allocated as: the guest asked for that type (HostMemoryRequest), and only
  * onto a device the guest has made, because device memory belongs to one.
  * Vulkan owns the descriptor once the import is made. */
-bool VulkanBackend::adopt(ImportedBlob &blob)
+bool VulkanBackend::adopt(const SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("VulkanBackend::adopt");
+    handle = 0u;
     if (device_ == VK_NULL_HANDLE || !memory_import_) return false;
-    const SourceMemory &source = blob.memory();
-    const int           fd = source.share();
-    uint64_t            memory = 0u;
-    if (!import_.import_dmabuf(device_, fd, source.size(), source.memory_type(), memory)) {
+    const int fd = memory.share();
+    uint64_t  made = 0u;
+    if (!import_.import_dmabuf(device_, fd, memory.size(), memory.memory_type(), made)) {
         if (fd >= 0) close(fd);
         return false;
     }
-    /* A non-dispatchable handle on the wire is the driver's own number, so the
-     * memory is what the guest names it by. */
-    blob.record(memory, memory);
     /* Made through the device, so destroying the device ends it as the driver
      * does. A registry with no room refuses the import rather than losing the
      * device, as a command's handle would: the guest is copied through
      * instead, and nothing it already has breaks. */
-    if (adopted_.add(blob) != Status::ok ||
-        handles_.remember(memory, VulkanObjectKind::other, reinterpret_cast<uint64_t>(device_), 0u) != Status::ok) {
-        abandon(blob);
+    if (handles_.remember(made, VulkanObjectKind::other, reinterpret_cast<uint64_t>(device_), 0u) != Status::ok) {
+        import_.release(device_, made);
         return false;
     }
+    /* A non-dispatchable handle on the wire is the driver's own number, so the
+     * memory is what the guest names it by. */
+    handle = made;
     return true;
 }
 
@@ -847,17 +849,14 @@ void VulkanBackend::release_object(uint32_t kind, uint64_t wire_handle, uint64_t
     import_.destroy_semaphore(device_, wire_handle);
 }
 
-void VulkanBackend::abandon(ImportedBlob &blob)
+/* The memory itself is the source's and stays mapped; what this made of it
+ * is this library's to free, and no longer a handle the guest names. */
+void VulkanBackend::abandon(const SourceMemory &, uint64_t handle)
 {
     AV_SCOPE("VulkanBackend::abandon");
-    adopted_.remove(blob);
-    const uint64_t object = blob.object();
-    if (object == 0u || device_ == VK_NULL_HANDLE) return;
-    /* The pointer itself is the device's and stays mapped; what this made of
-     * it is this library's to free, and no longer a handle the guest names. */
-    handles_.forget(object);
-    import_.release(device_, object);
-    blob.record(0u, 0u);
+    if (device_ == VK_NULL_HANDLE) return;
+    handles_.forget(handle);
+    import_.release(device_, handle);
 }
 
 bool VulkanBackend::poll()
@@ -920,7 +919,7 @@ void VulkanBackend::shut_down()
     handles_.release_all(release_order, sizeof release_order / sizeof release_order[0],
                          [this](uint64_t raw, VulkanObjectKind kind, uint64_t &, uint32_t) { let_go(raw, kind); });
     fds_.forget_all();
-    adopted_.clear();
+    imports_ = nullptr;
     /* The types were learnt of a physical device of the instance that just
      * died. */
     types_learnt_ = false;

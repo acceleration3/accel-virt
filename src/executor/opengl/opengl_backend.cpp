@@ -7,7 +7,7 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/opengl/gl_context_attributes.hpp"
-#include "executor/imported_blob.hpp"
+#include "executor/source_memory.hpp"
 #include "proto/generated/opengl/gl_command_names.h"
 #include "proto/generated/opengl/gl_dispatch_server.h"
 #include "proto/submission/published_slot_layout.hpp"
@@ -265,28 +265,29 @@ bool OpenGlBackend::lost() const
  * application lent (GL_AMD_pinned_memory, docs/host-memory.md, "Application
  * memory"), which become a memory object of the context: its name is what
  * the guest gives glBufferStorageMemEXT. */
-bool OpenGlBackend::adopt(ImportedBlob &blob)
+bool OpenGlBackend::adopt(const SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("OpenGlBackend::adopt");
-    if (region_.memory() != nullptr) return lend(blob);
-    if (!region_.adopt(blob)) return false;
-    pack_.adopt(blob.memory().share(), blob.memory().size());
+    if (region_.memory() != nullptr) return lend(memory, handle);
+    if (!region_.adopt(memory, handle)) return false;
+    pack_.adopt(memory.share(), memory.size());
     return true;
 }
 
-bool OpenGlBackend::lend(ImportedBlob &blob)
+bool OpenGlBackend::lend(const SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("OpenGlBackend::lend");
-    const int fd = blob.memory().share();
+    handle = 0u;
+    const int fd = memory.share();
     if (fd < 0) return false;
     uint32_t     name = 0u;
-    const bool   imported = import_.imports_memory() && import_.import_memory(fd, blob.memory().size(), name);
+    const bool   imported = import_.imports_memory() && import_.import_memory(fd, memory.size(), name);
     close(fd);
     if (!imported) {
-        LogLine(lines_).text("no memory object over ").number(blob.memory().size()).text(" lent bytes").write();
+        LogLine(lines_).text("no memory object over ").number(memory.size()).text(" lent bytes").write();
         return false;
     }
-    blob.record(name, name);
+    handle = name;
     return true;
 }
 
@@ -302,15 +303,14 @@ void OpenGlBackend::unpack()
     pack_.unbind();
 }
 
-void OpenGlBackend::abandon(ImportedBlob &blob)
+void OpenGlBackend::abandon(const SourceMemory &memory, uint64_t handle)
 {
     AV_SCOPE("OpenGlBackend::abandon");
-    if (&blob.memory() != region_.memory()) {
-        if (blob.object() != 0u) import_.delete_memory(static_cast<uint32_t>(blob.object()));
-        blob.record(0u, 0u);
+    if (!region_.is(memory)) {
+        import_.delete_memory(static_cast<uint32_t>(handle));
         return;
     }
-    region_.abandon(blob);
+    region_.abandon(memory);
     pack_.abandon();
 }
 

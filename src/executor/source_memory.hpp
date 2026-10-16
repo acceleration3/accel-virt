@@ -30,6 +30,10 @@ public:
     uint64_t              size() const;
     /* The source's own mapping of it, for an API that copies through it. */
     uint8_t              *pointer() const;
+    /* `bytes` at `offset` of that mapping, or null: for memory with no
+     * mapping, an offset or a length past its end, and a sum that would wrap -
+     * every number a command names it by came off the wire. */
+    uint8_t              *at(uint64_t offset, uint64_t bytes) const;
     const ExportedMemory &exported() const;
     /* A new descriptor of its dma-buf, the caller's: what a host API imports
      * it by. -1 when none can be had. */
