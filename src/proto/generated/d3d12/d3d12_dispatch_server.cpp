@@ -44,7 +44,7 @@ bool read_bytes(ServerDispatch& s, ::av::WireReader& r, ::av::WireArena& arena, 
     if (in_blob) {
         uint64_t offset = 0u;
         if (!r.read_pod(offset)) return false;
-        data = s.guest_bytes_out(offset, capacity);
+        data = s.guest_bytes(offset, capacity);
         return capacity == 0u || data != nullptr;
     }
     if (tag != tag_inline || capacity > inline_reply_bytes) return false;
@@ -60,6 +60,12 @@ bool read_bytes(ServerDispatch& s, ::av::WireReader& r, ::av::WireArena& arena, 
 }
 
 }  // namespace
+
+ServerDispatch::ServerDispatch(const ::av::GuestBytes& guest) : guest_(guest) {}
+
+uint8_t* ServerDispatch::guest_bytes(uint64_t offset, uint64_t size) const {
+    return guest_.at(offset, size);
+}
 
 static bool decode_OpenDevice12(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d12:OpenDevice12");

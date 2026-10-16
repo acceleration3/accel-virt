@@ -31,6 +31,8 @@ namespace av::clproto {
 // unloadable on a host whose loader had no GL sharing (042).
 class RealDispatch : public ServerDispatch {
 public:
+    using ServerDispatch::ServerDispatch;
+
     cl_int on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id* platforms, cl_uint* num_platforms) override {
         return ::clGetPlatformIDs(num_entries, platforms, num_platforms);
     }

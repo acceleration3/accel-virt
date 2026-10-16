@@ -57,12 +57,6 @@ void *forget_sync(void *user, uint64_t token)
     return static_cast<OpenGlBackend *>(user)->forget_fence(token);
 }
 
-uint8_t *blob_at(void *user, uint64_t offset, uint64_t bytes)
-{
-    AV_SCOPE("blob_at");
-    return static_cast<OpenGlBackend *>(user)->guest_bytes(offset, bytes);
-}
-
 bool pack_blob(void *user, uint64_t offset, uint64_t bytes, void **packed)
 {
     AV_SCOPE("pack_blob");
@@ -85,7 +79,7 @@ OpenGlBackend::OpenGlBackend() : OpenGlBackend(heap_)
 /* heap_ is constructed before blocks are bound to it, whichever constructor
  * runs: it is declared first. */
 OpenGlBackend::OpenGlBackend(BlockSource &blocks)
-    : heap_(), context_(), gl_(), import_(), buffers_(), pack_(gl_, buffers_), fences_(blocks), region_(), errors_(),
+    : heap_(), context_(), gl_(), import_(), buffers_(), pack_(gl_, buffers_), fences_(blocks), guest_(), region_(guest_), errors_(),
       resolved_(0u), ran_(0u),
       lost_(false), current_(false), sink_(stderr), lines_(sink_, "virtio-gpu-av: opengl: ")
 {
@@ -123,7 +117,7 @@ void OpenGlBackend::install_hooks()
     gl_.av_sync_for = sync_for;
     gl_.av_forget_sync = forget_sync;
     gl_.av_sync_user = this;
-    gl_.av_blob = blob_at;
+    gl_.av_guest = &guest_;
     gl_.av_pack_blob = pack_blob;
     gl_.av_unpack_blob = unpack_blob;
     gl_.av_blob_user = this;
@@ -238,7 +232,7 @@ void OpenGlBackend::publish_errors()
         errors_.record(error);
     }
     /* A region without the word has nobody reading it. */
-    const PublishedSlotLayout tail(region_.length());
+    const PublishedSlotLayout tail(guest_.length());
     if (tail.holds_tail()) static_cast<void>(region_.publish(tail.error_word(), errors_.word()));
 }
 
@@ -268,7 +262,7 @@ bool OpenGlBackend::lost() const
 bool OpenGlBackend::adopt(const SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("OpenGlBackend::adopt");
-    if (region_.memory() != nullptr) return lend(memory, handle);
+    if (region_.held()) return lend(memory, handle);
     if (!region_.adopt(memory, handle)) return false;
     pack_.adopt(memory.share(), memory.size());
     return true;
@@ -358,12 +352,6 @@ void *OpenGlBackend::forget_fence(uint64_t token)
 {
     AV_SCOPE("OpenGlBackend::forget_fence");
     return fences_.forget(token);
-}
-
-uint8_t *OpenGlBackend::guest_bytes(uint64_t offset, uint64_t bytes) const
-{
-    AV_SCOPE("OpenGlBackend::guest_bytes");
-    return region_.at(offset, bytes);
 }
 
 

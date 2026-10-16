@@ -855,8 +855,8 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
         out.append("            uint64_t av_at = 0;")
         out.append("            if (!av_r.read_varint(av_bytes)) return false;")
         out.append("            if (!av_r.read_varint(av_at)) return false;")
-        out.append("            if (av_gl.av_blob == nullptr) return false;")
-        out.append(f"            {name} = av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);")
+        out.append("            if (av_gl.av_guest == nullptr) return false;")
+        out.append(f"            {name} = av_gl.av_guest->at(av_at, av_bytes);")
         out.append(f"            if ({name} == nullptr) return false;")
         out.append(f"            {name}_room = av_bytes;")
         out.append("        } else if (av_present != 0) {")
@@ -910,12 +910,11 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
         out.append("            uint64_t av_at = 0;")
         out.append("            if (!av_r.read_varint(av_bytes)) return false;")
         out.append("            if (!av_r.read_varint(av_at)) return false;")
-        out.append("            if (av_gl.av_blob == nullptr) return false;")
+        out.append("            if (av_gl.av_guest == nullptr) return false;")
         # Bounds-checked against the whole mapping by the resolver,
         # which is the server's only defence against a guest that lies
         # about where its memory is.
-        out.append(f"            {name} = av_gl.av_blob("
-                   "av_gl.av_blob_user, av_at, av_bytes);")
+        out.append(f"            {name} = av_gl.av_guest->at(av_at, av_bytes);")
         out.append(f"            if ({name} == nullptr) return false;")
         out.append(f"            {name}_bytes = static_cast<size_t>(av_bytes);")
         if packs:
@@ -1021,9 +1020,8 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
             out.append("            uint64_t av_at = 0;")
             out.append("            if (!av_r.read_varint(av_bytes)) return false;")
             out.append("            if (!av_r.read_varint(av_at)) return false;")
-            out.append("            if (av_gl.av_blob == nullptr) return false;")
-            out.append("            const void* av_from ="
-                       " av_gl.av_blob(av_gl.av_blob_user, av_at, av_bytes);")
+            out.append("            if (av_gl.av_guest == nullptr) return false;")
+            out.append("            const void* av_from = av_gl.av_guest->at(av_at, av_bytes);")
             out.append("            if (av_from == nullptr) return false;")
             out.append(f"            {name} = reinterpret_cast<const {p.type.base}*>(av_from);")
             out.append(f"            {name}_room = av_bytes;")
@@ -1947,7 +1945,8 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
 def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n",
            "#include <stddef.h>", "#include <stdint.h>\n",
-           '#include "gl_types.h"\n',
+           '#include "gl_types.h"',
+           '#include "proto/wire/guest_bytes.hpp"\n',
            "namespace av::glproto {\n",
            "// The host's OpenGL, by name.",
            "//",
@@ -1956,12 +1955,12 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
            "// system's own getProcAddress. So the server holds a table",
            "// and fills it once per context.",
            "struct RealGl {",
-           "    // Turns a region offset from the guest into a pointer,",
-           "    // bounds-checked against the mapping. Set by the server;",
-           "    // null when there is no region, in which case a command",
-           "    // that names one is refused rather than guessed at.",
-           "    uint8_t* (*av_blob)(void*, uint64_t, uint64_t)"
-           " = nullptr;",
+           "    // The context's blob arena, which a region offset from the",
+           "    // guest is turned into a pointer in, bounds-checked against",
+           "    // the mapping. Set by the server; a command that names an",
+           "    // offset with none, or past it, is refused rather than",
+           "    // guessed at.",
+           "    const ::av::GuestBytes* av_guest = nullptr;",
            "    void* av_blob_user = nullptr;",
            "",
            "    // A pixel transfer into the region, made a pack buffer's: the",
@@ -1976,7 +1975,7 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
            "",
            "    // A guest mints a sync token; the host binds it to whatever",
            "    // glFenceSync made and looks it up again by the token. Fields",
-           "    // rather than free functions for the reason av_blob is one:",
+           "    // rather than free functions for the reason av_pack_blob is one:",
            "    // a parameterless hook cannot reach one context's state, and",
            "    // this project has no file-scope place to put it (042).",
            "    // av_forget_sync takes a token out for glDeleteSync and",

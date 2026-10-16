@@ -31,6 +31,8 @@ namespace av::clproto {
 // succeeds, answering whatever objects it makes with `produce`.
 class DefaultDispatch : public ServerDispatch {
 public:
+    using ServerDispatch::ServerDispatch;
+
     cl_int on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id* platforms, cl_uint* num_platforms) override {
         (void)num_entries;
         (void)platforms;

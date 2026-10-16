@@ -273,6 +273,12 @@ static bool resolve_kernel_argument(ServerDispatch& s, ::av::WireArena& arena, c
     return true;
 }
 
+ServerDispatch::ServerDispatch(const ::av::GuestBytes& guest) : guest_(guest) {}
+
+uint8_t* ServerDispatch::guest_bytes(uint64_t offset, uint64_t bytes) const {
+    return guest_.at(offset, bytes);
+}
+
 static bool decode_clGetPlatformIDs(ServerDispatch& s, ::av::WireReader& r,
                                    ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:clGetPlatformIDs");
@@ -1464,7 +1470,7 @@ static bool decode_clEnqueueReadBuffer(ServerDispatch& s, ::av::WireReader& r,
         if (wire_wanted == 2) {
             uint64_t wire_offset = 0;
             if (!r.read_varint(wire_offset)) return false;
-            ptr_lent = s.lent_for(wire_offset, static_cast<uint64_t>(ptr_capacity));
+            ptr_lent = s.guest_bytes(wire_offset, static_cast<uint64_t>(ptr_capacity));
             if (ptr_lent == nullptr) return false;
         }
     }
@@ -1575,7 +1581,7 @@ static bool decode_clEnqueueWriteBuffer(ServerDispatch& s, ::av::WireReader& r,
             uint64_t wire_count = 0;
             uint64_t wire_offset = 0;
             if (!r.read_varint(wire_count) || !r.read_varint(wire_offset)) return false;
-            void* wire_bytes = s.lent_for(wire_offset, wire_count);
+            void* wire_bytes = s.guest_bytes(wire_offset, wire_count);
             if (wire_bytes == nullptr) return false;
             ptr = static_cast<const void*>(wire_bytes);
             ptr_count = wire_count;
@@ -1915,7 +1921,7 @@ static bool decode_clEnqueueReadImage(ServerDispatch& s, ::av::WireReader& r,
         if (wire_wanted == 2) {
             uint64_t wire_offset = 0;
             if (!r.read_varint(wire_offset)) return false;
-            ptr_lent = s.lent_for(wire_offset, static_cast<uint64_t>(ptr_capacity));
+            ptr_lent = s.guest_bytes(wire_offset, static_cast<uint64_t>(ptr_capacity));
             if (ptr_lent == nullptr) return false;
         }
     }
@@ -2070,7 +2076,7 @@ static bool decode_clEnqueueWriteImage(ServerDispatch& s, ::av::WireReader& r,
             uint64_t wire_count = 0;
             uint64_t wire_offset = 0;
             if (!r.read_varint(wire_count) || !r.read_varint(wire_offset)) return false;
-            void* wire_bytes = s.lent_for(wire_offset, wire_count);
+            void* wire_bytes = s.guest_bytes(wire_offset, wire_count);
             if (wire_bytes == nullptr) return false;
             ptr = static_cast<const void*>(wire_bytes);
             ptr_count = wire_count;
@@ -4886,7 +4892,7 @@ static bool decode_clEnqueueReadBufferRect(ServerDispatch& s, ::av::WireReader& 
         if (wire_wanted == 2) {
             uint64_t wire_offset = 0;
             if (!r.read_varint(wire_offset)) return false;
-            ptr_lent = s.lent_for(wire_offset, static_cast<uint64_t>(ptr_capacity));
+            ptr_lent = s.guest_bytes(wire_offset, static_cast<uint64_t>(ptr_capacity));
             if (ptr_lent == nullptr) return false;
         }
     }
@@ -5073,7 +5079,7 @@ static bool decode_clEnqueueWriteBufferRect(ServerDispatch& s, ::av::WireReader&
             uint64_t wire_count = 0;
             uint64_t wire_offset = 0;
             if (!r.read_varint(wire_count) || !r.read_varint(wire_offset)) return false;
-            void* wire_bytes = s.lent_for(wire_offset, wire_count);
+            void* wire_bytes = s.guest_bytes(wire_offset, wire_count);
             if (wire_bytes == nullptr) return false;
             ptr = static_cast<const void*>(wire_bytes);
             ptr_count = wire_count;

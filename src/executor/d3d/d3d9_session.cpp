@@ -2,7 +2,6 @@
 
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/watched_blocks.hpp"
-#include "executor/guest_region.hpp"
 #include "executor/shim/d3d9_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "proto/generated/d3d9/d3d9_command_names.h"
@@ -20,8 +19,8 @@ constexpr uint64_t format_answer_bytes = 2u * sizeof(uint32_t);
 
 }  // namespace
 
-D3d9Session::D3d9Session(GuestRegion &region, D3dObjectTable &objects, WatchedBlocks &blocks)
-    : region_(region), host_(nullptr), surfaces_(nullptr), flips_(blocks), objects_(objects), blocks_(blocks),
+D3d9Session::D3d9Session(const GuestBytes &guest, D3dObjectTable &objects, WatchedBlocks &blocks)
+    : d3d9proto::ServerDispatch(guest), host_(nullptr), surfaces_(nullptr), flips_(blocks), objects_(objects), blocks_(blocks),
       devices_(blocks), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d9: "), refusal_(lines_), arena_(nullptr), lost_(false)
 {
     AV_SCOPE("D3d9Session::D3d9Session");
@@ -74,18 +73,6 @@ bool D3d9Session::run(uint32_t command_id, WireReader &payload, WireWriter &repl
     if (ran) return true;
     return devices_.refuse(refusal_, d3d9proto::command_name(command_id),
                            blocks_.refusal(static_cast<uint32_t>(D3DERR_DRIVERINTERNALERROR)));
-}
-
-const uint8_t *D3d9Session::guest_bytes(uint64_t offset, uint64_t size)
-{
-    AV_SCOPE("D3d9Session::guest_bytes");
-    return region_.at(offset, size);
-}
-
-uint8_t *D3d9Session::guest_bytes_out(uint64_t offset, uint64_t size)
-{
-    AV_SCOPE("D3d9Session::guest_bytes_out");
-    return region_.at(offset, size);
 }
 
 IDirect3DDevice9 *D3d9Session::device() const

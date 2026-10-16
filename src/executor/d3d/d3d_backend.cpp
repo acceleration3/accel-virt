@@ -30,7 +30,6 @@
 #include "proto/generated/d3d/d3d_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
 
-
 namespace av {
 
 namespace {
@@ -62,7 +61,6 @@ constexpr uint32_t max_dimension = 16384u;
 constexpr uint32_t max_buffer_bytes = 1u << 30u;
 constexpr uint32_t no_stream = 0xffffffffu;
 constexpr size_t   container_slack = 64u * 1024u;
-
 
 /* A Direct3D 11 present's frame, staged through its GPU's device: a 2D
  * texture of four-byte texels, or nothing. */
@@ -114,10 +112,11 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), surfaces_(nullptr), shares_(nullptr), wake_(), fence_wake_(), clock_(), admitted_(false), held_(false), heap_(),
+    : d3dproto::ServerDispatch(guest_), device11_(nullptr), surfaces_(nullptr), shares_(nullptr), wake_(), fence_wake_(), clock_(), admitted_(false), held_(false), heap_(),
       blocks_(heap_), remade_(blocks_, Pool::paged), states_(blocks_), sink_(stderr),
-      lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(blocks_), region_(),
-      imports_(nullptr), d3d12_(region_, objects_, wake_, fence_wake_, blocks_), d3d9_(region_, objects_, blocks_),
+      lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(blocks_), guest_(),
+      region_(guest_), imports_(nullptr), d3d12_(guest_, objects_, wake_, fence_wake_, blocks_),
+      d3d9_(guest_, objects_, blocks_),
       published_(blocks_), progress11_(fence_wake_), constants_(blocks_), slice_storage_(), slice_memory_(nullptr),
       slice_storage_refused_(false),
       missed_key_(0u), mark_refused_(false), show_refused_(false), lost_(false)
@@ -293,7 +292,7 @@ bool D3dBackend::lose_device()
 bool D3dBackend::adopt(const SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("D3dBackend::adopt");
-    if (region_.memory() == nullptr) return region_.adopt(memory, handle);
+    if (!region_.held()) return region_.adopt(memory, handle);
     handle = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&memory));
     return true;
 }
@@ -371,18 +370,6 @@ bool D3dBackend::import_object(uint32_t, uint32_t, int, uint64_t, const SharedIm
 void D3dBackend::release_object(uint32_t, uint64_t, uint64_t)
 {
     AV_SCOPE("D3dBackend::release_object");
-}
-
-const uint8_t *D3dBackend::guest_bytes(uint64_t offset, uint64_t size)
-{
-    AV_SCOPE("D3dBackend::guest_bytes");
-    return region_.at(offset, size);
-}
-
-uint8_t *D3dBackend::guest_bytes_out(uint64_t offset, uint64_t size)
-{
-    AV_SCOPE("D3dBackend::guest_bytes_out");
-    return region_.at(offset, size);
 }
 
 bool D3dBackend::all_of(const uint32_t *ids, uint32_t count, D3dObjectKind kind) const
@@ -1972,7 +1959,7 @@ bool D3dBackend::on_BindQueryResults(uint64_t offset, uint32_t slots)
     AV_SCOPE("D3dBackend::on_BindQueryResults");
     constexpr uint32_t most_slots = 4096u;
     if (slots == 0u || slots > most_slots) return false;
-    uint8_t *const results = region_.at(offset, static_cast<uint64_t>(slots) * QueryResultPublisher::slot_bytes);
+    uint8_t *const results = guest_.at(offset, static_cast<uint64_t>(slots) * QueryResultPublisher::slot_bytes);
     if (results == nullptr) return false;
     published_.bind(results, slots);
     return true;

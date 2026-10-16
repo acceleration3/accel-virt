@@ -1,6 +1,7 @@
 #include "executor/source_memory.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/wire/guest_bytes.hpp"
 
 #include <fcntl.h>
 
@@ -59,12 +60,7 @@ uint8_t *SourceMemory::pointer() const
 uint8_t *SourceMemory::at(uint64_t offset, uint64_t bytes) const
 {
     AV_SCOPE("SourceMemory::at");
-    uint8_t *const base = memory_.pointer();
-    const uint64_t length = memory_.size();
-    /* Subtraction rather than `offset + bytes`, which is what a guest would
-     * pick the numbers to wrap. */
-    if (base == nullptr || offset > length || bytes > length - offset) return nullptr;
-    return base + offset;
+    return GuestBytes(memory_.pointer(), memory_.size()).at(offset, bytes);
 }
 
 const ExportedMemory &SourceMemory::exported() const

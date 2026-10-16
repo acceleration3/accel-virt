@@ -1,11 +1,10 @@
 /* One context's view of host memory it shares with the guest
- * (docs/host-memory.md): an import of its GPU's memory source, read and
- * written through the source's own mapping, bounds-checked.
+ * (docs/host-memory.md): the import of its GPU's memory source that is the
+ * context's blob arena, adopted as the GuestBytes every command's offsets
+ * resolve in, through the source's own mapping.
  *
- * OpenGL's generated decoder asks for a host pointer at a guest offset at more
- * than a thousand sites - it is the bulk-data path, not a corner case - and
- * every offset and length in those asks came off the wire. A region that cannot
- * answer one refuses, and the command that named it is refused with it. */
+ * Direct3D, OpenCL and OpenGL each take their first import as their region,
+ * so the rule for which import that is, and what it is named by, is here. */
 #ifndef AV_GUEST_REGION_HPP
 #define AV_GUEST_REGION_HPP
 
@@ -13,11 +12,14 @@
 
 namespace av {
 
+class GuestBytes;
 class SourceMemory;
 
 class GuestRegion {
 public:
-    GuestRegion();
+    /* `bytes` is what the backend's decoders resolve offsets in; it outlives
+     * the region. */
+    explicit GuestRegion(GuestBytes &bytes);
     GuestRegion(const GuestRegion &) = delete;
     GuestRegion &operator=(const GuestRegion &) = delete;
 
@@ -31,28 +33,20 @@ public:
     /* Whether the region is `memory`: the import a backend's first adopt made
      * of it, rather than an object's own. */
     bool               is(const SourceMemory &memory) const;
-    /* The memory the region is, for an API that imports it on the GPU; null
-     * for no region. */
-    const SourceMemory *memory() const;
+    /* Whether there is one: the backend's next import is not its region. */
+    bool               held() const;
 
-    /* `bytes` at `offset`, or null: for a region that is not there, an offset
-     * past its end, a length past its end, and a sum that would wrap. */
-    uint8_t *at(uint64_t offset, uint64_t bytes) const;
-    /* Whether `bytes` points inside the region: memory a decoder resolved
-     * through `at`, rather than a copy of its own. */
-    bool     holds(const void *bytes) const;
     /* `value` stored at `offset` as one aligned eight-byte store, which the
      * guest reads whole and never half: an error word, a fence value. False
      * for a word outside the region or off its alignment. */
     [[nodiscard]] bool publish(uint64_t offset, uint64_t value);
-    uint64_t length() const;
 
     bool invariants_hold() const;
 
 private:
     friend struct GuestRegionProbe;
 
-    const SourceMemory *memory_;
+    GuestBytes &bytes_;
 };
 
 }  // namespace av

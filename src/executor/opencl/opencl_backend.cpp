@@ -83,11 +83,11 @@ OpenClBackend::OpenClBackend() : OpenClBackend(heap_)
 /* heap_ is constructed before blocks_ is bound to it, whichever constructor
  * runs: it is declared first. */
 OpenClBackend::OpenClBackend(BlockSource &blocks)
-    : heap_(), blocks_(blocks), bound_(nullptr), envelope_(), arguments_(), binaries_(), il_(), argument_kinds_(),
+    : clproto::RealDispatch(guest_), heap_(), blocks_(blocks), bound_(nullptr), envelope_(), arguments_(), binaries_(), il_(), argument_kinds_(),
       vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
       direct_(blocks, vehicle_, renderbuffer_textures_), copied_(blocks, object_bytes_, renderbuffer_textures_),
       gl_(nullptr), reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(blocks),
-      svm_(blocks), mapped_(blocks), imported_(nullptr), events_(blocks), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
+      svm_(blocks), mapped_(blocks), guest_(), arena_(guest_), imported_(nullptr), events_(blocks), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
       lost_(false)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
@@ -415,7 +415,7 @@ bool OpenClBackend::lost() const
 bool OpenClBackend::adopt(const SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("OpenClBackend::adopt");
-    if (arena_.memory() == nullptr) return arena_.adopt(memory, handle);
+    if (!arena_.held()) return arena_.adopt(memory, handle);
     handle = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&memory));
     return memory.pointer() != nullptr;
 }
@@ -426,12 +426,6 @@ void OpenClBackend::abandon(const SourceMemory &memory, uint64_t)
 {
     AV_SCOPE("OpenClBackend::abandon");
     arena_.abandon(memory);
-}
-
-void *OpenClBackend::lent_for(uint64_t offset, uint64_t bytes) const
-{
-    AV_SCOPE("OpenClBackend::lent_for");
-    return arena_.at(offset, bytes);
 }
 
 cl_mem OpenClBackend::on_clCreateBufferWithProperties(cl_context context,
@@ -450,7 +444,7 @@ cl_mem OpenClBackend::on_clCreateBufferWithProperties(cl_context context,
      * the guest's would let the guest choose what the host writes into. */
     const SourceMemory *const lent =
         backing.memory() != 0u && imported_ != nullptr ? imported_->named(backing.memory()) : nullptr;
-    uint8_t *const at = backing.memory() == 0u ? arena_.at(backing.offset(), static_cast<uint64_t>(size))
+    uint8_t *const at = backing.memory() == 0u ? guest_.at(backing.offset(), static_cast<uint64_t>(size))
                         : lent != nullptr      ? lent->at(backing.offset(), static_cast<uint64_t>(size))
                                                : nullptr;
     if (at == nullptr) {
@@ -820,7 +814,7 @@ cl_int OpenClBackend::on_clEnqueueReadBuffer(cl_command_queue command_queue, cl_
     AV_SCOPE("OpenClBackend::on_clEnqueueReadBuffer");
     static_cast<void>(blocking_read);
     cl_int served = CL_SUCCESS;
-    if (num_events_in_wait_list == 0u && event == nullptr && !arena_.holds(ptr) &&
+    if (num_events_in_wait_list == 0u && event == nullptr && !guest_.holds(ptr) &&
         read_ahead_.read(command_queue, buffer, offset, size, ptr, served))
         return served;
     return RealDispatch::on_clEnqueueReadBuffer(command_queue, buffer, CL_TRUE, offset, size, ptr,
@@ -846,7 +840,7 @@ cl_int OpenClBackend::on_clEnqueueReadBufferRect(
 {
     AV_SCOPE("OpenClBackend::on_clEnqueueReadBufferRect");
     static_cast<void>(blocking_read);
-    const bool into_arena = arena_.holds(ptr);
+    const bool into_arena = guest_.holds(ptr);
     if (!into_arena || !bounced_.bounces()) {
         const cl_int direct = RealDispatch::on_clEnqueueReadBufferRect(
             command_queue, buffer, CL_TRUE, buffer_origin, host_origin, region, buffer_row_pitch,

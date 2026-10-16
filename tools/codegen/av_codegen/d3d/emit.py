@@ -303,7 +303,8 @@ def emit_client_cpp(reg: Registry) -> str:
 
 def emit_server_h(reg: Registry) -> str:
     lines = [HEADER, "#pragma once", "", "#include <stddef.h>", "#include <stdint.h>", "",
-             f'#include {_inc("wire_types.h")}', '#include "proto/wire/wire_arena.hpp"',
+             f'#include {_inc("wire_types.h")}', '#include "proto/wire/guest_bytes.hpp"',
+             '#include "proto/wire/wire_arena.hpp"',
              '#include "proto/wire/wire_reader.hpp"', '#include "proto/wire/wire_writer.hpp"', "",
              f"namespace {NS} {{", "",
              "// Implemented by the executor; the table below calls into it. Every value",
@@ -317,12 +318,16 @@ def emit_server_h(reg: Registry) -> str:
              "    ServerDispatch& operator=(const ServerDispatch&) = delete;", "",
              "    // `size` bytes at `offset` in the context's blob arena, or null for a range",
              "    // outside it.",
-             "    virtual const uint8_t* guest_bytes(uint64_t offset, uint64_t size) = 0;",
-             "    virtual uint8_t* guest_bytes_out(uint64_t offset, uint64_t size) = 0;", ""]
+             "    uint8_t* guest_bytes(uint64_t offset, uint64_t size) const;", ""]
     for cmd in reg.commands:
         params = ", ".join(_server_params(reg, cmd))
         lines.append(f"    virtual bool on_{cmd.name}({params}) = 0;")
-    lines += ["", "protected:", "    ServerDispatch() = default;", "    ~ServerDispatch() = default;", "};", "",
+    lines += ["", "protected:",
+              "    // `guest` is the context's blob arena, which the implementation owns and",
+              "    // adopts its first import as.",
+              "    explicit ServerDispatch(const ::av::GuestBytes& guest);",
+              "    ~ServerDispatch() = default;", "",
+              "private:", "    const ::av::GuestBytes& guest_;", "};", "",
               "// Whether the registry has this command at all.",
               "bool knows_command(uint32_t cmd_id);",
               "// Decodes one command and calls the dispatch; false for a frame that does",
@@ -370,7 +375,7 @@ bool read_out_bytes(ServerDispatch& s, ::av::WireReader& r, ::av::WireArena& are
     if (in_blob) {{
         uint64_t offset = 0u;
         if (!r.read_pod(offset)) return false;
-        data = s.guest_bytes_out(offset, capacity);
+        data = s.guest_bytes(offset, capacity);
         return capacity == 0u || data != nullptr;
     }}
     if (tag != tag_inline || capacity > inline_reply_bytes) return false;
@@ -411,7 +416,10 @@ def _decode(reg: Registry, p: Param, lines: list[str]) -> None:
 def emit_server_cpp(reg: Registry) -> str:
     lines = [HEADER, f'#include {_inc("dispatch_server.h")}', "",
              '#include "core/trace/function_scope.hpp"', f'#include {_inc("protocol_ids.h")}', "",
-             f"namespace {NS} {{", _helpers(reg, SERVER_HELPERS)]
+             f"namespace {NS} {{", _helpers(reg, SERVER_HELPERS),
+             "ServerDispatch::ServerDispatch(const ::av::GuestBytes& guest) : guest_(guest) {}", "",
+             "uint8_t* ServerDispatch::guest_bytes(uint64_t offset, uint64_t size) const {",
+             "    return guest_.at(offset, size);", "}", ""]
     for cmd in reg.commands:
         lines.append(f"static bool decode_{cmd.name}(ServerDispatch& s, ::av::WireReader& r, "
                      "::av::WireWriter& reply, ::av::WireArena& arena) {")

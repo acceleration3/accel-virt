@@ -48,20 +48,20 @@ class WatchedBlocks;
 class D3d12HostDevice;
 class EventfdWake;
 class WakeSignal;
-class GuestRegion;
+class GuestBytes;
 class ImportTable;
 
 class D3d12Session final : public d3d12proto::ServerDispatch {
 public:
-    /* `region` is the session's blob arena, which D3dBackend adopts and this
-     * reads upload heaps, bulk data and published fences through. */
+    /* `guest` is the session's blob arena, which D3dBackend adopts and this
+     * reads bulk data through. */
     /* `objects` is the session's table, which the guest names every object
      * of from one id space: Direct3D 12's share it with 11's and 9's. */
     /* `tenant` is what wakes the session's worker should the GPU's Direct3D
      * 12 device, which it joins as it opens it, be lost (DeviceTenants);
      * `fence_wake` what wakes it when the GPU reaches a mark a queue left. */
     /* `blocks` is what the session's tables grow in. */
-    D3d12Session(GuestRegion &region, D3dObjectTable &objects, WakeSignal &tenant,
+    D3d12Session(const GuestBytes &guest, D3dObjectTable &objects, WakeSignal &tenant,
                  EventfdWake &fence_wake, WatchedBlocks &blocks);
 
     /* Binds the session to its GPU's device, which must outlive it; null is a
@@ -87,8 +87,6 @@ public:
      * that never opened one. */
     bool               lost() const;
 
-    const uint8_t *guest_bytes(uint64_t offset, uint64_t size) override;
-    uint8_t       *guest_bytes_out(uint64_t offset, uint64_t size) override;
 
     bool on_OpenDevice12(uint32_t flags, uint32_t& hresult, d3d12proto::Caps12& caps) override;
     bool on_QueryFormat12(uint32_t format, uint32_t samples, uint32_t& support1, uint32_t& support2, uint32_t& quality_levels) override;
@@ -191,7 +189,6 @@ private:
      * that has not in 5 s removes the device. */
     void                       drain();
 
-    GuestRegion           &region_;
     /* The session's imports; null between sessions. */
     const ImportTable     *imports_;
     D3d12HostDevice       *device_;

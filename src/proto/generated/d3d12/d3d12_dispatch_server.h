@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "proto/generated/d3d12/d3d12_wire_types.h"
+#include "proto/wire/guest_bytes.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -26,8 +27,7 @@ public:
 
     // `size` bytes at `offset` in the context's blob arena, or null for a range
     // outside it.
-    virtual const uint8_t* guest_bytes(uint64_t offset, uint64_t size) = 0;
-    virtual uint8_t* guest_bytes_out(uint64_t offset, uint64_t size) = 0;
+    uint8_t* guest_bytes(uint64_t offset, uint64_t size) const;
 
     virtual bool on_OpenDevice12(uint32_t flags, uint32_t& hresult, Caps12& caps) = 0;
     virtual bool on_QueryFormat12(uint32_t format, uint32_t samples, uint32_t& support1, uint32_t& support2, uint32_t& quality_levels) = 0;
@@ -97,8 +97,13 @@ public:
     virtual bool on_CopyTiles12(uint32_t list, uint32_t resource, const TileCoordinate& start, const TileSize& size, uint32_t buffer, uint64_t buffer_offset, uint32_t flags) = 0;
 
 protected:
-    ServerDispatch() = default;
+    // `guest` is the context's blob arena, which the implementation owns and
+    // adopts its first import as.
+    explicit ServerDispatch(const ::av::GuestBytes& guest);
     ~ServerDispatch() = default;
+
+private:
+    const ::av::GuestBytes& guest_;
 };
 
 // Whether the registry has this command at all.

@@ -19,6 +19,7 @@
 #include <CL/cl.h>
 #include <CL/cl_gl.h>
 
+#include "proto/wire/guest_bytes.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -74,7 +75,7 @@ public:
     // arena, `bytes` long, as a pointer, or null for a span that is not
     // wholly inside it. A lent parameter names this instead of carrying
     // its bytes, and the call reads or writes it in place.
-    virtual void* lent_for(uint64_t offset, uint64_t bytes) const = 0;
+    uint8_t* guest_bytes(uint64_t offset, uint64_t bytes) const;
     // What argument `index` of `kernel` is where the host's OpenCL
     // will not say - a program from IL, whose argument types a host
     // need not keep: false when the server knows no better either.
@@ -195,6 +196,14 @@ public:
     virtual cl_int on_clEnqueueSVMMemFill(cl_command_queue command_queue, void* svm_ptr, const void* pattern, size_t pattern_size, size_t size, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) = 0;
     virtual cl_int on_clSetKernelArgSVMPointer(cl_kernel kernel, cl_uint arg_index, const void* arg_value) = 0;
     virtual cl_int on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type) = 0;
+
+protected:
+    // `guest` is the context's blob arena, which the implementation owns
+    // and adopts its first import as.
+    explicit ServerDispatch(const ::av::GuestBytes& guest);
+
+private:
+    const ::av::GuestBytes& guest_;
 };
 
 // `arena` is where everything a decoded command points at lives,

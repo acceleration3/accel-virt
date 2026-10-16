@@ -10,7 +10,6 @@
 #include "executor/d3d/watched_blocks.hpp"
 #include "executor/d3d/d3d12_indirect_signature.hpp"
 #include "executor/d3d/d3d12_root_layout.hpp"
-#include "executor/guest_region.hpp"
 #include "executor/poll_budget.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
@@ -138,9 +137,9 @@ StagedFrame *PresentedResource::stage()
 
 }  // namespace
 
-D3d12Session::D3d12Session(GuestRegion &region, D3dObjectTable &objects, WakeSignal &tenant,
+D3d12Session::D3d12Session(const GuestBytes &guest, D3dObjectTable &objects, WakeSignal &tenant,
                            EventfdWake &fence_wake, WatchedBlocks &blocks)
-    : region_(region), imports_(nullptr), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
+    : d3d12proto::ServerDispatch(guest), imports_(nullptr), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
       joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks),
       progress_(fence_wake, blocks), views_(objects_, addresses_),
       pipelines_(objects_), presentation_(), tile_update_(), arena_(nullptr), removed_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "), refusal_(lines_), clock_()
@@ -217,18 +216,6 @@ uint32_t D3d12Session::removed_reason() const
 {
     AV_SCOPE("D3d12Session::removed_reason");
     return removed_;
-}
-
-const uint8_t *D3d12Session::guest_bytes(uint64_t offset, uint64_t size)
-{
-    AV_SCOPE("D3d12Session::guest_bytes");
-    return region_.at(offset, size);
-}
-
-uint8_t *D3d12Session::guest_bytes_out(uint64_t offset, uint64_t size)
-{
-    AV_SCOPE("D3d12Session::guest_bytes_out");
-    return region_.at(offset, size);
 }
 
 ID3D12GraphicsCommandList *D3d12Session::list(uint32_t id) const

@@ -20,6 +20,7 @@
 #include "executor/opencl/copied_gl_sharing.hpp"
 #include "executor/opencl/direct_gl_sharing.hpp"
 #include "executor/guest_region.hpp"
+#include "proto/wire/guest_bytes.hpp"
 #include "executor/host_object_registry.hpp"
 #include "executor/opencl/host_svm_ranges.hpp"
 #include "executor/opencl/kernel_pacer.hpp"
@@ -126,10 +127,6 @@ public:
      * mapping one of its maps answered. Those are the only two kinds of host
      * address the guest is ever told, so they are the only two it may name. */
     void *svm_for(uint64_t address, uint64_t bytes) const override;
-    /* `bytes` at `offset` of the adopted arena, or null for an offset or a
-     * length that does not lie inside it. Every offset here is a number the
-     * guest wrote, so this is a bounds check and never a dereference. */
-    void *lent_for(uint64_t offset, uint64_t bytes) const override;
     void  made(clproto::HandleKind kind, void *object) override;
     bool  room_for(uint64_t objects) override;
     void  retained(clproto::HandleKind kind, void *object) override;
@@ -197,7 +194,7 @@ public:
                                       const cl_event *event_wait_list, cl_event *event) override;
 
     /* A transfer's host memory is the decode arena, which the next command
-     * decodes over, or guest memory the guest lent (lent_for), which it may
+     * decodes over, or guest memory the guest lent (guest_bytes), which it may
      * give to another transfer once this one is answered - and a host driver
      * may touch a non-blocking transfer's memory when its queue reaches it
      * rather than at the call (rusticl does). So every transfer is made
@@ -417,7 +414,9 @@ private:
     HostObjectRegistry<uint64_t, clproto::HandleKind, void *> handles_;
     HostSvmRanges    svm_;
     HostSvmRanges    mapped_;
-    /* A context's first import: its blob arena. */
+    /* A context's first import: its blob arena, which the decoder resolves
+     * lent parameters in. */
+    GuestBytes       guest_;
     GuestRegion      arena_;
     /* The session's imports; null between sessions. */
     const ImportTable *imported_;

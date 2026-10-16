@@ -1021,7 +1021,7 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
             out.append("            uint64_t wire_count = 0;")
             out.append("            uint64_t wire_offset = 0;")
             out.append("            if (!r.read_varint(wire_count) || !r.read_varint(wire_offset)) return false;")
-            out.append("            void* wire_bytes = s.lent_for(wire_offset, wire_count);")
+            out.append("            void* wire_bytes = s.guest_bytes(wire_offset, wire_count);")
             out.append("            if (wire_bytes == nullptr) return false;")
             out.append(f"            {n} = static_cast<{p.type.cpp()}>(wire_bytes);")
             out.append(f"            {n}_count = wire_count;")
@@ -1100,7 +1100,7 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
             out.append(f"        if (wire_wanted == {WIRE_LENT}) {{")
             out.append("            uint64_t wire_offset = 0;")
             out.append("            if (!r.read_varint(wire_offset)) return false;")
-            out.append(f"            {n}_lent = s.lent_for(wire_offset, static_cast<uint64_t>({n}_capacity));")
+            out.append(f"            {n}_lent = s.guest_bytes(wire_offset, static_cast<uint64_t>({n}_capacity));")
             out.append(f"            if ({n}_lent == nullptr) return false;")
             out.append("        }")
         out.append("    }")
@@ -1200,6 +1200,7 @@ def _capacity_expr(cmd: Command, p: Param) -> str:
 def emit_server(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n",
          "#include <stddef.h>", "#include <stdint.h>", ""] + CL_PREAMBLE + ["",
+         '#include "proto/wire/guest_bytes.hpp"',
          '#include "proto/wire/wire_arena.hpp"',
          '#include "proto/wire/wire_reader.hpp"',
          '#include "proto/wire/wire_writer.hpp"', "",
@@ -1241,7 +1242,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
           "    // arena, `bytes` long, as a pointer, or null for a span that is not",
           "    // wholly inside it. A lent parameter names this instead of carrying",
           "    // its bytes, and the call reads or writes it in place.",
-          "    virtual void* lent_for(uint64_t offset, uint64_t bytes) const = 0;",
+          "    uint8_t* guest_bytes(uint64_t offset, uint64_t bytes) const;",
           "    // What argument `index` of `kernel` is where the host's OpenCL",
           "    // will not say - a program from IL, whose argument types a host",
           "    // need not keep: false when the server knows no better either.",
@@ -1251,7 +1252,10 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
          "#include <stddef.h>", "#include <stdint.h>", "",
          '#include "cl_protocol_ids.h"',
          '#include "core/trace/function_scope.hpp"', "",
-         "namespace av::clproto {", ""] + SIZE_HELPERS
+         "namespace av::clproto {", ""] + SIZE_HELPERS + [
+         "ServerDispatch::ServerDispatch(const ::av::GuestBytes& guest) : guest_(guest) {}", "",
+         "uint8_t* ServerDispatch::guest_bytes(uint64_t offset, uint64_t bytes) const {",
+         "    return guest_.at(offset, bytes);", "}", ""]
 
     for cmd in reg.commands.values():
         h.append(f"    virtual {_server_signature2(reg, cmd)} = 0;")
@@ -1460,7 +1464,12 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
     c.append("}")
     c.append("")
 
-    h += ["};", "",
+    h += ["", "protected:",
+          "    // `guest` is the context's blob arena, which the implementation owns",
+          "    // and adopts its first import as.",
+          "    explicit ServerDispatch(const ::av::GuestBytes& guest);", "",
+          "private:", "    const ::av::GuestBytes& guest_;",
+          "};", "",
           "// `arena` is where everything a decoded command points at lives,",
           "// for the length of the call; it is the caller's block, because it",
           "// has to outlive the decode that filled it.",
@@ -1562,7 +1571,8 @@ def emit_default_dispatch(reg: Registry, out_dir: Path) -> None:
            "// span it would read or write to `touched` - that is where a fake",
            "// holds the decoder to what it resolved and bounded - then",
            "// succeeds, answering whatever objects it makes with `produce`.",
-           "class DefaultDispatch : public ServerDispatch {", "public:"]
+           "class DefaultDispatch : public ServerDispatch {", "public:",
+           "    using ServerDispatch::ServerDispatch;", ""]
     for cmd in reg.commands.values():
         out.append(f"    {_server_signature2(reg, cmd)} override {{")
         out.extend(_default_body(reg, cmd))
@@ -1591,7 +1601,8 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
            "// path, and they do not all export the same extension symbols -",
            "// linking clGetGLContextInfoKHR made the whole executor library",
            "// unloadable on a host whose loader had no GL sharing (042).",
-           "class RealDispatch : public ServerDispatch {", "public:"]
+           "class RealDispatch : public ServerDispatch {", "public:",
+           "    using ServerDispatch::ServerDispatch;", ""]
     members: list[str] = []
     for cmd in reg.commands.values():
         decls = _server_params(reg, cmd)

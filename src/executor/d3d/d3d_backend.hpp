@@ -22,6 +22,7 @@
 #include "executor/d3d/guest_devices.hpp"
 #include "executor/d3d/watched_blocks.hpp"
 #include "executor/guest_region.hpp"
+#include "proto/wire/guest_bytes.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "executor/shim/vulkan_buffer.hpp"
 #include "executor/d3d/constant_ring.hpp"
@@ -101,8 +102,6 @@ public:
                                      uint64_t &wire_handle, uint64_t &detail) override;
     void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) override;
 
-    const uint8_t *guest_bytes(uint64_t offset, uint64_t size) override;
-    uint8_t       *guest_bytes_out(uint64_t offset, uint64_t size) override;
 
     bool on_CreateDevice11(uint32_t device, uint32_t feature_level, uint32_t flags, uint32_t &hresult,
                            uint32_t &level) override;
@@ -295,6 +294,9 @@ private:
      * container - is taken from; null between commands. */
     WireArena              *arena_;
     D3dObjectTable          objects_;
+    /* The session's blob arena, which the three dispatches resolve offsets
+     * in. */
+    GuestBytes              guest_;
     GuestRegion             region_;
     /* What the session imported: its region, Direct3D 12's CPU-visible
      * heaps and the slice store. Null between sessions. */

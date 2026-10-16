@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "proto/generated/d3d/d3d_wire_types.h"
+#include "proto/wire/guest_bytes.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -26,8 +27,7 @@ public:
 
     // `size` bytes at `offset` in the context's blob arena, or null for a range
     // outside it.
-    virtual const uint8_t* guest_bytes(uint64_t offset, uint64_t size) = 0;
-    virtual uint8_t* guest_bytes_out(uint64_t offset, uint64_t size) = 0;
+    uint8_t* guest_bytes(uint64_t offset, uint64_t size) const;
 
     virtual bool on_CreateDevice11(uint32_t device, uint32_t feature_level, uint32_t flags, uint32_t& hresult, uint32_t& level) = 0;
     virtual bool on_QueryCaps11(Caps11& caps, uint8_t* formats, uint64_t formats_capacity, uint64_t& formats_size) = 0;
@@ -100,8 +100,13 @@ public:
     virtual bool on_ClearState11() = 0;
 
 protected:
-    ServerDispatch() = default;
+    // `guest` is the context's blob arena, which the implementation owns and
+    // adopts its first import as.
+    explicit ServerDispatch(const ::av::GuestBytes& guest);
     ~ServerDispatch() = default;
+
+private:
+    const ::av::GuestBytes& guest_;
 };
 
 // Whether the registry has this command at all.

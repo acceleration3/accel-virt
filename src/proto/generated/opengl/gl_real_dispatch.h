@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "gl_types.h"
+#include "proto/wire/guest_bytes.hpp"
 
 namespace av::glproto {
 
@@ -18,11 +19,12 @@ namespace av::glproto {
 // system's own getProcAddress. So the server holds a table
 // and fills it once per context.
 struct RealGl {
-    // Turns a region offset from the guest into a pointer,
-    // bounds-checked against the mapping. Set by the server;
-    // null when there is no region, in which case a command
-    // that names one is refused rather than guessed at.
-    uint8_t* (*av_blob)(void*, uint64_t, uint64_t) = nullptr;
+    // The context's blob arena, which a region offset from the
+    // guest is turned into a pointer in, bounds-checked against
+    // the mapping. Set by the server; a command that names an
+    // offset with none, or past it, is refused rather than
+    // guessed at.
+    const ::av::GuestBytes* av_guest = nullptr;
     void* av_blob_user = nullptr;
 
     // A pixel transfer into the region, made a pack buffer's: the
@@ -37,7 +39,7 @@ struct RealGl {
 
     // A guest mints a sync token; the host binds it to whatever
     // glFenceSync made and looks it up again by the token. Fields
-    // rather than free functions for the reason av_blob is one:
+    // rather than free functions for the reason av_pack_blob is one:
     // a parameterless hook cannot reach one context's state, and
     // this project has no file-scope place to put it (042).
     // av_forget_sync takes a token out for glDeleteSync and

@@ -42,7 +42,7 @@ class D3d9HostDevice;
 class SharedSurfaces;
 class SessionShares;
 class D3d11HostDevice;
-class GuestRegion;
+class GuestBytes;
 class WatchedBlocks;
 class WireArena;
 class WireReader;
@@ -53,11 +53,11 @@ public:
     /* The largest surface edge any Direct3D 9 device makes. */
     static constexpr uint32_t max_dimension = 16384u;
 
-    /* `region` is the session's blob arena, which D3dBackend adopts, and
+    /* `guest` is the session's blob arena, which D3dBackend adopts, and
      * `objects` the session's object table: the guest names every object of
      * a session from one id space, so Direct3D 9's share Direct3D 11's table.
      * `blocks` is what the session's tables grow in. */
-    D3d9Session(GuestRegion &region, D3dObjectTable &objects, WatchedBlocks &blocks);
+    D3d9Session(const GuestBytes &guest, D3dObjectTable &objects, WatchedBlocks &blocks);
     ~D3d9Session();
     D3d9Session(const D3d9Session &) = delete;
     D3d9Session &operator=(const D3d9Session &) = delete;
@@ -82,8 +82,6 @@ public:
      * guest's driver removes its devices as one, from the context's fault. */
     bool               lost() const;
 
-    const uint8_t *guest_bytes(uint64_t offset, uint64_t size) override;
-    uint8_t       *guest_bytes_out(uint64_t offset, uint64_t size) override;
 
     bool on_CreateDevice9(uint32_t device, uint32_t flags, uint32_t &hresult) override;
     bool on_QueryCaps9(uint32_t &hresult, uint8_t *caps, uint64_t caps_capacity,
@@ -193,7 +191,6 @@ private:
      * DXVK to read; null where the arena has no room. */
     const uint32_t    *padded(const uint8_t *code, uint64_t code_size);
 
-    GuestRegion    &region_;
     D3d9HostDevice *host_;
     SharedSurfaces *surfaces_;
     D3d9FlipShares  flips_;

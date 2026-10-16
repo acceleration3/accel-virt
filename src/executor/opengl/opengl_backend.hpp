@@ -11,6 +11,7 @@
 #include "core/log/driver_log.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/guest_region.hpp"
+#include "proto/wire/guest_bytes.hpp"
 #include "proto/submission/gl_error_word.hpp"
 #include "executor/session_backend.hpp"
 #include "executor/shim/host_heap.hpp"
@@ -92,8 +93,6 @@ public:
     void              *fence_for(uint64_t token) const;
     /* What glDeleteSync deletes for `token` (SyncTokens::forget). */
     void              *forget_fence(uint64_t token);
-    /* The bytes of the imported region its bulk-data commands name. */
-    uint8_t           *guest_bytes(uint64_t offset, uint64_t bytes) const;
     /* A pixel transfer into the region packed into it by the GPU
      * (GlPackBuffer): the offset it names instead of a pointer, and once made,
      * the write finished. */
@@ -128,6 +127,9 @@ private:
     GlSharedBuffer  buffers_;
     GlPackBuffer    pack_;
     SyncTokens  fences_;
+    /* The context's arena, which the table resolves its bulk-data commands'
+     * offsets in. */
+    GuestBytes  guest_;
     GuestRegion region_;
     GlErrorWord  errors_;
     uint32_t    resolved_;
