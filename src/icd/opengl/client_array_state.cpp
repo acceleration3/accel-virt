@@ -35,9 +35,10 @@ constexpr uint32_t texture_targets_kept[] = {
 
 }  // namespace
 
-ClientArrayState::ClientArrayState()
-    : buffers_{}, buffers_restored_(false), pack_(), unpack_(), vertex_array_(0u), array_names_{}, array_elements_{}, arrays_known_(1u),
-      attribute_pointers_{}, active_unit_(unknown), textures_{}, samplers_{}, offsets_{}
+ClientArrayState::ClientArrayState(BlockSource &memory)
+    : buffers_{}, buffers_restored_(false), pack_(), unpack_(), vertex_array_(0u), default_elements_(0u),
+      elements_(memory, Pool::paged), attribute_pointers_{}, active_unit_(unknown), textures_{}, samplers_{},
+      offsets_(memory, Pool::paged), no_offsets_(0u)
 {
     AV_SCOPE("ClientArrayState::ClientArrayState");
     forget_bindings();
@@ -77,8 +78,8 @@ void ClientArrayState::bind_buffer(uint32_t target, uint32_t buffer)
 {
     AV_SCOPE("ClientArrayState::bind_buffer");
     if (target == element_array_buffer) {
-        const uint32_t row = vertex_array_row(vertex_array_);
-        if (row != max_vertex_arrays) array_elements_[row] = buffer;
+        uint32_t *const elements = elements_of(vertex_array_);
+        if (elements != nullptr) *elements = buffer;
         return;
     }
     const uint32_t slot = buffer_slot(target);
@@ -115,8 +116,10 @@ void ClientArrayState::delete_buffers(int32_t count, const uint32_t *buffers)
         if (name == 0u) continue;
         for (uint32_t &bound : buffers_)
             if (bound == name) bound = 0u;
-        for (uint32_t row = 0u; row < arrays_known_; row++)
-            if (array_elements_[row] == name) array_elements_[row] = 0u;
+        if (default_elements_ == name) default_elements_ = 0u;
+        elements_.for_each([name](uint32_t, uint32_t &elements) {
+            if (elements == name) elements = 0u;
+        });
     }
 }
 
@@ -124,8 +127,8 @@ uint32_t ClientArrayState::bound_buffer(uint32_t target) const
 {
     AV_SCOPE("ClientArrayState::bound_buffer");
     if (target == element_array_buffer) {
-        const uint32_t row = vertex_array_row(vertex_array_);
-        return row == max_vertex_arrays ? unknown : array_elements_[row];
+        const uint32_t *const elements = elements_of(vertex_array_);
+        return elements == nullptr ? unknown : *elements;
     }
     const uint32_t slot = buffer_slot(target);
     return slot == buffer_targets ? 0u : buffers_[slot];
@@ -143,14 +146,13 @@ bool ClientArrayState::query_buffer_bound() const
     return bound_buffer(query_buffer) != 0u;
 }
 
-void ClientArrayState::bind_vertex_array(uint32_t array)
+Status ClientArrayState::bind_vertex_array(uint32_t array)
 {
     AV_SCOPE("ClientArrayState::bind_vertex_array");
     vertex_array_ = array;
-    if (vertex_array_row(array) != max_vertex_arrays || arrays_known_ == max_vertex_arrays) return;
-    array_names_[arrays_known_] = array;
-    array_elements_[arrays_known_] = 0u;
-    arrays_known_++;
+    if (elements_of(array) != nullptr) return Status::ok;
+    uint32_t slot = 0u;
+    return elements_.insert(array, 0u, slot);
 }
 
 void ClientArrayState::delete_vertex_arrays(int32_t count, const uint32_t *arrays)
@@ -159,11 +161,8 @@ void ClientArrayState::delete_vertex_arrays(int32_t count, const uint32_t *array
     if (arrays == nullptr) return;
     for (int32_t index = 0; index < count; index++) {
         const uint32_t name = arrays[index];
-        const uint32_t row = vertex_array_row(name);
-        if (name == 0u || row == max_vertex_arrays) continue;
-        arrays_known_--;
-        array_names_[row] = array_names_[arrays_known_];
-        array_elements_[row] = array_elements_[arrays_known_];
+        if (name == 0u) continue;
+        static_cast<void>(elements_.erase(name));
         if (vertex_array_ == name) vertex_array_ = 0u;
     }
 }
@@ -195,10 +194,13 @@ uint64_t ClientArrayState::attribute_pointer(uint32_t index) const
 const uint64_t *ClientArrayState::offsets_of(const void *const *pointers, size_t count)
 {
     AV_SCOPE("ClientArrayState::offsets_of");
-    if (count > max_offsets || (pointers == nullptr && count != 0u)) return nullptr;
+    if (pointers == nullptr && count != 0u) return nullptr;
+    if (count == 0u) return &no_offsets_;
+    /* No GLsizei counts past it: a negative drawcount arrives as one. */
+    if (count > 0x7FFFFFFFu || offsets_.resize(static_cast<uint32_t>(count), 0u) != Status::ok) return nullptr;
     for (size_t index = 0u; index < count; index++)
-        offsets_[index] = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pointers[index]));
-    return offsets_;
+        offsets_.at(static_cast<uint32_t>(index)) = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pointers[index]));
+    return offsets_.begin();
 }
 
 bool ClientArrayState::skip_active_texture(uint32_t texture)
@@ -245,11 +247,7 @@ bool ClientArrayState::invariants_hold() const
     AV_SCOPE("ClientArrayState::invariants_hold");
     if (!pack_.invariants_hold() || !unpack_.invariants_hold()) return false;
     if (active_unit_ != unknown && active_unit_ >= units) return false;
-    if (arrays_known_ == 0u || arrays_known_ > max_vertex_arrays || array_names_[0] != 0u) return false;
-    for (uint32_t row = 1u; row < arrays_known_; row++)
-        for (uint32_t earlier = 0u; earlier < row; earlier++)
-            if (array_names_[earlier] == array_names_[row]) return false;
-    return true;
+    return elements_.find(0u) == nullptr && elements_.invariants_hold();
 }
 
 uint32_t ClientArrayState::buffer_slot(uint32_t target) const
@@ -297,12 +295,16 @@ const PixelStore *ClientArrayState::store_for(uint32_t pname, PixelStore::Field 
     }
 }
 
-uint32_t ClientArrayState::vertex_array_row(uint32_t array) const
+uint32_t *ClientArrayState::elements_of(uint32_t array)
 {
-    AV_SCOPE("ClientArrayState::vertex_array_row");
-    for (uint32_t row = 0u; row < arrays_known_; row++)
-        if (array_names_[row] == array) return row;
-    return max_vertex_arrays;
+    AV_SCOPE("ClientArrayState::elements_of");
+    return array == 0u ? &default_elements_ : elements_.find(array);
+}
+
+const uint32_t *ClientArrayState::elements_of(uint32_t array) const
+{
+    AV_SCOPE("ClientArrayState::elements_of");
+    return array == 0u ? &default_elements_ : elements_.find(array);
 }
 
 }  // namespace av::glicd

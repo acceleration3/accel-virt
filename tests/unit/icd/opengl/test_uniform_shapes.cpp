@@ -1,26 +1,27 @@
 /* How many values a uniform location answers, from its type (OpenGL 4.6 table
  * 7.3), kept per program and location until the program is linked again or
  * deleted. */
+#include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "icd/opengl/uniform_shape.hpp"
 #include "icd/opengl/uniform_shapes.hpp"
 
 #include <cstdint>
 
+using av::MockPlatform;
+using av::Status;
 using av::glicd::UniformShape;
 using av::glicd::UniformShapes;
 
 namespace av::glicd {
 
 struct UniformShapesProbe {
-    static void overfill(UniformShapes &shapes) { shapes.count_ = UniformShapes::capacity + 1u; }
-    static void negative(UniformShapes &shapes) { shapes.shapes_[0] = UniformShape(); shapes.count_ = 1u; }
-    static void unshaped(UniformShapes &shapes) { shapes.shapes_[0] = UniformShape(1u, 0, 0x1u); shapes.count_ = 1u; }
-    static void repeat(UniformShapes &shapes)
+    /* A row no remember writes: a negative location, or no values. */
+    static void plant(UniformShapes &shapes, std::uint64_t key, std::uint32_t values)
     {
-        shapes.shapes_[0] = UniformShape(1u, 2, 0x1406u);
-        shapes.shapes_[1] = UniformShape(1u, 2, 0x1406u);
-        shapes.count_ = 2u;
+        std::uint32_t slot = 0u;
+        static_cast<void>(shapes.values_.insert(key, values, slot));
     }
 };
 
@@ -55,11 +56,12 @@ TEST(uniform_shape, a_type_names_its_value_count)
   CHECK_EQ(none.location(), -1); }
 
 TEST(uniform_shapes, remembers_locations_per_program_until_forgotten)
-{ UniformShapes shapes;
+{ MockPlatform  platform;
+  UniformShapes shapes(platform);
   CHECK(shapes.invariants_hold());
-  shapes.remember(1u, 0, 0x8B5Cu);
-  shapes.remember(1u, 4, 0x8B51u);
-  shapes.remember(2u, 0, 0x1406u);
+  CHECK_STATUS(shapes.remember(1u, 0, 0x8B5Cu), Status::ok);
+  CHECK_STATUS(shapes.remember(1u, 4, 0x8B51u), Status::ok);
+  CHECK_STATUS(shapes.remember(2u, 0, 0x1406u), Status::ok);
   CHECK(shapes.invariants_hold());
   CHECK_EQ(shapes.held(), 3u);
   CHECK_EQ(shapes.values(1u, 0), 16u);
@@ -67,7 +69,7 @@ TEST(uniform_shapes, remembers_locations_per_program_until_forgotten)
   CHECK_EQ(shapes.values(2u, 0), 1u);
   CHECK_EQ(shapes.values(2u, 4), 0u);
   /* A location answered again takes its new type. */
-  shapes.remember(1u, 4, 0x8B52u);
+  CHECK_STATUS(shapes.remember(1u, 4, 0x8B52u), Status::ok);
   CHECK_EQ(shapes.values(1u, 4), 4u);
   CHECK_EQ(shapes.held(), 3u);
   shapes.forget(1u);
@@ -78,32 +80,49 @@ TEST(uniform_shapes, remembers_locations_per_program_until_forgotten)
   shapes.forget(9u);
   CHECK_EQ(shapes.held(), 1u); }
 
-TEST(uniform_shapes, ignores_a_negative_location_an_unknown_type_and_room_past_capacity)
-{ UniformShapes shapes;
-  shapes.remember(1u, -1, 0x1406u);
-  shapes.remember(1u, 2, 0x1234u);
+TEST(uniform_shapes, ignores_a_negative_location_and_an_unknown_type)
+{ MockPlatform  platform;
+  UniformShapes shapes(platform);
+  CHECK_STATUS(shapes.remember(1u, -1, 0x1406u), Status::ok);
+  CHECK_STATUS(shapes.remember(1u, 2, 0x1234u), Status::ok);
   CHECK_EQ(shapes.held(), 0u);
-  for (std::uint32_t location = 0u; location < UniformShapes::capacity; location++)
-      shapes.remember(1u, static_cast<std::int32_t>(location), 0x1406u);
-  CHECK_EQ(shapes.held(), UniformShapes::capacity);
-  shapes.remember(2u, 0, 0x1406u);
-  CHECK_EQ(shapes.held(), UniformShapes::capacity);
-  CHECK_EQ(shapes.values(2u, 0), 0u);
-  /* A location held can still change type when full. */
-  shapes.remember(1u, 5, 0x8B5Bu);
-  CHECK_EQ(shapes.values(1u, 5), 9u);
+  CHECK_EQ(shapes.values(1u, -1), 0u);
+  CHECK(shapes.invariants_hold()); }
+
+/* Well past the 1024 the table once held: every location of every program
+ * answers its own count, and a program forgotten takes only its own. */
+TEST(uniform_shapes, keeps_every_location_past_the_old_bound)
+{ MockPlatform  platform;
+  UniformShapes shapes(platform);
+  for (std::uint32_t program = 1u; program <= 20u; program++)
+      for (std::int32_t location = 0; location < 500; location++)
+          CHECK_STATUS(shapes.remember(program, location, program % 2u == 0u ? 0x8B5Cu : 0x1406u), Status::ok);
+  CHECK_EQ(shapes.held(), 10000u);
+  CHECK(shapes.invariants_hold());
+  CHECK_EQ(shapes.values(20u, 499), 16u);
+  CHECK_EQ(shapes.values(19u, 0), 1u);
+  shapes.forget(20u);
+  CHECK_EQ(shapes.held(), 9500u);
+  CHECK_EQ(shapes.values(20u, 499), 0u);
+  CHECK_EQ(shapes.values(18u, 499), 16u);
+  CHECK(shapes.invariants_hold()); }
+
+/* A location there is no memory to keep is refused, and answers 0 - nothing
+ * written - rather than a size the host would not match. */
+TEST(uniform_shapes, a_location_with_no_memory_to_keep_it_is_refused)
+{ MockPlatform  platform;
+  UniformShapes shapes(platform);
+  platform.fail_allocation_at(1u);
+  CHECK_STATUS(shapes.remember(1u, 0, 0x1406u), Status::no_memory);
+  CHECK_EQ(shapes.values(1u, 0), 0u);
+  CHECK_EQ(shapes.held(), 0u);
   CHECK(shapes.invariants_hold()); }
 
 TEST(uniform_shapes_invariants, fail_for_rows_no_remember_writes)
-{ UniformShapes over;
-  av::glicd::UniformShapesProbe::overfill(over);
-  CHECK(!over.invariants_hold());
-  UniformShapes negative;
-  av::glicd::UniformShapesProbe::negative(negative);
+{ MockPlatform  platform;
+  UniformShapes negative(platform);
+  av::glicd::UniformShapesProbe::plant(negative, std::uint64_t{1u} << 32u | 0xFFFFFFFFu, 1u);
   CHECK(!negative.invariants_hold());
-  UniformShapes unshaped;
-  av::glicd::UniformShapesProbe::unshaped(unshaped);
-  CHECK(!unshaped.invariants_hold());
-  UniformShapes repeated;
-  av::glicd::UniformShapesProbe::repeat(repeated);
-  CHECK(!repeated.invariants_hold()); }
+  UniformShapes unshaped(platform);
+  av::glicd::UniformShapesProbe::plant(unshaped, std::uint64_t{1u} << 32u, 0u);
+  CHECK(!unshaped.invariants_hold()); }

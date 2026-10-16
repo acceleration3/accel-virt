@@ -12,12 +12,13 @@
 
 namespace av::glicd {
 
-GlPresentLoop::GlPresentLoop(icd::ServiceThread &thread, icd::WakeSignal &handed, icd::WakeSignal &shown,
+GlPresentLoop::GlPresentLoop(BlockSource &memory, icd::ServiceThread &thread, icd::WakeSignal &handed,
+                             icd::WakeSignal &shown,
                              icd::ThreadLock &lock, Kmt &kmt, icd::WindowSurface &surface,
                              icd::WindowChains &chains, LogSink &log)
     : thread_(thread), handed_(handed), shown_(shown), lock_(lock), kmt_(kmt), surface_(surface), chains_(chains),
       log_(log),
-      frames_{}, stages_{}, orders_{}, next_order_(1u), shown_frames_(0u), dropped_frames_(0u), stopping_(0u),
+      rows_(memory, Pool::paged), next_order_(1u), shown_frames_(0u), dropped_frames_(0u), stopping_(0u),
       refused_(false), refusal_logged_()
 {
     AV_SCOPE("GlPresentLoop::GlPresentLoop");
@@ -73,13 +74,14 @@ bool GlPresentLoop::hand(const HandedFrame &frame)
     AV_SCOPE("GlPresentLoop::hand");
     lock_.acquire();
     const uint32_t row = free_row();
-    if (row != max_frames) {
-        frames_[row] = frame;
-        stages_[row] = Stage::queued;
-        orders_[row] = next_order_++;
-    }
+    const Row      queued{frame, Stage::queued, next_order_};
+    const bool     kept = row != no_row ? (rows_.at(row) = queued, true) : rows_.append(queued) == Status::ok;
+    if (kept)
+        next_order_++;
+    else
+        dropped_frames_++;
     lock_.release();
-    if (row == max_frames) return false;
+    if (!kept) return false;
     handed_.raise();
     return true;
 }
@@ -119,12 +121,12 @@ bool GlPresentLoop::turn()
     lock_.acquire();
     const uint32_t row = oldest();
     HandedFrame    frame;
-    if (row != max_frames) {
-        stages_[row] = Stage::showing;
-        frame = frames_[row];
+    if (row != no_row) {
+        rows_.at(row).stage_ = Stage::showing;
+        frame = rows_.at(row).frame_;
     }
     lock_.release();
-    if (row != max_frames) {
+    if (row != no_row) {
         show(row, frame);
         return true;
     }
@@ -137,7 +139,7 @@ uint32_t GlPresentLoop::queued() const
 {
     AV_SCOPE("GlPresentLoop::queued");
     uint32_t count = 0u;
-    for (const Stage stage : stages_) count += stage != Stage::free ? 1u : 0u;
+    for (const Row &row : rows_) count += row.stage_ != Stage::free ? 1u : 0u;
     return count;
 }
 
@@ -170,23 +172,24 @@ void GlPresentLoop::report(StateWriter &writer) const
 bool GlPresentLoop::invariants_hold() const
 {
     AV_SCOPE("GlPresentLoop::invariants_hold");
-    for (uint32_t row = 0u; row < max_frames; row++) {
-        const bool held = stages_[row] != Stage::free;
-        if (held != (frames_[row].owner() != nullptr)) return false;
-        if (held && (orders_[row] == 0u || orders_[row] >= next_order_)) return false;
+    for (uint32_t row = 0u; row < rows_.size(); row++) {
+        const Row &at = rows_.at(row);
+        const bool held = at.stage_ != Stage::free;
+        if (held != (at.frame_.owner() != nullptr)) return false;
+        if (held && (at.order_ == 0u || at.order_ >= next_order_)) return false;
         for (uint32_t earlier = 0u; earlier < row && held; earlier++)
-            if (stages_[earlier] != Stage::free && orders_[earlier] == orders_[row]) return false;
+            if (rows_.at(earlier).stage_ != Stage::free && rows_.at(earlier).order_ == at.order_) return false;
     }
-    return true;
+    return rows_.invariants_hold();
 }
 
 uint32_t GlPresentLoop::oldest() const
 {
     AV_SCOPE("GlPresentLoop::oldest");
-    uint32_t found = max_frames;
-    for (uint32_t row = 0u; row < max_frames; row++) {
-        if (stages_[row] != Stage::queued) continue;
-        if (found == max_frames || orders_[row] < orders_[found]) found = row;
+    uint32_t found = no_row;
+    for (uint32_t row = 0u; row < rows_.size(); row++) {
+        if (rows_.at(row).stage_ != Stage::queued) continue;
+        if (found == no_row || rows_.at(row).order_ < rows_.at(found).order_) found = row;
     }
     return found;
 }
@@ -194,27 +197,26 @@ uint32_t GlPresentLoop::oldest() const
 uint32_t GlPresentLoop::free_row() const
 {
     AV_SCOPE("GlPresentLoop::free_row");
-    for (uint32_t row = 0u; row < max_frames; row++)
-        if (stages_[row] == Stage::free) return row;
-    return max_frames;
+    for (uint32_t row = 0u; row < rows_.size(); row++)
+        if (rows_.at(row).stage_ == Stage::free) return row;
+    return no_row;
 }
 
 uint32_t GlPresentLoop::held_by(const BackBufferPresenter &owner) const
 {
     AV_SCOPE("GlPresentLoop::held_by");
     uint32_t count = 0u;
-    for (uint32_t row = 0u; row < max_frames; row++)
-        count += stages_[row] != Stage::free && frames_[row].owner() == &owner ? 1u : 0u;
+    for (const Row &row : rows_) count += row.stage_ != Stage::free && row.frame_.owner() == &owner ? 1u : 0u;
     return count;
 }
 
 void GlPresentLoop::drop_queued(const BackBufferPresenter &owner)
 {
     AV_SCOPE("GlPresentLoop::drop_queued");
-    for (uint32_t row = 0u; row < max_frames; row++) {
-        if (stages_[row] != Stage::queued || frames_[row].owner() != &owner) continue;
-        frames_[row] = HandedFrame();
-        stages_[row] = Stage::free;
+    for (Row &row : rows_) {
+        if (row.stage_ != Stage::queued || row.frame_.owner() != &owner) continue;
+        row.frame_ = HandedFrame();
+        row.stage_ = Stage::free;
         dropped_frames_++;
     }
 }
@@ -222,9 +224,8 @@ void GlPresentLoop::drop_queued(const BackBufferPresenter &owner)
 bool GlPresentLoop::holds(const BackBufferPresenter &owner, uint32_t slot) const
 {
     AV_SCOPE("GlPresentLoop::holds");
-    for (uint32_t row = 0u; row < max_frames; row++)
-        if (stages_[row] != Stage::free && frames_[row].owner() == &owner && frames_[row].slot() == slot)
-            return true;
+    for (const Row &row : rows_)
+        if (row.stage_ != Stage::free && row.frame_.owner() == &owner && row.frame_.slot() == slot) return true;
     return false;
 }
 
@@ -247,8 +248,8 @@ void GlPresentLoop::show(uint32_t row, const HandedFrame &frame)
                                                                 frame.pixels()));
     lock_.acquire();
     if (ready && !chained) frame.owner()->shown(frame.pixels(), frame.width(), frame.height());
-    frames_[row] = HandedFrame();
-    stages_[row] = Stage::free;
+    rows_.at(row).frame_ = HandedFrame();
+    rows_.at(row).stage_ = Stage::free;
     if (drawn)
         shown_frames_++;
     else

@@ -80,8 +80,12 @@ size_t compressed_level_bytes(GLenum target, GLint level, bool) noexcept
 const uint64_t *offsets_of(const void *const *offsets, size_t count) noexcept
 {
     AV_SCOPE("offsets_of");
-    ClientArrayState *const state = arrays();
-    return state != nullptr ? state->offsets_of(offsets, count) : nullptr;
+    GuestGlContext *const context = current_context();
+    if (context == nullptr) return nullptr;
+    const uint64_t *const converted = context->arrays().offsets_of(offsets, count);
+    /* A list there is no memory to convert is the application's error to see. */
+    if (converted == nullptr && offsets != nullptr) context->record(GuestGlContext::gl_out_of_memory);
+    return converted;
 }
 
 bool pixel_buffer_bound(bool packing) noexcept

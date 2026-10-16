@@ -32,7 +32,8 @@ uint32_t access_error(uint32_t access)
 }  // namespace
 
 MappedBuffers::MappedBuffers(BlockSource &memory, BufferShadows &shadows, LogSink &log)
-    : memory_(memory), shadows_(shadows), log_(log), mappings_{}, persistent_writers_(0u), logged_()
+    : memory_(memory), shadows_(shadows), log_(log), pool_(memory), mappings_(memory, Pool::paged),
+      persistent_writers_(0u), logged_()
 {
     AV_SCOPE("MappedBuffers::MappedBuffers");
 }
@@ -51,7 +52,7 @@ uint32_t MappedBuffers::map(ClientTransport &wire, uint32_t buffer, int64_t offs
     const uint32_t refused = access_error(access);
     if (refused != gl_no_error) return refused;
     if (offset < 0 || length == 0 || length < whole_buffer) return gl_invalid_value;
-    if (buffer == 0u || find(buffer) != max_mappings) return gl_invalid_operation;
+    if (buffer == 0u || find(buffer) != nullptr) return gl_invalid_operation;
     uint64_t known = 0u;
     int64_t  size = -1;
     if (shadows_.size_of(buffer, known)) {
@@ -64,42 +65,43 @@ uint32_t MappedBuffers::map(ClientTransport &wire, uint32_t buffer, int64_t offs
     }
     const int64_t mapped = length == whole_buffer ? size : length;
     if (offset > size || mapped > size - offset) return gl_invalid_value;
-    const uint32_t slot = find(0u);
-    if (slot == max_mappings) return gl_out_of_memory;
-    static_cast<void>(mappings_[slot].construct(memory_, shadows_));
-    BufferMapping &mapping = mappings_[slot].object();
-    const Status   made = mapping.map(wire, buffer, static_cast<uint64_t>(offset), static_cast<uint64_t>(mapped),
-                                      access);
+    /* Room to name the mapping first, so one made always has a name. */
+    BufferMapping *mapping = nullptr;
+    if (mappings_.reserve(mappings_.count() + 1u) != Status::ok || pool_.create(mapping, memory_, shadows_) != Status::ok)
+        return gl_out_of_memory;
+    const Status made = mapping->map(wire, buffer, static_cast<uint64_t>(offset), static_cast<uint64_t>(mapped),
+                                     access);
     if (made != Status::ok) {
-        mappings_[slot].destroy();
+        static_cast<void>(pool_.destroy(mapping));
         /* A buffer of no bytes has no range to map; anything else refused is
          * memory. */
         return mapped == 0 ? gl_invalid_value : gl_out_of_memory;
     }
+    uint32_t slot = 0u;
+    static_cast<void>(mappings_.insert(buffer, mapping, slot));
     log_once();
-    if (mapping.persistent_writes()) persistent_writers_++;
-    pointer = mapping.pointer();
+    if (mapping->persistent_writes()) persistent_writers_++;
+    pointer = mapping->pointer();
     return gl_no_error;
 }
 
 uint32_t MappedBuffers::unmap(ClientTransport &wire, uint32_t buffer)
 {
     AV_SCOPE("MappedBuffers::unmap");
-    const uint32_t slot = buffer != 0u ? find(buffer) : max_mappings;
-    if (slot == max_mappings) return gl_invalid_operation;
-    mappings_[slot].object().write_back(wire);
-    drop(slot);
+    BufferMapping *const mapping = find(buffer);
+    if (mapping == nullptr) return gl_invalid_operation;
+    mapping->write_back(wire);
+    drop(buffer);
     return gl_no_error;
 }
 
 uint32_t MappedBuffers::mark(uint32_t buffer, int64_t offset, int64_t length)
 {
     AV_SCOPE("MappedBuffers::mark");
-    const uint32_t slot = buffer != 0u ? find(buffer) : max_mappings;
+    BufferMapping *const mapping = find(buffer);
     if (offset < 0 || length < 0) return gl_invalid_value;
-    if (slot == max_mappings) return gl_invalid_operation;
-    const Status marked =
-        mappings_[slot].object().mark(static_cast<uint64_t>(offset), static_cast<uint64_t>(length));
+    if (mapping == nullptr) return gl_invalid_operation;
+    const Status marked = mapping->mark(static_cast<uint64_t>(offset), static_cast<uint64_t>(length));
     if (marked == Status::invalid_state) return gl_invalid_operation;
     return marked == Status::ok ? gl_no_error : gl_invalid_value;
 }
@@ -107,15 +109,14 @@ uint32_t MappedBuffers::mark(uint32_t buffer, int64_t offset, int64_t length)
 void *MappedBuffers::pointer_of(uint32_t buffer) const
 {
     AV_SCOPE("MappedBuffers::pointer_of");
-    const uint32_t slot = buffer != 0u ? find(buffer) : max_mappings;
-    return slot != max_mappings ? mappings_[slot].object().pointer() : nullptr;
+    const BufferMapping *const mapping = find(buffer);
+    return mapping != nullptr ? mapping->pointer() : nullptr;
 }
 
 bool MappedBuffers::map_state(uint32_t buffer, uint32_t pname, int64_t &value) const
 {
     AV_SCOPE("MappedBuffers::map_state");
-    const uint32_t       slot = buffer != 0u ? find(buffer) : max_mappings;
-    const BufferMapping *mapping = slot != max_mappings ? &mappings_[slot].object() : nullptr;
+    const BufferMapping *mapping = find(buffer);
     const uint32_t       access = mapping != nullptr ? mapping->access() : 0u;
     const uint32_t       both = BufferMapping::map_read | BufferMapping::map_write;
     switch (pname) {
@@ -145,35 +146,33 @@ void MappedBuffers::flush_persistent(ClientTransport &wire)
 {
     AV_SCOPE("MappedBuffers::flush_persistent");
     if (persistent_writers_ == 0u) return;
-    for (ObjectStorage<BufferMapping> &mapping : mappings_) {
-        if (mapping.constructed() && mapping.object().persistent_writes()) mapping.object().write_back(wire);
-    }
+    mappings_.for_each([&wire](uint32_t, BufferMapping *const &mapping) {
+        if (mapping->persistent_writes()) mapping->write_back(wire);
+    });
 }
 
 void MappedBuffers::forget(int32_t count, const uint32_t *buffers)
 {
     AV_SCOPE("MappedBuffers::forget");
     if (buffers == nullptr) return;
-    for (int32_t at = 0; at < count; at++) {
-        const uint32_t slot = buffers[at] != 0u ? find(buffers[at]) : max_mappings;
-        if (slot != max_mappings) drop(slot);
-    }
+    for (int32_t at = 0; at < count; at++)
+        if (find(buffers[at]) != nullptr) drop(buffers[at]);
 }
 
 void MappedBuffers::release()
 {
     AV_SCOPE("MappedBuffers::release");
-    for (uint32_t slot = 0u; slot < max_mappings; slot++) {
-        if (mappings_[slot].constructed()) drop(slot);
-    }
+    mappings_.erase_if([this](uint32_t, BufferMapping *&mapping) {
+        if (mapping->persistent_writes()) persistent_writers_--;
+        static_cast<void>(pool_.destroy(mapping));
+        return true;
+    });
 }
 
 uint32_t MappedBuffers::held() const
 {
     AV_SCOPE("MappedBuffers::held");
-    uint32_t count = 0u;
-    for (const ObjectStorage<BufferMapping> &mapping : mappings_) count += mapping.constructed() ? 1u : 0u;
-    return count;
+    return mappings_.count();
 }
 
 void MappedBuffers::report(StateWriter &writer) const
@@ -182,9 +181,8 @@ void MappedBuffers::report(StateWriter &writer) const
     writer.open("mappings", 0u);
     writer.number("held", held());
     writer.number("persistent_writers", persistent_writers_);
-    for (uint32_t slot = 0u; slot < max_mappings; slot++) {
-        if (mappings_[slot].constructed()) mappings_[slot].object().report(writer, slot);
-    }
+    for (uint32_t slot = mappings_.next_live(0u); slot != mappings_.no_slot; slot = mappings_.next_live(slot + 1u))
+        (*mappings_.at(slot))->report(writer, slot);
     writer.close();
 }
 
@@ -194,30 +192,28 @@ bool MappedBuffers::invariants_hold() const
 {
     AV_SCOPE("MappedBuffers::invariants_hold");
     uint32_t writers = 0u;
-    for (uint32_t slot = 0u; slot < max_mappings; slot++) {
-        if (!mappings_[slot].constructed()) continue;
-        const BufferMapping &mapping = mappings_[slot].object();
-        if (!mapping.invariants_hold() || mapping.buffer() == 0u || find(mapping.buffer()) != slot) return false;
-        writers += mapping.persistent_writes() ? 1u : 0u;
-    }
-    return writers == persistent_writers_;
+    bool     whole = mappings_.count() == pool_.live();
+    mappings_.for_each([&writers, &whole](uint32_t buffer, BufferMapping *const &mapping) {
+        whole = whole && mapping->invariants_hold() && buffer != 0u && mapping->buffer() == buffer;
+        writers += mapping->persistent_writes() ? 1u : 0u;
+    });
+    return whole && writers == persistent_writers_ && mappings_.invariants_hold();
 }
 
-uint32_t MappedBuffers::find(uint32_t buffer) const
+BufferMapping *MappedBuffers::find(uint32_t buffer) const
 {
     AV_SCOPE("MappedBuffers::find");
-    for (uint32_t slot = 0u; slot < max_mappings; slot++) {
-        const bool held = mappings_[slot].constructed();
-        if (buffer == 0u ? !held : held && mappings_[slot].object().buffer() == buffer) return slot;
-    }
-    return max_mappings;
+    BufferMapping *const *const mapping = buffer != 0u ? mappings_.find(buffer) : nullptr;
+    return mapping != nullptr ? *mapping : nullptr;
 }
 
-void MappedBuffers::drop(uint32_t slot)
+void MappedBuffers::drop(uint32_t buffer)
 {
     AV_SCOPE("MappedBuffers::drop");
-    if (mappings_[slot].object().persistent_writes()) persistent_writers_--;
-    mappings_[slot].destroy();
+    BufferMapping *mapping = nullptr;
+    static_cast<void>(mappings_.take(buffer, mapping));
+    if (mapping->persistent_writes()) persistent_writers_--;
+    static_cast<void>(pool_.destroy(mapping));
 }
 
 void MappedBuffers::log_once()

@@ -128,11 +128,11 @@ GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::
                      GlPresentLoop &presents, GlIcdBinding &binding)
     : lock_(lock), log_(log), lines_(log, "avgl: "), surface_(surface), slot_(slot), system_(system), presents_(presents),
       binding_(binding), formats_(),
-      query_(formats_), windows_(), currents_(slot), connection_(kmt, 0u),
+      query_(formats_), windows_(memory), currents_(slot), connection_(memory, kmt, 0u),
       extensions_(reported_extensions, reported_count, reported_wgl_extensions, reported_wgl_count),
       shared_handles_(kmt, lock, memory),
       contexts_(memory, connection_, send_lock, log, extensions_, shared_handles_),
-      manual_(currents_), callbacks_{}, callback_count_(0u), proc_table_(), pending_threads_{}, pending_handles_{}, sync_tokens_(0u), profile_noted_(false)
+      manual_(currents_), callbacks_{}, callback_count_(0u), proc_table_(), pending_(memory, Pool::paged), sync_tokens_(0u), profile_noted_(false)
 {
     AV_SCOPE("GlIcdRoot::GlIcdRoot");
     generated::fill_proc_table(proc_table_);
@@ -178,13 +178,11 @@ bool GlIcdRoot::set_pixel_format(void *dc, int32_t index)
         return false;
     }
     const icd::ThreadLockHold release(lock_);
-    Status    set = windows_.set_format(window, index);
-    if (set == Status::no_space) {
-        windows_.drop_gone(surface_);
-        set = windows_.set_format(window, index);
-    }
+    /* Rows of windows gone first: a handle Windows reuses starts with no format. */
+    windows_.drop_gone(surface_);
+    const Status set = windows_.set_format(window, index);
     if (set == Status::ok) return true;
-    fail(set == Status::no_space ? error_not_enough_memory : error_invalid_pixel_format);
+    fail(set == Status::no_memory ? error_not_enough_memory : error_invalid_pixel_format);
     return false;
 }
 
@@ -486,14 +484,17 @@ void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *at
     if (share_name != 0u) static_cast<void>(context->share(share_name));
     const Status made = context->make();
     lock_.acquire();
-    const bool pended = made == Status::ok && put_pending(thread, handle);
+    const Status pended = made == Status::ok ? put_pending(thread, handle) : made;
     lock_.release();
-    void *const hglrc = pended ? system_.create_context(dc) : nullptr;
+    void *const hglrc = pended == Status::ok ? system_.create_context(dc) : nullptr;
     const icd::ThreadLockHold release(lock_);
     const uint64_t unclaimed = take_pending(thread);
     if (hglrc != nullptr && unclaimed == 0u) return hglrc;
     static_cast<void>(contexts_.destroy(handle));
-    fail(made != Status::ok ? make_error(made, options) : error_invalid_operation);
+    if (made != Status::ok)
+        fail(make_error(made, options));
+    else
+        fail(pended == Status::no_memory ? error_not_enough_memory : error_invalid_operation);
     return nullptr;
 }
 
@@ -674,8 +675,11 @@ bool GlIcdRoot::invariants_hold() const
         return false;
     for (const GlProc slot : proc_table_.slots)
         if (slot == nullptr) return false;
-    for (uint32_t row = 0u; row < max_pending; row++)
-        if ((pending_threads_[row] == 0u) != (pending_handles_[row] == 0u)) return false;
+    bool pending_named = true;
+    pending_.for_each([&pending_named](uint32_t thread, const uint64_t &handle) {
+        pending_named = pending_named && thread != 0u && handle != 0u;
+    });
+    if (!pending_named || !pending_.invariants_hold()) return false;
     /* The query's own invariants are the format table's. */
     return extensions_.invariants_hold() && query_.invariants_hold() && windows_.invariants_hold() &&
            currents_.invariants_hold() &&
@@ -685,27 +689,16 @@ bool GlIcdRoot::invariants_hold() const
 uint64_t GlIcdRoot::take_pending(uint32_t thread)
 {
     AV_SCOPE("GlIcdRoot::take_pending");
-    for (uint32_t row = 0u; row < max_pending; row++) {
-        /* A thread id is never 0, so a row naming it holds a handle too. */
-        if (pending_threads_[row] != thread) continue;
-        const uint64_t handle = pending_handles_[row];
-        pending_threads_[row] = 0u;
-        pending_handles_[row] = 0u;
-        return handle;
-    }
-    return 0u;
+    uint64_t handle = 0u;
+    static_cast<void>(pending_.take(thread, handle));
+    return handle;
 }
 
-bool GlIcdRoot::put_pending(uint32_t thread, uint64_t handle)
+Status GlIcdRoot::put_pending(uint32_t thread, uint64_t handle)
 {
     AV_SCOPE("GlIcdRoot::put_pending");
-    for (uint32_t row = 0u; row < max_pending; row++) {
-        if (pending_handles_[row] != 0u) continue;
-        pending_threads_[row] = thread;
-        pending_handles_[row] = handle;
-        return true;
-    }
-    return false;
+    uint32_t slot = 0u;
+    return pending_.insert(thread, handle, slot);
 }
 
 void GlIcdRoot::fail(uint32_t error)
@@ -738,7 +731,7 @@ bool GlIcdRoot::shares_into(uint64_t first, uint64_t second) const
 {
     AV_SCOPE("GlIcdRoot::shares_into");
     uint64_t at = first;
-    for (uint32_t step = 0u; step < GlContextTable::max_contexts && at != 0u; step++) {
+    for (uint32_t step = 0u; step <= contexts_.live() && at != 0u; step++) {
         if (at == second) return true;
         const GuestGlContext *const context = contexts_.resolve(at);
         at = context != nullptr ? context->share_target() : 0u;
@@ -747,19 +740,14 @@ bool GlIcdRoot::shares_into(uint64_t first, uint64_t second) const
 }
 
 /* The unmade contexts `context` shares through, made from the far end so each
- * names a made context to share; a target deleted meanwhile shares nothing,
- * and a lost one fails the make. */
+ * names a made context to share: each round makes the farthest unmade one. A
+ * target deleted meanwhile shares nothing, and a lost one fails the make. */
 Status GlIcdRoot::make_chain(GuestGlContext &context)
 {
     AV_SCOPE("GlIcdRoot::make_chain");
-    GuestGlContext *chain[GlContextTable::max_contexts];
-    uint32_t        length = 0u;
-    for (GuestGlContext *at = &context;
-         at != nullptr && at->state() == GuestGlContext::State::created && length < GlContextTable::max_contexts;
-         at = contexts_.resolve(at->share_target()))
-        chain[length++] = at;
-    while (length != 0u) {
-        GuestGlContext &link = *chain[--length];
+    for (uint32_t round = 0u; round <= contexts_.live() && context.state() == GuestGlContext::State::created;
+         round++) {
+        GuestGlContext &link = farthest_unmade(context);
         GuestGlContext *const target = contexts_.resolve(link.share_target());
         if (target != nullptr && target->wire() == nullptr) return Status::invalid_state;
         if (target != nullptr) {
@@ -770,6 +758,20 @@ Status GlIcdRoot::make_chain(GuestGlContext &context)
         if (made != Status::ok) return made;
     }
     return Status::ok;
+}
+
+/* Share targets never loop (shares_into refuses one that would), so the walk
+ * ends within the contexts there are. */
+GuestGlContext &GlIcdRoot::farthest_unmade(GuestGlContext &context) const
+{
+    AV_SCOPE("GlIcdRoot::farthest_unmade");
+    GuestGlContext *link = &context;
+    for (uint32_t step = 0u; step < contexts_.live(); step++) {
+        GuestGlContext *const next = contexts_.resolve(link->share_target());
+        if (next == nullptr || next->state() != GuestGlContext::State::created) break;
+        link = next;
+    }
+    return *link;
 }
 
 GuestGlContext *GlIcdRoot::shared_context(void *share)

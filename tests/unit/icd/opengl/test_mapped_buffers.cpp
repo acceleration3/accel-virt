@@ -29,23 +29,20 @@ namespace av::glicd {
 
 struct MappedBuffersProbe {
     static void miscount(MappedBuffers &mappings) { mappings.persistent_writers_++; }
-    static BufferMapping &mapping(MappedBuffers &mappings, std::uint32_t slot)
+    static BufferMapping &mapping(MappedBuffers &mappings, std::uint32_t slot) { return **mappings.mappings_.at(slot); }
+    /* A mapping made and named by no buffer. */
+    static void unnamed(MappedBuffers &mappings, BlockSource &memory, BufferShadows &shadows)
     {
-        return mappings.mappings_[slot].object();
+        BufferMapping *made = nullptr;
+        static_cast<void>(mappings.pool_.create(made, memory, shadows));
     }
-    /* A slot holding a mapping of nothing. */
-    static void empty_slot(MappedBuffers &mappings, BlockSource &memory, BufferShadows &shadows)
+    /* The first mapping named a second time, by a buffer it does not map. */
+    static void duplicate(MappedBuffers &mappings)
     {
-        static_cast<void>(mappings.mappings_[5].construct(memory, shadows));
+        std::uint32_t slot = 0u;
+        static_cast<void>(mappings.mappings_.insert(77u, *mappings.mappings_.at(0u), slot));
     }
-    /* A second slot claiming the first slot's buffer. */
-    static void duplicate(MappedBuffers &mappings, ClientTransport &wire, BlockSource &memory,
-                          BufferShadows &shadows)
-    {
-        static_cast<void>(mappings.mappings_[1].construct(memory, shadows));
-        static_cast<void>(mappings.mappings_[1].object().map(wire, mappings.mappings_[0].object().buffer(), 0u, 1u,
-                                                               BufferMapping::map_write));
-    }
+    static void unduplicate(MappedBuffers &mappings) { static_cast<void>(mappings.mappings_.erase(77u)); }
 };
 
 struct BufferMappingProbe {
@@ -190,23 +187,36 @@ TEST(mapped_buffers, a_range_past_the_buffer_or_a_buffer_the_host_does_not_size_
   CHECK_EQ(rig.commands() - before, 1u);
   CHECK_EQ(rig.id(before), ids::kCmd_glGetNamedBufferSubData); }
 
-TEST(mapped_buffers, a_buffer_is_mapped_once_and_the_65th_map_is_out_of_memory)
+/* Well past the 64 maps the context once held: every buffer mapped once at
+ * its own pointer, a second map of one refused, and a map there is no memory
+ * for out of memory. */
+TEST(mapped_buffers, a_buffer_is_mapped_once_and_maps_go_past_the_old_bound)
 { Rig rig;
-  for (std::uint32_t buffer = 1u; buffer <= MappedBuffers::max_mappings; buffer++)
+  constexpr std::uint32_t many = 128u;
+  for (std::uint32_t buffer = 1u; buffer <= many; buffer++)
     CHECK(rig.map(buffer, 4, 0, 4, write, no_error) != nullptr);
-  CHECK_EQ(rig.mappings.held(), MappedBuffers::max_mappings);
+  CHECK_EQ(rig.mappings.held(), many);
+  for (std::uint32_t buffer = 1u; buffer <= many; buffer++) CHECK(rig.mappings.pointer_of(buffer) != nullptr);
+  CHECK(rig.mappings.pointer_of(1u) != rig.mappings.pointer_of(2u));
   void *pointer = reinterpret_cast<void *>(0x1u);
   const std::uint32_t before = rig.commands();
   CHECK_EQ(rig.mappings.map(rig.wire(), 5u, 0, 4, write, pointer), invalid_operation);
   CHECK(pointer == nullptr);
   CHECK_EQ(rig.commands(), before);
-  CHECK(rig.map(65u, 4, 0, 4, write, out_of_memory) == nullptr);
   CHECK_EQ(rig.context_rig.log().holding("buffer maps are guest copies"), 1u);
   CHECK_EQ(rig.context_rig.log().lines(), 1u);
-  /* An unmap makes room. */
+  CHECK(rig.mappings.invariants_hold());
   CHECK_EQ(rig.mappings.unmap(rig.wire(), 9u), no_error);
-  CHECK(rig.map(65u, 4, 0, 4, write, no_error) != nullptr);
-  CHECK_EQ(rig.mappings.held(), MappedBuffers::max_mappings); }
+  CHECK_EQ(rig.mappings.held(), many - 1u); }
+
+TEST(mapped_buffers, a_map_with_no_memory_to_hold_it_is_out_of_memory)
+{ Rig rig;
+  rig.context_rig.platform().fail_allocation_at(1u);
+  CHECK(rig.map(1u, 4, 0, 4, write, out_of_memory) == nullptr);
+  CHECK_EQ(rig.mappings.held(), 0u);
+  CHECK(rig.mappings.invariants_hold());
+  CHECK(rig.map(1u, 4, 0, 4, write, no_error) != nullptr);
+  CHECK(rig.mappings.invariants_hold()); }
 
 TEST(mapped_buffers, an_unmap_writes_back_what_was_mapped_and_gives_it_up)
 { Rig rig;
@@ -318,15 +328,16 @@ TEST(mapped_buffers_invariants, fail_for_a_miscount_a_buffer_mapped_twice_or_a_b
   CHECK(!counted.mappings.invariants_hold());
   Rig twice;
   CHECK(twice.map(1u, 4, 0, 4, write, no_error) != nullptr);
-  av::glicd::MappedBuffersProbe::duplicate(twice.mappings, twice.wire(), twice.context_rig.platform(),
-                                           twice.shadows);
+  av::glicd::MappedBuffersProbe::duplicate(twice.mappings);
   CHECK(!twice.mappings.invariants_hold());
+  av::glicd::MappedBuffersProbe::unduplicate(twice.mappings);
+  CHECK(twice.mappings.invariants_hold());
   Rig broken;
   CHECK(broken.map(1u, 4, 0, 4, write, no_error) != nullptr);
   av::glicd::BufferMappingProbe::set_dirty(av::glicd::MappedBuffersProbe::mapping(broken.mappings, 0u), 0u, 1u);
   CHECK(!broken.mappings.invariants_hold());
   Rig empty;
-  av::glicd::MappedBuffersProbe::empty_slot(empty.mappings, empty.context_rig.platform(), empty.shadows);
+  av::glicd::MappedBuffersProbe::unnamed(empty.mappings, empty.context_rig.platform(), empty.shadows);
   CHECK(!empty.mappings.invariants_hold()); }
 
 /* A frame's uniforms written one block per map of the whole buffer, write-only

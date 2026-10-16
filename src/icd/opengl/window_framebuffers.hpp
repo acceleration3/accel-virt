@@ -7,7 +7,8 @@
 #ifndef AV_GLICD_WINDOW_FRAMEBUFFERS_HPP
 #define AV_GLICD_WINDOW_FRAMEBUFFERS_HPP
 
-#include "core/support/object_storage.hpp"
+#include "core/support/keyed_slots.hpp"
+#include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "icd/opengl/back_buffer_presenter.hpp"
 
@@ -39,7 +40,6 @@ struct WindowFramebuffersProbe;
 
 class WindowFramebuffers {
 public:
-    static constexpr uint32_t max_windows = 8u;
     enum : uint32_t {
         gl_none = 0u, gl_front_left = 0x0400u, gl_back_left = 0x0402u, gl_front = 0x0404u, gl_back = 0x0405u,
         gl_left = 0x0406u, gl_front_and_back = 0x0408u, gl_draw_buffer = 0x0C01u, gl_read_buffer = 0x0C02u,
@@ -57,8 +57,9 @@ public:
      * the first time the context is current anywhere, the window bound for
      * drawing and reading with the viewport and scissor at its size, as a new
      * context finds them; afterwards a binding the application left on the
-     * window follows it to this one. no_space past max_windows windows;
-     * prepare's refusals otherwise, with the current window unchanged. */
+     * window follows it to this one. no_memory when there is no room for a
+     * new window's presenter; prepare's refusals otherwise, with the current
+     * window unchanged. */
     [[nodiscard]] Status make_current_on(ClientTransport &wire, void *window, const PixelFormat &format,
                                          icd::WindowSurface &surface);
     /* Null until the context is current on a window, or once that window is gone. */
@@ -107,17 +108,23 @@ public:
     bool invariants_hold() const;
 
 private:
-    uint32_t find(void *window) const;
+    /* The presenter of `window`, or null. */
+    BackBufferPresenter *find(void *window) const;
+    uint64_t             key_of(void *window) const;
+    void                 forget(BackBufferPresenter *presenter);
     /* The current window's `framebuffer`, bound for whichever of drawing and
      * reading the application left on the window. */
     void     bind_window(ClientTransport &wire, uint32_t framebuffer);
 
     BlockSource                        &memory_;
     LogSink                       &log_;
-    ObjectStorage<BackBufferPresenter>  presenters_[max_windows];
-    uint32_t                            current_;
-    /* The presenter the last present read a frame for; max_windows when none. */
-    uint32_t                            presented_;
+    ObjectPool<BackBufferPresenter>     pool_;
+    /* Each presenter by the window it draws on. */
+    KeyedSlots<uint64_t, BackBufferPresenter *> presenters_;
+    /* The window's presenter, or null. */
+    BackBufferPresenter                *current_;
+    /* The presenter the last present read a frame for, or null. */
+    BackBufferPresenter                *presented_;
     bool                                draws_window_;
     bool                                reads_window_;
     /* The buffer glReadBuffer last named, GL_BACK until it is named. */

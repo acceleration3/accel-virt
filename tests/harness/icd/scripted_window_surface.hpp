@@ -13,7 +13,7 @@ namespace av {
 
 class ScriptedWindowSurface final : public icd::WindowSurface {
 public:
-    static constexpr std::uint32_t max_dcs = 300u;
+    static constexpr std::uint32_t max_dcs = 1100u;
     static constexpr std::uint32_t kept_bytes = 1u << 16u;
 
     ScriptedWindowSurface();

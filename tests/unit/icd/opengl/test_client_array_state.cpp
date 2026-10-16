@@ -2,6 +2,7 @@
  * stores by name, the buffers a transfer or draw reads, vertex arrays' element
  * buffers, attribute pointers, multi-draw offsets and redundant binds. */
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "icd/opengl/client_array_state.hpp"
 
 #include <cstddef>
@@ -17,14 +18,11 @@ struct PixelStoreProbe {
 
 struct ClientArrayStateProbe {
     static void break_unit(ClientArrayState &state) { state.active_unit_ = 40u; }
-    static void break_arrays(ClientArrayState &state) { state.arrays_known_ = 0u; }
-    static void overfill_arrays(ClientArrayState &state) { state.arrays_known_ = ClientArrayState::max_vertex_arrays + 1u; }
-    static void rename_default(ClientArrayState &state) { state.array_names_[0] = 5u; }
-    static void repeat_array(ClientArrayState &state)
+    /* Array 0 kept by name, as only the default is. */
+    static void name_default(ClientArrayState &state)
     {
-        state.array_names_[1] = 7u;
-        state.array_names_[2] = 7u;
-        state.arrays_known_ = 3u;
+        std::uint32_t slot = 0u;
+        static_cast<void>(state.elements_.insert(0u, 0u, slot));
     }
     static void break_store(ClientArrayState &state, bool packing)
     {
@@ -42,7 +40,8 @@ constexpr std::uint32_t texture_2d = 0x0DE1u, texture_3d = 0x806Fu, texture0 = 0
 }  // namespace
 
 TEST(client_array_state, pixel_stores_are_kept_by_name_for_pack_and_unpack)
-{ ClientArrayState state;
+{ av::MockPlatform platform;
+  ClientArrayState state(platform);
   CHECK(state.invariants_hold());
   /* Four bytes per pixel, alignment 4: 2x2 is 8 + 8. */
   CHECK_EQ(state.pixel_bytes(rgba, ubyte, 2, 2, 1, true), 16u);
@@ -64,14 +63,16 @@ TEST(client_array_state, pixel_stores_are_kept_by_name_for_pack_and_unpack)
   CHECK(state.invariants_hold()); }
 
 TEST(client_array_state, a_compressed_upload_is_its_image_size)
-{ const ClientArrayState state;
+{ av::MockPlatform       platform;
+  const ClientArrayState state(platform);
   CHECK_EQ(state.compressed_bytes(640, false), 640u);
   CHECK_EQ(state.compressed_bytes(0, false), 0u);
   CHECK_EQ(state.compressed_bytes(-1, false), 0u);
   CHECK_EQ(state.compressed_bytes(640, true), 0u); }
 
 TEST(client_array_state, buffers_are_kept_per_target_and_unbound_when_deleted)
-{ ClientArrayState state;
+{ av::MockPlatform platform;
+  ClientArrayState state(platform);
   CHECK(!state.pixel_buffer_bound(true));
   CHECK(!state.pixel_buffer_bound(false));
   CHECK(!state.query_buffer_bound());
@@ -104,7 +105,8 @@ TEST(client_array_state, buffers_are_kept_per_target_and_unbound_when_deleted)
 TEST(client_array_state, every_buffer_target_is_kept)
 { constexpr std::uint32_t targets[] = {0x8892u, 0x88EBu, 0x88ECu, 0x9192u, 0x8A11u, 0x8C2Au, 0x8C8Eu,
                                        0x8F36u, 0x8F37u, 0x8F3Fu, 0x90D2u, 0x90EEu, 0x92C0u};
-  ClientArrayState state;
+  av::MockPlatform platform;
+  ClientArrayState state(platform);
   std::uint32_t    buffer = 20u;
   for (const std::uint32_t target : targets) state.bind_buffer(target, buffer++);
   buffer = 20u;
@@ -115,7 +117,8 @@ TEST(client_array_state, every_buffer_target_is_kept)
  * binding is not relied on. A target with no indices keeps its binding, and a
  * deletion leaves a binding not known as it was. */
 TEST(client_array_state, an_indexed_target_bound_several_at_once_is_no_longer_known)
-{ ClientArrayState state;
+{ av::MockPlatform platform;
+  ClientArrayState state(platform);
   constexpr std::uint32_t indexed[] = {0x8A11u, 0x8C8Eu, 0x90D2u, 0x92C0u};
   for (const std::uint32_t target : indexed) {
     state.bind_buffer(target, 5u);
@@ -139,7 +142,8 @@ TEST(client_array_state, an_indexed_target_bound_several_at_once_is_no_longer_kn
  * a vertex array holds, not a binding lost to a bind of several, and none at
  * all once glPopClientAttrib restored some. */
 TEST(client_array_state, a_binding_is_known_only_where_nothing_can_move_it_out_of_sight)
-{ ClientArrayState state;
+{ av::MockPlatform platform;
+  ClientArrayState state(platform);
   std::uint32_t    buffer = 99u;
   CHECK(state.known_buffer(ClientArrayState::array_buffer, buffer));
   CHECK_EQ(buffer, 0u);
@@ -159,17 +163,18 @@ TEST(client_array_state, a_binding_is_known_only_where_nothing_can_move_it_out_o
   CHECK(state.invariants_hold()); }
 
 TEST(client_array_state, each_vertex_array_keeps_its_element_buffer)
-{ ClientArrayState state;
+{ av::MockPlatform platform;
+  ClientArrayState state(platform);
   /* Array 0 starts known, with nothing bound. */
   CHECK(!state.indices_are_offset());
   CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 0u);
-  state.bind_vertex_array(3u);
+  CHECK_STATUS(state.bind_vertex_array(3u), av::Status::ok);
   CHECK(!state.indices_are_offset());
   state.bind_buffer(ClientArrayState::element_array_buffer, 8u);
   CHECK(state.indices_are_offset());
-  state.bind_vertex_array(4u);
+  CHECK_STATUS(state.bind_vertex_array(4u), av::Status::ok);
   CHECK(!state.indices_are_offset());
-  state.bind_vertex_array(3u);
+  CHECK_STATUS(state.bind_vertex_array(3u), av::Status::ok);
   CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 8u);
   CHECK(state.invariants_hold());
   /* Deleting the element buffer unbinds it from the array that held it. */
@@ -181,29 +186,45 @@ TEST(client_array_state, each_vertex_array_keeps_its_element_buffer)
   const std::uint32_t arrays[] = {0u, 3u, 77u};
   state.delete_vertex_arrays(3, arrays);
   CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 0u);
-  state.bind_vertex_array(3u);
+  CHECK_STATUS(state.bind_vertex_array(3u), av::Status::ok);
   CHECK(!state.indices_are_offset());
   state.delete_vertex_arrays(1, nullptr);
-  state.bind_vertex_array(4u);
+  CHECK_STATUS(state.bind_vertex_array(4u), av::Status::ok);
   const std::uint32_t other[] = {3u};
   state.delete_vertex_arrays(1, other);
   CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 0u);
   CHECK(state.invariants_hold()); }
 
-TEST(client_array_state, past_the_arrays_it_keeps_a_draw_takes_its_indices_as_an_offset)
-{ ClientArrayState state;
-  for (std::uint32_t array = 1u; array < ClientArrayState::max_vertex_arrays; array++) state.bind_vertex_array(array);
+/* Well past the 64 arrays once kept, each keeps its own element buffer; one
+ * there is no memory for has its draws take their indices as an offset. */
+TEST(client_array_state, every_vertex_array_keeps_its_element_buffer)
+{ av::MockPlatform platform;
+  ClientArrayState state(platform);
+  for (std::uint32_t array = 1u; array <= 5000u; array++) {
+      CHECK_STATUS(state.bind_vertex_array(array), av::Status::ok);
+      if (array % 2u == 0u) state.bind_buffer(ClientArrayState::element_array_buffer, array + 100000u);
+  }
   CHECK(state.invariants_hold());
-  state.bind_vertex_array(1000u);
+  for (std::uint32_t array = 1u; array <= 5000u; array++) {
+      CHECK_STATUS(state.bind_vertex_array(array), av::Status::ok);
+      CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), array % 2u == 0u ? array + 100000u : 0u);
+  }
+  CHECK_STATUS(state.bind_vertex_array(0u), av::Status::ok);
+  CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 0u);
+  platform.fail_allocation_at(1u);
+  av::Status bound = av::Status::ok;
+  std::uint32_t array = 5001u;
+  while (bound == av::Status::ok && array < 20000u) bound = state.bind_vertex_array(array++);
+  CHECK_STATUS(bound, av::Status::no_memory);
   CHECK(state.indices_are_offset());
   CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 0xFFFFFFFFu);
   state.bind_buffer(ClientArrayState::element_array_buffer, 5u);
   CHECK(state.indices_are_offset());
-  state.bind_vertex_array(ClientArrayState::max_vertex_arrays - 1u);
-  CHECK(!state.indices_are_offset()); }
+  CHECK(state.invariants_hold()); }
 
 TEST(client_array_state, a_client_pointer_is_one_with_no_array_buffer)
-{ ClientArrayState state;
+{ av::MockPlatform platform;
+  ClientArrayState state(platform);
   CHECK(!state.client_pointer(0u));
   CHECK(state.client_pointer(0x1000u));
   state.bind_buffer(ClientArrayState::array_buffer, 2u);
@@ -215,7 +236,8 @@ TEST(client_array_state, a_client_pointer_is_one_with_no_array_buffer)
   CHECK_EQ(state.attribute_pointer(ClientArrayState::max_attributes), 0u); }
 
 TEST(client_array_state, multi_draw_offsets_are_the_pointers_values)
-{ ClientArrayState state;
+{ av::MockPlatform platform;
+  ClientArrayState state(platform);
   const void *const pointers[] = {nullptr, reinterpret_cast<const void *>(0x10u),
                                   reinterpret_cast<const void *>(0xFFFFFFFFFFFFFFF0ull)};
   const std::uint64_t *const offsets = state.offsets_of(pointers, 3u);
@@ -225,10 +247,27 @@ TEST(client_array_state, multi_draw_offsets_are_the_pointers_values)
   CHECK_EQ(offsets[2], 0xFFFFFFFFFFFFFFF0ull);
   CHECK(state.offsets_of(nullptr, 0u) != nullptr);
   CHECK(state.offsets_of(nullptr, 1u) == nullptr);
-  CHECK(state.offsets_of(pointers, ClientArrayState::max_offsets + 1u) == nullptr); }
+  /* A negative drawcount, as the generated call casts it. */
+  CHECK(state.offsets_of(pointers, static_cast<std::size_t>(-1)) == nullptr); }
+
+/* Well past the 1024 pointers one multi-draw once converted, and a list
+ * there is no memory to convert is null. */
+TEST(client_array_state, multi_draw_offsets_go_past_the_old_bound)
+{ av::MockPlatform platform;
+  ClientArrayState state(platform);
+  constexpr std::size_t many = 5000u;
+  static const void *pointers[many];
+  for (std::size_t index = 0u; index < many; index++) pointers[index] = reinterpret_cast<const void *>(index * 4u);
+  const std::uint64_t *const offsets = state.offsets_of(pointers, many);
+  CHECK(offsets != nullptr);
+  CHECK_EQ(offsets[4999], 4999u * 4u);
+  platform.fail_allocation_at(1u);
+  static const void *more[many * 4u];
+  CHECK(state.offsets_of(more, many * 4u) == nullptr); }
 
 TEST(client_array_state, a_bind_repeating_the_last_one_is_skipped)
-{ ClientArrayState state;
+{ av::MockPlatform platform;
+  ClientArrayState state(platform);
   CHECK(!state.skip_bind_texture(texture_2d, 1u));
   CHECK(!state.skip_active_texture(texture0 + 1u));
   CHECK(state.skip_active_texture(texture0 + 1u));
@@ -253,30 +292,23 @@ TEST(client_array_state, a_bind_repeating_the_last_one_is_skipped)
   CHECK(state.invariants_hold()); }
 
 TEST(client_array_state_invariants, fail_for_state_no_call_makes)
-{ ClientArrayState unit;
+{ av::MockPlatform platform;
+  ClientArrayState unit(platform);
   av::glicd::ClientArrayStateProbe::break_unit(unit);
   CHECK(!unit.invariants_hold());
-  ClientArrayState none;
-  av::glicd::ClientArrayStateProbe::break_arrays(none);
+  ClientArrayState none(platform);
+  av::glicd::ClientArrayStateProbe::name_default(none);
   CHECK(!none.invariants_hold());
-  ClientArrayState over;
-  av::glicd::ClientArrayStateProbe::overfill_arrays(over);
-  CHECK(!over.invariants_hold());
-  ClientArrayState renamed;
-  av::glicd::ClientArrayStateProbe::rename_default(renamed);
-  CHECK(!renamed.invariants_hold());
-  ClientArrayState repeated;
-  av::glicd::ClientArrayStateProbe::repeat_array(repeated);
-  CHECK(!repeated.invariants_hold());
-  ClientArrayState pack;
+  ClientArrayState pack(platform);
   av::glicd::ClientArrayStateProbe::break_store(pack, true);
   CHECK(!pack.invariants_hold());
-  ClientArrayState unpack;
+  ClientArrayState unpack(platform);
   av::glicd::ClientArrayStateProbe::break_store(unpack, false);
   CHECK(!unpack.invariants_hold()); }
 
 TEST(client_array_state, answers_the_pixel_store_values_it_keeps)
-{ ClientArrayState state;
+{ av::MockPlatform platform;
+  ClientArrayState state(platform);
   CHECK_EQ(state.pixel_value(0x0D05u), 4);
   CHECK_EQ(state.pixel_value(0x0CF5u), 4);
   CHECK(state.store_pixel(0x0D05u, 8));

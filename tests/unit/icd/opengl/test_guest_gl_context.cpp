@@ -42,15 +42,27 @@ struct GuestGlContextProbe {
 };
 
 struct ClientArrayStateProbe {
-    static void forget_default(ClientArrayState &state, uint32_t known) { state.arrays_known_ = known; }
+    /* Array 0 kept by name, which only the default is, and let go again. */
+    static void name_default(ClientArrayState &state)
+    {
+        uint32_t slot = 0u;
+        static_cast<void>(state.elements_.insert(0u, 0u, slot));
+    }
+    static void unname_default(ClientArrayState &state) { static_cast<void>(state.elements_.erase(0u)); }
 };
 
 struct UniformShapesProbe {
-    static void overfill(UniformShapes &shapes, uint32_t count) { shapes.count_ = count; }
+    /* A row of no values, which no remember writes, planted and pulled. */
+    static void plant_unshaped(UniformShapes &shapes)
+    {
+        uint32_t slot = 0u;
+        static_cast<void>(shapes.values_.insert(uint64_t{9u} << 32u, 0u, slot));
+    }
+    static void pull_unshaped(UniformShapes &shapes) { static_cast<void>(shapes.values_.erase(uint64_t{9u} << 32u)); }
 };
 
 struct WindowFramebuffersProbe {
-    static void point_nowhere(WindowFramebuffers &windows, std::uint32_t slot) { windows.current_ = slot; }
+    static void point_at(WindowFramebuffers &windows, BackBufferPresenter *presenter) { windows.current_ = presenter; }
 };
 
 struct MappedBuffersProbe {
@@ -555,19 +567,20 @@ TEST(guest_gl_context_invariants, fail_when_a_made_context_or_its_client_state_i
   GuestGlContextProbe::connect(*made, false);
   CHECK(!made->invariants_hold());
   GuestGlContextProbe::connect(*made, true);
-  av::glicd::ClientArrayStateProbe::forget_default(made->arrays(), 0u);
+  av::glicd::ClientArrayStateProbe::name_default(made->arrays());
   CHECK(!made->invariants_hold());
-  av::glicd::ClientArrayStateProbe::forget_default(made->arrays(), 1u);
-  av::glicd::UniformShapesProbe::overfill(made->uniforms(), av::glicd::UniformShapes::capacity + 1u);
+  av::glicd::ClientArrayStateProbe::unname_default(made->arrays());
+  av::glicd::UniformShapesProbe::plant_unshaped(made->uniforms());
   CHECK(!made->invariants_hold());
-  av::glicd::UniformShapesProbe::overfill(made->uniforms(), 0u);
+  av::glicd::UniformShapesProbe::pull_unshaped(made->uniforms());
   av::glicd::QueryShapesProbe::overflow(made->queries(), 0x80000000u);
   CHECK(!made->invariants_hold());
   av::glicd::QueryShapesProbe::overflow(made->queries(), 0u);
   CHECK(made->invariants_hold());
-  av::glicd::WindowFramebuffersProbe::point_nowhere(made->framebuffers(), 0u);
+  av::glicd::BackBufferPresenter stray(rig.platform(), rig.log());
+  av::glicd::WindowFramebuffersProbe::point_at(made->framebuffers(), &stray);
   CHECK(!made->invariants_hold());
-  av::glicd::WindowFramebuffersProbe::point_nowhere(made->framebuffers(), av::glicd::WindowFramebuffers::max_windows);
+  av::glicd::WindowFramebuffersProbe::point_at(made->framebuffers(), nullptr);
   av::glicd::MappedBuffersProbe::miscount(made->mappings(), 1u);
   CHECK(!made->invariants_hold());
   av::glicd::MappedBuffersProbe::miscount(made->mappings(), 0u);

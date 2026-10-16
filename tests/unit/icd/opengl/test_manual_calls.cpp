@@ -343,6 +343,30 @@ TEST(manual_calls, a_uniform_location_learns_its_shape)
   gen::Wrap_glDeleteProgram(5u);
   CHECK_EQ(current.context().uniforms().values(5u, 8), 0u); }
 
+/* A location there is no memory to remember the shape of is still answered,
+ * the shape unknown - a later glGetUniform writes nothing - and the
+ * application told GL_OUT_OF_MEMORY. */
+TEST(manual_calls, a_uniform_shape_with_no_memory_to_keep_it_is_out_of_memory)
+{ Current current;
+  current.rig().host().gl_varint(4u);
+  current.rig().host().gl_varint(0u);
+  current.rig().host().gl_resource_property(0x8B5C /* GL_FLOAT_MAT4 */);
+  current.rig().platform().fail_allocation_at(1u);
+  CHECK_EQ(gen::Wrap_glGetUniformLocation(5u, "transform"), 4);
+  CHECK_EQ(current.context().uniforms().values(5u, 4), 0u);
+  CHECK_EQ(current.context().take_error(), 0x0505u /* GL_OUT_OF_MEMORY */); }
+
+/* A vertex array there is no memory to keep the element buffer of is still
+ * bound on the host, and the application told GL_OUT_OF_MEMORY. */
+TEST(manual_calls, a_vertex_array_with_no_memory_to_keep_is_out_of_memory)
+{ Current current;
+  const std::uint32_t sent = current.sent();
+  current.rig().platform().fail_allocation_at(1u);
+  gen::Wrap_glBindVertexArray(9u);
+  CHECK_EQ(current.context().take_error(), 0x0505u /* GL_OUT_OF_MEMORY */);
+  CHECK_EQ(current.sent(), sent + 1u);
+  CHECK_EQ(current.sent_since(sent), ids::kCmd_glBindVertexArray); }
+
 TEST(manual_calls, strings_are_the_hosts_and_no_extension_is_listed)
 { Current current;
   const std::uint32_t sent = current.sent();

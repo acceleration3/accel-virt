@@ -100,6 +100,14 @@ TEST(gl_hooks, answer_from_the_current_context)
   const void *const offsets[] = {reinterpret_cast<const void *>(std::uintptr_t{12u})};
   const std::uint64_t *const wired = glicd::offsets_of(offsets, 1u);
   CHECK(wired != nullptr && wired[0] == 12u);
+  /* A list there is no memory to convert is GL_OUT_OF_MEMORY; a null one is
+   * the host's to judge. */
+  static const void *many[4096] = {};
+  rig.platform().fail_allocation_at(1u);
+  CHECK(glicd::offsets_of(many, 4096u) == nullptr);
+  CHECK_EQ(context.take_error(), 0x0505u);
+  CHECK(glicd::offsets_of(nullptr, 1u) == nullptr);
+  CHECK_EQ(context.take_error(), 0u);
   CHECK(!glicd::pixel_buffer_bound(true));
   context.arrays().bind_buffer(pixel_pack_buffer, 3u);
   CHECK(glicd::pixel_buffer_bound(true));
@@ -115,7 +123,7 @@ TEST(gl_hooks, answer_from_the_current_context)
   glicd::forget_bindings();
   CHECK(!glicd::skip_bind_texture(texture_2d, 5u));
   CHECK_EQ(glproto::pname_count(wire, max_viewport_dims), 2u);
-  context.uniforms().remember(7u, 2, 0x8B5Cu /* GL_FLOAT_MAT4 */);
+  CHECK_STATUS(context.uniforms().remember(7u, 2, 0x8B5Cu /* GL_FLOAT_MAT4 */), av::Status::ok);
   CHECK_EQ(glproto::uniform_value_count(wire, 7u, 2), 16u);
   CHECK_EQ(glproto::uniform_block_value_count(wire, 7u, 0u, uniform_block_binding), 1u);
   /* The copies of buffers are told what changes. */

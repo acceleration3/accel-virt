@@ -70,7 +70,6 @@ public:
     };
     enum : uint32_t { gl_invalid_operation = 0x0502u, gl_invalid_enum = 0x0500u, gl_invalid_value = 0x0501u };
     static constexpr uint32_t swap_main_plane = 1u;
-    static constexpr uint32_t max_pending = 64u;
 
     GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock, LogSink &log,
               icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system, GlPresentLoop &presents,
@@ -167,7 +166,7 @@ private:
     /* The calling thread's context's frame for the DC's window, unpaced. */
     Shown show_frame(void *dc);
     uint64_t take_pending(uint32_t thread);
-    bool     put_pending(uint32_t thread, uint64_t handle);
+    [[nodiscard]] Status put_pending(uint32_t thread, uint64_t handle);
     void     fail(uint32_t error);
     uint32_t made_error(Status status) const;
     uint32_t make_error(Status status, const GlContextOptions &options) const;
@@ -176,6 +175,8 @@ private:
     bool            shares_into(uint64_t first, uint64_t second) const;
     /* Makes `context` after the unmade contexts it shares through. */
     [[nodiscard]] Status make_chain(GuestGlContext &context);
+    /* The last created context along `context`'s share targets. */
+    GuestGlContext      &farthest_unmade(GuestGlContext &context) const;
     /* What profile the host granted, named once per process. */
     void                 note_profile(const GuestGlContext &context);
 
@@ -202,8 +203,9 @@ private:
     void             *callbacks_[max_callbacks];
     uint32_t          callback_count_;
     generated::GlProcTable proc_table_;
-    uint32_t          pending_threads_[max_pending];
-    uint64_t          pending_handles_[max_pending];
+    /* The context each thread's wglCreateContextAttribsARB made and opengl32
+     * has yet to claim, by thread. */
+    KeyedSlots<uint32_t, uint64_t> pending_;
     uint64_t          sync_tokens_;
     /* Whether the host's answer about profiles has been named (feature 051). */
     bool              profile_noted_;

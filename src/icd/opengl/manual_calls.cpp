@@ -434,7 +434,7 @@ void ManualCalls::bind_vertex_array(uint32_t array)
     AV_SCOPE("ManualCalls::bind_vertex_array");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
-    context->arrays().bind_vertex_array(array);
+    if (context->arrays().bind_vertex_array(array) != Status::ok) context->record(GuestGlContext::gl_out_of_memory);
     glproto::av_glBindVertexArray(*context->wire(), array);
 }
 
@@ -642,7 +642,8 @@ int32_t ManualCalls::uniform_location(uint32_t program, const char *name)
     int32_t        written = 0;
     int32_t        type = 0;
     glproto::av_glGetProgramResourceiv(wire, program, gl_uniform, index, 1, &property, 1, &written, &type);
-    if (written == 1) context->uniforms().remember(program, location, static_cast<uint32_t>(type));
+    if (written == 1 && context->uniforms().remember(program, location, static_cast<uint32_t>(type)) != Status::ok)
+        context->record(GuestGlContext::gl_out_of_memory);
     return location;
 }
 

@@ -10,7 +10,8 @@
 namespace av::glicd {
 
 WindowFramebuffers::WindowFramebuffers(BlockSource &memory, LogSink &log)
-    : memory_(memory), log_(log), presenters_{}, current_(max_windows), presented_(max_windows), draws_window_(false),
+    : memory_(memory), log_(log), pool_(memory), presenters_(memory, Pool::paged), current_(nullptr),
+      presented_(nullptr), draws_window_(false),
       reads_window_(false),
       read_buffer_(gl_back), ever_current_(false)
 {
@@ -27,29 +28,30 @@ Status WindowFramebuffers::make_current_on(ClientTransport &wire, void *window, 
                                            icd::WindowSurface &surface)
 {
     AV_SCOPE("WindowFramebuffers::make_current_on");
-    uint32_t   slot = find(window);
-    const bool added = slot == max_windows;
-    if (added) {
-        slot = find(nullptr);
-        if (slot == max_windows) return Status::no_space;
-        static_cast<void>(presenters_[slot].construct(memory_, log_));
-    }
-    BackBufferPresenter &presenter = presenters_[slot].object();
+    BackBufferPresenter *found = find(window);
+    const bool           added = found == nullptr;
+    /* Room to name a new presenter first, so one made always has a name. */
+    if (added && (presenters_.reserve(presenters_.count() + 1u) != Status::ok ||
+                  pool_.create(found, memory_, log_) != Status::ok))
+        return Status::no_memory;
+    BackBufferPresenter &presenter = *found;
     const uint32_t       before = presenter.framebuffer();
     const uint32_t       old_width = presenter.width();
     const uint32_t       old_height = presenter.height();
     const Status         prepared = presenter.prepare(wire, window, format, surface);
     if (prepared != Status::ok) {
-        if (added) presenters_[slot].destroy();
+        if (added) static_cast<void>(pool_.destroy(found));
         return prepared;
     }
+    uint32_t slot = 0u;
+    if (added) static_cast<void>(presenters_.insert(key_of(window), found, slot));
     /* A window that changed size while another context was current on this
      * thread is made again here, not after a swap: what the application left
      * on it is bound again all the same, or the host draws into nothing. */
     const bool remade = !added && (presenter.framebuffer() != before || presenter.width() != old_width ||
                                    presenter.height() != old_height);
-    const bool moved = slot != current_;
-    current_ = slot;
+    const bool moved = found != current_;
+    current_ = found;
     if (!ever_current_) {
         ever_current_ = true;
         draws_window_ = true;
@@ -68,14 +70,14 @@ Status WindowFramebuffers::make_current_on(ClientTransport &wire, void *window, 
 void *WindowFramebuffers::window() const
 {
     AV_SCOPE("WindowFramebuffers::window");
-    return current_ != max_windows ? presenters_[current_].object().window() : nullptr;
+    return current_ != nullptr ? current_->window() : nullptr;
 }
 
 uint32_t WindowFramebuffers::name_of(uint32_t name) const
 {
     AV_SCOPE("WindowFramebuffers::name_of");
-    if (name != 0u || current_ == max_windows) return name;
-    return presenters_[current_].object().framebuffer();
+    if (name != 0u || current_ == nullptr) return name;
+    return current_->framebuffer();
 }
 
 void WindowFramebuffers::bound(uint32_t target, uint32_t name)
@@ -96,9 +98,9 @@ bool WindowFramebuffers::read_front(int32_t x, int32_t y, int32_t width, int32_t
                                     uint32_t type, void *pixels) const
 {
     AV_SCOPE("WindowFramebuffers::read_front");
-    if (!reads_window_ || current_ == max_windows) return false;
+    if (!reads_window_ || current_ == nullptr) return false;
     if (read_buffer_ != gl_front && read_buffer_ != gl_front_left) return false;
-    return presenters_[current_].object().read_front(x, y, width, height, format, type, pixels);
+    return current_->read_front(x, y, width, height, format, type, pixels);
 }
 
 uint32_t WindowFramebuffers::buffer_for(uint32_t buffer, bool drawing) const
@@ -121,9 +123,9 @@ int32_t WindowFramebuffers::answer(uint32_t pname, int32_t host_value) const
     const bool reading = pname == gl_read_buffer;
     if (!reading && pname != gl_draw_buffer && pname != gl_draw_buffer0) return host_value;
     const bool on_window = reading ? reads_window_ : draws_window_;
-    if (!on_window || current_ == max_windows || host_value != static_cast<int32_t>(gl_color_attachment0))
+    if (!on_window || current_ == nullptr || host_value != static_cast<int32_t>(gl_color_attachment0))
         return host_value;
-    const bool doubled = presenters_[current_].object().double_buffered();
+    const bool doubled = current_->double_buffered();
     return static_cast<int32_t>(doubled ? gl_back : gl_front);
 }
 
@@ -131,27 +133,26 @@ bool WindowFramebuffers::present(ClientTransport &wire, const ClientArrayState &
                                  icd::WindowSurface &surface, GlPresentLoop *loop, uint64_t luid)
 {
     AV_SCOPE("WindowFramebuffers::present");
-    const uint32_t slot = find(window);
-    if (window == nullptr || slot == max_windows) return false;
-    presented_ = slot;
-    return presenters_[slot].object().present(wire, state, dc, surface, loop, luid);
+    BackBufferPresenter *const presenter = find(window);
+    if (presenter == nullptr) return false;
+    presented_ = presenter;
+    return presenter->present(wire, state, dc, surface, loop, luid);
 }
 
 void WindowFramebuffers::hand_over(const BatchMark &mark)
 {
     AV_SCOPE("WindowFramebuffers::hand_over");
-    if (presented_ != max_windows && presenters_[presented_].constructed())
-        presenters_[presented_].object().hand_over(mark);
-    presented_ = max_windows;
+    if (presented_ != nullptr) presented_->hand_over(mark);
+    presented_ = nullptr;
 }
 
 void WindowFramebuffers::follow(ClientTransport &wire, void *window, const PixelFormat &format,
                                 icd::WindowSurface &surface)
 {
     AV_SCOPE("WindowFramebuffers::follow");
-    const uint32_t slot = find(window);
-    if (window == nullptr || slot == max_windows) return;
-    BackBufferPresenter &presenter = presenters_[slot].object();
+    BackBufferPresenter *const found = find(window);
+    if (found == nullptr) return;
+    BackBufferPresenter &presenter = *found;
     const uint32_t       before = presenter.framebuffer();
     const uint32_t       width = presenter.width();
     const uint32_t       height = presenter.height();
@@ -161,41 +162,36 @@ void WindowFramebuffers::follow(ClientTransport &wire, void *window, const Pixel
      * the deleted one had - the host reuses names - while deleting it bound 0
      * in its place: so a new size rebinds whatever the name. */
     const bool remade = after != before || presenter.width() != width || presenter.height() != height;
-    if (remade && slot == current_) bind_window(wire, after);
+    if (remade && found == current_) bind_window(wire, after);
 }
 
 void WindowFramebuffers::drop_gone(ClientTransport &wire, icd::WindowSurface &surface)
 {
     AV_SCOPE("WindowFramebuffers::drop_gone");
-    for (uint32_t slot = 0u; slot < max_windows; slot++) {
-        if (!presenters_[slot].constructed()) continue;
+    presenters_.erase_if([this, &wire, &surface](uint64_t, BackBufferPresenter *&presenter) {
         uint32_t width = 0u;
         uint32_t height = 0u;
-        if (surface.client_size(presenters_[slot].object().window(), width, height)) continue;
-        presenters_[slot].object().release(&wire);
-        presenters_[slot].destroy();
-        if (slot == current_) current_ = max_windows;
-        if (slot == presented_) presented_ = max_windows;
-    }
+        if (surface.client_size(presenter->window(), width, height)) return false;
+        presenter->release(&wire);
+        forget(presenter);
+        return true;
+    });
 }
 
 void WindowFramebuffers::release(ClientTransport *wire)
 {
     AV_SCOPE("WindowFramebuffers::release");
-    for (ObjectStorage<BackBufferPresenter> &presenter : presenters_) {
-        if (presenter.constructed()) presenter.object().release(wire);
-        presenter.destroy();
-    }
-    current_ = max_windows;
-    presented_ = max_windows;
+    presenters_.erase_if([this, wire](uint64_t, BackBufferPresenter *&presenter) {
+        presenter->release(wire);
+        forget(presenter);
+        return true;
+    });
 }
 
 uint32_t WindowFramebuffers::held() const
 {
     AV_SCOPE("WindowFramebuffers::held");
-    uint32_t count = 0u;
-    for (const ObjectStorage<BackBufferPresenter> &presenter : presenters_) count += presenter.constructed() ? 1u : 0u;
-    return count;
+    return presenters_.count();
 }
 
 void WindowFramebuffers::report(StateWriter &writer) const
@@ -205,10 +201,8 @@ void WindowFramebuffers::report(StateWriter &writer) const
     writer.number("held", held());
     writer.flag("draws_window", draws_window_);
     writer.flag("reads_window", reads_window_);
-    for (uint32_t slot = 0u; slot < max_windows; slot++) {
-        if (!presenters_[slot].constructed()) continue;
-        presenters_[slot].object().report(writer, slot);
-    }
+    for (uint32_t slot = presenters_.next_live(0u); slot != presenters_.no_slot; slot = presenters_.next_live(slot + 1u))
+        (*presenters_.at(slot))->report(writer, slot);
     writer.close();
 }
 
@@ -217,17 +211,15 @@ void WindowFramebuffers::report(StateWriter &writer) const
 bool WindowFramebuffers::invariants_hold() const
 {
     AV_SCOPE("WindowFramebuffers::invariants_hold");
-    if (current_ > max_windows || (current_ != max_windows && !presenters_[current_].constructed())) return false;
-    if (presented_ > max_windows) return false;
-    for (uint32_t slot = 0u; slot < max_windows; slot++) {
-        if (!presenters_[slot].constructed()) continue;
-        const BackBufferPresenter &presenter = presenters_[slot].object();
-        if (!presenter.invariants_hold()) return false;
-        for (uint32_t earlier = 0u; earlier < slot; earlier++)
-            if (presenters_[earlier].constructed() && presenters_[earlier].object().window() == presenter.window())
-                return false;
-    }
-    return true;
+    bool whole = presenters_.count() == pool_.live();
+    bool current_held = current_ == nullptr;
+    bool presented_held = presented_ == nullptr;
+    presenters_.for_each([&](uint64_t window, BackBufferPresenter *const &presenter) {
+        whole = whole && presenter->invariants_hold() && key_of(presenter->window()) == window;
+        current_held = current_held || presenter == current_;
+        presented_held = presented_held || presenter == presented_;
+    });
+    return whole && current_held && presented_held && presenters_.invariants_hold();
 }
 
 void WindowFramebuffers::bind_window(ClientTransport &wire, uint32_t framebuffer)
@@ -237,15 +229,27 @@ void WindowFramebuffers::bind_window(ClientTransport &wire, uint32_t framebuffer
     if (reads_window_) glproto::av_glBindFramebuffer(wire, gl_read_framebuffer, framebuffer);
 }
 
-/* The slot holding `window`; for null, the first free slot. */
-uint32_t WindowFramebuffers::find(void *window) const
+BackBufferPresenter *WindowFramebuffers::find(void *window) const
 {
     AV_SCOPE("WindowFramebuffers::find");
-    for (uint32_t slot = 0u; slot < max_windows; slot++) {
-        const bool held = presenters_[slot].constructed();
-        if (window == nullptr ? !held : held && presenters_[slot].object().window() == window) return slot;
-    }
-    return max_windows;
+    BackBufferPresenter *const *const presenter = window != nullptr ? presenters_.find(key_of(window)) : nullptr;
+    return presenter != nullptr ? *presenter : nullptr;
+}
+
+uint64_t WindowFramebuffers::key_of(void *window) const
+{
+    AV_SCOPE("WindowFramebuffers::key_of");
+    return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(window));
+}
+
+/* `presenter` gone from the pool and from what names it; the caller takes it
+ * out of the table. */
+void WindowFramebuffers::forget(BackBufferPresenter *presenter)
+{
+    AV_SCOPE("WindowFramebuffers::forget");
+    if (presenter == current_) current_ = nullptr;
+    if (presenter == presented_) presented_ = nullptr;
+    static_cast<void>(pool_.destroy(presenter));
 }
 
 }  // namespace av::glicd

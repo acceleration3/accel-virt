@@ -11,10 +11,17 @@
 #ifndef AV_GLICD_CLIENT_ARRAY_STATE_HPP
 #define AV_GLICD_CLIENT_ARRAY_STATE_HPP
 
+#include "core/support/growable_array.hpp"
+#include "core/support/keyed_slots.hpp"
+#include "core/support/status.hpp"
 #include "icd/opengl/pixel_store.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
+
+namespace av {
+class BlockSource;
+}  // namespace av
 
 namespace av::glicd {
 
@@ -29,14 +36,11 @@ public:
     static constexpr uint32_t query_buffer = 0x9192u;
     /* What bound_buffer answers where the binding is not known. */
     static constexpr uint32_t unknown = 0xFFFFFFFFu;
-    /* The most pointers one multi-draw converts. */
-    static constexpr size_t   max_offsets = 1024u;
-    /* The vertex arrays whose element buffer is kept; past this many a draw
-     * takes its indices as an offset, as the host then judges. */
-    static constexpr uint32_t max_vertex_arrays = 64u;
+    /* GL_MAX_VERTEX_ATTRIBS as every desktop driver reports it, the
+     * specification's least: an index past it is the host's to refuse. */
     static constexpr uint32_t max_attributes = 16u;
 
-    ClientArrayState();
+    explicit ClientArrayState(BlockSource &memory);
     ClientArrayState(const ClientArrayState &) = delete;
     ClientArrayState &operator=(const ClientArrayState &) = delete;
 
@@ -68,7 +72,9 @@ public:
     uint32_t bound_buffer(uint32_t target) const;
     bool     pixel_buffer_bound(bool packing) const;
     bool     query_buffer_bound() const;
-    void     bind_vertex_array(uint32_t array);
+    /* no_memory when a new array's element buffer cannot be kept: its draws
+     * then take their indices as an offset, as the host judges. */
+    [[nodiscard]] Status bind_vertex_array(uint32_t array);
     /* A deleted vertex array's element buffer is forgotten; deleting the bound
      * one binds array 0, as OpenGL does. */
     void     delete_vertex_arrays(int32_t count, const uint32_t *arrays);
@@ -82,8 +88,9 @@ public:
     /* 0 for an attribute never pointed or past max_attributes. */
     uint64_t attribute_pointer(uint32_t index) const;
 
-    /* `count` pointers as the 64-bit offsets the wire carries; null past
-     * max_offsets or for a null list with a count. Valid until the next call. */
+    /* `count` pointers as the 64-bit offsets the wire carries; null for a null
+     * list with a count, or one there is no memory for. Valid until the next
+     * call. */
     const uint64_t *offsets_of(const void *const *pointers, size_t count);
 
     /* Whether this bind repeats what the context already has; each records the
@@ -107,22 +114,25 @@ private:
     bool        indexed(uint32_t target) const;
     uint32_t    texture_slot(uint32_t target) const;
     const PixelStore *store_for(uint32_t pname, PixelStore::Field &field) const;
-    /* The row of `array` in the vertex array table, or max_vertex_arrays. */
-    uint32_t    vertex_array_row(uint32_t array) const;
+    /* Where the element buffer of `array` is kept; null when it is not. */
+    uint32_t       *elements_of(uint32_t array);
+    const uint32_t *elements_of(uint32_t array) const;
 
     uint32_t   buffers_[buffer_targets];
     bool       buffers_restored_;
     PixelStore pack_;
     PixelStore unpack_;
     uint32_t   vertex_array_;
-    uint32_t   array_names_[max_vertex_arrays];
-    uint32_t   array_elements_[max_vertex_arrays];
-    uint32_t   arrays_known_;
+    /* Vertex array 0's element buffer, and every other array's by name. */
+    uint32_t                       default_elements_;
+    KeyedSlots<uint32_t, uint32_t> elements_;
     uint64_t   attribute_pointers_[max_attributes];
     uint32_t   active_unit_;
     uint32_t   textures_[units][texture_targets];
     uint32_t   samplers_[units];
-    uint64_t   offsets_[max_offsets];
+    GrowableArray<uint64_t> offsets_;
+    /* What a list of no offsets points at. */
+    uint64_t                no_offsets_;
 
     friend struct ClientArrayStateProbe;
 };

@@ -1,4 +1,4 @@
-/* The buffer ranges one context has mapped (data-model.md: at most 64), with
+/* The buffer ranges one context has mapped, as many as it maps, with
  * the checks OpenGL makes of a map, an unmap and an explicit flush, and the
  * one line per context that says maps are copies here (FR-006). A range is
  * judged against the buffer's size, which the host is asked only when the
@@ -8,8 +8,9 @@
 #ifndef AV_GLICD_MAPPED_BUFFERS_HPP
 #define AV_GLICD_MAPPED_BUFFERS_HPP
 
+#include "core/support/keyed_slots.hpp"
+#include "core/support/object_pool.hpp"
 #include "icd/common/once_latch.hpp"
-#include "core/support/object_storage.hpp"
 #include "icd/opengl/buffer_mapping.hpp"
 
 #include <stdint.h>
@@ -34,7 +35,6 @@ struct MappedBuffersProbe;
 
 class MappedBuffers {
 public:
-    static constexpr uint32_t max_mappings = 64u;
     /* glMapBuffer's length: all of the buffer. */
     static constexpr int64_t  whole_buffer = -1;
     enum : uint32_t {
@@ -78,15 +78,17 @@ public:
     bool invariants_hold() const;
 
 private:
-    /* The slot mapping `buffer`; for 0, the first free slot. */
-    uint32_t find(uint32_t buffer) const;
-    void     drop(uint32_t slot);
-    void     log_once();
+    /* The mapping of `buffer`, or null; 0 maps nothing. */
+    BufferMapping *find(uint32_t buffer) const;
+    void           drop(uint32_t buffer);
+    void           log_once();
 
-    BlockSource                   &memory_;
-    BufferShadows                 &shadows_;
-    LogSink                  &log_;
-    ObjectStorage<BufferMapping>   mappings_[max_mappings];
+    BlockSource                             &memory_;
+    BufferShadows                           &shadows_;
+    LogSink                                 &log_;
+    ObjectPool<BufferMapping>                pool_;
+    /* Each mapping by the buffer it maps. */
+    KeyedSlots<uint32_t, BufferMapping *>    mappings_;
     uint32_t                       persistent_writers_;
     icd::OnceLatch                 logged_;
 

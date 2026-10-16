@@ -21,11 +21,17 @@ struct GuestGlContextProbe {
 };
 
 struct GlContextTableProbe {
-    static void zero_generation(GlContextTable &table) { table.generations_[3] = 0u; }
-    static void pass_generation(GlContextTable &table) { table.generations_[4] = GlContextTable::max_generation + 1u; }
-    static void miscount(GlContextTable &table) { table.live_ = 1u; }
-    static void last_generation(GlContextTable &table, uint32_t slot) { table.generations_[slot] = 0xFFFFu; }
-    static GuestGlContext *slot(GlContextTable &table, uint32_t slot) { return table.contexts_[slot]; }
+    static void last_handle(GlContextTable &table) { table.next_ = GlContextTable::last_handle; }
+    static void zero_next(GlContextTable &table) { table.next_ = 0u; }
+    static void restore_next(GlContextTable &table) { table.next_ = 1u; }
+    static GuestGlContext *at(GlContextTable &table, std::uint32_t slot) { return *table.contexts_.at(slot); }
+    /* `context` named under a second handle the pool knows nothing of. */
+    static void plant(GlContextTable &table, std::uint64_t handle, GuestGlContext *context)
+    {
+        std::uint32_t slot = 0u;
+        static_cast<void>(table.contexts_.insert(handle, context, slot));
+    }
+    static void pull(GlContextTable &table, std::uint64_t handle) { static_cast<void>(table.contexts_.erase(handle)); }
 };
 
 }  // namespace av::glicd
@@ -48,21 +54,20 @@ TEST(gl_context_table, a_handle_names_its_context_until_it_is_destroyed)
   CHECK_STATUS(table.create(2, GlContextOptions(), first), Status::ok);
   CHECK_STATUS(table.create(3, GlContextOptions(), second), Status::ok);
   CHECK(table.invariants_hold());
-  CHECK_EQ(first, 0x10001u);
-  CHECK_EQ(second, 0x10002u);
+  CHECK_EQ(first, 1u);
+  CHECK_EQ(second, 2u);
   CHECK_EQ(table.live(), 2u);
   GuestGlContext *const context = table.resolve(second);
   CHECK(context != nullptr);
   CHECK_EQ(context->pixel_format(), 3);
-  CHECK_EQ(table.handle_of(*context), second);
   CHECK_STATUS(table.destroy(first), Status::ok);
   CHECK(table.invariants_hold());
   CHECK(table.resolve(first) == nullptr);
   CHECK_STATUS(table.destroy(first), Status::invalid_parameter);
-  /* The slot is taken again under a new generation: the old handle stays dead. */
+  /* A handle is not minted again: the old one stays dead. */
   std::uint64_t third = 0u;
   CHECK_STATUS(table.create(4, GlContextOptions(), third), Status::ok);
-  CHECK_EQ(third, 0x20001u);
+  CHECK_EQ(third, 3u);
   CHECK(table.resolve(first) == nullptr);
   CHECK_EQ(table.resolve(third)->pixel_format(), 4);
   CHECK_EQ(table.live(), 2u); }
@@ -71,42 +76,64 @@ TEST(gl_context_table, forged_handles_resolve_to_nothing)
 { Table fixture;
   std::uint64_t handle = 0u;
   CHECK_STATUS(fixture.table.create(1, GlContextOptions(), handle), Status::ok);
-  const std::uint64_t forged[] = {0u, 1u, 0x10000u, 0x10003u, 0x30001u, 0x1000000010001ull, 0x10101u,
+  const std::uint64_t forged[] = {0u, 2u, 0x10000u, 0x10001u, 0x100000001ull, 0xFFFFFFFFu,
                                   0xFFFFFFFFFFFFFFFFull};
   for (const std::uint64_t each : forged) {
       CHECK(fixture.table.resolve(each) == nullptr);
       CHECK_STATUS(fixture.table.destroy(each), Status::invalid_parameter);
   }
   CHECK(fixture.table.resolve(handle) != nullptr);
-  CHECK_EQ(fixture.table.live(), 1u);
-  GuestGlContext stranger(fixture.rig.connection(), fixture.rig.platform(), fixture.rig.send_lock(),
-                          fixture.rig.log(), fixture.rig.extensions(), fixture.rig.handles(), 1, GlContextOptions());
-  CHECK_EQ(fixture.table.handle_of(stranger), 0u); }
+  CHECK_EQ(fixture.table.live(), 1u); }
 
-TEST(gl_context_table, refuses_a_257th_context_and_a_pool_that_cannot_grow)
+/* Well past the 256 the table once held: every context its own handle, each
+ * resolving to its own, and a pool that cannot grow refuses with no handle. */
+TEST(gl_context_table, holds_contexts_past_the_old_bound_and_refuses_one_with_no_memory)
 { Table fixture;
-  std::uint64_t handle = 0u;
-  for (std::uint32_t each = 0u; each < GlContextTable::max_contexts; each++)
-      CHECK_STATUS(fixture.table.create(1, GlContextOptions(), handle), Status::ok);
-  CHECK_EQ(handle, 0x10100u);
-  CHECK_STATUS(fixture.table.create(1, GlContextOptions(), handle), Status::no_space);
-  CHECK_EQ(handle, 0u);
+  constexpr std::uint32_t many = 600u;
+  static std::uint64_t handles[many];
+  for (std::uint32_t each = 0u; each < many; each++) {
+      CHECK_STATUS(fixture.table.create(static_cast<std::int32_t>(each % 7u) + 1, GlContextOptions(), handles[each]),
+                   Status::ok);
+      CHECK_EQ(handles[each], each + 1u);
+  }
+  CHECK_EQ(fixture.table.live(), many);
+  for (std::uint32_t each = 0u; each < many; each++)
+      CHECK_EQ(fixture.table.resolve(handles[each])->pixel_format(), static_cast<std::int32_t>(each % 7u) + 1);
+  CHECK(fixture.table.invariants_hold());
+  for (std::uint32_t each = 0u; each < many; each += 2u) CHECK_STATUS(fixture.table.destroy(handles[each]), Status::ok);
+  CHECK_EQ(fixture.table.live(), many / 2u);
+  CHECK(fixture.table.resolve(handles[0]) == nullptr);
+  CHECK(fixture.table.resolve(handles[1]) != nullptr);
   CHECK(fixture.table.invariants_hold());
   Table starved;
+  std::uint64_t handle = 7u;
   starved.rig.platform().fail_allocation_at(1u);
   CHECK_STATUS(starved.table.create(1, GlContextOptions(), handle), Status::no_memory);
   CHECK_EQ(handle, 0u);
-  CHECK_EQ(starved.table.live(), 0u); }
+  CHECK_EQ(starved.table.live(), 0u);
+  handle = 7u;
+  starved.rig.platform().fail_allocation_at(3u);
+  CHECK_STATUS(starved.table.create(1, GlContextOptions(), handle), Status::no_memory);
+  CHECK_EQ(handle, 0u);
+  CHECK_EQ(starved.table.live(), 0u);
+  CHECK(starved.table.invariants_hold()); }
 
-TEST(gl_context_table, a_generation_wraps_past_its_last_value)
+/* The count wraps past the last 32-bit handle to 1, and steps over a handle a
+ * live context still has. */
+TEST(gl_context_table, a_handle_wraps_past_the_last_and_skips_one_in_use)
 { Table fixture;
-  av::glicd::GlContextTableProbe::last_generation(fixture.table, 0u);
-  std::uint64_t handle = 0u;
-  CHECK_STATUS(fixture.table.create(1, GlContextOptions(), handle), Status::ok);
-  CHECK_EQ(handle, 0xFFFF0001u);
-  CHECK_STATUS(fixture.table.destroy(handle), Status::ok);
-  CHECK_STATUS(fixture.table.create(1, GlContextOptions(), handle), Status::ok);
-  CHECK_EQ(handle, 0x10001u);
+  std::uint64_t first = 0u, last = 0u, wrapped = 0u;
+  CHECK_STATUS(fixture.table.create(1, GlContextOptions(), first), Status::ok);
+  CHECK_EQ(first, 1u);
+  av::glicd::GlContextTableProbe::last_handle(fixture.table);
+  CHECK_STATUS(fixture.table.create(1, GlContextOptions(), last), Status::ok);
+  CHECK_EQ(last, 0xFFFFFFFFu);
+  CHECK_STATUS(fixture.table.create(1, GlContextOptions(), wrapped), Status::ok);
+  CHECK_EQ(wrapped, 2u);
+  av::glicd::GlContextTableProbe::last_handle(fixture.table);
+  std::uint64_t again = 0u;
+  CHECK_STATUS(fixture.table.create(1, GlContextOptions(), again), Status::ok);
+  CHECK_EQ(again, 3u);
   CHECK(fixture.table.invariants_hold()); }
 
 TEST(gl_context_table, reports_each_live_context_under_its_handle)
@@ -116,29 +143,32 @@ TEST(gl_context_table, reports_each_live_context_under_its_handle)
   char bytes[512];
   av::StateWriter writer(bytes, sizeof bytes);
   fixture.table.report(writer);
-  CHECK(std::strcmp(writer.dump(), "contexts/0 live=1\ncontexts/0/context/65537 state=created owner=0 "
+  CHECK(std::strcmp(writer.dump(), "contexts/0 live=1\ncontexts/0/context/1 state=created owner=0 "
                                    "pixel_format=1 major=0 minor=0 profile=0 flags=0 share=0 share_target=0 error=0 "
                                    "link=4 arena=false renderer= extensions=0\n"
-                                   "contexts/0/context/65537/windows/0 held=0 draws_window=false "
+                                   "contexts/0/context/1/windows/0 held=0 draws_window=false "
                                    "reads_window=false\n"
-                     "contexts/0/context/65537/mappings/0 held=0 persistent_writers=0\n"
-                    "contexts/0/context/65537/shadows/0 trusted=true held=0 held_bytes=0 sizes=0") == 0); }
+                     "contexts/0/context/1/mappings/0 held=0 persistent_writers=0\n"
+                    "contexts/0/context/1/shadows/0 trusted=true held=0 held_bytes=0 sizes=0") == 0); }
 
-TEST(gl_context_table_invariants, fail_for_a_zero_generation_a_miscount_or_a_broken_context)
+TEST(gl_context_table_invariants, fail_for_no_next_handle_or_a_broken_context)
 { Table zero;
-  av::glicd::GlContextTableProbe::zero_generation(zero.table);
+  av::glicd::GlContextTableProbe::zero_next(zero.table);
   CHECK(!zero.table.invariants_hold());
-  Table past;
-  av::glicd::GlContextTableProbe::pass_generation(past.table);
-  CHECK(!past.table.invariants_hold());
-  Table counted;
-  av::glicd::GlContextTableProbe::miscount(counted.table);
-  CHECK(!counted.table.invariants_hold());
+  av::glicd::GlContextTableProbe::restore_next(zero.table);
+  CHECK(zero.table.invariants_hold());
   Table broken;
   std::uint64_t handle = 0u;
   CHECK_STATUS(broken.table.create(1, GlContextOptions(), handle), Status::ok);
-  GuestGlContext *const context = av::glicd::GlContextTableProbe::slot(broken.table, 0u);
+  GuestGlContext *const context = av::glicd::GlContextTableProbe::at(broken.table, 0u);
   av::glicd::GuestGlContextProbe::claim_made(*context);
   CHECK(!broken.table.invariants_hold());
   av::glicd::GuestGlContextProbe::unclaim(*context);
+  CHECK(broken.table.invariants_hold());
+  av::glicd::GlContextTableProbe::plant(broken.table, 99u, nullptr);
+  CHECK(!broken.table.invariants_hold());
+  av::glicd::GlContextTableProbe::pull(broken.table, 99u);
+  av::glicd::GlContextTableProbe::plant(broken.table, 99u, context);
+  CHECK(!broken.table.invariants_hold());
+  av::glicd::GlContextTableProbe::pull(broken.table, 99u);
   CHECK(broken.table.invariants_hold()); }

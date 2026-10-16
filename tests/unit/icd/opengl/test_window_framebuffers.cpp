@@ -44,16 +44,29 @@ struct BackBufferPresenterProbe {
 };
 
 struct WindowFramebuffersProbe {
-    static void point_nowhere(WindowFramebuffers &windows, std::uint32_t slot) { windows.current_ = slot; }
-    static void presented(WindowFramebuffers &windows, std::uint32_t slot) { windows.presented_ = slot; }
+    static void point_at(WindowFramebuffers &windows, BackBufferPresenter *presenter) { windows.current_ = presenter; }
+    static void presented(WindowFramebuffers &windows, BackBufferPresenter *presenter)
+    {
+        windows.presented_ = presenter;
+    }
     static BackBufferPresenter &presenter(WindowFramebuffers &windows, std::uint32_t slot)
     {
-        return windows.presenters_[slot].object();
+        return **windows.presenters_.at(slot);
     }
-    static void copy_window(WindowFramebuffers &windows, BlockSource &memory, LogSink &log, void *window)
+    /* A presenter made and named by no window. */
+    static void unnamed(WindowFramebuffers &windows, BlockSource &memory, LogSink &log)
     {
-        static_cast<void>(windows.presenters_[5].construct(memory, log));
-        BackBufferPresenterProbe::set_window(windows.presenters_[5].object(), window);
+        BackBufferPresenter *made = nullptr;
+        static_cast<void>(windows.pool_.create(made, memory, log));
+    }
+    /* A presenter drawing on `window` named by `other` as well. */
+    static void copy_window(WindowFramebuffers &windows, BlockSource &memory, LogSink &log, void *window, void *other)
+    {
+        BackBufferPresenter *made = nullptr;
+        static_cast<void>(windows.pool_.create(made, memory, log));
+        BackBufferPresenterProbe::set_window(*made, window);
+        std::uint32_t slot = 0u;
+        static_cast<void>(windows.presenters_.insert(reinterpret_cast<std::uintptr_t>(other), made, slot));
     }
 };
 
@@ -69,7 +82,7 @@ struct Rig {
     GuestGlContext            context{context_rig.connection(), context_rig.platform(), context_rig.send_lock(),
                                       context_rig.log(), context_rig.extensions(), context_rig.handles(), 1, GlContextOptions()};
     av::ScriptedWindowSurface surface;
-    ClientArrayState          state;
+    ClientArrayState          state{context_rig.platform()};
     int                       dcs[10] = {};
     int                       windows[10] = {};
     Windows                   framebuffers{context_rig.platform(), context_rig.log()};
@@ -165,13 +178,24 @@ TEST(window_framebuffers, a_later_window_moves_only_the_bindings_left_on_the_win
   CHECK_EQ(rig.commands(), moved);
   CHECK(rig.framebuffers.invariants_hold()); }
 
-TEST(window_framebuffers, a_ninth_window_is_no_space_and_a_refused_one_is_not_kept)
+/* Past the 8 windows a context once held: every window keeps its presenter,
+ * and one there is no memory for is refused with the current window kept. */
+TEST(window_framebuffers, windows_past_the_old_bound_and_one_with_no_memory)
 { Rig rig;
-  for (int index = 0; index < 8; index++)
+  for (int index = 0; index < 10; index++)
     CHECK_STATUS(rig.current_on(index, 100u + 10u * static_cast<std::uint32_t>(index)), Status::ok);
-  CHECK_EQ(rig.framebuffers.held(), 8u);
-  CHECK_STATUS(rig.framebuffers.make_current_on(rig.wire(), &rig.windows[8], doubled, rig.surface), Status::no_space);
-  CHECK(rig.framebuffers.window() == &rig.windows[7]);
+  CHECK_EQ(rig.framebuffers.held(), 10u);
+  CHECK(rig.framebuffers.window() == &rig.windows[9]);
+  CHECK(rig.framebuffers.invariants_hold());
+  Rig starved;
+  CHECK_STATUS(starved.current_on(0, 100u), Status::ok);
+  starved.context_rig.platform().fail_allocation_at(1u);
+  Status made = Status::ok;
+  int    index = 1;
+  while (made == Status::ok && index < 10) made = starved.current_on(index++, 200u);
+  CHECK_STATUS(made, Status::no_memory);
+  CHECK(starved.framebuffers.window() == &starved.windows[index - 2]);
+  CHECK(starved.framebuffers.invariants_hold());
   Rig refused;
   CHECK_STATUS(refused.current_on(0, 100u), Status::ok);
   int unknown = 0;
@@ -180,7 +204,7 @@ TEST(window_framebuffers, a_ninth_window_is_no_space_and_a_refused_one_is_not_ke
   CHECK_EQ(refused.framebuffers.held(), 1u);
   CHECK(refused.framebuffers.window() == &refused.windows[0]);
   /* A window already held keeps its presenter when a remake is refused. */
-  refused.surface.resize(&refused.windows[0], Windows::max_windows * 2000u, 4u);
+  refused.surface.resize(&refused.windows[0], 16000u, 4u);
   CHECK_STATUS(refused.framebuffers.make_current_on(refused.wire(), &refused.windows[0], doubled, refused.surface),
                Status::invalid_parameter);
   CHECK_EQ(refused.framebuffers.held(), 1u);
@@ -284,7 +308,7 @@ TEST(window_framebuffers, a_swap_presents_the_window_and_a_resize_rebinds_what_w
   CHECK_EQ(rig.argument(swapped + 11u, 0u), Windows::gl_draw_framebuffer);
   rig.framebuffers.bound(Windows::gl_read_framebuffer, 0u);
   /* A window whose remake is refused keeps presenting what it had. */
-  rig.surface.resize(&rig.windows[1], Windows::max_windows * 2000u, 8u);
+  rig.surface.resize(&rig.windows[1], 16000u, 8u);
   rig.context_rig.host().gl_bytes(nullptr, 0u);
   CHECK(rig.swap(1));
   CHECK_EQ(rig.framebuffers.name_of(0u), 600u);
@@ -425,17 +449,20 @@ TEST(window_framebuffers, reports_its_bindings_and_each_window)
 TEST(window_framebuffers_invariants, fail_for_a_current_window_not_held_a_window_held_twice_or_a_broken_presenter)
 { using Probe = av::glicd::WindowFramebuffersProbe;
   Rig nowhere;
-  Probe::point_nowhere(nowhere.framebuffers, 3u);
+  av::glicd::BackBufferPresenter stray(nowhere.context_rig.platform(), nowhere.context_rig.log());
+  Probe::point_at(nowhere.framebuffers, &stray);
   CHECK(!nowhere.framebuffers.invariants_hold());
-  Probe::point_nowhere(nowhere.framebuffers, Windows::max_windows + 1u);
-  CHECK(!nowhere.framebuffers.invariants_hold());
-  Probe::point_nowhere(nowhere.framebuffers, Windows::max_windows);
+  Probe::point_at(nowhere.framebuffers, nullptr);
   CHECK(nowhere.framebuffers.invariants_hold());
   Rig twice;
   CHECK_STATUS(twice.current_on(0, 100u), Status::ok);
   CHECK_STATUS(twice.current_on(1, 200u), Status::ok);
-  Probe::copy_window(twice.framebuffers, twice.context_rig.platform(), twice.context_rig.log(), &twice.windows[1]);
+  Probe::copy_window(twice.framebuffers, twice.context_rig.platform(), twice.context_rig.log(), &twice.windows[1],
+                     &twice.windows[2]);
   CHECK(!twice.framebuffers.invariants_hold());
+  Rig leaked;
+  Probe::unnamed(leaked.framebuffers, leaked.context_rig.platform(), leaked.context_rig.log());
+  CHECK(!leaked.framebuffers.invariants_hold());
   Rig broken;
   CHECK_STATUS(broken.current_on(0, 100u), Status::ok);
   av::glicd::BackBufferPresenterProbe::drop_texture(Probe::presenter(broken.framebuffers, 0u));
@@ -470,9 +497,10 @@ TEST(window_framebuffers, a_frame_read_for_the_thread_is_handed_over_once)
   CHECK(rig.framebuffers.invariants_hold());
   rig.framebuffers.release(nullptr); }
 
-TEST(window_framebuffers_invariants, fail_for_a_presented_window_past_the_table)
+TEST(window_framebuffers_invariants, fail_for_a_presented_window_not_held)
 { Rig rig;
-  av::glicd::WindowFramebuffersProbe::presented(rig.framebuffers, Windows::max_windows + 1u);
+  av::glicd::BackBufferPresenter stray(rig.context_rig.platform(), rig.context_rig.log());
+  av::glicd::WindowFramebuffersProbe::presented(rig.framebuffers, &stray);
   CHECK(!rig.framebuffers.invariants_hold());
-  av::glicd::WindowFramebuffersProbe::presented(rig.framebuffers, Windows::max_windows);
+  av::glicd::WindowFramebuffersProbe::presented(rig.framebuffers, nullptr);
   CHECK(rig.framebuffers.invariants_hold()); }

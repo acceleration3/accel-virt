@@ -1,35 +1,32 @@
-/* A window's pixel format: set once, as Windows allows, on a real window, up
- * to 256 windows. */
+/* A window's pixel format: set once, as Windows allows, on a real window, for
+ * as many windows as there are. */
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "icd/opengl/window_table.hpp"
 
 #include <cstring>
 
+using av::MockPlatform;
 using av::Status;
 using av::glicd::WindowTable;
 
 namespace av::glicd {
 
 struct WindowTableProbe {
-    static void overfill(WindowTable &table) { table.count_ = WindowTable::max_windows + 1u; }
-    static void empty_row(WindowTable &table) { table.windows_[0] = nullptr; table.count_ = 1u; }
-    static void zero_format(WindowTable &table, void *window) { table.windows_[0] = window; table.formats_[0] = 0; table.count_ = 1u; }
-    static void repeat(WindowTable &table, void *window)
+    static void plant(WindowTable &table, void *window, std::int32_t format)
     {
-        table.windows_[0] = window;
-        table.windows_[1] = window;
-        table.formats_[0] = 1;
-        table.formats_[1] = 1;
-        table.count_ = 2u;
+        std::uint32_t slot = 0u;
+        static_cast<void>(table.formats_.insert(reinterpret_cast<std::uintptr_t>(window), format, slot));
     }
 };
 
 }  // namespace av::glicd
 
 TEST(window_table, a_window_takes_one_format_and_keeps_it)
-{ WindowTable table;
+{ MockPlatform platform;
+  WindowTable  table(platform);
   int first = 0;
   int second = 0;
   CHECK_EQ(table.format_of(&first), 0);
@@ -43,26 +40,36 @@ TEST(window_table, a_window_takes_one_format_and_keeps_it)
   CHECK_EQ(table.held(), 2u);
   CHECK(table.invariants_hold()); }
 
-TEST(window_table, refuses_no_window_a_format_below_one_and_a_257th_window)
-{ WindowTable table;
+TEST(window_table, refuses_no_window_a_format_below_one_and_one_with_no_memory)
+{ MockPlatform platform;
+  WindowTable  table(platform);
   int window = 0;
   CHECK_STATUS(table.set_format(nullptr, 1), Status::invalid_parameter);
   CHECK_STATUS(table.set_format(&window, 0), Status::invalid_parameter);
   CHECK_STATUS(table.set_format(&window, -1), Status::invalid_parameter);
   CHECK_EQ(table.held(), 0u);
-  int windows[WindowTable::max_windows + 1u] = {};
-  for (int &each : windows) {
-      const Status set = table.set_format(&each, 2);
-      CHECK_STATUS(set, &each == &windows[WindowTable::max_windows] ? Status::no_space : Status::ok);
-  }
-  CHECK_EQ(table.held(), WindowTable::max_windows);
-  CHECK_EQ(table.format_of(&windows[WindowTable::max_windows]), 0);
+  platform.fail_allocation_at(1u);
+  CHECK_STATUS(table.set_format(&window, 1), Status::no_memory);
+  CHECK_EQ(table.format_of(&window), 0);
+  CHECK(table.invariants_hold()); }
+
+TEST(window_table, keeps_windows_past_the_old_bound)
+{ MockPlatform platform;
+  WindowTable  table(platform);
+  constexpr std::uint32_t many = 2000u;
+  static int windows[many] = {};
+  for (std::uint32_t index = 0u; index < many; index++)
+      CHECK_STATUS(table.set_format(&windows[index], 1 + static_cast<int>(index % 5u)), Status::ok);
+  CHECK_EQ(table.held(), many);
+  for (std::uint32_t index = 0u; index < many; index++)
+      CHECK_EQ(table.format_of(&windows[index]), 1 + static_cast<int>(index % 5u));
   CHECK(table.invariants_hold()); }
 
 /* A window's format lasts as long as the window: a row goes only once its
  * window is gone, and the others keep theirs. */
 TEST(window_table, drops_the_rows_of_windows_that_are_gone)
-{ WindowTable table;
+{ MockPlatform platform;
+  WindowTable  table(platform);
   av::ScriptedWindowSurface surface;
   int dcs[3] = {};
   int windows[3] = {};
@@ -85,7 +92,8 @@ TEST(window_table, drops_the_rows_of_windows_that_are_gone)
   CHECK_EQ(table.format_of(&windows[0]), 5); }
 
 TEST(window_table, reports_each_window_and_its_format)
-{ WindowTable table;
+{ MockPlatform platform;
+  WindowTable  table(platform);
   CHECK_STATUS(table.set_format(reinterpret_cast<void *>(0x1234u), 5), Status::ok);
   char bytes[256];
   av::StateWriter writer(bytes, sizeof bytes);
@@ -94,16 +102,11 @@ TEST(window_table, reports_each_window_and_its_format)
                     "windows/0 held=1\nwindows/0/window/0 hwnd=0x0000000000001234 format=5") == 0); }
 
 TEST(window_table_invariants, fail_for_rows_no_set_writes)
-{ int window = 0;
-  WindowTable over;
-  av::glicd::WindowTableProbe::overfill(over);
-  CHECK(!over.invariants_hold());
-  WindowTable empty;
-  av::glicd::WindowTableProbe::empty_row(empty);
+{ MockPlatform platform;
+  int window = 0;
+  WindowTable empty(platform);
+  av::glicd::WindowTableProbe::plant(empty, nullptr, 1);
   CHECK(!empty.invariants_hold());
-  WindowTable zero;
-  av::glicd::WindowTableProbe::zero_format(zero, &window);
-  CHECK(!zero.invariants_hold());
-  WindowTable repeated;
-  av::glicd::WindowTableProbe::repeat(repeated, &window);
-  CHECK(!repeated.invariants_hold()); }
+  WindowTable zero(platform);
+  av::glicd::WindowTableProbe::plant(zero, &window, 0);
+  CHECK(!zero.invariants_hold()); }

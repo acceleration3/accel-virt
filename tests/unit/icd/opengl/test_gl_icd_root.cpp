@@ -64,11 +64,16 @@ struct PixelFormatTableProbe {
 };
 
 struct WindowTableProbe {
-    static void overfill(WindowTable &table) { table.count_ = WindowTable::max_windows + 1u; }
+    /* A row of no format, which no set writes. */
+    static void plant_unformatted(WindowTable &table)
+    {
+        std::uint32_t slot = 0u;
+        static_cast<void>(table.formats_.insert(0x77u, 0, slot));
+    }
 };
 
 struct GlContextTableProbe {
-    static void zero_generation(GlContextTable &table) { table.generations_[3] = 0u; }
+    static void zero_next(GlContextTable &table) { table.next_ = 0u; }
 };
 
 }  // namespace av::glicd
@@ -177,22 +182,47 @@ TEST(gl_icd_root, a_window_takes_one_format_and_a_memory_dc_none)
   CHECK(rig.opengl32().set_pixel_format(rig.other_dc(), 24));
   CHECK(rig.root().invariants_hold()); }
 
-TEST(gl_icd_root, a_257th_window_is_out_of_memory)
+/* Well past the 256 windows the table once held, every window keeps its
+ * format; a closed window's row goes, and one there is no memory for is out
+ * of memory. */
+TEST(gl_icd_root, windows_past_the_old_bound_keep_their_formats)
 { GlIcdRig rig;
   rig.load_with_format();
-  static int dcs[256];
-  static int windows[256];
-  for (std::uint32_t index = 0u; index < 256u; index++) {
+  constexpr std::uint32_t many = 1000u;
+  static int dcs[many];
+  static int windows[many];
+  const std::uint32_t before = av::glicd::GlIcdRootProbe::windows(rig.root()).held();
+  for (std::uint32_t index = 0u; index < many; index++) {
       rig.surface().add_dc(&dcs[index], &windows[index], 8u, 8u);
-      const bool set = rig.opengl32().set_pixel_format(&dcs[index], 1);
-      CHECK_EQ(set, index < 255u);
+      CHECK(rig.opengl32().set_pixel_format(&dcs[index], 1 + static_cast<std::int32_t>(index % 2u)));
   }
-  check_error(rig, Root::error_not_enough_memory);
-  /* A closed window's row makes room for the next. */
+  CHECK_EQ(av::glicd::GlIcdRootProbe::windows(rig.root()).held(), before + many);
+  CHECK_EQ(av::glicd::GlIcdRootProbe::windows(rig.root()).format_of(&windows[999]), 2);
   rig.surface().close_window(&windows[3]);
-  CHECK(rig.opengl32().set_pixel_format(&dcs[255], 1));
-  CHECK_EQ(av::glicd::GlIcdRootProbe::windows(rig.root()).held(), 256u);
+  static int dc = 0, window = 0;
+  rig.surface().add_dc(&dc, &window, 8u, 8u);
+  CHECK(rig.opengl32().set_pixel_format(&dc, 1));
+  CHECK_EQ(av::glicd::GlIcdRootProbe::windows(rig.root()).held(), before + many);
   CHECK(av::glicd::GlIcdRootProbe::windows(rig.root()).format_of(&windows[3]) == 0);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(gl_icd_root, a_window_with_no_memory_for_its_format_is_out_of_memory)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  static int dc = 0, window = 0;
+  rig.surface().add_dc(&dc, &window, 8u, 8u);
+  rig.platform().fail_allocation_at(1u);
+  const std::uint32_t held = av::glicd::GlIcdRootProbe::windows(rig.root()).held();
+  bool refused = false;
+  /* The table's next growth is the allocation that fails. */
+  for (std::uint32_t step = 0u; step < 64u && !refused; step++) {
+      static int more_dcs[64], more_windows[64];
+      rig.surface().add_dc(&more_dcs[step], &more_windows[step], 8u, 8u);
+      refused = !rig.opengl32().set_pixel_format(&more_dcs[step], 1);
+  }
+  CHECK(refused);
+  check_error(rig, Root::error_not_enough_memory);
+  CHECK(av::glicd::GlIcdRootProbe::windows(rig.root()).held() >= held);
   CHECK(rig.root().invariants_hold()); }
 
 TEST(gl_icd_root, a_swap_forgets_the_windows_that_are_gone)
@@ -210,6 +240,7 @@ TEST(gl_icd_root, a_swap_forgets_the_windows_that_are_gone)
 TEST(gl_icd_root, nothing_reaches_the_device_until_a_context_is_made_current)
 { GlIcdRig rig;
   rig.load_with_format();
+  const std::uint32_t windows = rig.platform().live_allocations();
   void *const context = rig.opengl32().create_context(rig.dc());
   CHECK(context != nullptr);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::enumerate_adapters), 0u);
@@ -230,7 +261,8 @@ TEST(gl_icd_root, nothing_reaches_the_device_until_a_context_is_made_current)
   CHECK(rig.root().invariants_hold());
   CHECK(rig.opengl32().delete_context(context));
   CHECK_EQ(rig.kmt().open_objects(), 0u);
-  CHECK_EQ(rig.platform().live_allocations(), 0u); }
+  /* What is left is the window's format, which lasts as long as the window. */
+  CHECK_EQ(rig.platform().live_allocations(), windows); }
 
 TEST(gl_icd_root, a_context_needs_layer_0_and_a_window_with_a_format)
 { GlIcdRig rig;
@@ -241,24 +273,32 @@ TEST(gl_icd_root, a_context_needs_layer_0_and_a_window_with_a_format)
   check_error(rig, Root::error_invalid_pixel_format);
   CHECK_EQ(rig.root().create_context(rig.memory_dc()), 0u);
   check_error(rig, Root::error_invalid_pixel_format);
-  CHECK_EQ(rig.root().create_context(rig.dc()), 0x10001u);
+  CHECK_EQ(rig.root().create_context(rig.dc()), 1u);
   CHECK_EQ(rig.threads().last_error(), 0u); }
 
-TEST(gl_icd_root, a_257th_context_is_out_of_memory)
+/* Well past the 256 contexts the table once held, and one with no memory for
+ * it is out of memory. */
+TEST(gl_icd_root, contexts_past_the_old_bound_and_one_with_no_memory)
 { GlIcdRig rig;
   rig.load_with_format();
-  for (std::uint32_t index = 0u; index < 256u; index++) CHECK(rig.root().create_context(rig.dc()) != 0u);
-  CHECK_EQ(rig.root().create_context(rig.dc()), 0u);
-  check_error(rig, Root::error_not_enough_memory); }
+  for (std::uint32_t index = 0u; index < 600u; index++) CHECK_EQ(rig.root().create_context(rig.dc()), index + 1u);
+  CHECK_EQ(rig.root().invariants_hold(), true);
+  /* The next allocation fails: whichever create first needs one is refused. */
+  rig.platform().fail_allocation_at(1u);
+  std::uint32_t made = 600u;
+  while (made < 2000u && rig.root().create_context(rig.dc()) != 0u) made++;
+  CHECK(made < 2000u);
+  check_error(rig, Root::error_not_enough_memory);
+  CHECK(rig.root().invariants_hold()); }
 
 TEST(gl_icd_root, set_context_refuses_a_handle_it_did_not_make_and_a_window_of_another_format)
 { GlIcdRig rig;
   rig.load_with_format();
   CHECK(rig.opengl32().set_pixel_format(rig.other_dc(), 2));
   const std::uint64_t handle = rig.root().create_context(rig.dc());
-  CHECK(rig.root().set_context(rig.dc(), 0x10002u, nullptr) == nullptr);
+  CHECK(rig.root().set_context(rig.dc(), handle + 1u, nullptr) == nullptr);
   check_error(rig, Root::error_invalid_handle);
-  CHECK(rig.root().set_context(rig.dc(), handle + 0x10000u, nullptr) == nullptr);
+  CHECK(rig.root().set_context(rig.dc(), handle + 0x100000000ull, nullptr) == nullptr);
   check_error(rig, Root::error_invalid_handle);
   CHECK(rig.root().set_context(rig.other_dc(), handle, nullptr) == nullptr);
   check_error(rig, Root::error_invalid_pixel_format);
@@ -900,8 +940,8 @@ TEST(gl_icd_root, a_create_with_attributes_opengl32_does_not_finish_leaves_nothi
 TEST(gl_icd_root, a_create_with_attributes_and_no_room_is_out_of_memory)
 { GlIcdRig rig;
   rig.load_with_format();
-  for (std::uint32_t index = 0u; index < 256u; index++) CHECK(rig.root().create_context(rig.dc()) != 0u);
   const std::int32_t none[] = {0};
+  rig.platform().fail_allocation_at(1u);
   CHECK(rig.root().create_context_attribs(rig.dc(), nullptr, none) == nullptr);
   check_error(rig, Root::error_not_enough_memory); }
 
@@ -928,7 +968,7 @@ TEST(gl_icd_root, reports_busy_when_its_lock_is_held_and_everything_otherwise)
   rig.root().report(full);
   CHECK(std::strncmp(full.dump(), "root/0 busy=false callbacks=9 current_anywhere=1\nconnection/0 users=1 ", 69u) == 0);
   CHECK(std::strstr(full.dump(), "\nwindows/0 held=1\n") != nullptr);
-  CHECK(std::strstr(full.dump(), "\ncontexts/0 live=1\ncontexts/0/context/65537 state=made owner=1 ") != nullptr); }
+  CHECK(std::strstr(full.dump(), "\ncontexts/0 live=1\ncontexts/0/context/1 state=made owner=1 ") != nullptr); }
 
 TEST(gl_icd_root, a_dropped_command_is_logged_and_sync_tokens_count_up)
 { GlIcdRig rig;
@@ -1052,14 +1092,14 @@ TEST(gl_icd_root_invariants, fail_when_a_part_it_owns_is_broken)
   av::glicd::PixelFormatTableProbe::repeat_row(GlIcdRootProbe::formats(formats.root()));
   CHECK(!formats.root().invariants_hold());
   GlIcdRig windows;
-  av::glicd::WindowTableProbe::overfill(GlIcdRootProbe::windows(windows.root()));
+  av::glicd::WindowTableProbe::plant_unformatted(GlIcdRootProbe::windows(windows.root()));
   CHECK(!windows.root().invariants_hold());
   GlIcdRig connection;
   av::icd::IcdConnectionProbe::set_users(GlIcdRootProbe::connection(connection.root()), 1u);
   CHECK(!connection.root().invariants_hold());
   av::icd::IcdConnectionProbe::set_users(GlIcdRootProbe::connection(connection.root()), 0u);
   GlIcdRig contexts;
-  av::glicd::GlContextTableProbe::zero_generation(GlIcdRootProbe::contexts(contexts.root()));
+  av::glicd::GlContextTableProbe::zero_next(GlIcdRootProbe::contexts(contexts.root()));
   CHECK(!contexts.root().invariants_hold()); }
 
 TEST(gl_icd_root_invariants, fail_when_a_thread_names_a_context_another_thread_owns)

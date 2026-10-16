@@ -19,6 +19,7 @@
 #ifndef AV_GLICD_GL_PRESENT_LOOP_HPP
 #define AV_GLICD_GL_PRESENT_LOOP_HPP
 
+#include "core/support/growable_array.hpp"
 #include "icd/common/once_latch.hpp"
 #include "icd/common/service_thread.hpp"
 #include "icd/opengl/handed_frame.hpp"
@@ -30,6 +31,7 @@ class LogSink;
 }  // namespace av
 
 namespace av {
+class BlockSource;
 class Kmt;
 class StateWriter;
 }  // namespace av
@@ -48,7 +50,6 @@ struct GlPresentLoopProbe;
 
 class GlPresentLoop final : public icd::ServiceLoop {
 public:
-    static constexpr uint32_t max_frames = 32u;
     /* An idle thread looks again this often; a hand-over wakes it at once. */
     static constexpr uint32_t idle_milliseconds = 1000u;
     /* A swap waiting for a slot looks again this often, this many times,
@@ -57,7 +58,7 @@ public:
     static constexpr uint32_t slot_milliseconds = 4u;
     static constexpr uint32_t slot_looks = 500u;
 
-    GlPresentLoop(icd::ServiceThread &thread, icd::WakeSignal &handed, icd::WakeSignal &shown,
+    GlPresentLoop(BlockSource &memory, icd::ServiceThread &thread, icd::WakeSignal &handed, icd::WakeSignal &shown,
                   icd::ThreadLock &lock, Kmt &kmt, icd::WindowSurface &surface, icd::WindowChains &chains,
                   LogSink &log);
     ~GlPresentLoop();
@@ -74,7 +75,8 @@ public:
      * `reserved`, waiting for the thread to show one while all are taken;
      * `slots` when none came free in time, and the caller drops its frame. */
     uint32_t free_slot(const BackBufferPresenter &owner, uint32_t slots, uint32_t reserved);
-    /* Queues `frame` and wakes the thread; false when the table is full. */
+    /* Queues `frame` and wakes the thread; false, the frame dropped, when
+     * there is no memory for a row. */
     bool     hand(const HandedFrame &frame);
     /* Returns once nothing of `owner`'s is queued or being shown: before its
      * room or its pixels change, and before it goes. What the thread will not
@@ -102,7 +104,15 @@ public:
 private:
     enum class Stage : uint8_t { free, queued, showing };
 
-    /* The queued frame handed first, or max_frames. */
+    struct Row {
+        HandedFrame frame_;
+        Stage       stage_;
+        uint64_t    order_;
+    };
+
+    static constexpr uint32_t no_row = 0xFFFFFFFFu;
+
+    /* The queued frame handed first, or no_row. */
     uint32_t oldest() const;
     uint32_t free_row() const;
     uint32_t held_by(const BackBufferPresenter &owner) const;
@@ -126,9 +136,9 @@ private:
     icd::WindowSurface &surface_;
     icd::WindowChains  &chains_;
     LogSink       &log_;
-    HandedFrame         frames_[max_frames];
-    Stage               stages_[max_frames];
-    uint64_t            orders_[max_frames];
+    /* As many as frames are ever handed at once - two for each window
+     * presenting - and reused once free. */
+    GrowableArray<Row>  rows_;
     uint64_t            next_order_;
     uint64_t            shown_frames_;
     uint64_t            dropped_frames_;
