@@ -26,12 +26,14 @@
 #include "icd/common/loss_latch.hpp"
 #include "icd/common/refused_calls.hpp"
 #include "icd/common/once_latch.hpp"
+#include "icd/common/open_mappings.hpp"
+#include "icd/common/staged_mapping.hpp"
+#include "icd/common/written_runs.hpp"
 #include "icd/d3d/command_recording.hpp"
 #include "icd/d3d/context_slices.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/upload_sink.hpp"
-#include "icd/d3d/write_maps.hpp"
 #include "um/d3d/reentrant_call_lock.hpp"
 #include "um/common/srw_lock.hpp"
 #include "um/d3d/d3d_call_trace.hpp"
@@ -173,6 +175,10 @@ private:
     uint32_t subresource_count(const ResourceRecord &resource) const;
 
     [[nodiscard]] bool upload_written(const ResourceRecord &resource, uint32_t flags);
+    [[nodiscard]] bool open_map(const ResourceRecord &resource, uint32_t subresource, size_t offset, size_t bytes,
+                                uint32_t flags);
+    /* Every map of the resource `id` names forgotten: it is destroyed mapped. */
+    void               forget_maps(uint32_t id);
     /* A dynamic buffer the CPU writes, made on a slice of the session's slice
      * store the host draws from in place; false, nothing taken, where the
      * session has none or this is a deferred context. */
@@ -280,8 +286,14 @@ private:
     d3d::D3dSession          &session_;
     BlockSource           &memory_;
     WatchedShadows         shadows_;
-    /* The subresources mapped for writing, and how (WriteMaps). */
-    d3d::WriteMaps         maps_;
+    /* The subresources mapped for writing, each with the copy flags its own
+     * map gave - DISCARD or NO_OVERWRITE, which the upload at the unmap
+     * carries to the host's UpdateSubresource1 - over the shadow, which
+     * outlives them. Kept per subresource: a cube's faces or a texture's
+     * mips may be open at once with different maps. */
+    icd::OpenMappings<icd::StagedMapping> maps_;
+    /* The runs of a watched shadow an unmap sends, kept off the stack. */
+    icd::WrittenRuns       written_;
     LogSink          &log_;
     KeyedLog         lines_;
     icd::RefusedCalls refused_;

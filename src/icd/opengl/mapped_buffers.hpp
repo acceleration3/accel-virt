@@ -8,9 +8,9 @@
 #ifndef AV_GLICD_MAPPED_BUFFERS_HPP
 #define AV_GLICD_MAPPED_BUFFERS_HPP
 
-#include "core/support/keyed_slots.hpp"
-#include "core/support/object_pool.hpp"
 #include "icd/common/once_latch.hpp"
+#include "icd/common/open_mappings.hpp"
+#include "icd/opengl/buffer_map_transfer.hpp"
 #include "icd/opengl/buffer_mapping.hpp"
 
 #include <stdint.h>
@@ -24,9 +24,6 @@ class BlockSource;
 class ClientTransport;
 class StateWriter;
 }  // namespace av
-
-namespace av::icd {
-}
 
 namespace av::glicd {
 
@@ -79,17 +76,17 @@ public:
 
 private:
     /* The mapping of `buffer`, or null; 0 maps nothing. */
-    BufferMapping *find(uint32_t buffer) const;
-    void           drop(uint32_t buffer);
-    void           log_once();
+    BufferMapping       *find(uint32_t buffer);
+    const BufferMapping *find(uint32_t buffer) const;
+    void                 drop(BufferMapping &mapping);
+    void                 log_once();
 
-    BlockSource                             &memory_;
-    BufferShadows                           &shadows_;
-    LogSink                                 &log_;
-    ObjectPool<BufferMapping>                pool_;
-    /* Each mapping by the buffer it maps. */
-    KeyedSlots<uint32_t, BufferMapping *>    mappings_;
-    uint32_t                       persistent_writers_;
+    BufferShadows                     &shadows_;
+    LogSink                           &log_;
+    BufferMapTransfer                  transfer_;
+    /* Each mapping by the buffer it maps: OpenGL maps a buffer once. */
+    icd::OpenMappings<BufferMapping>   mappings_;
+    uint32_t                           persistent_writers_;
     icd::OnceLatch                 logged_;
 
     friend struct MappedBuffersProbe;

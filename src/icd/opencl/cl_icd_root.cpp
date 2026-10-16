@@ -1501,11 +1501,11 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
     /* A buffer over the application's own memory maps to that memory, as the
      * API says it does; any other is staged in a block of the ICD's own.
      * Either is filled here and written back at the unmap. */
-    uint8_t *const own = named->application_memory();
-    uint8_t *const at = own != nullptr ? context->take_application_mapping(named->wire(), mapped, offset, bytes,
-                                                                             flags, own + offset)
-                                       : context->take_mapping(named->wire(), mapped, offset, bytes, flags);
-    if (at == nullptr) {
+    uint8_t *const      own = named->application_memory();
+    MappedRegion *const taken = own != nullptr ? context->take_application_mapping(named->wire(), mapped, offset,
+                                                                                    bytes, flags, own + offset)
+                                               : context->take_mapping(named->wire(), mapped, offset, bytes, flags);
+    if (taken == nullptr) {
         refusals_.note_map("clEnqueueMapBuffer: no slot or no staging block for a map", bytes, context->mappings());
         static_cast<void>(
             av::clproto::av_clEnqueueUnmapMemObject(*wire, held->wire(), named->wire(), mapped, 0u, nullptr, nullptr));
@@ -1516,11 +1516,9 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
      * write-invalidate map promises nothing about them, so it is not read. */
     if ((flags & CL_MAP_WRITE_INVALIDATE_REGION) == 0u) {
         ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
-        const cl_int     read = chunks.read(named->wire(), offset, bytes, at);
+        const cl_int     read = chunks.read(named->wire(), offset, bytes, taken->at());
         if (read != CL_SUCCESS) {
-            /* take_mapping answered `at`, so this is the row it took. */
-            MappedRegion *const region = context->mapping_at(at);
-            context->give_back_mapping(*region);
+            context->give_back_mapping(*taken);
             static_cast<void>(av::clproto::av_clEnqueueUnmapMemObject(*wire, held->wire(), named->wire(), mapped,
                                                                       0u, nullptr, nullptr));
             report_error(error, read);
@@ -1532,7 +1530,7 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
             wrap(*wire, ClObject::Kind::event, mapped_event, context, held, nullptr));
     }
     report_error(error, CL_SUCCESS);
-    return at;
+    return taken->at();
 }
 
 cl_int ClIcdRoot::unmap(cl_command_queue queue, cl_mem buffer, void *pointer, cl_event *event,
@@ -1546,8 +1544,8 @@ cl_int ClIcdRoot::unmap(cl_command_queue queue, cl_mem buffer, void *pointer, cl
     GuestClContext *const context = held->context();
     if (context == nullptr) return CL_INVALID_CONTEXT;
     /* The pointer the map answered, and not an address inside it. */
-    MappedRegion *const region = context->mapping_at(pointer);
-    if (region == nullptr || region->buffer() != named->wire()) return CL_INVALID_VALUE;
+    MappedRegion *const region = context->mapping_at(named->wire(), pointer);
+    if (region == nullptr) return CL_INVALID_VALUE;
     ClientTransport *const wire = context->wire();
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     /* The write-back after the unmap is a transfer the host blocks on. */
@@ -1569,7 +1567,8 @@ cl_int ClIcdRoot::unmap(cl_command_queue queue, cl_mem buffer, void *pointer, cl
     cl_int written = CL_SUCCESS;
     if (unmapped == CL_SUCCESS && region->writes_back()) {
         ClTransferChunks chunks(*wire, held->wire(), context_of(*held)->staging());
-        written = chunks.write(named->wire(), region->offset(), region->bytes(), region->at());
+        written = chunks.write(named->wire(), static_cast<size_t>(region->offset()),
+                               static_cast<size_t>(region->bytes()), region->at());
     }
     context->give_back_mapping(*region);
     if (unmapped != CL_SUCCESS) return unmapped;

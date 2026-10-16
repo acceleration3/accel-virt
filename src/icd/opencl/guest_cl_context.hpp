@@ -17,7 +17,6 @@
 #ifndef AV_CLICD_GUEST_CL_CONTEXT_HPP
 #define AV_CLICD_GUEST_CL_CONTEXT_HPP
 
-#include "core/support/keyed_slots.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "guest/transport/kmt_blob_arena.hpp"
@@ -27,6 +26,7 @@
 #include "icd/common/context_link.hpp"
 #include "icd/common/host_channel.hpp"
 #include "icd/common/loss_latch.hpp"
+#include "icd/common/open_mappings.hpp"
 #include "icd/opencl/cl_d3d11_objects.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
 #include "icd/opencl/cl_property_list.hpp"
@@ -175,7 +175,7 @@ public:
     /* Takes a mapping of `bytes` at `offset` into `buffer`, staging the bytes
      * in guest memory. Null when there is no room for another mapping or no
      * memory for the block; the caller is what fills it. */
-    uint8_t         *take_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
+    MappedRegion    *take_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
                                   cl_map_flags flags);
     /* Takes a mapping whose memory is the arena's rather than a staged block
      * of its own: `at` is that memory, nothing is read in at the map and
@@ -187,20 +187,17 @@ public:
      * (CL_MEM_USE_HOST_PTR): `at` is that memory, which the caller fills and
      * the unmap writes back, and which is never freed here. Null when there
      * is no room for another mapping. */
-    uint8_t         *take_application_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
+    MappedRegion    *take_application_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
                                               cl_map_flags flags, uint8_t *at);
     /* Takes a staged mapping of the `region` of `image` at `origin`, in
      * texels of `element_bytes`, its rows and slices packed in the block.
      * Null when there is no room for another mapping, no memory for the
      * block, or a region whose size does not fit; the caller fills it. */
-    uint8_t         *take_image_mapping(uint64_t image, const size_t *origin, const size_t *region,
+    MappedRegion    *take_image_mapping(uint64_t image, const size_t *origin, const size_t *region,
                                         size_t element_bytes, cl_map_flags flags);
-    /* The mapping `pointer` answers, or null for a pointer no live mapping
-     * returned. */
-    MappedRegion    *mapping_at(const void *pointer);
-    /* A region no live mapping holds, made when every one is held; null when
-     * there is no memory for one. */
-    MappedRegion    *free_mapping();
+    /* The mapping of `buffer` that `pointer` answers, or null for a pointer
+     * no live mapping of it returned. */
+    MappedRegion    *mapping_at(uint64_t buffer, const void *pointer);
     /* Gives one back, freeing the staged block. */
     void             give_back_mapping(MappedRegion &region);
     /* Gives back every mapping of `buffer`, which is going: an application
@@ -235,10 +232,9 @@ private:
     SvmTable                             svm_;
     ClExternalMemory                     external_;
     ClD3d11Objects                       d3d11_;
-    /* As many mappings as the context has held at once - Affinity keeps a
-     * small buffer mapped for each tile of an open document - each at an
-     * address that holds while it lives, and reused once given back. */
-    KeyedSlots<uint32_t, MappedRegion>   mappings_;
+    /* As many mappings as the context holds at once - Affinity keeps a
+     * small buffer mapped for each tile of an open document. */
+    icd::OpenMappings<MappedRegion>      mappings_;
     ClPropertyList                       properties_;
     ClContextNotify                      notify_;
     State                                state_;

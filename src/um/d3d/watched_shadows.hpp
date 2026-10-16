@@ -12,16 +12,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
+namespace av::icd {
+class WrittenRuns;
+}  // namespace av::icd
+
 namespace av::d3d11 {
 
 class WatchedShadows {
 public:
-    struct Run {
-        size_t offset;
-        size_t bytes;
-    };
-    static constexpr uint32_t max_runs = 32u;
-
     explicit WatchedShadows(BlockSource &heap);
     WatchedShadows(const WatchedShadows &) = delete;
     WatchedShadows &operator=(const WatchedShadows &) = delete;
@@ -29,10 +27,11 @@ public:
     /* `watched` says which kind it gave: the release must be told. */
     uint8_t *allocate(size_t bytes, bool &watched);
     void     release(uint8_t *shadow, bool watched);
-    /* The runs of [start, start + bytes) written since the watch last began,
-     * in order and merged, then the watch begins again. False when they
-     * cannot be told - too many pages or runs - and the range goes whole. */
-    bool     take_written(uint8_t *start, size_t bytes, Run *runs, uint32_t &count);
+    /* The pages of [start, start + bytes) written since the watch last
+     * began, noted in `runs` (empty first) from `start`, then the watch
+     * begins again. False when they cannot be told - too many pages or runs -
+     * and the range goes whole. */
+    bool     take_written(uint8_t *start, size_t bytes, icd::WrittenRuns &runs);
     /* The watch begins again: what the driver itself wrote there, the host has. */
     void     forget_writes(uint8_t *start, size_t bytes);
 

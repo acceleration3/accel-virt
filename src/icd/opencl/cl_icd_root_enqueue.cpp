@@ -311,8 +311,9 @@ void *ClIcdRoot::map_image(cl_command_queue queue, cl_mem image, cl_bool blockin
         report_error(error, settled);
         return nullptr;
     }
-    uint8_t *const at = context->take_image_mapping(named->wire(), origin, region, layout.element_bytes(), flags);
-    if (at == nullptr) {
+    MappedRegion *const taken =
+        context->take_image_mapping(named->wire(), origin, region, layout.element_bytes(), flags);
+    if (taken == nullptr) {
         refusals_.note_map("clEnqueueMapImage: no slot or no staging block for a map", layout.slice_pitch(),
                            context->mappings());
         report_error(error, CL_OUT_OF_HOST_MEMORY);
@@ -320,9 +321,9 @@ void *ClIcdRoot::map_image(cl_command_queue queue, cl_mem image, cl_bool blockin
     }
     if ((flags & CL_MAP_WRITE_INVALIDATE_REGION) == 0u) {
         ClTransferChunks chunks(*wire, held->wire(), context->staging());
-        const cl_int     read = chunks.read_image(named->wire(), layout, at);
+        const cl_int     read = chunks.read_image(named->wire(), layout, taken->at());
         if (read != CL_SUCCESS) {
-            context->give_back_mapping(*context->mapping_at(at));
+            context->give_back_mapping(*taken);
             report_error(error, read);
             return nullptr;
         }
@@ -330,7 +331,8 @@ void *ClIcdRoot::map_image(cl_command_queue queue, cl_mem image, cl_bool blockin
     *row_pitch = layout.row_pitch();
     if (slice_pitch != nullptr)
         *slice_pitch = type == CL_MEM_OBJECT_IMAGE1D_ARRAY ? layout.row_pitch() : sliced ? layout.slice_pitch() : 0u;
-    const cl_int marked = marker_event(*wire, *held, event);
+    uint8_t *const at = taken->at();
+    const cl_int   marked = marker_event(*wire, *held, event);
     report_error(error, marked);
     return at;
 }

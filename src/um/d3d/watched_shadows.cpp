@@ -1,6 +1,7 @@
 #include "um/d3d/watched_shadows.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/common/written_runs.hpp"
 
 #include <windows.h>
 
@@ -32,10 +33,10 @@ void WatchedShadows::release(uint8_t *shadow, bool watched)
     else heap_.release(shadow);
 }
 
-bool WatchedShadows::take_written(uint8_t *start, size_t bytes, Run *runs, uint32_t &count)
+bool WatchedShadows::take_written(uint8_t *start, size_t bytes, icd::WrittenRuns &runs)
 {
     AV_SCOPE("WatchedShadows::take_written");
-    count = 0u;
+    runs.clear();
     const uintptr_t begin = reinterpret_cast<uintptr_t>(start);
     const uintptr_t end = begin + bytes;
     void     *pages[max_pages];
@@ -51,12 +52,7 @@ bool WatchedShadows::take_written(uint8_t *start, size_t bytes, Run *runs, uint3
         const uintptr_t from = first > begin ? first : begin;
         const uintptr_t to = first + page < end ? first + page : end;
         if (to <= from) continue;
-        if (count != 0u && runs[count - 1u].offset + runs[count - 1u].bytes == from - begin) {
-            runs[count - 1u].bytes += to - from;
-            continue;
-        }
-        if (count == max_runs) return false;
-        runs[count++] = Run{from - begin, to - from};
+        if (!runs.note(from - begin, to - from)) return false;
     }
     return true;
 }

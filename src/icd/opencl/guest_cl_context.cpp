@@ -22,7 +22,7 @@ GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memo
       channel_(memory, log, "avcl: ", icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes),
                send_lock),
       blocks_(memory, blocks_lock), orphaned_work_(false), staging_(memory, blocks_lock),
-      svm_(memory), external_(handles, memory, log), d3d11_(memory), mappings_(memory, Pool::paged), properties_(), notify_(), state_(State::created)
+      svm_(memory), external_(handles, memory, log), d3d11_(memory), mappings_(memory), properties_(), notify_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
 }
@@ -120,7 +120,7 @@ void GuestClContext::teardown()
     wakes_ = false;
     /* A buffer released with a mapping live keeps the mapping's memory until
      * the unmap, so the blocks go here rather than with the buffer. */
-    mappings_.for_each([this](uint32_t, MappedRegion &region) { give_back_mapping(region); });
+    mappings_.close_all();
     svm_.give_back_all();
     /* Before the transport goes, and only while it can still carry a release:
      * the device counts this context as a holder of every object it opened,
@@ -244,112 +244,81 @@ bool GuestClContext::has_arena() const
     return channel_.arena_view() != nullptr;
 }
 
-uint8_t *GuestClContext::take_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
+MappedRegion *GuestClContext::take_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
                                       cl_map_flags flags)
 {
     AV_SCOPE("GuestClContext::take_mapping");
-    if (buffer == 0u || host == 0u || bytes == 0u) return nullptr;
-    MappedRegion *const region = free_mapping();
-    if (region == nullptr) return nullptr;
-    uint8_t *const block = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
-    if (block == nullptr) return nullptr;
+    if (host == 0u) return nullptr;
     /* A write-invalidate map is never read from the host, and a read may
-     * answer short: what nothing fills is still the application's to read,
-     * so it reads zeros, never what the heap last held there. OpenGL's
-     * staged maps do the same (BufferMapping). */
-    __builtin_memset(block, 0, bytes);
-    region->take(buffer, host, offset, bytes, flags, block, MappedRegion::Memory::staged);
-    return block;
+     * answer short: the copy starts zeroed (OpenMappings::stage). */
+    MappedRegion *taken = nullptr;
+    if (mappings_.stage(MappedRegion(buffer, host, offset, bytes, flags, MappedRegion::Memory::staged), taken) !=
+        Status::ok)
+        return nullptr;
+    return taken;
 }
 
-uint8_t *GuestClContext::take_image_mapping(uint64_t image, const size_t *origin, const size_t *region,
+MappedRegion *GuestClContext::take_image_mapping(uint64_t image, const size_t *origin, const size_t *region,
                                             size_t element_bytes, cl_map_flags flags)
 {
     AV_SCOPE("GuestClContext::take_image_mapping");
     const ClImageRegion layout(origin, region, 0u, 0u, element_bytes);
-    if (image == 0u || !layout.valid()) return nullptr;
-    const size_t bytes = layout.slice_pitch() * layout.slices();
-    MappedRegion *const mapping = free_mapping();
-    if (mapping == nullptr) return nullptr;
-    uint8_t *const block = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
-    if (block == nullptr) return nullptr;
-    __builtin_memset(block, 0, bytes);
-    mapping->take(image, 0u, 0u, bytes, flags, block, MappedRegion::Memory::staged);
-    mapping->place_in_image(origin, region, element_bytes);
-    return block;
+    if (!layout.valid()) return nullptr;
+    const size_t  bytes = layout.slice_pitch() * layout.slices();
+    MappedRegion *taken = nullptr;
+    if (mappings_.stage(MappedRegion(image, origin, region, element_bytes, bytes, flags), taken) != Status::ok)
+        return nullptr;
+    return taken;
 }
 
 MappedRegion *GuestClContext::take_shared_mapping(uint64_t buffer, uint64_t host, size_t offset,
                                                   size_t bytes, uint8_t *at)
 {
     AV_SCOPE("GuestClContext::take_shared_mapping");
-    if (buffer == 0u || host == 0u || bytes == 0u || at == nullptr) return nullptr;
-    MappedRegion *const region = free_mapping();
-    if (region == nullptr) return nullptr;
-    /* Not staged: no block was allocated for it, so none is freed with it,
-     * and the unmap has nothing to write back. The flags are the map's, but
-     * they change nothing here - what a write through this mapping reaches
-     * is the buffer itself. */
-    region->take(buffer, host, offset, bytes, 0u, at, MappedRegion::Memory::shared);
-    return region;
+    if (host == 0u || bytes == 0u) return nullptr;
+    /* The flags are the map's, but they change nothing here - what a write
+     * through this mapping reaches is the buffer itself. */
+    MappedRegion *taken = nullptr;
+    if (mappings_.lend(MappedRegion(buffer, host, offset, bytes, 0u, MappedRegion::Memory::shared), at, taken) !=
+        Status::ok)
+        return nullptr;
+    return taken;
 }
 
-uint8_t *GuestClContext::take_application_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
+MappedRegion *GuestClContext::take_application_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
                                                   cl_map_flags flags, uint8_t *at)
 {
     AV_SCOPE("GuestClContext::take_application_mapping");
-    if (buffer == 0u || host == 0u || bytes == 0u || at == nullptr) return nullptr;
-    MappedRegion *const region = free_mapping();
-    if (region == nullptr) return nullptr;
-    region->take(buffer, host, offset, bytes, flags, at, MappedRegion::Memory::application);
-    return at;
+    if (host == 0u || bytes == 0u) return nullptr;
+    MappedRegion *taken = nullptr;
+    if (mappings_.lend(MappedRegion(buffer, host, offset, bytes, flags, MappedRegion::Memory::application), at,
+                       taken) != Status::ok)
+        return nullptr;
+    return taken;
 }
 
-MappedRegion *GuestClContext::mapping_at(const void *pointer)
+MappedRegion *GuestClContext::mapping_at(uint64_t buffer, const void *pointer)
 {
     AV_SCOPE("GuestClContext::mapping_at");
-    for (uint32_t slot = mappings_.next_live(0u); slot != mappings_.no_slot; slot = mappings_.next_live(slot + 1u))
-        if (mappings_.at(slot)->answers(pointer)) return mappings_.at(slot);
-    return nullptr;
-}
-
-MappedRegion *GuestClContext::free_mapping()
-{
-    AV_SCOPE("GuestClContext::free_mapping");
-    for (uint32_t slot = mappings_.next_live(0u); slot != mappings_.no_slot; slot = mappings_.next_live(slot + 1u))
-        if (!mappings_.at(slot)->held()) return mappings_.at(slot);
-    /* Regions are never erased, so the next slot is a key no region has. */
-    uint32_t slot = 0u;
-    if (mappings_.insert(mappings_.slots(), MappedRegion(), slot) != Status::ok) return nullptr;
-    return mappings_.at(slot);
+    return mappings_.answering(buffer, pointer);
 }
 
 void GuestClContext::give_back_mapping(MappedRegion &region)
 {
     AV_SCOPE("GuestClContext::give_back_mapping");
-    if (!region.held()) return;
-    if (region.staged()) memory_.release(region.at());
-    region.give_up();
+    mappings_.close(region);
 }
 
 uint32_t GuestClContext::give_back_mappings_of(uint64_t buffer)
 {
     AV_SCOPE("GuestClContext::give_back_mappings_of");
-    uint32_t given = 0u;
-    mappings_.for_each([this, buffer, &given](uint32_t, MappedRegion &region) {
-        if (!region.held() || region.buffer() != buffer) return;
-        give_back_mapping(region);
-        ++given;
-    });
-    return given;
+    return mappings_.close_if([buffer](const MappedRegion &region) { return region.object() == buffer; });
 }
 
 uint32_t GuestClContext::mappings() const
 {
     AV_SCOPE("GuestClContext::mappings");
-    uint32_t held = 0u;
-    mappings_.for_each([&held](uint32_t, const MappedRegion &region) { held += region.held() ? 1u : 0u; });
-    return held;
+    return mappings_.count();
 }
 
 void GuestClContext::report(StateWriter &writer) const
@@ -371,17 +340,6 @@ bool GuestClContext::invariants_hold() const
 {
     AV_SCOPE("GuestClContext::invariants_hold");
     if (!svm_.invariants_hold() || !external_.invariants_hold() || !d3d11_.invariants_hold()) return false;
-    const uint32_t slots = mappings_.slots();
-    for (uint32_t slot = 0u; slot < slots; ++slot) {
-        const MappedRegion *const region = mappings_.at(slot);
-        if (region == nullptr || !region->invariants_hold()) return false;
-        /* No two live mappings answer the same pointer: an unmap would then
-         * have two mappings to choose between. */
-        for (uint32_t other = slot + 1u; other < slots && region->held(); ++other) {
-            const MappedRegion *const second = mappings_.at(other);
-            if (second != nullptr && second->held() && region->at() == second->at()) return false;
-        }
-    }
     if (!mappings_.invariants_hold()) return false;
     /* The channel and the lock around it are opened together and torn down
      * together, so one without the other is a make or a teardown that
