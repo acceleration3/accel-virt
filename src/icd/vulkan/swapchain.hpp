@@ -8,6 +8,7 @@
 #ifndef AV_SWAPCHAIN_HPP
 #define AV_SWAPCHAIN_HPP
 
+#include "core/log/driver_log.hpp"
 #include "icd/common/present_pacing.hpp"
 #include "icd/common/once_latch.hpp"
 #include "icd/vulkan/chained_image.hpp"
@@ -92,6 +93,7 @@ private:
     WindowSurface &windows_;
     PresentDevice  device_;
     ChainedImage   chained_;
+    DriverLog      lines_;
     PresentPacing  pacing_;
     LogSink       &log_;
     uint64_t       luid_;

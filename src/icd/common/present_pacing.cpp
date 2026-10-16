@@ -15,7 +15,7 @@ PresentPacing::~PresentPacing()
     pacer_.destroy();
 }
 
-Status PresentPacing::bind(Kmt &kmt, LogSink &log, uint32_t adapter, uint32_t device)
+Status PresentPacing::bind(Kmt &kmt, DriverLog &log, uint32_t adapter, uint32_t device)
 {
     AV_SCOPE("PresentPacing::bind");
     return pacer_.construct(kmt, log, adapter, device);

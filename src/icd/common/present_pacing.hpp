@@ -21,8 +21,8 @@
 #include <stdint.h>
 
 namespace av {
+class DriverLog;
 class Kmt;
-class LogSink;
 }  // namespace av
 
 namespace av::icd {
@@ -39,8 +39,9 @@ public:
     PresentPacing(const PresentPacing &) = delete;
     PresentPacing &operator=(const PresentPacing &) = delete;
 
-    /* The adapter whose blanks are waited for; a second bind is refused. */
-    [[nodiscard]] Status bind(Kmt &kmt, LogSink &log, uint32_t adapter, uint32_t device);
+    /* The adapter whose blanks are waited for; a second bind is refused.
+     * `log` is the presenting driver's: a refused wait is said in its name. */
+    [[nodiscard]] Status bind(Kmt &kmt, DriverLog &log, uint32_t adapter, uint32_t device);
     void                 unbind();
 
     /* False for an interval no reported extension defines, which leaves the

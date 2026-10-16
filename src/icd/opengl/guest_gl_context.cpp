@@ -32,7 +32,7 @@ GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memo
                                LogSink &log, const GlExtensionPolicy &extensions,
                                icd::SharedHandles &handles, int32_t pixel_format,
                                const GlContextOptions &options)
-    : memory_(memory), log_(log), policy_(extensions),
+    : memory_(memory), log_(log), lines_(log, "avgl: "), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_reported_(false),
       channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), extensions_(), framebuffers_(memory, log), shadows_(memory), staging_(), mappings_(memory, shadows_, log), externals_(handles, memory, log),
@@ -426,7 +426,7 @@ Status GuestGlContext::build()
     GuestConnection &device = link_.device();
     const Status     opened = channel_.open(device, options_);
     if (opened != Status::ok) return opened == Status::no_memory ? Status::no_memory : Status::invalid_parameter;
-    static_cast<void>(pacing_.bind(device.kmt(), log_, device.adapter(), device.device()));
+    static_cast<void>(pacing_.bind(device.kmt(), lines_, device.adapter(), device.device()));
     if (device.kmt().adapter_luid(device.adapter(), luid_) != Status::ok) luid_ = 0u;
     return Status::ok;
 }

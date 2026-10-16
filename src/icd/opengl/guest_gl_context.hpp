@@ -12,6 +12,7 @@
 #ifndef AV_GLICD_GUEST_GL_CONTEXT_HPP
 #define AV_GLICD_GUEST_GL_CONTEXT_HPP
 
+#include "core/log/driver_log.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "icd/common/context_link.hpp"
@@ -214,6 +215,7 @@ private:
 
     BlockSource                   &memory_;
     LogSink                  &log_;
+    DriverLog                      lines_;
     const GlExtensionPolicy       &policy_;
     int32_t                        pixel_format_;
     GlContextOptions               options_;

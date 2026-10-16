@@ -23,14 +23,14 @@ Swapchain::Swapchain(BlockSource &memory, WindowSurface &windows, WindowChains &
                      VkDevice device, VkPhysicalDevice physical, Kmt &kmt, LogSink &log, Connection &connection)
     : memory_(memory), windows_(windows), device_(entries, device, physical),
       chained_(entries, device, chains, connection.transport()),
-      pacing_(), log_(log), luid_(connection.luid()),
+      lines_(log, "avvk: "), pacing_(), log_(log), luid_(connection.luid()),
       app_device_(device), window_(nullptr), extent_{0u, 0u}, format_(static_cast<int32_t>(VK_FORMAT_UNDEFINED)),
       held_{}, count_(0u), next_(0u), frame_(nullptr),
       through_chain_(false), retired_(false), presented_(0u), window_refused_(), chain_refused_()
 {
     AV_SCOPE("Swapchain::Swapchain");
     /* Fresh, so the bind cannot be refused. */
-    static_cast<void>(pacing_.bind(kmt, log, connection.adapter(), connection.device()));
+    static_cast<void>(pacing_.bind(kmt, lines_, connection.adapter(), connection.device()));
 }
 
 Swapchain::~Swapchain()

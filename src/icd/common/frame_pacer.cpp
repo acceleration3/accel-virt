@@ -4,11 +4,11 @@
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/driver_log.hpp"
 
 namespace av::icd {
 
-FramePacer::FramePacer(Kmt &kmt, LogSink &log, uint32_t adapter, uint32_t device)
+FramePacer::FramePacer(Kmt &kmt, DriverLog &log, uint32_t adapter, uint32_t device)
     : kmt_(kmt), log_(log), adapter_(adapter), device_(device), blanks_(0u), failures_(0u), due_(0u),
       read_at_(0u), read_position_(), blank_since_admitted_(true)
 {
@@ -22,7 +22,7 @@ void FramePacer::wait()
         blanks_++;
         return;
     }
-    if (failures_++ == 0u) log_.write("avvk: FIFO present unpaced: the adapter's vertical blank wait failed");
+    if (failures_++ == 0u) log_.write("presents unpaced: the adapter's vertical blank wait failed");
 }
 
 /* A schedule of its own, a refresh apart from whenever the first frame came,

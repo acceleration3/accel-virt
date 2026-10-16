@@ -13,7 +13,7 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
+class DriverLog;
 }  // namespace av
 
 namespace av {
@@ -26,7 +26,8 @@ struct FramePacerProbe;
 
 class FramePacer {
 public:
-    FramePacer(Kmt &kmt, LogSink &log, uint32_t adapter, uint32_t device);
+    /* `log` is the pacing driver's: a refusal is said in its name. */
+    FramePacer(Kmt &kmt, DriverLog &log, uint32_t adapter, uint32_t device);
     FramePacer(const FramePacer &) = delete;
     FramePacer &operator=(const FramePacer &) = delete;
 
@@ -53,8 +54,8 @@ private:
     /* Where the scan-out cannot be read: one a refresh apart from the first. */
     bool admits_on_schedule(uint64_t now, uint64_t period);
 
-    Kmt     &kmt_;
-    LogSink &log_;
+    Kmt       &kmt_;
+    DriverLog &log_;
     uint32_t adapter_;
     uint32_t device_;
     uint64_t blanks_;
