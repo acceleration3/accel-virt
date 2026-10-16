@@ -47,6 +47,10 @@ EXCLUDE = {
     "src/guest/probe/d3d11_shared_entry.hpp": "the Direct3D 11 the D3D11 probe's shared-clear scenario calls, "
                              "implemented by WindowsD3d11SharedEntry over the system's d3d11.dll in src/um and by "
                              "ScriptedD3d11Shared in tests/harness, and exercised through every SharedClearWork test",
+    "src/guest/probe/d3d11_tir_entry.hpp": "the Direct3D 11 the D3D11 probe's target-independent rasterization "
+                             "scenario calls, implemented by WindowsD3d11TirEntry over the system's d3d11.dll in "
+                             "src/um and by ScriptedD3d11Tir in tests/harness, and exercised through every "
+                             "TirCoverageWork test",
     "src/guest/probe/d3d9ex_entry.hpp": "the Direct3D 9Ex the D3D9 probe's WPF scenario calls, implemented "
                              "by WindowsD3d9ExEntry over the system's d3d9.dll in src/um and by ScriptedD3d9Ex "
                              "in tests/harness, and exercised through every WpfPresentWork test",

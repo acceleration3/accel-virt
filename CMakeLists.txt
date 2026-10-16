@@ -34,7 +34,7 @@ add_compile_options(
 set(AV_WINDOWS_KIT_DIR ${CMAKE_SOURCE_DIR}/third_party/windows-kit CACHE PATH
     "Windows kit subset written by tools/fetch_windows_kit.sh")
 set(AV_WINDOWS_KIT_VERSION
-    "Microsoft.Windows.WDK.x64 10.0.26100.6584\nMicrosoft.Windows.SDK.CPP 10.0.26100.9169\nheaders km shared um-closure-3 umddi-4")
+    "Microsoft.Windows.WDK.x64 10.0.26100.6584\nMicrosoft.Windows.SDK.CPP 10.0.26100.9169\nheaders km shared um-closure-4 umddi-4")
 foreach(required VERSION overlay.yaml include/km/ntddk.h include/um/Windows.h lib/x64/ntoskrnl.lib)
   if(NOT EXISTS ${AV_WINDOWS_KIT_DIR}/${required})
     message(FATAL_ERROR "Windows kit: ${AV_WINDOWS_KIT_DIR}/${required} is missing; "

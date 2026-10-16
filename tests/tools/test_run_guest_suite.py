@@ -99,8 +99,11 @@ D3D_REPORTS = {
            "ok d3d11.deferred_buffers\r\nok d3d11.deferred_contexts\r\nok d3d11.deferred_frames\r\n"
            "ok d3d11.deferred_readback\r\nok d3d11.deferred_contents 256\r\nok d3d11.deferred_commit 0\r\n"
            "ok d3d11.shared_device\r\nok d3d11.shared_targets\r\nok d3d11.shared_readback\r\n"
-           "ok d3d11.shared_texels 3\r\nok d3d11.shared_device_kept\r\n"
-           "avd3d11probe: 19 passed, 0 failed\r\n"),
+           "ok d3d11.shared_texels 3\r\nok d3d11.shared_device_kept\r\nok d3d11.tir_device\r\n"
+           "ok d3d11.tir_pipeline\r\nok d3d11.tir_draw\r\nok d3d11.tir_readback\r\n"
+           "note d3d11.tir_coverage the device is a layer's: DXVK as released rasterizes a forced sample "
+           "count at the render target's\r\nok d3d11.tir_device_kept\r\n"
+           "avd3d11probe: 24 passed, 0 failed\r\n"),
     "12": ("ok d3d12.device\r\nok d3d12.feature_level 49152\r\nok d3d12.adapter_luid\r\nok d3d12.queue\r\n"
            "ok d3d12.target\r\nok d3d12.clear\r\nok d3d12.fence\r\nok d3d12.readback\r\n"
            "ok d3d12.pixels 4096\r\navd3d12probe: 9 passed, 0 failed\r\n"),
@@ -1073,7 +1076,7 @@ class GuestSuiteRun(unittest.TestCase):
             self.assertIn(f"pull C:\\av\\d3d{api}.txt", lines)
             self.assertEqual((self.work / f"d3d{api}.txt").read_text(newline=""), D3D_REPORTS[api])
         self.assertIn("guest: d3d9 ok: 11 passed through dxvk", result.stdout)
-        self.assertIn("guest: d3d11 ok: 19 passed through dxvk", result.stdout)
+        self.assertIn("guest: d3d11 ok: 24 passed through dxvk", result.stdout)
         self.assertIn("guest: d3d12 ok: 9 passed through vkd3d-proton", result.stdout)
         # It ran in the console session, as a window needs.
         self.assertTrue(any("schtasks.exe /create /tn avconsole" in line for line in lines))
@@ -1181,7 +1184,7 @@ class GuestSuiteRun(unittest.TestCase):
         cases = {
             "failed step": ({"avd3d11probe": D3D_REPORTS["11"].replace(
                 "ok d3d11.pixels 4096", "FAIL d3d11.pixels status=6 0").replace(
-                "19 passed, 0 failed", "18 passed, 1 failed")},
+                "24 passed, 0 failed", "23 passed, 1 failed")},
                 "d3d11 failed: 1 step(s) failed, exit 0; see d3d11.txt"),
             "missing step": ({"avd3d12probe": D3D_REPORTS["12"].replace("ok d3d12.fence\r\n", "").replace(
                 "9 passed", "8 passed")},

@@ -907,7 +907,7 @@ gives it (docs/host-memory.md, Budgets).
   which runs the probe on the system's runtime, this is avumd's path; through
   `--d3d` it is DXVK's.
 
-  Last, the D3D11 probe clears render targets shared between processes
+  Next, the D3D11 probe clears render targets shared between processes
   (`SharedClearWork`, the `shared_*` steps), as DWM does to the surfaces of a
   Windows.Graphics.Capture window capture: BGRA, `D3D11_RESOURCE_MISC_SHARED`,
   614x289 (the captured window), 33x7 and 1x1 - sizes whose tight rows are no
@@ -921,6 +921,22 @@ gives it (docs/host-memory.md, Budgets).
   session on it, the capture delivered 0.1 frames a second and the desktop
   went black. On that host the unfixed executor hangs the probe in
   `shared_readback`, which the run reports as the probe timing out.
+
+  Then it draws Direct2D's hairlines with target-independent rasterization
+  (`TirCoverageWork`, the `tir_*` steps), as Direct2D draws into its coverage
+  atlas: a device at feature level 11_1, a rasterizer state forcing 16
+  samples onto a single-sample R32_UINT target, a pixel shader writing
+  SV_Coverage and a blend state whose logic op ORs it in, the shaders hand-
+  assembled DXBC (`src/um/probe/d3d/tir_coverage_shaders.hpp`). Strokes 1/32
+  to 8/32 of a pixel thin, at offsets that put their edges on the pattern's
+  rows, are drawn in one call and read back (`tir_draw`, `tir_readback`);
+  every texel must be the mask a D3D rasterizer gives (`tir_coverage`, texels
+  right of 4096, against `CoverageTriangle`), and the device must still stand
+  (`tir_device_kept`). The host's DXVK rasterized such a draw at one sample,
+  and Affinity's hairlines lost rows; it now emulates the forced count
+  (`tools/dxvk-patches/0008`, and `test_d3d_tir_device` on the host). DXVK
+  beside the probe under `--d3d`, as released, ignores the forced count with
+  a render target bound, so there `tir_coverage` is a note.
 
   After those, the D3D11 probe has the host lose its GPU's Direct3D 11 device
   under it (`HostLossWork`, the `loss_*` steps; docs/protocol.md, "Losing the

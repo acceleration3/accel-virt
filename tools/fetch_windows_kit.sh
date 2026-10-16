@@ -27,10 +27,12 @@ UM_HEADERS=(apiquery2.h consoleapi.h consoleapi2.h consoleapi3.h datetimeapi.h d
 # What the D3D probes reach (feature 047, T028): d3d11.h and d3d12.h, their
 # COM closure, and the D3D10 and debug-layer headers d3d11.h includes of its
 # own accord. d3d9.h, dxgi.h and the RPC headers are in shared/, which is
-# taken whole. Together 5.6 MB of the um directory's 120.
+# taken whole. Together 5.6 MB of the um directory's 120. d3d11_1.h is the
+# 11.1 device's: the target-independent rasterization probe's rasterizer and
+# logic-op blend states (TirCoverageWork).
             combaseapi.h objbase.h objidl.h objidlbase.h Unknwn.h Unknwnbase.h oaidl.h ocidl.h oleidl.h
             oleauto.h ole2.h PropIdl.h PropIdlBase.h servprov.h coml2api.h cguid.h rpcnsi.h rpcnsip.h
-            urlmon.h msxml.h d3dcommon.h d3d11.h d3d11sdklayers.h d3d12.h d3d12sdklayers.h d3d10.h
+            urlmon.h msxml.h d3dcommon.h d3d11.h d3d11_1.h d3d11sdklayers.h d3d12.h d3d12sdklayers.h d3d10.h
             d3d10_1.h d3d10_1shader.h d3d10effect.h d3d10misc.h d3d10sdklayers.h d3d10shader.h
 # What the Khronos OpenCL loader reaches for its SetupAPI discovery path
 # (feature 052): its own closure - cfg.h, devpropdef.h, guiddef.h - is in
@@ -49,7 +51,7 @@ KIT=third_party/windows-kit
 CACHE=third_party/.cache
 PINNED="$WDK_ID $WDK_VERSION
 $SDK_ID $SDK_VERSION
-headers km shared um-closure-3 umddi-4"
+headers km shared um-closure-4 umddi-4"
 
 if [ -f "$KIT/VERSION" ] && [ "$(cat "$KIT/VERSION")" = "$PINNED" ]; then
     echo "windows kit: $KIT already at pinned versions"

@@ -141,7 +141,10 @@ GL_PICTURES = ("opengl-draw", "opengl-share", "opengl-recreated", "opengl-compat
 # Feature 047's three D3D probes, each through the layer beside it: DXVK's
 # d3d9.dll and d3d11.dll, vkd3d-proton's d3d12.dll. One summary and one step
 # list each, and the steps are the probe's own order - a probe that stops
-# printing one has not proven it, whatever its summary counts.
+# printing one has not proven it, whatever its summary counts. tir_coverage is
+# judged only on the system's runtime (gpu_matrix.py): DXVK beside the probe,
+# as released, ignores a forced sample count with a render target bound, and
+# the probe notes it there instead.
 D3D_SUMMARY = re.compile(rb"^avd3d(9|11|12)probe: (\d+) passed, (\d+) failed\r?$", re.M)
 D3D_STEP = re.compile(rb"^ok d3d(9|11|12)\.(\w+)(?: (\S+))?\r?$", re.M)
 D3D_STEPS = {"9": ("device", "adapter_ids", "clear", "readback", "pixels", "present",
@@ -149,7 +152,8 @@ D3D_STEPS = {"9": ("device", "adapter_ids", "clear", "readback", "pixels", "pres
              "11": ("device", "feature_level", "adapter_luid", "target", "readback", "pixels", "present",
                     "deferred_device", "deferred_buffers", "deferred_contexts", "deferred_frames",
                     "deferred_readback", "deferred_contents", "deferred_commit", "shared_device",
-                    "shared_targets", "shared_readback", "shared_texels", "shared_device_kept"),
+                    "shared_targets", "shared_readback", "shared_texels", "shared_device_kept",
+                    "tir_device", "tir_pipeline", "tir_draw", "tir_readback", "tir_device_kept"),
              "12": ("device", "feature_level", "adapter_luid", "queue", "target", "clear", "fence", "readback",
                     "pixels")}
 # Which layer each probe's DLLs come from, and what the probe is called.

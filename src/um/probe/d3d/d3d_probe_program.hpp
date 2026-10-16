@@ -10,7 +10,8 @@
  * the window back through GDI; the D3D11 probe runs Dark Souls Remastered's
  * deferred-context frames on its window after the clear (DeferredMapWork),
  * then clears render targets shared between processes the size of a captured
- * window (SharedClearWork). */
+ * window (SharedClearWork) and draws Direct2D's hairlines with
+ * target-independent rasterization (TirCoverageWork). */
 #ifndef AV_D3D_PROBE_PROGRAM_HPP
 #define AV_D3D_PROBE_PROGRAM_HPP
 
@@ -21,6 +22,7 @@
 #include "um/probe/d3d/windows_d3d11_deferred_entry.hpp"
 #include "um/probe/d3d/windows_d3d11_entry.hpp"
 #include "um/probe/d3d/windows_d3d11_shared_entry.hpp"
+#include "um/probe/d3d/windows_d3d11_tir_entry.hpp"
 #include "um/probe/d3d/windows_d3d12_entry.hpp"
 #include "um/probe/d3d/windows_d3d9_entry.hpp"
 #include "um/probe/d3d/windows_d3d9ex_entry.hpp"
@@ -66,6 +68,7 @@ private:
     WindowsD3d11Entry         d3d11_;
     WindowsD3d11DeferredEntry deferred_;
     WindowsD3d11SharedEntry   shared_;
+    WindowsD3d11TirEntry      tir_;
     /* The device the host is asked to lose, and the one made after it. */
     WindowsD3d11SharedEntry   lost_;
     WindowsD3d11SharedEntry   remade_;
