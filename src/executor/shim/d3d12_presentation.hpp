@@ -14,7 +14,7 @@
 #define AV_D3D12_PRESENTATION_HPP
 
 #include <stdint.h>
-#include "executor/shim/vulkan_timeline.hpp"
+#include "executor/shim/compose_order.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -57,8 +57,7 @@ private:
     D3d11HostDevice *device11_;
     SessionShares   *shares_;
     ID3D12Fence     *fence_;
-    VulkanTimeline   waited_;
-    uint64_t         value_;
+    ComposeOrder     order_;
 };
 
 }  // namespace av

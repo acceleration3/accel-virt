@@ -92,12 +92,9 @@ Status D3d9FlipShares::flip_on_gpu(Primary &shown, IDirect3DSurface9 *source)
     VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
     if (!lane.vulkan_.surface_image(source, image, layout) ||
         !lane.vulkan_.work().copy(image, layout, shown.adopted_.image(), shown.width_, shown.height_,
-                                  lane.signalled_, lane.value_ + 1u))
+                                  lane.signalled_, lane.order_.next()) ||
+        !lane.order_.presented())
         return Status::invalid_state;
-    lane.value_++;
-    device11_->lock(nullptr);
-    ScopeExit unlock([this] { device11_->unlock(); });
-    if (!device11_->vulkan().wait(lane.waited_, lane.value_)) return Status::invalid_state;
     shares_->written(shown.key_);
     return Status::ok;
 }
@@ -178,11 +175,7 @@ D3d9FlipShares::Lane *D3d9FlipShares::connect(IDirect3DDevice9 *device, Lane &la
     bool connected = lane.vulkan_.connect(device) && lane.timeline_.make_exportable(compositor.table()) &&
                      lane.timeline_.export_fd(for_d3d9) && lane.signalled_.import_fd(lane.vulkan_.table(), for_d3d9) &&
                      lane.timeline_.export_fd(for_d3d11);
-    if (connected) {
-        device11_->lock(nullptr);
-        connected = device11_->vulkan().import_timeline(for_d3d11, lane.waited_);
-        device11_->unlock();
-    }
+    if (connected) connected = lane.order_.connect(*device11_, for_d3d11);
     if (connected) return &lane;
     close_lane(lane);
     lane.refused_ = true;
@@ -194,17 +187,11 @@ D3d9FlipShares::Lane *D3d9FlipShares::connect(IDirect3DDevice9 *device, Lane &la
 void D3d9FlipShares::close_lane(Lane &lane)
 {
     AV_SCOPE("D3d9FlipShares::close_lane");
-    if (lane.waited_.made()) {
-        device11_->lock(nullptr);
-        device11_->vulkan().idle();
-        lane.waited_.release();
-        device11_->unlock();
-    }
+    lane.order_.release();
     lane.vulkan_.work().idle();
     lane.signalled_.release();
     lane.vulkan_.release();
     lane.timeline_.release();
-    lane.value_ = 0u;
 }
 
 /* A key already published by someone else (conflict) is not this primary's
@@ -291,7 +278,7 @@ void D3d9FlipShares::forget(Primary &primary)
     }
     /* A copy may still be writing the image: it is done before the image
      * goes. */
-    if (primary.lane_ != nullptr) static_cast<void>(primary.lane_->signalled_.wait(primary.lane_->value_, 1000000000u));
+    if (primary.lane_ != nullptr) static_cast<void>(primary.lane_->signalled_.wait(primary.lane_->order_.value(), 1000000000u));
     primary.adopted_.release();
     primary.image_.release();
     primary.texture_ = nullptr;

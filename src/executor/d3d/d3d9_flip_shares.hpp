@@ -29,6 +29,7 @@
 #include "core/support/keyed_slots.hpp"
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
+#include "executor/shim/compose_order.hpp"
 #include "executor/shim/d3d9_vulkan_lane.hpp"
 #include "executor/shim/vulkan_image.hpp"
 #include "executor/shim/vulkan_timeline.hpp"
@@ -82,8 +83,7 @@ private:
         D3d9VulkanLane vulkan_;
         VulkanTimeline timeline_;
         VulkanTimeline signalled_;
-        VulkanTimeline waited_;
-        uint64_t       value_;
+        ComposeOrder   order_;
         /* Asked once and refused: the device flips on the CPU. */
         bool             refused_;
     };
