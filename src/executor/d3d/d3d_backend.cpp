@@ -158,8 +158,10 @@ void D3dBackend::shut_down()
         device11_->lock(nullptr);
         published_.unbind();
         constants_.close();
-        objects_.release_all();
+        /* While the table still names the dynamic buffers: each is discarded
+         * off the store before the store goes, then the table lets them go. */
         release_slice_storage();
+        objects_.release_all();
         progress11_.release();
         device11_->unlock();
     }
