@@ -2,6 +2,7 @@
 
 #include "core/support/extension_words.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/generated/opencl/cl_supported_extensions.h"
 
 namespace av::clicd {
 
@@ -121,28 +122,13 @@ const ClExtensionPolicy::Row reported_extensions[] = {
 const uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
 
 ClExtensionPolicy::ClExtensionPolicy(const Row *rows, uint32_t count)
-    : rows_(rows), count_(rows != nullptr ? count : 0u), vendor_(0u)
+    : rows_(rows, count < max_rows ? count : max_rows, "cl_",
+            icd::ExtensionRows::Names(clproto::kCarriedExtensions,
+                                      sizeof clproto::kCarriedExtensions / sizeof clproto::kCarriedExtensions[0]),
+            icd::ExtensionRows::Names(nullptr, 0u)),
+      vendor_(0u)
 {
     AV_SCOPE("ClExtensionPolicy::ClExtensionPolicy");
-    if (count_ > max_rows) count_ = max_rows;
-}
-
-size_t ClExtensionPolicy::letters_of(const char *name) const
-{
-    AV_SCOPE("ClExtensionPolicy::letters_of");
-    size_t length = 0u;
-    while (length < name_bytes && name[length] != '\0') ++length;
-    return length;
-}
-
-bool ClExtensionPolicy::same(const char *row_name, const char *name) const
-{
-    AV_SCOPE("ClExtensionPolicy::same");
-    const size_t length = letters_of(row_name);
-    for (size_t index = 0u; index < length; ++index) {
-        if (name[index] == '\0' || row_name[index] != name[index]) return false;
-    }
-    return name[length] == '\0';
 }
 
 uint32_t ClExtensionPolicy::vendor_of(const char *host) const
@@ -160,40 +146,37 @@ uint32_t ClExtensionPolicy::vendor_of(const char *host) const
     return vendor;
 }
 
-bool ClExtensionPolicy::answered_by(const ExtensionWords &host, const Row &row) const
+bool ClExtensionPolicy::answered_by(const ExtensionWords &host, uint32_t index) const
 {
     AV_SCOPE("ClExtensionPolicy::answered_by");
+    if (!rows_.reportable(index)) return false;
     /* The host extension the row is answered over, when it is not the host's
      * own spelling of it: cl_khr_external_memory_win32 is answered over the
      * device's cl_khr_external_memory, since no Linux OpenCL has a Win32
      * handle to take and the device opens the object through OpenGL instead
      * (research.md §21). */
-    if (row.host_ != nullptr && row.host_[0] == answered_here[0]) {
-        if (row.host_[1] == '\0') return true;
+    const char *const over = rows_.row(index).host_;
+    if (over != nullptr && over[0] == answered_here[0]) {
+        if (over[1] == '\0') return true;
         /* "-*": answered here once the adapter is described, whatever it is. */
-        if (row.host_[1] == '*' && row.host_[2] == '\0') return vendor_ != 0u;
+        if (over[1] == '*' && over[2] == '\0') return vendor_ != 0u;
         /* "-1002": answered here on an adapter of that PCI vendor. */
-        return vendor_ != 0u && vendor_of(row.host_) == vendor_;
+        return vendor_ != 0u && vendor_of(over) == vendor_;
     }
-    return host.holds(row.host_ != nullptr ? row.host_ : row.name_);
+    return host.holds(rows_.host_name(index));
 }
 
 bool ClExtensionPolicy::reportable(const char *name) const
 {
     AV_SCOPE("ClExtensionPolicy::reportable");
-    if (name == nullptr) return false;
-    for (uint32_t index = 0u; index < count_; ++index)
-        if (same(rows_[index].name_, name)) return true;
-    return false;
+    return rows_.named(name) != rows_.count();
 }
 
 bool ClExtensionPolicy::reports(const ExtensionWords &host, const char *name) const
 {
     AV_SCOPE("ClExtensionPolicy::reports");
-    if (name == nullptr) return false;
-    for (uint32_t index = 0u; index < count_; ++index)
-        if (same(rows_[index].name_, name)) return answered_by(host, rows_[index]);
-    return false;
+    const uint32_t index = rows_.named(name);
+    return index != rows_.count() && answered_by(host, index);
 }
 
 size_t ClExtensionPolicy::report(const ExtensionWords &host, char *into, size_t into_bytes) const
@@ -203,18 +186,18 @@ size_t ClExtensionPolicy::report(const ExtensionWords &host, char *into, size_t 
      * with room, and an answer that does not fit writes nothing rather than
      * as much as happened to fit. */
     size_t needed = 1u;
-    for (uint32_t index = 0u; index < count_; ++index) {
-        if (!answered_by(host, rows_[index])) continue;
-        needed += letters_of(rows_[index].name_) + (needed > 1u ? 1u : 0u);
+    for (uint32_t index = 0u; index < rows_.count(); ++index) {
+        if (!answered_by(host, index)) continue;
+        needed += __builtin_strlen(rows_.row(index).name_) + (needed > 1u ? 1u : 0u);
     }
     if (into == nullptr || into_bytes < needed) return needed;
 
     size_t at = 0u;
-    for (uint32_t index = 0u; index < count_; ++index) {
-        if (!answered_by(host, rows_[index])) continue;
+    for (uint32_t index = 0u; index < rows_.count(); ++index) {
+        if (!answered_by(host, index)) continue;
         if (at != 0u) into[at++] = ' ';
-        const size_t length = letters_of(rows_[index].name_);
-        for (size_t letter = 0u; letter < length; ++letter) into[at++] = rows_[index].name_[letter];
+        const char *const name = rows_.row(index).name_;
+        for (size_t letter = 0u; name[letter] != '\0'; ++letter) into[at++] = name[letter];
     }
     into[at] = '\0';
     return needed;
@@ -224,18 +207,19 @@ size_t ClExtensionPolicy::report_versions(const ExtensionWords &host, cl_name_ve
 {
     AV_SCOPE("ClExtensionPolicy::report_versions");
     size_t needed = 0u;
-    for (uint32_t index = 0u; index < count_; ++index) {
-        if (answered_by(host, rows_[index])) ++needed;
+    for (uint32_t index = 0u; index < rows_.count(); ++index) {
+        if (answered_by(host, index)) ++needed;
     }
     if (into == nullptr || room < needed) return needed;
     size_t at = 0u;
-    for (uint32_t index = 0u; index < count_; ++index) {
-        if (!answered_by(host, rows_[index])) continue;
+    for (uint32_t index = 0u; index < rows_.count(); ++index) {
+        if (!answered_by(host, index)) continue;
+        const Row       &row = rows_.row(index);
         cl_name_version &entry = into[at++];
-        entry.version = CL_MAKE_VERSION(rows_[index].spec_version_, 0u, 0u);
+        entry.version = CL_MAKE_VERSION(row.spec_version_, 0u, 0u);
         size_t letter = 0u;
-        for (; rows_[index].name_[letter] != '\0' && letter + 1u < CL_NAME_VERSION_MAX_NAME_SIZE; ++letter)
-            entry.name[letter] = rows_[index].name_[letter];
+        for (; row.name_[letter] != '\0' && letter + 1u < CL_NAME_VERSION_MAX_NAME_SIZE; ++letter)
+            entry.name[letter] = row.name_[letter];
         for (; letter < CL_NAME_VERSION_MAX_NAME_SIZE; ++letter) entry.name[letter] = '\0';
     }
     return needed;
@@ -250,25 +234,13 @@ void ClExtensionPolicy::observe_vendor(uint32_t vendor)
 uint32_t ClExtensionPolicy::rows() const
 {
     AV_SCOPE("ClExtensionPolicy::rows");
-    return count_;
+    return rows_.count();
 }
 
 bool ClExtensionPolicy::invariants_hold() const
 {
     AV_SCOPE("ClExtensionPolicy::invariants_hold");
-    if (count_ > max_rows) return false;
-    if (count_ != 0u && rows_ == nullptr) return false;
-    for (uint32_t index = 0u; index < count_; ++index) {
-        if (rows_[index].name_ == nullptr || rows_[index].test_ == nullptr) return false;
-        const size_t length = letters_of(rows_[index].name_);
-        if (length == 0u || length == name_bytes) return false;
-        /* No name twice: reporting one twice would be a list no application
-         * can parse into a set. */
-        for (uint32_t other = index + 1u; other < count_; ++other) {
-            if (same(rows_[index].name_, rows_[other].name_)) return false;
-        }
-    }
-    return true;
+    return rows_.count() <= max_rows && rows_.invariants_hold();
 }
 
 }  // namespace av::clicd

@@ -12,13 +12,13 @@
  * through this ICD, which tools/check_extension_policy.py holds it to - no
  * test, no row; no row, no report (constitution VI).
  *
- * The device's answer is one space-separated string, unlike Vulkan's array of
- * structures, so only the row type is shared with Vulkan's ExtensionPolicy - the
- * shape GlExtensionPolicy already takes for OpenGL's. */
+ * The table and its matching are ExtensionRows', as Vulkan's and OpenGL's
+ * are; this answers it as OpenCL spells it - one space-separated string, and
+ * the same names with their versions - and decides the rows answered here. */
 #ifndef AV_CLICD_CL_EXTENSION_POLICY_HPP
 #define AV_CLICD_CL_EXTENSION_POLICY_HPP
 
-#include "icd/common/extension_row.hpp"
+#include "icd/common/extension_rows.hpp"
 
 #include <CL/cl.h>
 
@@ -37,14 +37,14 @@ class ClExtensionPolicy {
 public:
     using Row = icd::ExtensionRow;
 
-    /* An extension name past this is not one any registry has, so a host
-     * string carrying one is a host string this does not believe. */
-    static constexpr uint32_t name_bytes = 128u;
+    /* The most rows read: what a CL_DEVICE_EXTENSIONS_WITH_VERSION answer
+     * is built in. */
     static constexpr uint32_t max_rows = 32u;
     /* The host a row names when no host extension answers it: the ICD does. */
     static constexpr char answered_here[] = "-";
 
-    /* `rows` is a constant table the owner keeps for as long as this. */
+    /* `rows` is a constant table the owner keeps for as long as this; rows
+     * past max_rows are not read. */
     ClExtensionPolicy(const Row *rows, uint32_t count);
     ClExtensionPolicy(const ClExtensionPolicy &) = delete;
     ClExtensionPolicy &operator=(const ClExtensionPolicy &) = delete;
@@ -77,20 +77,15 @@ public:
 private:
     friend struct ClExtensionPolicyProbe;
 
-    /* Whether a host offering `host` answers `row`: its own name, or the host
-     * extension the row names instead. */
-    bool     answered_by(const ExtensionWords &host, const Row &row) const;
-    /* The letters of a row's name, at most name_bytes. */
-    size_t   letters_of(const char *name) const;
-    /* Whether a row's name is `name`. */
-    bool     same(const char *row_name, const char *name) const;
+    /* Whether the `index`th row is reportable and answered on a host offering
+     * `host`: by this ICD, or by the host extension it names. */
+    bool     answered_by(const ExtensionWords &host, uint32_t index) const;
     /* The PCI vendor an "-<hex>" row is answered on, from the hex after its
      * dash; 0 for anything that is not hex. */
     uint32_t vendor_of(const char *host) const;
 
-    const Row *rows_;
-    uint32_t   count_;
-    uint32_t   vendor_;
+    icd::ExtensionRows rows_;
+    uint32_t           vendor_;
 };
 
 /* What this ICD ships, read by tools/check_extension_policy.py and by the

@@ -4,11 +4,12 @@
  * a WGL extension - the ICD's own functions - only through a row naming its
  * test. WGL_EXT_swap_control is never reported: presentation has no interval
  * to honour (051). The host's list is read once per context, and only while a
- * row is still unfound: each name is a round trip. */
+ * row is still unfound: each name is a round trip. Both tables and their
+ * matching are ExtensionRows', as Vulkan's and OpenCL's are. */
 #ifndef AV_GLICD_GL_EXTENSION_POLICY_HPP
 #define AV_GLICD_GL_EXTENSION_POLICY_HPP
 
-#include "icd/common/extension_row.hpp"
+#include "icd/common/extension_rows.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -48,17 +49,13 @@ public:
     bool invariants_hold() const;
 
 private:
-    bool starts_with(const char *name, const char *prefix) const;
-    bool carried(const char *name) const;
-    bool withheld(const char *name) const;
-    /* The row of `name` that may be reported, or max_rows. */
-    uint32_t reportable(const char *name) const;
+    /* Every row a host listing `name` answers, marked in `found`; how many
+     * were not marked before. */
+    uint32_t mark(const char *name, bool (&found)[max_rows]) const;
 
-    const Row *gl_rows_;
-    uint32_t   gl_count_;
-    const Row *wgl_rows_;
-    uint32_t   wgl_count_;
-    char       wgl_[wgl_bytes];
+    icd::ExtensionRows gl_rows_;
+    icd::ExtensionRows wgl_rows_;
+    char               wgl_[wgl_bytes];
 
     friend struct GlExtensionPolicyProbe;
 };

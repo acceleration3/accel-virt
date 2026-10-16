@@ -1,7 +1,7 @@
 /* One extension a driver may report, an entry of the constant table each
  * Khronos ICD keeps (Vulkan's ExtensionPolicy, OpenCL's ClExtensionPolicy,
- * OpenGL's GlExtensionPolicy), which tools/check_extension_policy.py holds to
- * a test per row (constitution VI). Its fields keep a member's trailing
+ * OpenGL's GlExtensionPolicy, each over ExtensionRows), which
+ * tools/check_extension_policy.py holds to a test per row (constitution VI). Its fields keep a member's trailing
  * underscore, as every row of this codebase does. */
 #ifndef AV_ICD_EXTENSION_ROW_HPP
 #define AV_ICD_EXTENSION_ROW_HPP
