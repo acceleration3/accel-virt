@@ -13,7 +13,7 @@
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "icd/d3d/pitched_rows.hpp"
-#include "icd/d3d/present_format.hpp"
+#include "proto/d3d/d3d9_present_format.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "proto/escape/next_point_record.hpp"
 #include "um/d3d/d3d9_device.hpp"
@@ -55,7 +55,7 @@ HRESULT D3d9Device::allocate(D3d9Resource &resource)
 {
     AV_SCOPE("D3d9Device::allocate");
     const D3d9Subresource &top = resource.subresources[0];
-    d3d::PresentFormat presented(0u);
+    D3d9PresentFormat presented(0u);
     if (!presented.take_ddi(static_cast<uint32_t>(resource.format))) return E_INVALIDARG;
     d3d::KernelSurface surface(top.width, top.height, presented.dxgi());
     if (surface.make() != Status::ok) return E_INVALIDARG;
@@ -82,7 +82,7 @@ HRESULT D3d9Device::allocate_primary(D3d9Resource &resource, const D3DDDIARG_CRE
 {
     AV_SCOPE("D3d9Device::allocate_primary");
     const D3d9Subresource &top = resource.subresources[0];
-    d3d::PresentFormat presented(0u);
+    D3d9PresentFormat presented(0u);
     if (!presented.take_ddi(static_cast<uint32_t>(resource.format))) return E_INVALIDARG;
     d3d::KernelSurface surface(top.width, top.height, presented.dxgi(),
                                ScanoutTarget(create.VidPnSourceId, create.RefreshRate.Numerator,

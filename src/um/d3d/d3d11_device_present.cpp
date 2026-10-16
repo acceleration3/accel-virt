@@ -12,6 +12,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/log/log_sink.hpp"
 #include "icd/d3d/kernel_surface.hpp"
+#include "proto/d3d/d3d9_present_format.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/scanout_target.hpp"
@@ -467,20 +468,6 @@ HRESULT D3d11Device::query_resource_residency(DXGI_DDI_ARG_QUERYRESOURCERESIDENC
 
 namespace av::d3d11 {
 
-namespace {
-
-constexpr uint32_t ddi_format_a8r8g8b8 = 21u;
-constexpr uint32_t ddi_format_x8r8g8b8 = 22u;
-
-uint32_t dxgi_format_of(uint32_t format)
-{
-    AV_SCOPE("dxgi_format_of");
-    return format == ddi_format_a8r8g8b8 || format == ddi_format_x8r8g8b8 ? static_cast<uint32_t>(DXGI_FORMAT_B8G8R8A8_UNORM)
-                                                                          : format;
-}
-
-}  // namespace
-
 bool D3d11Device::open_guest_surface(ResourceRecord &resource, const D3D10DDIARG_OPENRESOURCE &args)
 {
     AV_SCOPE("D3d11Device::open_guest_surface");
@@ -492,7 +479,8 @@ bool D3d11Device::open_guest_surface(ResourceRecord &resource, const D3D10DDIARG
             Status::ok)
         return false;
     const SurfaceLayout &layout = descriptor.layout();
-    if (layout.width() == 0u || layout.height() == 0u) return false;
+    D3d9PresentFormat    presented(0u);
+    if (layout.width() == 0u || layout.height() == 0u || !presented.take_ddi(layout.format())) return false;
     if (guest_surfaces_.reserve(guest_surfaces_.size() + 1u) != Status::ok) return false;
     resource.dimension = D3D10DDIRESOURCE_TEXTURE2D;
     resource.width = layout.width();
@@ -501,7 +489,7 @@ bool D3d11Device::open_guest_surface(ResourceRecord &resource, const D3D10DDIARG
     resource.layers = 1u;
     resource.mips = 1u;
     resource.samples = 1u;
-    resource.format = dxgi_format_of(layout.format());
+    resource.format = presented.viewed();
     resource.bind = D3D10_DDI_BIND_SHADER_RESOURCE | D3D10_DDI_BIND_RENDER_TARGET;
     resource.allocation_pitch = layout.pitch();
     d3dproto::ResourceDesc desc = {};

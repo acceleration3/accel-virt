@@ -7,6 +7,7 @@
 #include "executor/shim/compositor_device.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
+#include "proto/d3d/d3d9_present_format.hpp"
 #include "proto/vulkan/exportable_image_info.hpp"
 
 #include <unistd.h>
@@ -24,7 +25,10 @@ D3D11_TEXTURE2D_DESC1 shared_texture_desc(uint32_t width, uint32_t height, uint3
     described.Height = height;
     described.MipLevels = 1u;
     described.ArraySize = 1u;
-    described.Format = format == D3DFMT_X8R8G8B8 ? DXGI_FORMAT_B8G8R8X8_UNORM : DXGI_FORMAT_B8G8R8A8_UNORM;
+    /* flip() takes X8R8G8B8 and A8R8G8B8 only; anything else stays BGRA. */
+    D3d9PresentFormat presented(DXGI_FORMAT_B8G8R8A8_UNORM);
+    static_cast<void>(presented.take_ddi(format));
+    described.Format = static_cast<DXGI_FORMAT>(presented.dxgi());
     described.SampleDesc.Count = 1u;
     described.Usage = D3D11_USAGE_DEFAULT;
     described.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;

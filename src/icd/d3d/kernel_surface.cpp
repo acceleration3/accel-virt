@@ -1,7 +1,7 @@
 #include "icd/d3d/kernel_surface.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "icd/d3d/present_format.hpp"
+#include "proto/d3d/d3d9_present_format.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "icd/common/shared_bytes.hpp"
 #include "proto/resources/shared_object_kind.hpp"
@@ -128,7 +128,7 @@ uint32_t KernelSurface::source() const
 uint32_t KernelSurface::kernel_format() const
 {
     AV_SCOPE("KernelSurface::kernel_format");
-    return PresentFormat(format_).ddi();
+    return D3d9PresentFormat(format_).ddi();
 }
 
 }  // namespace av::d3d
