@@ -266,6 +266,7 @@ void CopiedGlSharing::forget_all()
     GlMirror gone;
     while (mirrors_.forget_any(gone))
         if (gone.image() != nullptr) textures_.destroy(gone.level().texture(), gone.image());
+    mirrors_.forget_all();
 }
 
 uint32_t CopiedGlSharing::mirrors() const

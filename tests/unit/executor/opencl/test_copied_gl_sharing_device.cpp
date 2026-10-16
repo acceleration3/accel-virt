@@ -238,7 +238,8 @@ TEST(copied_gl_sharing_device, a_buffer_that_cannot_be_mirrored_is_refused_as_th
   rig.delete_buffer(empty);
   rig.delete_buffer(name); }
 
-/* As many as the table holds, and one more refused with its cl_mem let go. */
+/* As many as the table holds - as many cl_mems as a guest can hold at all -
+ * and one more refused with its cl_mem let go. */
 TEST(copied_gl_sharing_device, a_full_table_refuses_the_next_mirror_and_releases_its_cl_mem)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
@@ -246,15 +247,102 @@ TEST(copied_gl_sharing_device, a_full_table_refuses_the_next_mirror_and_releases
   CopiedGlSharing     sharing(vehicle.objects(), vehicle.textures());
   const std::uint32_t name = rig.buffer(nullptr, 64u);
   static cl_mem       made[av::ClGlMirrors::max_mirrors];
-  for (cl_mem &each : made) each = sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, name, nullptr);
+  bool                all_made = true;
+  for (cl_mem &each : made) {
+      each = sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, name, nullptr);
+      all_made = all_made && each != nullptr;
+  }
+  CHECK(all_made);
   CHECK_EQ(sharing.mirrors(), av::ClGlMirrors::max_mirrors);
   cl_int error = CL_SUCCESS;
   CHECK(sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, name, &error) == nullptr);
   CHECK_EQ(error, CL_OUT_OF_RESOURCES);
   CHECK(sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, name, nullptr) == nullptr);
+  CHECK_EQ(sharing.mirrors(), av::ClGlMirrors::max_mirrors);
   sharing.forget_all();
+  CHECK_EQ(sharing.mirrors(), 0u);
   for (cl_mem each : made) ::clReleaseMemObject(each);
   rig.delete_buffer(name); }
+
+namespace {
+
+constexpr std::uint32_t pool_side = 4u;
+constexpr std::size_t   pool_bytes = pool_side * pool_side * 4u;
+
+/* A texture of the pool: which one it is in its first two bytes, and the
+ * turn it is from in the third, so no two textures or turns read alike. */
+void stamp(std::uint8_t *bytes, std::uint32_t texture, std::uint8_t turn)
+{
+    fill(bytes, pool_bytes, turn);
+    bytes[0] = static_cast<std::uint8_t>(texture);
+    bytes[1] = static_cast<std::uint8_t>(texture >> 8u);
+    bytes[2] = turn;
+}
+
+}  // namespace
+
+/* DaVinci Resolve's texture pool: every texture it hands OpenCL is kept for
+ * the session, and the 257th held at once used to be refused with
+ * CL_OUT_OF_RESOURCES. More than that are made, acquired in one call - each
+ * reading its own texture - written and released in one call - each
+ * texture reading what its cl_mem was given - and each forgotten. */
+TEST(copied_gl_sharing_device, a_texture_pool_past_256_is_held_acquired_and_released_at_once)
+{ HostGlRig rig;
+  Vehicle   vehicle(rig);
+  if (!rig.ready() || !vehicle.ready()) return;
+  CopiedGlSharing         sharing(vehicle.objects(), vehicle.textures());
+  constexpr std::uint32_t pool = 320u;
+  static std::uint32_t    names[pool];
+  static cl_mem           mems[pool];
+  std::uint8_t            sent[pool_bytes], seen[pool_bytes];
+  bool                    all_made = true;
+  for (std::uint32_t at = 0u; at < pool; at++) {
+      stamp(sent, at, 1u);
+      names[at] = rig.texture(gl_texture_2d, 0, gl_rgba8, gl_rgba, gl_unsigned_byte, pool_side, pool_side, 1u, sent);
+      cl_int error = CL_INVALID_VALUE;
+      mems[at] = sharing.from_texture(rig.context(), CL_MEM_READ_WRITE, gl_texture_2d, 0, names[at], &error);
+      all_made = all_made && mems[at] != nullptr && error == CL_SUCCESS;
+  }
+  CHECK(all_made);
+  CHECK_EQ(sharing.mirrors(), pool);
+
+  CHECK_EQ(sharing.acquire(rig.queue(), pool, mems, 0u, nullptr, nullptr), CL_SUCCESS);
+  const std::size_t origin[3] = {0u, 0u, 0u};
+  const std::size_t region[3] = {pool_side, pool_side, 1u};
+  bool              read_own = true;
+  for (std::uint32_t at = 0u; at < pool; at++) {
+      stamp(sent, at, 1u);
+      read_own = read_own && ::clEnqueueReadImage(rig.queue(), mems[at], CL_TRUE, origin, region, 0u, 0u, seen, 0u,
+                                                  nullptr, nullptr) == CL_SUCCESS &&
+                 std::memcmp(seen, sent, sizeof seen) == 0;
+      stamp(sent, at, 2u);
+      read_own = read_own && ::clEnqueueWriteImage(rig.queue(), mems[at], CL_TRUE, origin, region, 0u, 0u, sent, 0u,
+                                                   nullptr, nullptr) == CL_SUCCESS;
+  }
+  CHECK(read_own);
+  CHECK_EQ(sharing.release(rig.queue(), pool, mems, 0u, nullptr, nullptr), CL_SUCCESS);
+  bool written_back = true, named = true;
+  for (std::uint32_t at = 0u; at < pool; at++) {
+      stamp(sent, at, 2u);
+      std::memset(seen, 0, sizeof seen);
+      rig.read_texture(gl_texture_2d, names[at], 0, gl_rgba, gl_unsigned_byte, seen);
+      written_back = written_back && std::memcmp(seen, sent, sizeof seen) == 0;
+      cl_GLuint name = 0u;
+      named = named && sharing.object_info(mems[at], nullptr, &name) == CL_SUCCESS && name == names[at];
+  }
+  CHECK(written_back);
+  CHECK(named);
+
+  bool forgotten = true;
+  for (std::uint32_t at = 0u; at < pool; at++) {
+      sharing.forget(mems[at]);
+      forgotten = forgotten && sharing.mirrors() == pool - at - 1u &&
+                  sharing.object_info(mems[at], nullptr, nullptr) == CL_INVALID_GL_OBJECT;
+      ::clReleaseMemObject(mems[at]);
+      rig.delete_texture(names[at]);
+  }
+  CHECK(forgotten);
+  CHECK_EQ(sharing.mirrors(), 0u); }
 
 /* What an acquire or a release refuses before copying anything: objects that
  * do not match their count, a cl_mem made from no GL object, a wait list the

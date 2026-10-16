@@ -75,6 +75,7 @@ public:
                             size_t *value_bytes_ret) override;
     /* The mirror forgotten, and a renderbuffer's texture destroyed. */
     void       forget(cl_mem object) override;
+    /* Every mirror as forget does, then the table's memory given back. */
     void       forget_all() override;
 
     uint32_t mirrors() const;
