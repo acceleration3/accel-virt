@@ -16,7 +16,7 @@ public:
 
     uint64_t now_nanoseconds() const override;
     void     pause(uint64_t nanoseconds) override;
-    /* The time `nanoseconds` from now, as pthread_cond_timedwait takes it. */
+    /* The time `nanoseconds` from now, as PosixCondition::wait_until takes it. */
     timespec ahead(uint64_t nanoseconds) const;
 
 private:
