@@ -93,6 +93,10 @@ public:
     void     settle(const Source &owner);
     /* Sleeps until the thread has shown a frame or `milliseconds` pass. */
     void     await_shown(uint32_t milliseconds);
+    /* A frame drawn already put on its window on the calling thread, under
+     * the lock: a presenter's own present when there is no thread to hand
+     * it to. False when the window or its chain refused it. */
+    bool     show_now(const Frame &frame);
     /* The windows' chains a presenter opens its slots in, and this thread
      * presents a frame drawn into a slot through. */
     WindowChains &chains();
@@ -275,6 +279,14 @@ void WindowPresentQueue<Source, Readiness>::await_shown(uint32_t milliseconds)
 {
     AV_SCOPE("WindowPresentQueue::await_shown");
     static_cast<void>(shown_.wait(milliseconds));
+}
+
+template <typename Source, typename Readiness>
+bool WindowPresentQueue<Source, Readiness>::show_now(const Frame &frame)
+{
+    AV_SCOPE("WindowPresentQueue::show_now");
+    const ThreadLockHold held(lock_);
+    return put_on_window(frame);
 }
 
 template <typename Source, typename Readiness>

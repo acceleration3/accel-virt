@@ -44,9 +44,6 @@ public:
     bool               opened() const;
     /* The image a frame is copied into; null unless opened. */
     VkImage            slot() const;
-    /* The slot on the window, with the frame copied into it complete. False
-     * when the chain will not present it, or nothing is opened. */
-    [[nodiscard]] bool show();
     /* The slot's image destroyed and its memory released, the window's chain
      * left as it is: a retired swapchain's window is its successor's. */
     void               release();

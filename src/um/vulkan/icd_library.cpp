@@ -7,10 +7,19 @@ namespace av {
 
 IcdLibrary::Seams::Seams()
     : process(L"avvk"), lock(), send_lock(), memory_lock(), windows(), chains_lock(),
-      chains(process.heap(), process.kmt(), chains_lock, process.log()),
-      root(process.heap(), process.kmt(), lock, send_lock, memory_lock, process.log(), icd::icd_binding, windows, chains)
+      chains(process.heap(), process.kmt(), chains_lock, process.log()), present_lock(), present_thread(),
+      present_handed(), present_shown(),
+      root(process.heap(), process.kmt(), lock, send_lock, memory_lock, process.log(), icd::icd_binding, windows, chains,
+           present_thread, present_handed, present_shown, present_lock)
 {
     AV_SCOPE("IcdLibrary::Seams::Seams");
+    /* Without the wake events frames are shown on the presenting thread, which
+     * costs the process nothing else. Made on the first call, never under the
+     * loader lock. */
+    if (present_handed.initialize() != Status::ok || present_shown.initialize() != Status::ok) {
+        process.log().write("avvk: no present thread: its wake events could not be made");
+        root.presentation().refuse_presents();
+    }
 }
 
 VkResult IcdLibrary::negotiate(uint32_t *version)

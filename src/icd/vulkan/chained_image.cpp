@@ -73,12 +73,6 @@ VkImage ChainedImage::slot() const
     return image_;
 }
 
-bool ChainedImage::show()
-{
-    AV_SCOPE("ChainedImage::show");
-    return opened() && slots_.present(0u);
-}
-
 /* The memory is the device's to free: releasing the object does
  * (VulkanBackend::release_object), as a vkFreeMemory of it would not. */
 void ChainedImage::release()

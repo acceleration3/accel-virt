@@ -5,7 +5,9 @@
 
 #include "core/support/keyed_slots.hpp"
 #include "core/support/object_pool.hpp"
+#include "icd/common/window_present_queue.hpp"
 #include "icd/vulkan/entry_lookup.hpp"
+#include "icd/vulkan/fence_ready.hpp"
 #include "icd/vulkan/surface_table.hpp"
 #include "icd/vulkan/swapchain.hpp"
 #include "icd/vulkan/win32_surface_create_record.hpp"
@@ -22,19 +24,26 @@ namespace av {
 class BlockSource;
 class Kmt;
 class StateWriter;
+class ThreadLock;
 }  // namespace av
 
 namespace av::icd {
 
 class IcdRoot;
+class ServiceThread;
+class ThreadWake;
 class WindowChains;
 class WindowSurface;
 struct PresentationProbe;
 
 class Presentation {
 public:
+    /* The present thread is `present_thread`, woken by `handed`, waking a
+     * present that waits for a slot by `shown`, its tables under
+     * `present_lock` (WindowPresentQueue). */
     Presentation(BlockSource &memory, Kmt &kmt, WindowSurface &windows, WindowChains &chains, LogSink &log,
-                 IcdRoot &root, EntryLookup &entries);
+                 IcdRoot &root, EntryLookup &entries, ServiceThread &present_thread, ThreadWake &handed,
+                 ThreadWake &shown, ThreadLock &present_lock);
     ~Presentation();
     Presentation(const Presentation &) = delete;
     Presentation &operator=(const Presentation &) = delete;
@@ -58,6 +67,10 @@ public:
      * as the answer. */
     VkResult present(VkQueue queue, const VkPresentInfoKHR *info);
 
+    /* The shim could not make what the present thread needs: presents show
+     * their own frames. */
+    void refuse_presents();
+
     /* What goes with an instance or a device. */
     void forget_instance(VkInstance instance);
     void forget_device(VkDevice device);
@@ -80,6 +93,9 @@ private:
     LogSink       &log_;
     IcdRoot       &root_;
     EntryLookup   &entries_;
+    FenceReady     ready_;
+    /* Before the swapchains, which are settled on it as they go. */
+    VkPresentQueue presents_;
     SurfaceTable   surfaces_;
     /* As many swapchains as the application makes, a swapchain's handle its
      * address, found through its handle. */

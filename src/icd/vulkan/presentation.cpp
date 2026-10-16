@@ -11,8 +11,11 @@
 namespace av::icd {
 
 Presentation::Presentation(BlockSource &memory, Kmt &kmt, WindowSurface &windows, WindowChains &chains,
-                           LogSink &log, IcdRoot &root, EntryLookup &entries)
+                           LogSink &log, IcdRoot &root, EntryLookup &entries, ServiceThread &present_thread,
+                           ThreadWake &handed, ThreadWake &shown, ThreadLock &present_lock)
     : memory_(memory), kmt_(kmt), windows_(windows), chains_(chains), log_(log), root_(root), entries_(entries),
+      ready_(entries), presents_(memory, present_thread, handed, shown, present_lock, ready_, windows, chains, log,
+                                 "avvk: "),
       surfaces_(memory), chains_made_(memory), swapchains_(memory, Pool::paged)
 {
     AV_SCOPE("Presentation::Presentation");
@@ -117,7 +120,7 @@ VkResult Presentation::create_swapchain(VkDevice device, const VkSwapchainCreate
     Swapchain *chain = nullptr;
     /* Room to name it first, so a swapchain made always has a handle. */
     if (swapchains_.reserve(swapchains_.count() + 1u) != Status::ok ||
-        chains_made_.create(chain, memory_, windows_, chains_, entries_, device, physical, kmt_, log_, *connection) !=
+        chains_made_.create(chain, windows_, chains_, entries_, device, physical, kmt_, log_, *connection, presents_) !=
             Status::ok)
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     SurfaceProperties properties(windows_, window);
@@ -176,6 +179,12 @@ VkResult Presentation::present(VkQueue queue, const VkPresentInfoKHR *info)
     return answer;
 }
 
+void Presentation::refuse_presents()
+{
+    AV_SCOPE("Presentation::refuse_presents");
+    presents_.refuse();
+}
+
 void Presentation::forget_instance(VkInstance instance)
 {
     AV_SCOPE("Presentation::forget_instance");
@@ -216,6 +225,7 @@ void Presentation::report(StateWriter &writer) const
         writer.number("presented", chain->presented());
         writer.close();
     });
+    presents_.report(writer);
     writer.close();
 }
 

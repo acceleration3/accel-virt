@@ -303,13 +303,14 @@ constexpr uint32_t max_allocated_at_once = 1024u;
 }  // namespace
 
 IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &memory_lock,
-                 LogSink &log, IcdBinding &binding, WindowSurface &windows, WindowChains &chains)
+                 LogSink &log, IcdBinding &binding, WindowSurface &windows, WindowChains &chains,
+                 ServiceThread &present_thread, ThreadWake &handed, ThreadWake &shown, ThreadLock &present_lock)
     : memory_(memory), kmt_(kmt), lock_(lock), send_lock_(send_lock), memory_lock_(memory_lock), log_(log), lines_(memory, log, "avvk: "),
       binding_(binding),
       api_version_(vulkan_1_3), before_instance_(local_rows, before_instance_rows),
       entry_points_(local_rows, local_row_count),
       extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), connections_(memory), pending_(nullptr), spans_(memory),
-      entries_(*this), presentation_(memory, kmt, windows, chains, log, *this, entries_), templates_(memory, lock),
+      entries_(*this), presentation_(memory, kmt, windows, chains, log, *this, entries_, present_thread, handed, shown, present_lock), templates_(memory, lock),
       externals_(lock, memory), shared_handles_(kmt, lock, memory), kernel_refusal_(0u), idle_skipped_(0u), idle_waited_(0u),
       memory_handles_(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT,
                       VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT),

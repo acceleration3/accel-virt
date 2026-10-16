@@ -1,6 +1,7 @@
 /* avvk.dll's ICD root and what it is constructed over: the process heap, the
- * thread locks, the log file, D3DKMT through gdi32, and the windows' GDI
- * surfaces and DXGI chains. One per process, in
+ * thread locks, the log file, D3DKMT through gdi32, the windows' GDI
+ * surfaces and DXGI chains, and the present thread with its lock and wake
+ * events. One per process, in
  * the exports' storage (avvk_exports.cpp), constructed on the loader's first
  * call rather than at DLL attach, where the loader lock forbids opening a file
  * or an event. Translation only: what the root decides is in src/icd. */
@@ -13,6 +14,8 @@
 #include "um/common/gdi_window_surface.hpp"
 #include "um/common/lazy_driver.hpp"
 #include "um/common/srw_lock.hpp"
+#include "um/common/windows_service_thread.hpp"
+#include "um/common/windows_thread_wake.hpp"
 #include "um/trace/process_trace.hpp"
 
 #include <stdint.h>
@@ -49,6 +52,11 @@ private:
         SrwLock      chains_lock;
         /* Before the root, which closes its swapchains' chains as it goes. */
         DxgiWindowChains chains;
+        /* Before the root, whose swapchains' frames the thread shows. */
+        SrwLock              present_lock;
+        WindowsServiceThread present_thread;
+        WindowsThreadWake    present_handed;
+        WindowsThreadWake    present_shown;
         icd::IcdRoot root;
     };
 

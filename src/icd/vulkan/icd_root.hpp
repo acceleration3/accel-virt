@@ -58,6 +58,8 @@ class ThreadLock;
 
 namespace av::icd {
 
+class ServiceThread;
+class ThreadWake;
 class WindowChains;
 class WindowSurface;
 class MemoryTypeTable;
@@ -69,9 +71,11 @@ public:
     static constexpr uint32_t latest_interface = 7u;
     static constexpr uint32_t oldest_interface = 5u;
 
-    /* Binds itself into `binding` until destroyed. */
+    /* Binds itself into `binding` until destroyed. The present thread and
+     * what it is woken and locked by are Presentation's. */
     IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &memory_lock,
-            LogSink &log, IcdBinding &binding, WindowSurface &windows, WindowChains &chains);
+            LogSink &log, IcdBinding &binding, WindowSurface &windows, WindowChains &chains,
+            ServiceThread &present_thread, ThreadWake &handed, ThreadWake &shown, ThreadLock &present_lock);
     ~IcdRoot();
     IcdRoot(const IcdRoot &) = delete;
     IcdRoot &operator=(const IcdRoot &) = delete;
