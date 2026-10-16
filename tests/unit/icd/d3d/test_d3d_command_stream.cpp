@@ -5,6 +5,7 @@
  * received is read off MockKmt's ring, which journals every command of a
  * batch. */
 #include "core/support/status.hpp"
+#include "guest/transport/blob_import.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -15,11 +16,16 @@
 #include "proto/context/sub_api.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
+#include "proto/generated/d3d12/d3d12_dispatch_client.h"
+#include "proto/generated/d3d12/d3d12_protocol_ids.h"
+#include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_reader.hpp"
 
 #include <cstdint>
 
+using av::BlobImport;
+using av::BlobImportAnswer;
 using av::CommandHeader;
 using av::GuestConnection;
 using av::KmtTransport;
@@ -59,6 +65,7 @@ public:
     ~Fixture() { transport_.teardown(); }
 
     MockKmt          &kmt() { return kmt_; }
+    KmtTransport     &transport() { return transport_; }
     D3dCommandStream &stream() { return stream_; }
     std::uint32_t     submits() { return kmt_.calls(MockKmt::Call::submit); }
     std::uint32_t     id(std::uint32_t index) { return kmt_.command_id(index); }
@@ -487,3 +494,59 @@ TEST(d3d_command_stream, a_command_longer_than_its_room_is_sent_in_pieces)
     CHECK(!recording.spilled());
     CHECK(stream.send_async(kCmd_Draw, recording) == TransportResult::failed); }
   transport.teardown(); }
+
+/* Resident Evil 4 makes upload heaps - a blob import each, sent on the
+ * transport under the stream's lock - between the 70-85 KB compute shaders it
+ * builds, whose code the stream holds in blob leases until its batch goes.
+ * The import, sent ahead and answered, retired those leases; the next shader
+ * was copied over the first while its command waited in the stream, and the
+ * host refused what it read and removed the device. A transport sending after
+ * the stream publishes the shaders first, each lease still holding its own
+ * code when the batch carrying it goes. */
+TEST(d3d_command_stream, a_blob_import_goes_after_the_shaders_the_stream_holds)
+{ Fixture fixture;
+  constexpr std::size_t code_bytes = 8u * 1024u;
+  std::uint8_t room[3u * code_bytes] = {};
+  fixture.transport().blobs().lend(room, sizeof room);
+  fixture.transport().send_after(fixture.stream());
+  std::uint8_t first[code_bytes];
+  std::uint8_t second[code_bytes];
+  for (std::size_t at = 0u; at < code_bytes; at++) {
+      first[at] = static_cast<std::uint8_t>(at);
+      second[at] = static_cast<std::uint8_t>(0xFFu - at);
+  }
+  CHECK(av::d3d12proto::av_d3d12_CreateComputePipeline12(fixture.stream(), 1u, 0u, first, sizeof first));
+  CHECK_EQ(fixture.kmt().commands(), 0u);
+  CHECK_EQ(fixture.transport().blobs().used(), code_bytes);
+  std::uint8_t answer[BlobImportAnswer::encoded_size] = {};
+  CHECK_STATUS(BlobImportAnswer(BlobImportAnswer::imported, 0x77u).encode(answer, sizeof answer), Status::ok);
+  fixture.kmt().queue_answer(answer, sizeof answer);
+  BlobImport heap(fixture.transport());
+  CHECK_STATUS(heap.import(5u), Status::ok);
+  CHECK_EQ(fixture.kmt().commands(), 2u);
+  CHECK_EQ(fixture.id(0u), av::d3d12proto::kCmd_CreateComputePipeline12);
+  CHECK_EQ(fixture.id(1u), CommandHeader::import_blob_id);
+  /* The host has run the first shader's command: its room is lent again. */
+  CHECK_EQ(fixture.transport().blobs().used(), 0u);
+  CHECK(av::d3d12proto::av_d3d12_CreateComputePipeline12(fixture.stream(), 2u, 0u, second, sizeof second));
+  CHECK_STATUS(fixture.stream().flush(), Status::ok);
+  CHECK_EQ(fixture.kmt().commands(), 3u);
+  CHECK_EQ(fixture.id(2u), av::d3d12proto::kCmd_CreateComputePipeline12);
+  CHECK(fixture.stream().invariants_hold()); }
+
+/* A stream the transport is told to send after, then dropped, is not sent
+ * ahead of the import: its command keeps waiting for its own flush. */
+TEST(d3d_command_stream, a_dropped_stream_keeps_its_commands_until_it_flushes)
+{ Fixture fixture;
+  fixture.transport().send_after(fixture.stream());
+  fixture.transport().drop(fixture.stream());
+  CHECK(av_d3d_Draw(fixture.stream(), 3u, 0u));
+  std::uint8_t answer[BlobImportAnswer::encoded_size] = {};
+  CHECK_STATUS(BlobImportAnswer(BlobImportAnswer::imported, 0x77u).encode(answer, sizeof answer), Status::ok);
+  fixture.kmt().queue_answer(answer, sizeof answer);
+  BlobImport heap(fixture.transport());
+  CHECK_STATUS(heap.import(5u), Status::ok);
+  CHECK_EQ(fixture.kmt().commands(), 1u);
+  CHECK_EQ(fixture.id(0u), CommandHeader::import_blob_id);
+  CHECK_STATUS(fixture.stream().flush(), Status::ok);
+  CHECK_EQ(fixture.id(1u), kCmd_Draw); }

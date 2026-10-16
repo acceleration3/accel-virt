@@ -9,6 +9,7 @@
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/publish_gate.hpp"
+#include "guest/transport/unsent_batch.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/resources/scanout_target.hpp"
@@ -32,7 +33,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, BlockSource &memory, Sub
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
-      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), answered_(false),
+      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), ahead_(nullptr), answered_(false),
       decode_arena_(nullptr, 0u), blobs_(), spill_(memory), answer_(memory)
 {
     AV_SCOPE("KmtTransport::KmtTransport");
@@ -43,7 +44,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
-      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), answered_(false),
+      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), ahead_(nullptr), answered_(false),
       decode_arena_(nullptr, 0u), blobs_(), spill_(), answer_()
 {
     AV_SCOPE("KmtTransport::KmtTransport");
@@ -266,6 +267,24 @@ void KmtTransport::forget(const PublishGate &gate)
     if (held_ == &gate) held_ = nullptr;
 }
 
+void KmtTransport::send_after(UnsentBatch &batch)
+{
+    AV_SCOPE("KmtTransport::send_after");
+    ahead_ = &batch;
+}
+
+void KmtTransport::drop(const UnsentBatch &batch)
+{
+    AV_SCOPE("KmtTransport::drop");
+    if (ahead_ == &batch) ahead_ = nullptr;
+}
+
+bool KmtTransport::sent_ahead()
+{
+    AV_SCOPE("KmtTransport::sent_ahead");
+    return ahead_ == nullptr || ahead_->flush() == Status::ok;
+}
+
 uint64_t KmtTransport::submissions_through_doorbell() const
 {
     AV_SCOPE("KmtTransport::submissions_through_doorbell");
@@ -319,8 +338,10 @@ void KmtTransport::teardown()
     watch_.read_page(nullptr);
     fences_ = TransportFence();
     faulted_ = false;
-    /* A gate is its device's, which a transport torn down outlives no longer. */
+    /* A gate is its device's, and a stream its session's, which a transport
+     * torn down outlives no longer. */
     held_ = nullptr;
+    ahead_ = nullptr;
     answered_ = false;
     spill_.release();
     answer_.release();
@@ -549,7 +570,7 @@ TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t lengt
 TransportResult KmtTransport::send_async(uint32_t command_id, WireWriter &writer)
 {
     AV_SCOPE("KmtTransport::send_async");
-    if (faulted_) return TransportResult::failed;
+    if (faulted_ || !sent_ahead()) return TransportResult::failed;
     uint64_t fence = 0u;
     return publish(command_id, writer, 0u, fence);
 }
@@ -578,7 +599,7 @@ void KmtTransport::give_back_spill()
 TransportResult KmtTransport::send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply)
 {
     AV_SCOPE("KmtTransport::send_sync");
-    if (faulted_) return TransportResult::failed;
+    if (faulted_ || !sent_ahead()) return TransportResult::failed;
     uint64_t              fence = 0u;
     const TransportResult sent = publish(command_id, writer, CommandHeader::generate_reply, fence);
     if (sent != TransportResult::ok) return sent;

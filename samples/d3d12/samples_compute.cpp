@@ -1,4 +1,4 @@
-// computeparticles, computeshader, particlefire, raytracing, bloom, radialblur, offscreen
+// computeparticles, computeshader, particlefire, raytracing, bloom, radialblur, offscreen, shaderstream
 #include "framework.h"
 
 namespace samples {
@@ -1722,6 +1722,116 @@ private:
     Descriptors          table_;
 };
 
+
+// ---------------------------------------------------------------- shaderstream
+
+// Eight compute shaders of several KB of DXIL each, made one after another
+// with a buffer uploaded between each two - a new upload heap each, as
+// Resident Evil 4 makes its heaps between the 70-85 KB compute shaders it
+// builds. Each shader paints one band of the picture from its own buffer's
+// colour. The guest driver holds a shader's code in a blob lease until its
+// command's batch goes, and a heap's import, answered ahead of that batch,
+// once let the next shader be copied over it: the host then built one band
+// from another's code - another's colours here, a refused pipeline and a
+// removed device in the game.
+class ShaderStream final : public Sample {
+public:
+    const char *name() const override { return "shaderstream"; }
+    bool init(Gpu &gpu) override
+    {
+        static const char *const show_source = COMPUTE_QUAD_HLSL R"(
+Texture2D image : register(t0);
+SamplerState filter : register(s0);
+float4 ps(Quad q) : SV_Target { return image.Sample(filter, q.uv); }
+)";
+        root_ = gpu.root_signature(RootLayout().uav_table(0, 1).srv(0).no_input());
+        for (uint32_t band = 0; band < bands; band++) {
+            char name[48] = {};
+            copy_text(name, sizeof name, "shaderstream_cs");
+            append_number(name, sizeof name, band, 0);
+            char source[2048] = {};
+            band_source(band, source, sizeof source);
+            painters_[band] = gpu.compute(root_, gpu.cs(name, source, "cs"));
+            const float3 hue = {0.15f + 0.1f * band, 0.9f - 0.1f * band, 0.3f + 0.05f * (band % 3)};
+            const float colour[4] = {hue.x, hue.y, hue.z, 1.0f};
+            colours_[band] = gpu.buffer(colour, sizeof colour, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        }
+        show_root_ = gpu.root_signature(RootLayout().srv_table(0, 1, D3D12_SHADER_VISIBILITY_PIXEL)
+                                            .sampler(0, D3D12_FILTER_MIN_MAG_MIP_POINT, D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+                                                     D3D12_SHADER_VISIBILITY_PIXEL));
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC show =
+            quad_pass(gpu, show_root_, gpu.vs("shaderstream_quad_vs", quad_source), gpu.ps("shaderstream_ps", show_source));
+        show_ = gpu.pipeline(show);
+        if (gpu.failed) return false;
+        image_.create(gpu, size, size, DXGI_FORMAT_R8G8B8A8_UNORM, true, false);
+        return !gpu.failed;
+    }
+    void render(Gpu &gpu, float) override
+    {
+        auto *l = gpu.list;
+        image_.become(gpu, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        l->SetComputeRootSignature(root_);
+        l->SetComputeRootDescriptorTable(0, image_.uav.gpu);
+        for (uint32_t band = 0; band < bands; band++) {
+            l->SetPipelineState(painters_[band]);
+            l->SetComputeRootShaderResourceView(1, colours_[band]->GetGPUVirtualAddress());
+            l->Dispatch(size / 16, size / bands / 16, 1);
+        }
+        image_.become(gpu, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        gpu.begin_frame(0.03f, 0.03f, 0.03f);
+        l->SetGraphicsRootSignature(show_root_);
+        l->SetPipelineState(show_);
+        const float w = static_cast<float>(gpu.width), h = static_cast<float>(gpu.height);
+        const float side = min(h * 0.9f, w * 0.9f);
+        gpu.viewport((w - side) * 0.5f, (h - side) * 0.5f, side, side);
+        l->SetGraphicsRootDescriptorTable(0, image_.srv.gpu);
+        draw_quad(l);
+    }
+    void release() override
+    {
+        safe_release(root_);
+        safe_release(show_root_);
+        safe_release(show_);
+        for (auto *&painter : painters_) safe_release(painter);
+        for (auto *&colour : colours_) safe_release(colour);
+        image_.release();
+    }
+
+private:
+    static constexpr uint32_t size = 512;
+    static constexpr uint32_t bands = 8;
+
+    // A band's shader: its rows of the image, a wave summed over an unrolled
+    // loop - long enough that its DXIL crosses as a blob - in its buffer's
+    // colour, with the band's own frequencies.
+    static void band_source(uint32_t band, char *source, size_t capacity)
+    {
+        copy_text(source, capacity, "#define BAND ");
+        append_number(source, capacity, band, 0);
+        append_text(source, capacity, R"(
+RWTexture2D<float4> image : register(u0);
+StructuredBuffer<float4> colour : register(t0);
+[numthreads(16, 16, 1)]
+void cs(uint3 id : SV_DispatchThreadID) {
+    uint2 at = uint2(id.x, id.y + BAND * 64);
+    float2 p = float2(at) / 512.0;
+    float wave = 0;
+    [unroll] for (int i = 0; i < 96; i++) {
+        float k = i + 1 + BAND * 3;
+        wave += sin(p.x * k * 2.1 + p.y * (k * 0.7 + BAND)) * cos(p.y * k * 1.3 - p.x * BAND) / k;
+    }
+    image[at] = float4(saturate(colour[0].rgb * (0.75 + 0.5 * wave)), 1);
+}
+)");
+    }
+
+    ID3D12RootSignature *root_ = nullptr, *show_root_ = nullptr;
+    ID3D12PipelineState *painters_[bands] = {};
+    ID3D12PipelineState *show_ = nullptr;
+    ID3D12Resource      *colours_[bands] = {};
+    RenderTexture        image_;
+};
+
 }  // namespace
 
 void register_compute(Sample **all, uint32_t &made)
@@ -1733,6 +1843,7 @@ void register_compute(Sample **all, uint32_t &made)
     all[made++] = new Bloom();
     all[made++] = new RadialBlur();
     all[made++] = new Offscreen();
+    all[made++] = new ShaderStream();
 }
 
 }  // namespace samples

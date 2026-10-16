@@ -10,6 +10,7 @@
 #include "guest/transport/host_watch.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "guest/transport/publish_gate.hpp"
+#include "guest/transport/unsent_batch.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -1870,6 +1871,153 @@ TEST(kmt_transport, a_torn_down_transport_forgets_what_held_it)
   const std::size_t length = frame_batch(framed, 0x10001u, 1u, false);
   CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
   CHECK_EQ(gate.passes(), 0u);
+  transport.teardown(); }
+
+namespace {
+
+/* A stream's held-back commands, as the Direct3D command stream holds them:
+ * a framed batch it sends on the transport when asked, counting each time it
+ * is asked. One that refuses fails as a stream the host refused does. */
+class HeldCommands final : public av::UnsentBatch {
+public:
+    HeldCommands(KmtTransport &transport, bool refuses)
+        : transport_(transport), refuses_(refuses), framed_{}, length_(0u), flushes_(0u)
+    {
+    }
+    void hold(std::uint32_t id) { length_ = frame_batch(framed_, id, 1u, false); }
+    Status flush() override
+    {
+        flushes_++;
+        if (refuses_) return Status::invalid_state;
+        if (length_ == 0u) return Status::ok;
+        const TransportResult sent = transport_.send_async_batch(framed_, length_);
+        length_ = 0u;
+        return sent == TransportResult::ok ? Status::ok : Status::invalid_state;
+    }
+    std::uint32_t flushes() const { return flushes_; }
+
+private:
+    KmtTransport &transport_;
+    bool          refuses_;
+    std::uint8_t  framed_[12u];
+    std::size_t   length_;
+    std::uint32_t flushes_;
+};
+
+}  // namespace
+
+/* Resident Evil 4's compute shaders: the stream held commands whose arrays
+ * were in blob leases when a heap's import - a command of the transport's own
+ * - was sent and answered. Sent first, it retired those leases, the next
+ * shader was copied over them, and the host read it in place of the first.
+ * Followed, the stream's batch reaches the device first, so the answer
+ * retires leases the host has run, and the transport's commands keep their
+ * place after the stream's. */
+TEST(kmt_transport, a_followed_stream_sends_what_it_holds_before_the_transport_s_own_command)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::d3d, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  std::uint8_t room[64] = {};
+  transport.blobs().lend(room, sizeof room);
+  HeldCommands stream(transport, false);
+  transport.send_after(stream);
+  /* The stream's command, its array in a lease, held back. */
+  CHECK(transport.blobs().take(16u).taken());
+  stream.hold(0x10001u);
+  const std::uint8_t nothing = 0u;
+  fixture.kmt().queue_answer(&nothing, 0u);
+  WireWriter sync = transport.request_writer();
+  sync.write_u32(1u);
+  WireReader got(nullptr, 0u);
+  CHECK(transport.send_sync(0x30002u, sync, got) == TransportResult::ok);
+  transport.end_call();
+  CHECK_EQ(stream.flushes(), 1u);
+  CHECK_EQ(fixture.kmt().commands(), 2u);
+  CHECK_EQ(fixture.kmt().command_id(0u), 0x10001u);
+  CHECK_EQ(fixture.kmt().command_id(1u), 0x30002u);
+  CHECK_EQ(transport.blobs().used(), 0u);
+  /* An asynchronous command of its own goes after the stream's too. */
+  stream.hold(0x10002u);
+  WireWriter async = transport.request_writer();
+  async.write_u32(2u);
+  CHECK(transport.send_async(0x30001u, async) == TransportResult::ok);
+  transport.end_call();
+  CHECK_EQ(stream.flushes(), 2u);
+  CHECK_EQ(fixture.kmt().commands(), 4u);
+  CHECK_EQ(fixture.kmt().command_id(2u), 0x10002u);
+  CHECK_EQ(fixture.kmt().command_id(3u), 0x30001u);
+  /* With nothing held back, asking costs no batch. */
+  WireWriter alone = transport.request_writer();
+  alone.write_u32(3u);
+  CHECK(transport.send_async(0x30001u, alone) == TransportResult::ok);
+  CHECK_EQ(stream.flushes(), 3u);
+  CHECK_EQ(fixture.kmt().commands(), 5u);
+  /* The stream's own batches are not sent ahead of themselves. */
+  std::uint8_t framed[12u] = {};
+  const std::size_t length = frame_batch(framed, 0x10003u, 1u, false);
+  CHECK(transport.send_async_batch(framed, length) == TransportResult::ok);
+  CHECK_EQ(stream.flushes(), 3u);
+  CHECK(transport.invariants_hold());
+  transport.teardown(); }
+
+/* A stream that cannot send what it holds - its device is lost - keeps the
+ * transport's command from going ahead of it: the command fails unsent, and
+ * the context is not faulted for it. */
+TEST(kmt_transport, a_stream_that_cannot_send_fails_the_transport_s_command_unsent)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::d3d, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  HeldCommands stream(transport, true);
+  transport.send_after(stream);
+  WireWriter async = transport.request_writer();
+  async.write_u32(1u);
+  CHECK(transport.send_async(0x30001u, async) == TransportResult::failed);
+  WireWriter sync = transport.request_writer();
+  sync.write_u32(2u);
+  WireReader got(nullptr, 0u);
+  CHECK(transport.send_sync(0x30002u, sync, got) == TransportResult::failed);
+  transport.end_call();
+  CHECK_EQ(stream.flushes(), 2u);
+  CHECK_EQ(fixture.kmt().commands(), 0u);
+  CHECK(!transport.faulted());
+  transport.teardown(); }
+
+/* A session closing drops its own stream and no other's; a transport torn
+ * down follows none. */
+TEST(kmt_transport, a_dropped_or_torn_down_stream_is_no_longer_sent_ahead)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::d3d, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  HeldCommands followed(transport, false);
+  HeldCommands other(transport, false);
+  transport.send_after(followed);
+  transport.drop(other);
+  WireWriter first = transport.request_writer();
+  first.write_u32(1u);
+  CHECK(transport.send_async(0x30001u, first) == TransportResult::ok);
+  CHECK_EQ(followed.flushes(), 1u);
+  transport.drop(followed);
+  WireWriter second = transport.request_writer();
+  second.write_u32(2u);
+  CHECK(transport.send_async(0x30001u, second) == TransportResult::ok);
+  CHECK_EQ(followed.flushes(), 1u);
+  transport.send_after(followed);
+  transport.teardown();
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  WireWriter third = transport.request_writer();
+  third.write_u32(3u);
+  CHECK(transport.send_async(0x30001u, third) == TransportResult::ok);
+  CHECK_EQ(followed.flushes(), 1u);
+  CHECK_EQ(other.flushes(), 0u);
   transport.teardown(); }
 
 /* What a packet on another of this process's contexts names: the transport's

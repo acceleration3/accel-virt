@@ -47,6 +47,7 @@ class ContextViewsRecord;
 
 class GuestConnection;
 class PublishGate;
+class UnsentBatch;
 struct KmtTransportProbe;
 
 class KmtTransport final : public ClientTransport {
@@ -119,6 +120,13 @@ public:
     void                 hold(PublishGate &gate);
     /* `gate` is going away: a hold by it is dropped, one by another kept. */
     void                 forget(const PublishGate &gate);
+    /* From now on a command of the transport's own (send_async, send_sync)
+     * is published only after `batch` has sent what it holds back - a stream
+     * whose commands carry blob leases (UnsentBatch). One stream at a time;
+     * `batch` outlives this or is dropped first. */
+    void                 send_after(UnsentBatch &batch);
+    /* `batch` is going away: dropped if it is the one followed. */
+    void                 drop(const UnsentBatch &batch);
     /* Has the driver set the event `handle` names - this process's, one it may
      * set - whenever the host raises on this context, and when the context is
      * lost or goes (docs/protocol.md, "Wake event record"). invalid_state
@@ -226,6 +234,9 @@ private:
     [[nodiscard]] bool room_for_fence();
     uint64_t           published_now() const;
     [[nodiscard]] TransportResult publish_batch(const uint8_t *batch, uint32_t length, uint64_t &fence);
+    /* What the followed stream holds back, sent ahead of a command of the
+     * transport's own: false when it could not be. */
+    [[nodiscard]] bool            sent_ahead();
     /* Waits for the context and points `reply` at the answer for `fence`. */
     [[nodiscard]] TransportResult await(uint64_t fence, WireReader &reply);
     bool                          replied_within_spin(uint64_t fence);
@@ -272,6 +283,9 @@ private:
     bool             faulted_;
     /* What the next batch written waits for; null when nothing is held. */
     PublishGate     *held_;
+    /* The stream whose held-back commands go before the transport's own;
+     * null when there is none. */
+    UnsentBatch     *ahead_;
     /* A synchronous call was answered since the last end_call. */
     bool             answered_;
     WireArena        decode_arena_;

@@ -91,6 +91,10 @@ HRESULT D3dSession::open(uint32_t adapter)
     if (opened != Status::ok) return opened == Status::no_memory ? E_OUTOFMEMORY : E_FAIL;
     static_cast<void>(stream_.construct(channel_.transport(), batch_, batch_bytes));
     stream_.object().speak_with(select_command_, finish_command_, flush_command_);
+    /* A heap's blob import, made under the same lock between the stream's
+     * commands, would otherwise reach the host ahead of them and retire the
+     * leases they carry (UnsentBatch). */
+    channel_.transport().send_after(stream_.object());
     if (channel_.arena_view() != nullptr)
         query_results_.reserve(channel_.transport().blobs(), channel_.arena_view(), channel_.arena_bytes(), lent_bytes);
     if (host_has_slices()) open_slices();
@@ -171,6 +175,7 @@ void D3dSession::close()
     slice_store_ = nullptr;
     if (stream_.constructed()) {
         static_cast<void>(stream_.object().flush());
+        channel_.transport().drop(stream_.object());
         stream_.destroy();
     }
     channel_.close(false);

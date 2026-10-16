@@ -16,11 +16,15 @@
  * Every device the process makes speaks on this one stream, so the doorbell
  * and ring it costs are spent once per process: the stream remembers which
  * device the host has selected and selects another only when the speaker
- * changes (speak_as), which inside a batch is rare. */
+ * changes (speak_as), which inside a batch is rare.
+ *
+ * What it holds back carries blob leases, so the session has its transport
+ * send it before any command of the transport's own (UnsentBatch). */
 #ifndef AV_D3D_COMMAND_STREAM_HPP
 #define AV_D3D_COMMAND_STREAM_HPP
 
 #include "core/support/status.hpp"
+#include "guest/transport/unsent_batch.hpp"
 #include "icd/common/framed_block.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/client/client_transport.hpp"
@@ -37,7 +41,7 @@ namespace av::d3d {
 
 class CommandRecording;
 
-class D3dCommandStream final : public ClientTransport {
+class D3dCommandStream final : public ClientTransport, public UnsentBatch {
 public:
     /* The most one command is lent in a recording, which bounds its inline
      * data; a sending stream's command that outgrows it spills into the
@@ -74,8 +78,10 @@ public:
     void                 speak_with(uint32_t select_command, uint32_t finish_command, uint32_t flush_command);
 
     /* Sends what is recorded, answered by nothing. invalid_state when the
-     * transport refused it, which loses the device; ok with nothing to send. */
-    [[nodiscard]] Status flush();
+     * transport refused it, which loses the device; ok with nothing to send.
+     * The transport asks for it too, before a command of its own goes, once
+     * told to send after this stream (KmtTransport::send_after). */
+    [[nodiscard]] Status flush() override;
     /* What an application's Flush asks for: the batch goes when the host is
      * ready for it, and otherwise keeps growing until a later flush, a sync
      * or a full block sends it. */
