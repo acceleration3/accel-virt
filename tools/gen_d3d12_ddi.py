@@ -89,6 +89,8 @@ IMPLEMENTED = {
         "pfnCommandRecorderSetCommandPoolAsTarget", "pfnEnumerateMetaCommands",
         "pfnCheckDriverMatchingIdentifier", "pfnGetDebugAllocationInfo",
         "pfnCalcPrivateCommandSignatureSize", "pfnCreateCommandSignature", "pfnDestroyCommandSignature",
+        "pfnCalcPrivatePipelineLibrarySize", "pfnCreatePipelineLibrary", "pfnDestroyPipelineLibrary",
+        "pfnAddPipelineStateToLibrary", "pfnCalcSerializedLibrarySize", "pfnSerializeLibrary",
     },
     QUEUE_TABLE: {"pfnExecuteCommandLists", "pfnSignalFence", "pfnWaitForFence", "pfnUpdateTileMappings",
                   "pfnCopyTileMappings"},

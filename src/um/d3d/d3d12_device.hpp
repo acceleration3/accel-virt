@@ -33,6 +33,7 @@
 #include "icd/d3d/d3d12_address_space.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/device_removal.hpp"
+#include "icd/d3d/pipeline_library_blob.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
 #include "um/d3d/batch_follower.hpp"
 #include "um/d3d/d3d12_ddi.hpp"
@@ -167,6 +168,7 @@ private:
     D3d12Recorder                         recorder_;
     ResourceRecord                        null_resource_;
     d3d::DeviceRemoval                    removal_;
+    d3d::PipelineLibraryBlob              library_blob_;
 };
 
 }  // namespace av::d3d12

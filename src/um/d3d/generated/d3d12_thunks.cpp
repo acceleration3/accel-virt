@@ -272,22 +272,22 @@ extern "C" D3DKMT_HANDLE APIENTRY avumd_d3d12_CheckResourceAllocationHandle(D3D1
 { static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCheckResourceAllocationHandle"); return D3DKMT_HANDLE{}; }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcPrivatePipelineLibrarySize(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 * a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCalcPrivatePipelineLibrarySize"); return SIZE_T{}; }
+{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_private_pipeline_library_size(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_CreatePipelineLibrary(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 * a1, D3D12DDI_HPIPELINELIBRARY a2)
-{ static_cast<void>(a1); static_cast<void>(a2); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCreatePipelineLibrary"); return E_NOTIMPL; }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("CreatePipelineLibrary", device.create_pipeline_library(a1, a2)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_DestroyPipelineLibrary(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINELIBRARY a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnDestroyPipelineLibrary"); }
+{ D3d12DeviceHandle(handle.pDrvPrivate).device().destroy_pipeline_library(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_AddPipelineStateToLibrary(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINELIBRARY a1, D3D12DDI_HPIPELINESTATE a2, UINT a3)
-{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnAddPipelineStateToLibrary"); return E_NOTIMPL; }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("AddPipelineStateToLibrary", device.add_pipeline_state_to_library(a1, a2, a3)); }
 
 extern "C" SIZE_T APIENTRY avumd_d3d12_CalcSerializedLibrarySize(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINELIBRARY a1)
-{ static_cast<void>(a1); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnCalcSerializedLibrarySize"); return SIZE_T{}; }
+{ return D3d12DeviceHandle(handle.pDrvPrivate).device().calc_serialized_library_size(a1); }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_SerializeLibrary(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINELIBRARY a1, void * a2)
-{ static_cast<void>(a1); static_cast<void>(a2); D3d12DeviceHandle(handle.pDrvPrivate).device().unsupported("pfnSerializeLibrary"); return E_NOTIMPL; }
+{ D3d12Device &device = D3d12DeviceHandle(handle.pDrvPrivate).device(); return device.answered("SerializeLibrary", device.serialize_library(a1, a2)); }
 
 extern "C" VOID APIENTRY avumd_d3d12_GetDebugAllocationInfo(D3D12DDI_HDEVICE handle, D3D12DDI_HANDLE_AND_TYPE a1, UINT * a2, D3D12DDI_DEBUG_VIRTUAL_ADDRESS_ALLOCATION_INFO_0012 * a3, UINT * a4, D3D12DDI_DEBUG_KMT_ALLOCATION_INFO_0014 * a5)
 { D3d12DeviceHandle(handle.pDrvPrivate).device().get_debug_allocation_info(a1, a2, a3, a4, a5); }

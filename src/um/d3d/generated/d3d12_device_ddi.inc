@@ -78,6 +78,12 @@ VOID check_existing_resource_allocation_info(D3D12DDI_HRESOURCE, D3D12DDI_RESOUR
 UINT get_implicit_physical_adapter_mask();
 UINT get_present_private_driver_data_size(const D3D12DDIARG_PRESENT_0001 *);
 VOID query_node_map(UINT, UINT *);
+SIZE_T calc_private_pipeline_library_size(const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 *);
+HRESULT create_pipeline_library(const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 *, D3D12DDI_HPIPELINELIBRARY);
+VOID destroy_pipeline_library(D3D12DDI_HPIPELINELIBRARY);
+HRESULT add_pipeline_state_to_library(D3D12DDI_HPIPELINELIBRARY, D3D12DDI_HPIPELINESTATE, UINT);
+SIZE_T calc_serialized_library_size(D3D12DDI_HPIPELINELIBRARY);
+HRESULT serialize_library(D3D12DDI_HPIPELINELIBRARY, void *);
 VOID get_debug_allocation_info(D3D12DDI_HANDLE_AND_TYPE, UINT *, D3D12DDI_DEBUG_VIRTUAL_ADDRESS_ALLOCATION_INFO_0012 *, UINT *, D3D12DDI_DEBUG_KMT_ALLOCATION_INFO_0014 *);
 SIZE_T calc_private_command_recorder_size(const D3D12DDIARG_CREATE_COMMAND_RECORDER_0040 *);
 HRESULT create_command_recorder(const D3D12DDIARG_CREATE_COMMAND_RECORDER_0040 *, D3D12DDI_HCOMMANDRECORDER_0040);

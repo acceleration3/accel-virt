@@ -238,6 +238,7 @@ static_assert(av::d3d::hr_dxgi_unsupported == DXGI_ERROR_UNSUPPORTED);
 static_assert(av::d3d::hr_dxgi_device_removed == DXGI_ERROR_DEVICE_REMOVED);
 static_assert(av::d3d::hr_dxgi_device_hung == DXGI_ERROR_DEVICE_HUNG);
 static_assert(av::d3d::hr_dxgi_device_reset == DXGI_ERROR_DEVICE_RESET);
+static_assert(av::d3d::hr_d3d12_driver_version_mismatch == D3D12_ERROR_DRIVER_VERSION_MISMATCH);
 
 /* The WDDM 3.2 D3D11 DDI word DdiVersionList names (d3d10umddi.h:7969). */
 static_assert(D3DWDDM3_2_DDI_SUPPORTED == 0x000B002D00010000ull);

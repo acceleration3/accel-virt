@@ -104,9 +104,10 @@ D3D_REPORTS = {
            "note d3d11.tir_coverage the device is a layer's: DXVK as released rasterizes a forced sample "
            "count at the render target's\r\nok d3d11.tir_device_kept\r\n"
            "avd3d11probe: 24 passed, 0 failed\r\n"),
-    "12": ("ok d3d12.device\r\nok d3d12.feature_level 49152\r\nok d3d12.adapter_luid\r\nok d3d12.queue\r\n"
+    "12": ("ok d3d12.device\r\nok d3d12.feature_level 49152\r\nok d3d12.adapter_luid\r\n"
+           "ok d3d12.pipeline_library\r\nok d3d12.queue\r\n"
            "ok d3d12.target\r\nok d3d12.clear\r\nok d3d12.fence\r\nok d3d12.readback\r\n"
-           "ok d3d12.pixels 4096\r\navd3d12probe: 9 passed, 0 failed\r\n"),
+           "ok d3d12.pixels 4096\r\navd3d12probe: 10 passed, 0 failed\r\n"),
 }
 """What each D3D probe prints when every step of feature 047's US1 and US2 passed."""
 D3D_PICTURES = ("C:\\av\\d3d9-clear.bmp", "C:\\av\\d3d9-wpf.bmp", "C:\\av\\d3d11-clear.bmp",
@@ -1077,7 +1078,7 @@ class GuestSuiteRun(unittest.TestCase):
             self.assertEqual((self.work / f"d3d{api}.txt").read_text(newline=""), D3D_REPORTS[api])
         self.assertIn("guest: d3d9 ok: 11 passed through dxvk", result.stdout)
         self.assertIn("guest: d3d11 ok: 24 passed through dxvk", result.stdout)
-        self.assertIn("guest: d3d12 ok: 9 passed through vkd3d-proton", result.stdout)
+        self.assertIn("guest: d3d12 ok: 10 passed through vkd3d-proton", result.stdout)
         # It ran in the console session, as a window needs.
         self.assertTrue(any("schtasks.exe /create /tn avconsole" in line for line in lines))
         for picture in ("d3d9-clear", "d3d9-wpf", "d3d11-clear", "d3d12-clear"):

@@ -27,6 +27,12 @@ public:
     /* The adapter's LUID, which is what the runner compares with the
      * driver's. */
     virtual int32_t adapter_luid(uint64_t &luid) = 0;
+    /* What a game engine asks of a new device before anything else (Resident
+     * Evil 4's): where the device reports a library-capable shader cache, an
+     * empty pipeline library made, serialized into `serialized` bytes and
+     * made again from them; then the device asked whether it is still there.
+     * S_OK with `serialized` 0 where the device reports no library. */
+    virtual int32_t pipeline_library(uint32_t &serialized) = 0;
     /* A direct command queue, a command allocator and one command list. */
     virtual int32_t create_queue() = 0;
     /* A `width` by `height` RGBA8 render target, a descriptor heap for its

@@ -44,7 +44,7 @@ D3d12Device::D3d12Device(d3d::D3dSession &session, LogSink &log,
                          const D3d12HostCaps &caps,
                          void *const &list_table)
     : session_(session), log_(log), lines_(log, "avumd: "), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), follower_(), residency_(), channel_(), addresses_(),
-      recorder_(*this), null_resource_{}, removal_()
+      recorder_(*this), null_resource_{}, removal_(), library_blob_()
 {
     AV_SCOPE("D3d12Device::D3d12Device");
     null_resource_.depth_or_array = 1u;

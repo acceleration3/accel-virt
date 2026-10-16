@@ -154,8 +154,8 @@ D3D_STEPS = {"9": ("device", "adapter_ids", "clear", "readback", "pixels", "pres
                     "deferred_readback", "deferred_contents", "deferred_commit", "shared_device",
                     "shared_targets", "shared_readback", "shared_texels", "shared_device_kept",
                     "tir_device", "tir_pipeline", "tir_draw", "tir_readback", "tir_device_kept"),
-             "12": ("device", "feature_level", "adapter_luid", "queue", "target", "clear", "fence", "readback",
-                    "pixels")}
+             "12": ("device", "feature_level", "adapter_luid", "pipeline_library", "queue", "target", "clear",
+                    "fence", "readback", "pixels")}
 # Which layer each probe's DLLs come from, and what the probe is called.
 D3D_LAYERS = {"9": "dxvk", "11": "dxvk", "12": "vkd3d-proton"}
 D3D_PICTURES = ("d3d9-clear", "d3d9-wpf", "d3d11-clear", "d3d12-clear")

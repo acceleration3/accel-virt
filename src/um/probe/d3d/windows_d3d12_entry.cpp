@@ -25,7 +25,7 @@ uint32_t aligned_row(uint32_t width)
 WindowsD3d12Entry::WindowsD3d12Entry()
     : factory_(nullptr), adapter_(nullptr), device_(nullptr), queue_(nullptr), allocator_(nullptr),
       commands_(nullptr), views_(nullptr), target_(nullptr), readback_(nullptr), fence_(nullptr),
-      reached_(nullptr), signalled_(0u), width_(0u), height_(0u), row_pitch_(0u)
+      reached_(nullptr), signalled_(0u), width_(0u), height_(0u), row_pitch_(0u), library_blob_{}
 {
     AV_SCOPE("WindowsD3d12Entry::WindowsD3d12Entry");
 }
@@ -69,6 +69,39 @@ int32_t WindowsD3d12Entry::adapter_luid(uint64_t &luid)
     luid = (static_cast<uint64_t>(static_cast<uint32_t>(described.AdapterLuid.HighPart)) << 32) |
            described.AdapterLuid.LowPart;
     return asked;
+}
+
+int32_t WindowsD3d12Entry::pipeline_library(uint32_t &serialized)
+{
+    AV_SCOPE("WindowsD3d12Entry::pipeline_library");
+    serialized = 0u;
+    D3D12_FEATURE_DATA_SHADER_CACHE cache = {};
+    HRESULT asked = device_->CheckFeatureSupport(D3D12_FEATURE_SHADER_CACHE, &cache, sizeof cache);
+    if (asked < 0) return asked;
+    if ((cache.SupportFlags & D3D12_SHADER_CACHE_SUPPORT_LIBRARY) == 0) return asked;
+    ID3D12Device1 *device = nullptr;
+    asked = device_->QueryInterface(__uuidof(ID3D12Device1), reinterpret_cast<void **>(&device));
+    if (asked < 0) return asked;
+    ID3D12PipelineLibrary *empty = nullptr;
+    asked = device->CreatePipelineLibrary(nullptr, 0u, __uuidof(ID3D12PipelineLibrary),
+                                          reinterpret_cast<void **>(&empty));
+    if (asked >= 0) {
+        const SIZE_T bytes = empty->GetSerializedSize();
+        asked = bytes <= sizeof library_blob_ ? empty->Serialize(library_blob_, bytes)
+                                              : static_cast<HRESULT>(E_OUTOFMEMORY);
+        empty->Release();
+        ID3D12PipelineLibrary *again = nullptr;
+        if (asked >= 0)
+            asked = device->CreatePipelineLibrary(library_blob_, bytes, __uuidof(ID3D12PipelineLibrary),
+                                                  reinterpret_cast<void **>(&again));
+        if (again != nullptr) again->Release();
+        serialized = static_cast<uint32_t>(bytes);
+    }
+    device->Release();
+    if (asked < 0) return asked;
+    /* A driver that refused a slot may have had the runtime remove the
+     * device instead of failing the call. */
+    return device_->GetDeviceRemovedReason();
 }
 
 int32_t WindowsD3d12Entry::create_queue()

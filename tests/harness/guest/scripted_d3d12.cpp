@@ -69,6 +69,17 @@ std::int32_t ScriptedD3d12::adapter_luid(std::uint64_t &luid)
     return 0;
 }
 
+std::int32_t ScriptedD3d12::pipeline_library(std::uint32_t &serialized)
+{
+    const std::int32_t refused = refusal(Call::pipeline_library);
+    if (refused != 0) return refused;
+    CHECK(live_);
+    /* Before the queue, as an engine asks. */
+    CHECK(!queue_);
+    serialized = library_bytes;
+    return 0;
+}
+
 std::int32_t ScriptedD3d12::create_queue()
 {
     const std::int32_t refused = refusal(Call::create_queue);

@@ -17,8 +17,11 @@ public:
     static constexpr std::uint32_t feature_level_12_0 = 0xC000u;
     static constexpr std::uint64_t adapter = 0x1234ABCDu;
 
-    enum class Call : unsigned { create_device, adapter_luid, create_queue, create_render_target, clear_and_copy,
-                                 wait, read_back, release, count };
+    /* What an empty library serializes to: a header. */
+    static constexpr std::uint32_t library_bytes = 8u;
+
+    enum class Call : unsigned { create_device, adapter_luid, pipeline_library, create_queue, create_render_target,
+                                 clear_and_copy, wait, read_back, release, count };
 
     ScriptedD3d12();
     ScriptedD3d12(const ScriptedD3d12 &) = delete;
@@ -36,6 +39,7 @@ public:
 
     std::int32_t create_device(std::uint32_t &feature_level) override;
     std::int32_t adapter_luid(std::uint64_t &luid) override;
+    std::int32_t pipeline_library(std::uint32_t &serialized) override;
     std::int32_t create_queue() override;
     std::int32_t create_render_target(std::uint32_t width, std::uint32_t height) override;
     std::int32_t clear_and_copy(const std::uint8_t *colour) override;

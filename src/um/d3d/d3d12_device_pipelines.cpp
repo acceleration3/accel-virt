@@ -31,6 +31,10 @@ constexpr uint32_t most_samplers = 64u;
 /* CreateCommandSignature12's own maximum. */
 constexpr uint32_t most_indirect_arguments = 16u;
 constexpr uint32_t most_signatures = 1024u;
+/* The runtime's block for a pipeline library. The driver keeps nothing in it
+ * (PipelineLibraryBlob says why), but no runtime is documented to take a
+ * private size of zero. */
+constexpr SIZE_T library_private_bytes = sizeof(uint64_t);
 
 /* A DXBC or DXIL container says its size at byte 24; a token stream and a
  * DXIL program header both say theirs, in words, as their second word. */
@@ -546,6 +550,61 @@ VOID D3d12Device::destroy_pipeline_state(D3D12DDI_HPIPELINESTATE handle)
     ObjectRecord &pipeline = *static_cast<ObjectRecord *>(handle.pDrvPrivate);
     static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), pipeline.header.id), "Destroy12"));
     pipeline = ObjectRecord{};
+}
+
+/* Pipeline libraries. D3D12Core reports a library-capable shader cache for
+ * every driver at this DDI version, so these slots must answer: Resident
+ * Evil 4's engine makes a library first on every new device, and the
+ * E_NOTIMPL an unimplemented slot answers made the runtime remove the device
+ * (DXGI_ERROR_DRIVER_INTERNAL_ERROR) before it had a queue. A pipeline
+ * loaded from a library still comes to CreatePipelineState with its whole
+ * description, which is all the host compiles from. */
+SIZE_T D3d12Device::calc_private_pipeline_library_size(const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 *args)
+{
+    AV_SCOPE("D3d12Device::calc_private_pipeline_library_size");
+    static_cast<void>(args);
+    return library_private_bytes;
+}
+
+HRESULT D3d12Device::create_pipeline_library(const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 *args,
+                                             D3D12DDI_HPIPELINELIBRARY handle)
+{
+    AV_SCOPE("D3d12Device::create_pipeline_library");
+    static_cast<void>(handle);
+    if (args == nullptr) return E_INVALIDARG;
+    return library_blob_.opened(args->pInitialData, args->InitialDataSize);
+}
+
+VOID D3d12Device::destroy_pipeline_library(D3D12DDI_HPIPELINELIBRARY handle)
+{
+    AV_SCOPE("D3d12Device::destroy_pipeline_library");
+    static_cast<void>(handle);
+}
+
+HRESULT D3d12Device::add_pipeline_state_to_library(D3D12DDI_HPIPELINELIBRARY library, D3D12DDI_HPIPELINESTATE state,
+                                                   UINT index)
+{
+    AV_SCOPE("D3d12Device::add_pipeline_state_to_library");
+    static_cast<void>(library);
+    static_cast<void>(state);
+    static_cast<void>(index);
+    return S_OK;
+}
+
+SIZE_T D3d12Device::calc_serialized_library_size(D3D12DDI_HPIPELINELIBRARY library)
+{
+    AV_SCOPE("D3d12Device::calc_serialized_library_size");
+    static_cast<void>(library);
+    return library_blob_.size();
+}
+
+HRESULT D3d12Device::serialize_library(D3D12DDI_HPIPELINELIBRARY library, void *blob)
+{
+    AV_SCOPE("D3d12Device::serialize_library");
+    static_cast<void>(library);
+    if (blob == nullptr) return E_INVALIDARG;
+    library_blob_.write(blob);
+    return S_OK;
 }
 
 }  // namespace av::d3d12

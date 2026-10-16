@@ -880,6 +880,15 @@ gives it (docs/host-memory.md, Budgets).
   probes make a window, so all three run in the console session through
   `ConsoleProgram`, as the Vulkan probe does.
 
+  The D3D12 probe asks first what Resident Evil 4's engine asks of every
+  new device (`pipeline_library`): where the device reports a library-capable
+  shader cache, an empty pipeline library is made, serialized and made again
+  from its blob, and the device must still be there. avumd answered those
+  slots E_NOTIMPL, and D3D12Core removed the device for it
+  (DXGI_ERROR_DRIVER_INTERNAL_ERROR) before the game had a queue; its blob is
+  now a header only (`PipelineLibraryBlob`), since the host compiles every
+  pipeline from the description the runtime still hands CreatePipelineState.
+
   The D3D9 probe then presents on its window the way WPF does
   (`WpfPresentWork`, the `wpf_*` steps and `d3d9-wpf.bmp`): Direct3D 9Ex, a
   device on a 1x1 swap chain, the window's own COPY swap chain beside it, one

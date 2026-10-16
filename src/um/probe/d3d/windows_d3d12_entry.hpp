@@ -21,6 +21,7 @@ public:
 
     int32_t create_device(uint32_t &feature_level) override;
     int32_t adapter_luid(uint64_t &luid) override;
+    int32_t pipeline_library(uint32_t &serialized) override;
     int32_t create_queue() override;
     int32_t create_render_target(uint32_t width, uint32_t height) override;
     int32_t clear_and_copy(const uint8_t *colour) override;
@@ -45,6 +46,9 @@ private:
     uint32_t                   height_;
     /* What a copy out of a texture rounds each row up to. */
     uint32_t                   row_pitch_;
+    /* Room for a serialized empty library: a header, whatever the driver. */
+    static constexpr uint32_t  library_room = 4096u;
+    uint8_t                    library_blob_[library_room];
 };
 
 }  // namespace av

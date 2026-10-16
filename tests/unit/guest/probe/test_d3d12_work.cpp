@@ -20,6 +20,7 @@ struct D3d12WorkProbe {
     static void          read_without_a_device(D3d12Work &work) { work.read_ = true; }
     static void          adapter_without_a_device(D3d12Work &work) { work.adapter_ = 0x99u; }
     static void          level_without_a_device(D3d12Work &work) { work.feature_level_ = 0xC000u; }
+    static void          library_without_a_device(D3d12Work &work) { work.serialized_library_ = 8u; }
     static std::uint32_t coloured(const D3d12Work &work) { return work.coloured(); }
 };
 
@@ -53,7 +54,8 @@ public:
           work.run(steps_);
           CHECK(work.invariants_hold());
           adapter_ = work.adapter();
-          feature_level_ = work.feature_level(); }
+          feature_level_ = work.feature_level();
+          serialized_library_ = work.serialized_library(); }
         CHECK(!d3d12_.live());
         report_.finish();
         return report_.text();
@@ -61,6 +63,7 @@ public:
 
     std::uint64_t adapter() const { return adapter_; }
     std::uint32_t feature_level() const { return feature_level_; }
+    std::uint32_t serialized_library() const { return serialized_library_; }
 
 private:
     ScriptedD3d12     d3d12_;
@@ -70,6 +73,7 @@ private:
     ScenarioSteps     steps_;
     std::uint64_t     adapter_ = 0u;
     std::uint32_t     feature_level_ = 0u;
+    std::uint32_t     serialized_library_ = 0u;
 };
 
 }  // namespace
@@ -80,13 +84,17 @@ TEST(d3d12_work, every_step_passes_and_the_target_is_the_colour_the_list_cleared
   CHECK(std::strstr(report, "ok d3d12.device") != nullptr);
   CHECK(std::strstr(report, "ok d3d12.feature_level 49152") != nullptr);
   CHECK(std::strstr(report, "ok d3d12.adapter_luid") != nullptr);
+  CHECK(std::strstr(report, "ok d3d12.pipeline_library") != nullptr);
   CHECK(std::strstr(report, "ok d3d12.queue") != nullptr);
   CHECK(std::strstr(report, "ok d3d12.target") != nullptr);
   CHECK(std::strstr(report, "ok d3d12.clear") != nullptr);
   CHECK(std::strstr(report, "ok d3d12.fence") != nullptr);
   CHECK(std::strstr(report, "ok d3d12.readback") != nullptr);
   CHECK(std::strstr(report, "ok d3d12.pixels 4096") != nullptr);
-  CHECK(std::strstr(report, "avd3d12probe: 9 passed, 0 failed") != nullptr);
+  CHECK(std::strstr(report, "avd3d12probe: 10 passed, 0 failed") != nullptr);
+  /* The library before the queue, as the engine that needed it asks. */
+  CHECK(std::strstr(report, "ok d3d12.pipeline_library") < std::strstr(report, "ok d3d12.queue"));
+  CHECK_EQ(rig.serialized_library(), ScriptedD3d12::library_bytes);
   CHECK_EQ(rig.adapter(), ScriptedD3d12::adapter);
   CHECK_EQ(rig.feature_level(), ScriptedD3d12::feature_level_12_0);
   CHECK_EQ(rig.d3d12().width(), D3d12Work::extent);
@@ -101,7 +109,7 @@ TEST(d3d12_work, a_target_of_the_wrong_colour_fails_with_the_count)
       const char *report = rig.run();
       CHECK(std::strstr(report, "FAIL d3d12.pixels") != nullptr);
       CHECK(std::strstr(report, " 4095\n") != nullptr);
-      CHECK(std::strstr(report, "avd3d12probe: 8 passed, 1 failed") != nullptr);
+      CHECK(std::strstr(report, "avd3d12probe: 9 passed, 1 failed") != nullptr);
   }
   D3d12Rig alpha;
   alpha.d3d12().miscolour(3u);
@@ -118,11 +126,12 @@ TEST(d3d12_work, a_refusal_at_each_call_stops_the_run_there)
   const Refusal refusals[] = {
       {Call::create_device, "FAIL d3d12.device", 0u},
       {Call::adapter_luid, "FAIL d3d12.adapter_luid", 2u},
-      {Call::create_queue, "FAIL d3d12.queue", 3u},
-      {Call::create_render_target, "FAIL d3d12.target", 4u},
-      {Call::clear_and_copy, "FAIL d3d12.clear", 5u},
-      {Call::wait, "FAIL d3d12.fence", 6u},
-      {Call::read_back, "FAIL d3d12.readback", 7u},
+      {Call::pipeline_library, "FAIL d3d12.pipeline_library", 3u},
+      {Call::create_queue, "FAIL d3d12.queue", 4u},
+      {Call::create_render_target, "FAIL d3d12.target", 5u},
+      {Call::clear_and_copy, "FAIL d3d12.clear", 6u},
+      {Call::wait, "FAIL d3d12.fence", 7u},
+      {Call::read_back, "FAIL d3d12.readback", 8u},
   };
   for (const Refusal &refusal : refusals) {
       D3d12Rig rig;
@@ -134,6 +143,9 @@ TEST(d3d12_work, a_refusal_at_each_call_stops_the_run_there)
       CHECK_EQ(rig.report().failed(), 1u);
       const bool made = refusal.call != Call::create_device;
       CHECK_EQ(rig.d3d12().calls(Call::release), made ? 1u : 0u);
+      /* Nothing after the refused step ran: a device the library removed
+       * makes no queue. */
+      CHECK_EQ(rig.d3d12().calls(Call::create_queue), refusal.call >= Call::create_queue ? 1u : 0u);
       /* Nothing after the refused step ran. */
       CHECK_EQ(rig.d3d12().calls(Call::read_back), refusal.call == Call::read_back ? 1u : 0u);
   }
@@ -165,10 +177,13 @@ TEST(d3d12_work, rounding_is_within_a_step_and_an_impossible_state_is_named)
   CHECK(work.invariants_hold());
   D3d12WorkProbe::read_without_a_device(work);
   CHECK(!work.invariants_hold());
-  /* The other two: something learnt from a device that was never made. */
+  /* The others: something learnt from a device that was never made. */
   D3d12Work adapter(d3d12, images);
   D3d12WorkProbe::adapter_without_a_device(adapter);
   CHECK(!adapter.invariants_hold());
   D3d12Work level(d3d12, images);
   D3d12WorkProbe::level_without_a_device(level);
-  CHECK(!level.invariants_hold()); }
+  CHECK(!level.invariants_hold());
+  D3d12Work library(d3d12, images);
+  D3d12WorkProbe::library_without_a_device(library);
+  CHECK(!library.invariants_hold()); }

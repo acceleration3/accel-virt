@@ -16,7 +16,8 @@ constexpr uint8_t tolerance = 1u;
 }  // namespace
 
 D3d12Work::D3d12Work(D3d12Entry &d3d12, ImageSink &images)
-    : d3d12_(d3d12), images_(images), adapter_(0u), feature_level_(0u), made_(false), read_(false), frame_{}
+    : d3d12_(d3d12), images_(images), adapter_(0u), feature_level_(0u), serialized_library_(0u), made_(false),
+      read_(false), frame_{}
 {
     AV_SCOPE("D3d12Work::D3d12Work");
 }
@@ -34,6 +35,7 @@ void D3d12Work::run(ScenarioSteps &steps)
     made_ = true;
     steps.check_measured("feature_level", Status::ok, feature_level_);
     if (steps.check_result("adapter_luid", d3d12_.adapter_luid(adapter_)) != Status::ok) return;
+    if (steps.check_result("pipeline_library", d3d12_.pipeline_library(serialized_library_)) != Status::ok) return;
     if (steps.check_result("queue", d3d12_.create_queue()) != Status::ok) return;
     if (steps.check_result("target", d3d12_.create_render_target(extent, extent)) != Status::ok) return;
     if (steps.check_result("clear", d3d12_.clear_and_copy(colour)) != Status::ok) return;
@@ -57,6 +59,12 @@ uint32_t D3d12Work::feature_level() const
     return feature_level_;
 }
 
+uint32_t D3d12Work::serialized_library() const
+{
+    AV_SCOPE("D3d12Work::serialized_library");
+    return serialized_library_;
+}
+
 uint32_t D3d12Work::coloured() const
 {
     AV_SCOPE("D3d12Work::coloured");
@@ -76,7 +84,7 @@ uint32_t D3d12Work::coloured() const
 bool D3d12Work::invariants_hold() const
 {
     AV_SCOPE("D3d12Work::invariants_hold");
-    if (!made_ && (read_ || adapter_ != 0u || feature_level_ != 0u)) return false;
+    if (!made_ && (read_ || adapter_ != 0u || feature_level_ != 0u || serialized_library_ != 0u)) return false;
     return coloured() <= pixels;
 }
 
