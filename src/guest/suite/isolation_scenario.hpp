@@ -11,6 +11,7 @@
 #include "core/support/status.hpp"
 #include "guest/suite/scenario_steps.hpp"
 #include "guest/suite/scenario_transport.hpp"
+#include "proto/generated/vulkan/vk_handle_translation.h"
 
 #include <stdint.h>
 
@@ -38,6 +39,8 @@ private:
 
     ScenarioSteps     steps_;
     ScenarioTransport link_;
+    /* The instance it makes is named in the host's own number. */
+    vkproto::HandleIdentity handles_;
     /* The doomed context's commands, then the relinked one's: never both live. */
     uint8_t           staging_[ScenarioTransport::command_bytes];
 };

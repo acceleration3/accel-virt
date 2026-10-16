@@ -15,38 +15,28 @@
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
-#include <string.h>
-
 namespace av {
 
 namespace {
-
-/* The executor whose handles the generated decoder is about to check. One
- * context runs on one worker thread and one call at a time - the ABI says so -
- * so the current backend is the thread's, and this is the only shape a hook
- * with no user pointer can take. */
-thread_local VulkanBackend *inside = nullptr;
 
 /* Devices before instances, the order the API requires and the order a guest
  * would have used had it bothered. What a device made goes with it: the
  * driver frees it. */
 constexpr VulkanObjectKind release_order[] = {VulkanObjectKind::device, VulkanObjectKind::instance};
 
-/* Every other handle. The driver dereferences these too - a VkBuffer this
- * executor never made is the same hole one layer down - but null is a value the
- * API itself defines for most of them, and refusing it would refuse every
- * optional parameter. So: null passes, anything else must be ours. */
-template <typename H>
-bool answer_optional(const VulkanBackend *backend, uint64_t raw, H &out)
+/* The kind this host tells a handle of `kind` apart as: the five the loader
+ * dispatches on are judged by kind, everything else only by whether this
+ * context made it. */
+constexpr VulkanObjectKind object_kind(vkproto::HandleKind kind)
 {
-    AV_SCOPE("answer_optional");
-    if (backend == nullptr) {
-        memcpy(&out, &raw, sizeof out);
-        return true;
+    switch (kind) {
+    case vkproto::HandleKind::instance: return VulkanObjectKind::instance;
+    case vkproto::HandleKind::physical_device: return VulkanObjectKind::physical_device;
+    case vkproto::HandleKind::device: return VulkanObjectKind::device;
+    case vkproto::HandleKind::queue: return VulkanObjectKind::queue;
+    case vkproto::HandleKind::command_buffer: return VulkanObjectKind::command_buffer;
+    default: return VulkanObjectKind::other;
     }
-    if (raw != 0u && !backend->knows_handle(raw)) return false;
-    memcpy(&out, &raw, sizeof out);
-    return true;
 }
 
 }  // namespace
@@ -138,10 +128,28 @@ bool VulkanBackend::room_for(uint64_t handles)
  * made any, so remembering one cannot fail from the wire. Were it to, the
  * handle is one this host refuses when the guest names it - a refused
  * command, never a pointer the guest chose. */
-void VulkanBackend::made(uint64_t raw, VulkanObjectKind kind)
+void VulkanBackend::made(vkproto::HandleKind kind, uint64_t handle)
 {
     AV_SCOPE("VulkanBackend::made");
-    keep(raw, kind, 0u);
+    keep(handle, object_kind(kind), 0u);
+}
+
+/* A dispatchable handle must be one this context made as that kind: the loader
+ * dereferences it to find the table to call through, so null, a number never
+ * made or a queue where a device belongs aborts the host process rather than
+ * getting an error back (feature 042, T064). Every other handle the driver
+ * dereferences too - a VkBuffer this executor never made is the same hole one
+ * layer down - but null is a value the API defines for most of them, and
+ * refusing it would refuse every optional parameter: null passes, anything
+ * else must be this context's. */
+bool VulkanBackend::handle_for(vkproto::HandleKind kind, uint64_t wire, uint64_t &handle) const
+{
+    AV_SCOPE("VulkanBackend::handle_for");
+    const VulkanObjectKind judged = object_kind(kind);
+    const bool named = judged == VulkanObjectKind::other ? knows_handle(wire) : knows_handle(wire, judged);
+    if (!named) return false;
+    handle = wire;
+    return true;
 }
 
 /* The null handle is the API's own and is never anybody's to own. */
@@ -182,12 +190,6 @@ bool VulkanBackend::knows_handle(uint64_t raw, VulkanObjectKind kind) const
 {
     AV_SCOPE("VulkanBackend::knows_handle");
     return handles_.find(raw, kind) != nullptr;
-}
-
-VulkanBackend *VulkanBackend::deciding()
-{
-    AV_SCOPE("VulkanBackend::deciding");
-    return inside;
 }
 
 Status VulkanBackend::enable_identity(VkInstanceCreateInfo &create)
@@ -308,16 +310,7 @@ bool VulkanBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
                         WireArena &arena)
 {
     AV_SCOPE("VulkanBackend::run");
-    return run_through(*this, command_id, payload, reply, arena);
-}
-
-bool VulkanBackend::run_through(vkproto::ServerDispatch &driver, uint32_t command_id,
-                                WireReader &payload, WireWriter &reply, WireArena &arena)
-{
-    AV_SCOPE("VulkanBackend::run_through");
-    inside = this;
-    const bool decoded = vkproto::dispatch_command(driver, command_id, payload, reply, arena);
-    inside = nullptr;
+    const bool decoded = vkproto::dispatch_command(*this, command_id, payload, reply, arena);
     parent_ = 0u;
     if (!decoded) return false;
     ran_++;
@@ -469,7 +462,7 @@ VkResult VulkanBackend::on_vkCreateImage(VkDevice device, const VkImageCreateInf
     const VkResult result = RealVulkanDispatch::on_vkCreateImage(device, &create, nullptr, pImage);
     if (bindable) {
         made_through(reinterpret_cast<uint64_t>(device));
-        made(reinterpret_cast<uint64_t>(*pImage), VulkanObjectKind::external_image);
+        keep(reinterpret_cast<uint64_t>(*pImage), VulkanObjectKind::external_image, 0u);
     }
     return result;
 }
@@ -945,545 +938,5 @@ uint64_t VulkanBackend::ran() const
     AV_SCOPE("VulkanBackend::ran");
     return ran_;
 }
-
-
-/* The generated decoder's inbound handle hook, defined here rather than in a
- * file of its own: the defaults are weak and live in the generated archive, and
- * a strong definition in an object nothing else references is never pulled in
- * to override them. Next to the class whose state it reads, it always is. */
-namespace vkproto {
-
-namespace {
-
-/* Outbound: whatever the host is about to tell the guest about is a handle the
- * host made, so this is where it becomes one the host will accept back, in
- * the room handles_room made for it before the driver was called. */
-template <typename H>
-uint64_t remember(VulkanBackend *backend, H value, VulkanObjectKind kind = VulkanObjectKind::other)
-{
-    AV_SCOPE("remember");
-    uint64_t raw = 0u;
-    static_assert(sizeof(H) <= sizeof raw);
-    memcpy(&raw, &value, sizeof value);
-    if (backend != nullptr) backend->made(raw, kind);
-    return raw;
-}
-
-/* Nobody deciding means nobody is being defended against: the numbers are this
- * process's own. That is the guest side, where an application's handles arrive
- * through its own loader and identity is the whole of the mapping.
- *
- * On the host a backend is always deciding, because VulkanBackend::run sets it
- * around every dispatch and a decode happens nowhere else. So this is not a way
- * to lose the checking by accident - it is what makes one archive serve both
- * sides without the guest's ICD having every handle it decodes refused
- * (feature 042). */
-/* A handle the loader dispatches on. */
-template <typename H>
-bool answer(const VulkanBackend *backend, uint64_t raw, H &out, VulkanObjectKind kind)
-{
-    AV_SCOPE("answer");
-    if (backend == nullptr) {
-        memcpy(&out, &raw, sizeof out);
-        return true;
-    }
-    /* Null is a legitimate value for an optional handle and never for one of
-     * these five, and no kind of handle: the loader dereferences a
-     * dispatchable handle to find the table to call through, so a guest naming
-     * the null instance aborts the process rather than getting an error back.
-     * The fuzz target found that in vkCmdResetEvent2 (feature 042). And it must
-     * be this kind of handle: the table a queue is dereferenced through is not
-     * a device's, so naming one where the other belongs aborts the process the
-     * same way (T064). */
-    if (!backend->knows_handle(raw, kind)) return false;
-    memcpy(&out, &raw, sizeof out);
-    return true;
-}
-
-}  // namespace
-
-/* Nobody deciding is the guest side again, where nothing is remembered and so
- * nothing is forgotten, and there is always room. */
-bool handles_room(uint64_t handles) noexcept
-{
-    AV_SCOPE("handles_room");
-    VulkanBackend *const backend = VulkanBackend::deciding();
-    return backend == nullptr || backend->room_for(handles);
-}
-
-void handles_made_through(uint64_t parent) noexcept
-{
-    AV_SCOPE("handles_made_through");
-    if (VulkanBackend *backend = VulkanBackend::deciding()) backend->made_through(parent);
-}
-
-void handle_ended(uint64_t handle) noexcept
-{
-    AV_SCOPE("handle_ended");
-    if (VulkanBackend *backend = VulkanBackend::deciding()) backend->ended(handle);
-}
-
-void handle_children_ended(uint64_t handle) noexcept
-{
-    AV_SCOPE("handle_children_ended");
-    if (VulkanBackend *backend = VulkanBackend::deciding()) backend->children_ended(handle);
-}
-
-/* The length of a WithTemplate blob, for the generated decoder: the template's,
- * as this context recorded it when the guest created it. A context that is not
- * deciding - a loopback test's decode with no backend - answers 0, which
- * accepts only an empty blob. */
-uint64_t descriptor_template_bytes(VkDescriptorUpdateTemplate t) noexcept
-{
-    AV_SCOPE("descriptor_template_bytes");
-    const VulkanBackend *const backend = VulkanBackend::deciding();
-    return backend != nullptr ? backend->template_bytes(t) : 0u;
-}
-
-bool wire_to_handle(uint64_t raw, VkInstance &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer(VulkanBackend::deciding(), raw, out, VulkanObjectKind::instance);
-}
-
-bool wire_to_handle(uint64_t raw, VkPhysicalDevice &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer(VulkanBackend::deciding(), raw, out, VulkanObjectKind::physical_device);
-}
-
-bool wire_to_handle(uint64_t raw, VkDevice &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer(VulkanBackend::deciding(), raw, out, VulkanObjectKind::device);
-}
-
-bool wire_to_handle(uint64_t raw, VkQueue &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer(VulkanBackend::deciding(), raw, out, VulkanObjectKind::queue);
-}
-
-bool wire_to_handle(uint64_t raw, VkCommandBuffer &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer(VulkanBackend::deciding(), raw, out, VulkanObjectKind::command_buffer);
-}
-
-bool wire_to_handle(uint64_t raw, VkAccelerationStructureKHR &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkAccelerationStructureNV &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkBuffer &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkBufferView &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkCommandPool &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkDeferredOperationKHR &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkDescriptorPool &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkDescriptorSet &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkDescriptorSetLayout &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkDescriptorUpdateTemplate &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkDeviceMemory &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkEvent &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkFence &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkFramebuffer &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkImage &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkImageView &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkMicromapEXT &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkPipeline &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkPipelineBinaryKHR &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkPipelineCache &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkPipelineLayout &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkPrivateDataSlot &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkQueryPool &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkRenderPass &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkSampler &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkSamplerYcbcrConversion &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkSemaphore &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkShaderEXT &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkShaderModule &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkSurfaceKHR &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkSwapchainKHR &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-bool wire_to_handle(uint64_t raw, VkValidationCacheEXT &out) noexcept
-{
-    AV_SCOPE("wire_to_handle");
-    return answer_optional(VulkanBackend::deciding(), raw, out);
-}
-
-uint64_t handle_to_wire(VkAccelerationStructureKHR v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkAccelerationStructureNV v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkBuffer v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkBufferView v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkCommandBuffer v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v, VulkanObjectKind::command_buffer);
-}
-
-uint64_t handle_to_wire(VkCommandPool v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkDeferredOperationKHR v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkDescriptorPool v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkDescriptorSet v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkDescriptorSetLayout v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkDescriptorUpdateTemplate v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkDevice v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v, VulkanObjectKind::device);
-}
-
-uint64_t handle_to_wire(VkDeviceMemory v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkEvent v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkFence v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkFramebuffer v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkImage v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkImageView v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkInstance v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v, VulkanObjectKind::instance);
-}
-
-uint64_t handle_to_wire(VkMicromapEXT v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkPhysicalDevice v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v, VulkanObjectKind::physical_device);
-}
-
-uint64_t handle_to_wire(VkPipeline v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkPipelineBinaryKHR v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkPipelineCache v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkPipelineLayout v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkPrivateDataSlot v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkQueryPool v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkQueue v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v, VulkanObjectKind::queue);
-}
-
-uint64_t handle_to_wire(VkRenderPass v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkSampler v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkSamplerYcbcrConversion v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkSemaphore v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkShaderEXT v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkShaderModule v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkSurfaceKHR v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkSwapchainKHR v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-uint64_t handle_to_wire(VkValidationCacheEXT v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v);
-}
-
-}  // namespace vkproto
 
 }  // namespace av

@@ -81,11 +81,6 @@ set(AV_GENERATED_NAMES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d12/d3d12_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d9/d3d9_command_names.cpp)
 set(AV_GENERATED_SOURCES
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_default.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatchable_handle_default.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_host_image_default.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_descriptor_template_default.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_lifetime_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_server.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_server.cpp
   # The OpenGL host decode path, which compiles now that the sync hooks are
@@ -131,6 +126,7 @@ list(APPEND AV_PORTABLE_SOURCES ${AV_GENERATED_NAMES})
 # device core for QEMU below never encodes one.
 set(AV_GENERATED_CLIENT_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_client.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_identity.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_client.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_dispatch_client.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d12/d3d12_dispatch_client.cpp
@@ -386,23 +382,14 @@ foreach(t av_core av_harness)
 endforeach()
 
 # ---- the Vulkan ICD's portable core: src/icd over the generated wrappers ------
-# Not in av_core: the ICD defines the strong handle_to_wire hooks that unwrap a
-# dispatchable handle, and the executor library, which links av_core, defines
-# its own (feature 045). Only what links this sees the ICD's. The DLL itself is
-# src/um's (T029); on Linux this is what the ICD's unit tests and the full-stack
-# rig link.
+# Not in av_core: the ICD defines the hooks its generated wrappers call by name
+# (icd_hooks.cpp), which only what links the wrappers may hold. The DLL itself
+# is src/um's (T029); on Linux this is what the ICD's unit tests and the
+# full-stack rig link.
 if(AV_GENERATED)
   file(GLOB_RECURSE AV_ICD_SOURCES CONFIGURE_DEPENDS src/icd/common/*.cpp src/icd/vulkan/*.cpp)
-  # The client dispatch and the weak handle defaults are av_core's too, and are
-  # compiled again here on purpose. A link reads archives in order: with them in
-  # this archive, every handle_to_wire the wrappers reach is resolved here - the
-  # ICD's five strong ones and the identity for the rest - before av_core is
-  # read, so the executor's own strong definitions in vulkan_backend.cpp are
-  # never pulled into an ICD link to collide with them.
   add_library(av_icd STATIC ${AV_ICD_SOURCES}
-    ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_icd_entries.cpp
-    ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_client.cpp
-    ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_default.cpp)
+    ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_icd_entries.cpp)
   target_link_libraries(av_icd PUBLIC av_core)
   # The generated wrappers include their siblings by the names the generator
   # gives them.

@@ -57,7 +57,7 @@ void HostVisibleImportScenario::run()
 Status HostVisibleImportScenario::read_memory_types()
 {
     AV_SCOPE("HostVisibleImportScenario::read_memory_types");
-    vkproto::av_vkGetPhysicalDeviceMemoryProperties(link_.transport(), chain_.physical_device(), &memory_types_);
+    vkproto::av_vkGetPhysicalDeviceMemoryProperties(link_.transport(), chain_.handles(), chain_.physical_device(), &memory_types_);
     const uint32_t count = memory_types_.memoryTypeCount;
     return steps_.check_measured("memory_types", count != 0u ? Status::ok : Status::not_found, count);
 }
@@ -76,17 +76,15 @@ Status HostVisibleImportScenario::make_buffer(uint32_t side)
     buffer_info.usage = names.usage;
     buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     VkBuffer       buffer = VK_NULL_HANDLE;
-    const VkResult created = vkproto::av_vkCreateBuffer(transport, chain_.device(), &buffer_info, nullptr, &buffer);
+    const VkResult created = vkproto::av_vkCreateBuffer(transport, chain_.handles(), chain_.device(), &buffer_info, nullptr, &buffer);
     const Status   buffered = steps_.check_result(names.buffer, created);
     if (buffered != Status::ok) return buffered;
     buffers_[side] = buffer;
     const Status imported = import_chunk(side);
     if (imported != Status::ok) return imported;
-    /* The generated identity, which takes a handle's bits in either build's
-     * shape of the type. */
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    static_cast<void>(vkproto::wire_to_handle(imports_[side].memory(), memory));
-    const VkResult bound = vkproto::av_vkBindBufferMemory(transport, chain_.device(), buffers_[side], memory, 0u);
+    /* In either build's shape of the type. */
+    const VkDeviceMemory memory = vkproto::as_handle<VkDeviceMemory>(imports_[side].memory());
+    const VkResult bound = vkproto::av_vkBindBufferMemory(transport, chain_.handles(), chain_.device(), buffers_[side], memory, 0u);
     return steps_.check_result(names.bind_buffer, bound);
 }
 
@@ -99,7 +97,7 @@ Status HostVisibleImportScenario::import_chunk(uint32_t side)
     AV_SCOPE("HostVisibleImportScenario::import_chunk");
     const SideSteps     &names = side_steps[side];
     VkMemoryRequirements requirements = {};
-    vkproto::av_vkGetBufferMemoryRequirements(link_.transport(), chain_.device(), buffers_[side], &requirements);
+    vkproto::av_vkGetBufferMemoryRequirements(link_.transport(), chain_.handles(), chain_.device(), buffers_[side], &requirements);
     uint32_t type = memory_types_.memoryTypeCount;
     for (uint32_t candidate = memory_types_.memoryTypeCount; candidate-- > 0u;) {
         const bool host_visible =
@@ -141,7 +139,7 @@ Status HostVisibleImportScenario::record_copy()
     pool_info.queueFamilyIndex = queue_family;
     VkCommandPool pool = VK_NULL_HANDLE;
     const Status  pooled = steps_.check_result(
-        "command_pool", vkproto::av_vkCreateCommandPool(transport, device, &pool_info, nullptr, &pool));
+        "command_pool", vkproto::av_vkCreateCommandPool(transport, chain_.handles(), device, &pool_info, nullptr, &pool));
     if (pooled != Status::ok) return pooled;
     pool_ = pool;
     VkCommandBufferAllocateInfo allocate = {};
@@ -151,18 +149,18 @@ Status HostVisibleImportScenario::record_copy()
     allocate.commandBufferCount = 1u;
     uint64_t     command_buffer = 0u;
     const Status allocated = steps_.check_result(
-        "command_buffer", vkproto::av_vkAllocateCommandBuffers(transport, device, &allocate, &command_buffer));
+        "command_buffer", vkproto::av_vkAllocateCommandBuffers(transport, chain_.handles(), device, &allocate, &command_buffer));
     if (allocated != Status::ok) return allocated;
     command_buffer_ = command_buffer;
     const VkCommandBuffer    recording = reinterpret_cast<VkCommandBuffer>(command_buffer_);
     VkCommandBufferBeginInfo begin = {};
     begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    VkResult recorded = vkproto::av_vkBeginCommandBuffer(transport, recording, &begin);
+    VkResult recorded = vkproto::av_vkBeginCommandBuffer(transport, chain_.handles(), recording, &begin);
     if (recorded == VK_SUCCESS) {
         const VkBufferCopy region = {0u, 0u, copy_bytes};
-        vkproto::av_vkCmdCopyBuffer(transport, recording, buffers_[source], buffers_[destination], 1u, &region);
-        recorded = vkproto::av_vkEndCommandBuffer(transport, recording);
+        vkproto::av_vkCmdCopyBuffer(transport, chain_.handles(), recording, buffers_[source], buffers_[destination], 1u, &region);
+        recorded = vkproto::av_vkEndCommandBuffer(transport, chain_.handles(), recording);
     }
     return steps_.check_result("record", recorded);
 }
@@ -174,14 +172,14 @@ Status HostVisibleImportScenario::submit_copy()
     KmtTransport  &transport = link_.transport();
     const VkDevice device = chain_.device();
     uint64_t       queue = 0u;
-    vkproto::av_vkGetDeviceQueue(transport, device, queue_family, 0u, &queue);
+    vkproto::av_vkGetDeviceQueue(transport, chain_.handles(), device, queue_family, 0u, &queue);
     const Status queued = steps_.check("queue", queue != 0u ? Status::ok : Status::not_found);
     if (queued != Status::ok) return queued;
     VkFenceCreateInfo fence_info = {};
     fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     VkFence      fence = VK_NULL_HANDLE;
     const Status fenced =
-        steps_.check_result("fence", vkproto::av_vkCreateFence(transport, device, &fence_info, nullptr, &fence));
+        steps_.check_result("fence", vkproto::av_vkCreateFence(transport, chain_.handles(), device, &fence_info, nullptr, &fence));
     if (fenced != Status::ok) return fenced;
     fence_ = fence;
     const VkCommandBuffer submitted = reinterpret_cast<VkCommandBuffer>(command_buffer_);
@@ -190,7 +188,7 @@ Status HostVisibleImportScenario::submit_copy()
     submit.commandBufferCount = 1u;
     submit.pCommandBuffers = &submitted;
     return steps_.check_result(
-        "submit", vkproto::av_vkQueueSubmit(transport, reinterpret_cast<VkQueue>(queue), 1u, &submit, fence_));
+        "submit", vkproto::av_vkQueueSubmit(transport, chain_.handles(), reinterpret_cast<VkQueue>(queue), 1u, &submit, fence_));
 }
 
 /* A copy the host has not finished cannot be judged by its bytes, so a wait
@@ -201,7 +199,7 @@ Status HostVisibleImportScenario::judge_copy(uint32_t filled_before)
     uint32_t slices = 0u;
     VkResult waited = VK_TIMEOUT;
     while (waited == VK_TIMEOUT && slices < fence_slices) {
-        waited = vkproto::av_vkWaitForFences(link_.transport(), chain_.device(), 1u, &fence_, VK_TRUE, fence_slice_ns);
+        waited = vkproto::av_vkWaitForFences(link_.transport(), chain_.handles(), chain_.device(), 1u, &fence_, VK_TRUE, fence_slice_ns);
         slices++;
     }
     const Status   finished =
@@ -222,11 +220,11 @@ Status HostVisibleImportScenario::destroy()
     KmtTransport  &transport = link_.transport();
     const VkDevice device = chain_.device();
     if (device != VK_NULL_HANDLE) {
-        vkproto::av_vkDestroyFence(transport, device, fence_, nullptr);
+        vkproto::av_vkDestroyFence(transport, chain_.handles(), device, fence_, nullptr);
         const VkCommandBuffer command_buffer = reinterpret_cast<VkCommandBuffer>(command_buffer_);
-        if (command_buffer_ != 0u) vkproto::av_vkFreeCommandBuffers(transport, device, pool_, 1u, &command_buffer);
-        vkproto::av_vkDestroyCommandPool(transport, device, pool_, nullptr);
-        for (const VkBuffer buffer : buffers_) vkproto::av_vkDestroyBuffer(transport, device, buffer, nullptr);
+        if (command_buffer_ != 0u) vkproto::av_vkFreeCommandBuffers(transport, chain_.handles(), device, pool_, 1u, &command_buffer);
+        vkproto::av_vkDestroyCommandPool(transport, chain_.handles(), device, pool_, nullptr);
+        for (const VkBuffer buffer : buffers_) vkproto::av_vkDestroyBuffer(transport, chain_.handles(), device, buffer, nullptr);
     }
     Status     first = Status::ok;
     const auto keep = [&first](Status status) { first = first == Status::ok ? status : first; };

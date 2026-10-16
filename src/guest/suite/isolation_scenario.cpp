@@ -48,8 +48,8 @@ Status IsolationScenario::exercise_healthy()
     VkInstanceCreateInfo info = {};
     info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     uint64_t instance = 0u;
-    if (vkproto::av_vkCreateInstance(transport, &info, nullptr, &instance) != VK_SUCCESS) return Status::invalid_state;
-    vkproto::av_vkDestroyInstance(transport, reinterpret_cast<VkInstance>(instance), nullptr);
+    if (vkproto::av_vkCreateInstance(transport, handles_, &info, nullptr, &instance) != VK_SUCCESS) return Status::invalid_state;
+    vkproto::av_vkDestroyInstance(transport, handles_, reinterpret_cast<VkInstance>(instance), nullptr);
     return transport.nop(answered);
 }
 

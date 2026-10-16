@@ -26,6 +26,10 @@ class LogSink;
 class StateWriter;
 }  // namespace av
 
+namespace av::vkproto {
+class HandleTranslation;
+}  // namespace av::vkproto
+
 namespace av::icd {
 
 class Connection;
@@ -33,7 +37,7 @@ struct DeviceMemoryProbe;
 
 class DeviceMemory {
 public:
-    DeviceMemory(Kmt &kmt, Connection &connection, LogSink &log);
+    DeviceMemory(Kmt &kmt, Connection &connection, vkproto::HandleTranslation &handles, LogSink &log);
     DeviceMemory(const DeviceMemory &) = delete;
     DeviceMemory &operator=(const DeviceMemory &) = delete;
 
@@ -83,6 +87,7 @@ private:
     HostAllocation    *find(VkDeviceMemory memory) const;
 
     Connection     &connection_;
+    vkproto::HandleTranslation &handles_;
     LogSink        &log_;
     DriverLog       lines_;
     MemoryTypeTable types_;

@@ -1,19 +1,12 @@
 /* The hooks the generated Vulkan ICD wrappers call by name (063
- * contracts/generated_code.md §F), and the ICD's strong handle_to_wire for the
- * five dispatchable types, which overrides the generated weak identity so a
- * wrapped handle crosses the wire as the host's own. Each is one line into the
- * bound root, which is the only state here (icd_binding.hpp).
- *
- * The strong definitions are why this file is not in av_core: the executor
- * library links av_core and defines its own. They sit beside hooks every
- * wrapper references, so the object is always pulled into a link that uses the
- * wrappers, and the weak defaults never win there. */
+ * contracts/generated_code.md §F), among them the translation every wrapper
+ * encodes its handles through. Each is one line into the bound root, which is
+ * the only state here (icd_binding.hpp). */
 #include "core/trace/function_scope.hpp"
 #include "icd/vulkan/command_batch.hpp"
 #include "icd/vulkan/icd_binding.hpp"
 #include "icd/vulkan/icd_root.hpp"
 #include "icd/vulkan/loader_handle.hpp"
-#include "proto/generated/vulkan/vk_serialize.h"
 #include "proto/client/icd_connection.hpp"
 #include "proto/client/icd_handle_registry.hpp"
 
@@ -112,47 +105,10 @@ ClientTransport &record_target(VkCommandBuffer command_buffer)
     return icd_binding.root().record_target(command_buffer);
 }
 
+vkproto::HandleTranslation &wire_handles()
+{
+    AV_SCOPE("wire_handles");
+    return icd_binding.root().wire_handles();
+}
+
 }  // namespace av::icd
-
-namespace av::vkproto {
-
-uint64_t handle_to_wire(VkInstance v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return icd::icd_binding.root().wire(v, icd::Kind::instance);
-}
-
-uint64_t handle_to_wire(VkPhysicalDevice v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return icd::icd_binding.root().wire(v, icd::Kind::physical_device);
-}
-
-uint64_t handle_to_wire(VkDevice v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return icd::icd_binding.root().wire(v, icd::Kind::device);
-}
-
-uint64_t handle_to_wire(VkQueue v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return icd::icd_binding.root().wire(v, icd::Kind::queue);
-}
-
-uint64_t handle_to_wire(VkCommandBuffer v) noexcept
-{
-    AV_SCOPE("handle_to_wire");
-    return icd::icd_binding.root().wire(v, icd::Kind::command_buffer);
-}
-
-/* The length of the blob a WithTemplate command carries: the template's, from
- * the entries it was created with (feature 047). A handle this process did not
- * make answers 0, which sends no descriptors rather than bytes from nowhere. */
-uint64_t descriptor_template_bytes(VkDescriptorUpdateTemplate t) noexcept
-{
-    AV_SCOPE("descriptor_template_bytes");
-    return icd::icd_binding.root().templates().bytes_of(t);
-}
-
-}  // namespace av::vkproto

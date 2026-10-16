@@ -14,11 +14,15 @@ namespace av {
 class ClientTransport;
 }  // namespace av
 
+namespace av::vkproto {
+class HandleTranslation;
+}  // namespace av::vkproto
+
 namespace av::icd {
 
 class SemaphoreWaitProbe final : public CompletionProbe {
 public:
-    SemaphoreWaitProbe(ClientTransport &wire, VkDevice device, const VkSemaphoreWaitInfo *info);
+    SemaphoreWaitProbe(ClientTransport &wire, vkproto::HandleTranslation &handles, VkDevice device, const VkSemaphoreWaitInfo *info);
 
     [[nodiscard]] bool ask(uint64_t slice) override;
     void               pause(uint64_t slice) override;
@@ -27,6 +31,7 @@ public:
 
 private:
     ClientTransport           &wire_;
+    vkproto::HandleTranslation &handles_;
     VkDevice                   device_;
     const VkSemaphoreWaitInfo *info_;
     VkResult                   result_;

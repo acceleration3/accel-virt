@@ -211,7 +211,7 @@ kernel driver must have in hand before DISPATCH, where it cannot allocate.
 
 A guest's Vulkan and OpenCL commands that hand back new handles ask their
 backend for room for all of them before the host driver is called
-(`handles_room`, `ServerDispatch::room_for`, written by `tools/codegen`), so a
+(`ServerDispatch::room_for` in both APIs, written by `tools/codegen`), so a
 table that cannot grow answers the API's out-of-memory error with nothing made
 on the host.
 

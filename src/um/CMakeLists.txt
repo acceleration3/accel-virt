@@ -33,10 +33,7 @@ list(REMOVE_ITEM AVTEST_SOURCES ${AVTEST_GENERATED})
 set(AVTEST_GENERATED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated)
 list(APPEND AVTEST_SOURCES
   ${AVTEST_GENERATED_DIR}/vulkan/vk_dispatch_client.cpp
-  ${AVTEST_GENERATED_DIR}/vulkan/vk_handle_default.cpp
-  ${AVTEST_GENERATED_DIR}/vulkan/vk_dispatchable_handle_default.cpp
-  ${AVTEST_GENERATED_DIR}/vulkan/vk_host_image_default.cpp
-  ${AVTEST_GENERATED_DIR}/vulkan/vk_descriptor_template_default.cpp
+  ${AVTEST_GENERATED_DIR}/vulkan/vk_handle_identity.cpp
   ${AVTEST_GENERATED_DIR}/opencl/cl_dispatch_client.cpp
   ${AVTEST_GENERATED_DIR}/d3d/d3d_dispatch_client.cpp
   # Where every program's report grows into (GuestReport).
@@ -128,9 +125,8 @@ add_dependencies(avvkprobe avclprobe_imports)
 
 # avvk.dll, the Vulkan ICD (feature 045): the ICD's decisions in src/icd over
 # the transport, D3DKMT through gdi32, the shim both ICDs share in common/ and its
-# own in vulkan/. The generated
-# default handle_to_wire of the dispatchable types is not linked: icd_hooks.cpp
-# answers the host's own handle for those.
+# own in vulkan/, which translates the handles the generated wrappers encode
+# (GuestHandleTranslation).
 file(GLOB_RECURSE AVVK_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../icd/vulkan/*.cpp
@@ -149,9 +145,7 @@ list(REMOVE_ITEM AVVK_SOURCES ${AVTEST_GENERATED})
 list(APPEND AVVK_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/kmt/gdi_kmt.cpp
   ${AVTEST_GENERATED_DIR}/vulkan/vk_icd_entries.cpp
-  ${AVTEST_GENERATED_DIR}/vulkan/vk_dispatch_client.cpp
-  ${AVTEST_GENERATED_DIR}/vulkan/vk_handle_default.cpp
-  ${AVTEST_GENERATED_DIR}/vulkan/vk_host_image_default.cpp)
+  ${AVTEST_GENERATED_DIR}/vulkan/vk_dispatch_client.cpp)
 
 # The probe's module-level assembly is Intel syntax that LTO's IR assembler
 # reads as AT&T: it stays an ordinary object.

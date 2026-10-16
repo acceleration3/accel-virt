@@ -7,6 +7,7 @@
 #define AV_VULKAN_DEVICE_CHAIN_HPP
 
 #include "core/support/status.hpp"
+#include "proto/generated/vulkan/vk_handle_translation.h"
 
 #include <stdint.h>
 #include <vulkan/vulkan_core.h>
@@ -31,6 +32,9 @@ public:
     VkPhysicalDevice     physical_device() const;
     /* Null until made. */
     VkDevice             device() const;
+    /* What the scenario's commands name these handles through: they are the
+     * host's numbers already. */
+    vkproto::HandleTranslation &handles();
 
     bool invariants_hold() const;
 
@@ -45,6 +49,7 @@ private:
 
     ScenarioSteps   &steps_;
     ClientTransport &transport_;
+    vkproto::HandleIdentity handles_;
     uint64_t         instance_;
     uint64_t         physical_device_;
     uint64_t         device_;

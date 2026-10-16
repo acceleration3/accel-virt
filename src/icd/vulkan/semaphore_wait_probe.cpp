@@ -5,8 +5,8 @@
 
 namespace av::icd {
 
-SemaphoreWaitProbe::SemaphoreWaitProbe(ClientTransport &wire, VkDevice device, const VkSemaphoreWaitInfo *info)
-    : wire_(wire), device_(device), info_(info), result_(VK_TIMEOUT)
+SemaphoreWaitProbe::SemaphoreWaitProbe(ClientTransport &wire, vkproto::HandleTranslation &handles, VkDevice device, const VkSemaphoreWaitInfo *info)
+    : wire_(wire), handles_(handles), device_(device), info_(info), result_(VK_TIMEOUT)
 {
     AV_SCOPE("SemaphoreWaitProbe::SemaphoreWaitProbe");
 }
@@ -14,7 +14,7 @@ SemaphoreWaitProbe::SemaphoreWaitProbe(ClientTransport &wire, VkDevice device, c
 bool SemaphoreWaitProbe::ask(uint64_t slice)
 {
     AV_SCOPE("SemaphoreWaitProbe::ask");
-    result_ = vkproto::av_vkWaitSemaphores(wire_, device_, info_, slice);
+    result_ = vkproto::av_vkWaitSemaphores(wire_, handles_, device_, info_, slice);
     return result_ != VK_TIMEOUT;
 }
 

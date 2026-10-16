@@ -311,6 +311,7 @@ IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &se
       entry_points_(local_rows, local_row_count),
       extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), connections_(memory), pending_(nullptr), spans_(memory),
       entries_(*this), presentation_(memory, kmt, windows, chains, log, *this, entries_, present_thread, handed, shown, present_lock), templates_(memory, lock),
+      translation_(lock, handles_, templates_),
       externals_(lock, memory), shared_handles_(kmt, lock, memory), kernel_refusal_(0u), idle_skipped_(0u), idle_waited_(0u),
       memory_handles_(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT,
                       VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT),
@@ -630,7 +631,7 @@ VkResult IcdRoot::enumerate_device_extensions(VkPhysicalDevice physical_device, 
     }
     ClientTransport &transport = made->connection()->transport();
     uint32_t         listed = 0u;
-    VkResult result = vkproto::av_vkEnumerateDeviceExtensionProperties(transport, physical_device, nullptr, &listed,
+    VkResult result = vkproto::av_vkEnumerateDeviceExtensionProperties(transport, translation_, physical_device, nullptr, &listed,
                                                                         nullptr);
     if (result != VK_SUCCESS) return result;
     if (listed == 0u) return extensions_.report(nullptr, 0u, count, properties);
@@ -642,7 +643,7 @@ VkResult IcdRoot::enumerate_device_extensions(VkPhysicalDevice physical_device, 
         static_cast<VkExtensionProperties *>(memory_.allocate(listed * sizeof(VkExtensionProperties), Pool::paged));
     if (host == nullptr) return VK_ERROR_OUT_OF_HOST_MEMORY;
     ScopeExit released([&] { memory_.release(host); });
-    result = vkproto::av_vkEnumerateDeviceExtensionProperties(transport, physical_device, nullptr, &listed, host);
+    result = vkproto::av_vkEnumerateDeviceExtensionProperties(transport, translation_, physical_device, nullptr, &listed, host);
     if (result != VK_SUCCESS && result != VK_INCOMPLETE) return result;
     /* The one time the host's own list is in hand: whether it shares by
      * dma-buf is decided here and read everywhere else (feature 053, T031). */
@@ -661,7 +662,7 @@ void IcdRoot::learn_host_sharing(LoaderHandle &made, VkPhysicalDevice physical_d
     if (made.connection()->host_has_dma_buf()) return;
     ClientTransport &transport = made.connection()->transport();
     uint32_t         listed = 0u;
-    if (vkproto::av_vkEnumerateDeviceExtensionProperties(transport, physical_device, nullptr, &listed,
+    if (vkproto::av_vkEnumerateDeviceExtensionProperties(transport, translation_, physical_device, nullptr, &listed,
                                                           nullptr) != VK_SUCCESS)
         return;
     if (listed == 0u || listed > max_host_extensions) return;
@@ -670,7 +671,7 @@ void IcdRoot::learn_host_sharing(LoaderHandle &made, VkPhysicalDevice physical_d
     if (host == nullptr) return;
     ScopeExit      released([&] { memory_.release(host); });
     const VkResult result =
-        vkproto::av_vkEnumerateDeviceExtensionProperties(transport, physical_device, nullptr, &listed, host);
+        vkproto::av_vkEnumerateDeviceExtensionProperties(transport, translation_, physical_device, nullptr, &listed, host);
     if (result != VK_SUCCESS && result != VK_INCOMPLETE) return;
     for (uint32_t index = 0u; index < listed; index++)
         if (__builtin_strcmp(host[index].extensionName, dma_buf_extension) == 0)
@@ -720,7 +721,7 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
     forwarded.ppEnabledExtensionNames = asked.names();
     uint64_t       host = 0u;
     const VkResult result =
-        vkproto::av_vkCreateDevice(made->connection()->transport(), physical_device, &forwarded, allocator, &host);
+        vkproto::av_vkCreateDevice(made->connection()->transport(), translation_, physical_device, &forwarded, allocator, &host);
     if (result != VK_SUCCESS) return result;
     *device = static_cast<VkDevice>(wrap_child(LoaderHandle::Kind::device, host, *made));
     /* Without a handle the host's device cannot be named to destroy it; it
@@ -738,10 +739,10 @@ void IcdRoot::release_device_memory(LoaderHandle &device)
     if (released != Status::ok) lines_.note("device memory not released whole, status", static_cast<uint64_t>(released));
 }
 
-DescriptorTemplateTable &IcdRoot::templates()
+vkproto::HandleTranslation &IcdRoot::wire_handles()
 {
-    AV_SCOPE("IcdRoot::templates");
-    return templates_;
+    AV_SCOPE("IcdRoot::wire_handles");
+    return translation_;
 }
 
 /* The generated wrapper makes the template on the host; what it made is
@@ -817,7 +818,7 @@ VkResult IcdRoot::own_process_allocation(LoaderHandle &made, VkDevice device,
              static_cast<uint64_t>(built));
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
-    return vkproto::av_vkAllocateMemory(made.connection()->transport(), device, chain.forwarded(), allocator,
+    return vkproto::av_vkAllocateMemory(made.connection()->transport(), translation_, device, chain.forwarded(), allocator,
                                          &memory);
 }
 
@@ -853,8 +854,8 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
     /* Published before the handle is minted: a handle naming an object the
      * device does not hold is one an opening process would follow to nothing. */
     SharedObjectCall     call(made.connection()->transport());
-    const uint64_t       wire_handle = memory != VK_NULL_HANDLE ? vkproto::handle_to_wire(memory)
-                                                                : vkproto::handle_to_wire(semaphore);
+    const uint64_t       wire_handle = memory != VK_NULL_HANDLE ? HandleBits(memory).value()
+                                                                : HandleBits(semaphore).value();
     const Status         published = call.share(carrier_data.object_id(), kind, size, wire_handle);
     if (published != Status::ok) {
         lines_.note("vkAllocateMemory: the device would not publish a shared object, status", call.device_status());
@@ -1003,7 +1004,7 @@ VkResult IcdRoot::host_memory_fd(LoaderHandle &made, VkDevice owner, VkDeviceMem
         static_cast<VkExternalMemoryHandleTypeFlagBits>(memory_share_type(*made.connection()));
     /* A faulted connection needs no check of its own: the call through it
      * answers VK_ERROR_DEVICE_LOST. */
-    return vkproto::av_vkGetMemoryFdKHR(made.connection()->transport(), owner, &get, &fd);
+    return vkproto::av_vkGetMemoryFdKHR(made.connection()->transport(), translation_, owner, &get, &fd);
 }
 
 VkResult IcdRoot::host_semaphore_fd(LoaderHandle &made, VkDevice owner, VkSemaphore semaphore, int &fd)
@@ -1013,7 +1014,7 @@ VkResult IcdRoot::host_semaphore_fd(LoaderHandle &made, VkDevice owner, VkSemaph
     get.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
     get.semaphore = semaphore;
     get.handleType = static_cast<VkExternalSemaphoreHandleTypeFlagBits>(semaphore_handles_.host_type());
-    return vkproto::av_vkGetSemaphoreFdKHR(made.connection()->transport(), owner, &get, &fd);
+    return vkproto::av_vkGetSemaphoreFdKHR(made.connection()->transport(), translation_, owner, &get, &fd);
 }
 
 VkResult IcdRoot::import_semaphore_handle(VkDevice device, const ImportSemaphoreWin32HandleRecord *request)
@@ -1056,7 +1057,7 @@ VkResult IcdRoot::import_semaphore_handle(VkDevice device, const ImportSemaphore
     importing.flags = request->flags_;
     importing.handleType = static_cast<VkExternalSemaphoreHandleTypeFlagBits>(semaphore_handles_.host_type());
     importing.fd = fd;
-    return vkproto::av_vkImportSemaphoreFdKHR(made->connection()->transport(), device, &importing);
+    return vkproto::av_vkImportSemaphoreFdKHR(made->connection()->transport(), translation_, device, &importing);
 }
 
 void IcdRoot::destroy_semaphore(VkDevice device, VkSemaphore semaphore, const VkAllocationCallbacks *allocator)
@@ -1092,7 +1093,7 @@ void IcdRoot::external_buffer_properties(VkPhysicalDevice physical_device,
     asked.handleType = static_cast<VkExternalMemoryHandleTypeFlagBits>(memory_share_type(*connection));
     VkExternalBufferProperties answered = {};
     answered.sType = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES;
-    vkproto::av_vkGetPhysicalDeviceExternalBufferProperties(connection->transport(), physical_device, &asked,
+    vkproto::av_vkGetPhysicalDeviceExternalBufferProperties(connection->transport(), translation_, physical_device, &asked,
                                                              &answered);
     properties->externalMemoryProperties.externalMemoryFeatures =
         answered.externalMemoryProperties.externalMemoryFeatures;
@@ -1121,7 +1122,7 @@ void IcdRoot::external_semaphore_properties(VkPhysicalDevice physical_device,
     asked.handleType = static_cast<VkExternalSemaphoreHandleTypeFlagBits>(semaphore_handles_.host_type());
     VkExternalSemaphoreProperties answered = {};
     answered.sType = VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES;
-    vkproto::av_vkGetPhysicalDeviceExternalSemaphoreProperties(connection->transport(), physical_device, &asked,
+    vkproto::av_vkGetPhysicalDeviceExternalSemaphoreProperties(connection->transport(), translation_, physical_device, &asked,
                                                                 &answered);
     properties->externalSemaphoreFeatures = answered.externalSemaphoreFeatures;
     properties->exportFromImportedHandleTypes =
@@ -1172,7 +1173,7 @@ VkResult IcdRoot::shared_allocation(LoaderHandle &made, VkDevice device, const V
              static_cast<uint64_t>(built));
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
-    const VkResult allocated = vkproto::av_vkAllocateMemory(made.connection()->transport(), device,
+    const VkResult allocated = vkproto::av_vkAllocateMemory(made.connection()->transport(), translation_, device,
                                                              chain.forwarded(), allocator, &memory);
     if (allocated != VK_SUCCESS) return allocated;
     /* Declared exportable, so the identity is minted now: Vulkan promises the
@@ -1180,7 +1181,7 @@ VkResult IcdRoot::shared_allocation(LoaderHandle &made, VkDevice device, const V
      * memory nobody shares is never given one (feature 053, T031). */
     const VkResult published = publish(made, device, SharedObjectKind::memory, size, memory, VK_NULL_HANDLE);
     if (published == VK_SUCCESS) return VK_SUCCESS;
-    vkproto::av_vkFreeMemory(made.connection()->transport(), device, memory, allocator);
+    vkproto::av_vkFreeMemory(made.connection()->transport(), translation_, device, memory, allocator);
     memory = VK_NULL_HANDLE;
     return published;
 }
@@ -1217,11 +1218,9 @@ VkResult IcdRoot::imported_allocation(LoaderHandle &made, VkDevice device,
         lines_.note("vkAllocateMemory: the device would not open a shared object, status", call.device_status());
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
-    /* Not branched on, because it cannot fail: SharedObjectCall::judge has
-     * already refused an open that answered no handle, and the conversion of a
-     * non-zero one is a copy of the same width. A branch nothing can take is
-     * one no test can judge. */
-    static_cast<void>(vkproto::wire_to_handle(opened, memory));
+    /* SharedObjectCall::judge has already refused an open that answered no
+     * handle. */
+    memory = HandleBits(opened).as<VkDeviceMemory>();
     /* As in publish: only a process with no memory left refuses the row, and
      * then what the device opened is given back. */
     if (!externals_.remember(device, memory, VK_NULL_HANDLE, object_id, size,
@@ -1263,7 +1262,7 @@ void IcdRoot::release_idle_fences(LoaderHandle &device)
         LoaderHandle *const queue = child_of(device, LoaderHandle::Kind::queue, index);
         if (queue == nullptr) return;
         if (queue->idle_fence() == 0u) continue;
-        vkproto::av_vkDestroyFence(device.connection()->transport(), static_cast<VkDevice>(static_cast<void *>(&device)),
+        vkproto::av_vkDestroyFence(device.connection()->transport(), translation_, static_cast<VkDevice>(static_cast<void *>(&device)),
                                     HandleBits(queue->idle_fence()).as<VkFence>(), nullptr);
         queue->keep_idle_fence(0u);
     }
@@ -1312,7 +1311,7 @@ void IcdRoot::learn_types(Connection &connection, VkPhysicalDevice physical_devi
     AV_SCOPE("IcdRoot::learn_types");
     if (connection.refuses(entry)) return;
     VkPhysicalDeviceMemoryProperties host = {};
-    vkproto::av_vkGetPhysicalDeviceMemoryProperties(connection.transport(), physical_device, &host);
+    vkproto::av_vkGetPhysicalDeviceMemoryProperties(connection.transport(), translation_, physical_device, &host);
     if (connection.refuses(entry)) return;
     const Status built = types.build(host);
     if (built != Status::ok) lines_.note("the host's memory types were not taken, status", static_cast<uint64_t>(built));
@@ -1359,7 +1358,7 @@ DeviceMemory *IcdRoot::memory_of(LoaderHandle &device)
     const ThreadLockHold release(lock_);
     if (device.device_memory() != nullptr) return device.device_memory();
     DeviceMemory *made = nullptr;
-    if (memories_.create(made, kmt_, *device.connection(), log_) != Status::ok) {
+    if (memories_.create(made, kmt_, *device.connection(), translation_, log_) != Status::ok) {
         log_.write("avvk: no memory to keep a device's allocations in");
         return nullptr;
     }
@@ -1461,7 +1460,7 @@ void IcdRoot::physical_device_properties(VkPhysicalDevice physical_device, VkPhy
     AV_SCOPE("IcdRoot::physical_device_properties");
     Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
     if (connection == nullptr) return;
-    PhysicalDeviceView view(connection->transport(), connection->luid(), connection->adapter_name(), api_version_,
+    PhysicalDeviceView view(connection->transport(), translation_, connection->luid(), connection->adapter_name(), api_version_,
                             log_);
     view.properties(physical_device, properties);
 }
@@ -1471,7 +1470,7 @@ void IcdRoot::physical_device_properties2(VkPhysicalDevice physical_device, VkPh
     AV_SCOPE("IcdRoot::physical_device_properties2");
     Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
     if (connection == nullptr) return;
-    PhysicalDeviceView view(connection->transport(), connection->luid(), connection->adapter_name(), api_version_,
+    PhysicalDeviceView view(connection->transport(), translation_, connection->luid(), connection->adapter_name(), api_version_,
                             log_);
     view.properties2(physical_device, properties);
 }
@@ -1553,14 +1552,6 @@ Connection *IcdRoot::connection_of(void *handle, LoaderHandle::Kind kind)
     return made != nullptr ? made->connection() : nullptr;
 }
 
-uint64_t IcdRoot::wire(void *handle, LoaderHandle::Kind kind)
-{
-    AV_SCOPE("IcdRoot::wire");
-    const ThreadLockHold release(lock_);
-    const LoaderHandle *const made = handles_.made(handle, kind);
-    return made != nullptr ? made->host() : 0u;
-}
-
 void IcdRoot::destroy_wrapper(void *handle, LoaderHandle::Kind kind)
 {
     AV_SCOPE("IcdRoot::destroy_wrapper");
@@ -1582,7 +1573,7 @@ void IcdRoot::device_queue(VkDevice device, uint32_t family, uint32_t index, VkQ
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) return;
     uint64_t host = 0u;
-    vkproto::av_vkGetDeviceQueue(made->connection()->transport(), device, family, index, &host);
+    vkproto::av_vkGetDeviceQueue(made->connection()->transport(), translation_, device, family, index, &host);
     *queue = static_cast<VkQueue>(wrap_child(LoaderHandle::Kind::queue, host, *made));
 }
 
@@ -1592,7 +1583,7 @@ void IcdRoot::device_queue2(VkDevice device, const VkDeviceQueueInfo2 *info, VkQ
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) return;
     uint64_t host = 0u;
-    vkproto::av_vkGetDeviceQueue2(made->connection()->transport(), device, info, &host);
+    vkproto::av_vkGetDeviceQueue2(made->connection()->transport(), translation_, device, info, &host);
     *queue = static_cast<VkQueue>(wrap_child(LoaderHandle::Kind::queue, host, *made));
 }
 
@@ -1612,7 +1603,7 @@ VkResult IcdRoot::allocate_command_buffers(VkDevice device, const VkCommandBuffe
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     uint64_t       hosts[max_allocated_at_once] = {};
-    const VkResult result = vkproto::av_vkAllocateCommandBuffers(made->connection()->transport(), device, info, hosts);
+    const VkResult result = vkproto::av_vkAllocateCommandBuffers(made->connection()->transport(), translation_, device, info, hosts);
     if (result != VK_SUCCESS) return result;
     for (uint32_t wrapped = 0u; wrapped < count; wrapped++) {
         command_buffers[wrapped] =
@@ -1634,7 +1625,7 @@ void IcdRoot::free_command_buffers(VkDevice device, VkCommandPool pool, uint32_t
     AV_SCOPE("IcdRoot::free_command_buffers");
     Connection *const connection = connection_of(device, LoaderHandle::Kind::device);
     if (connection == nullptr) return;
-    vkproto::av_vkFreeCommandBuffers(connection->transport(), device, pool, count, command_buffers);
+    vkproto::av_vkFreeCommandBuffers(connection->transport(), translation_, device, pool, count, command_buffers);
     for (uint32_t index = 0u; index < count; index++)
         if (command_buffers[index] != VK_NULL_HANDLE)
             destroy_wrapper(command_buffers[index], LoaderHandle::Kind::command_buffer);
@@ -1647,7 +1638,7 @@ VkResult IcdRoot::begin_command_buffer(VkCommandBuffer command_buffer, const VkC
         return VK_ERROR_DEVICE_LOST;
     CommandBatch &batch = record_target(command_buffer);
     batch.discard();
-    if (vkproto::av_vkBeginCommandBuffer(batch, command_buffer, info) == VK_SUCCESS) return VK_SUCCESS;
+    if (vkproto::av_vkBeginCommandBuffer(batch, translation_, command_buffer, info) == VK_SUCCESS) return VK_SUCCESS;
     log_.write("avvk: vkBeginCommandBuffer: no memory to record into");
     return VK_ERROR_OUT_OF_HOST_MEMORY;
 }
@@ -1662,7 +1653,7 @@ VkResult IcdRoot::end_command_buffer(VkCommandBuffer command_buffer)
         batch.discard();
         return VK_ERROR_DEVICE_LOST;
     }
-    const VkResult recorded = vkproto::av_vkEndCommandBuffer(batch, command_buffer);
+    const VkResult recorded = vkproto::av_vkEndCommandBuffer(batch, translation_, command_buffer);
     const Status   shipped = batch.end();
     if (shipped == Status::ok) return recorded;
     lines_.note("vkEndCommandBuffer: batch not shipped, status", static_cast<uint64_t>(shipped));
@@ -1687,7 +1678,7 @@ VkResult IcdRoot::wait_for_fences(VkDevice device, uint32_t count, const VkFence
         return VK_ERROR_DEVICE_LOST;
     }
     if (made->connection()->refuses("vkWaitForFences")) return VK_ERROR_DEVICE_LOST;
-    FenceWaitProbe     probe(made->connection()->transport(), device, count, fences, wait_all);
+    FenceWaitProbe     probe(made->connection()->transport(), translation_, device, count, fences, wait_all);
     HostCompletionWait wait(kmt_, timeout);
     static_cast<void>(wait.run(probe));
     return probe.result();
@@ -1702,7 +1693,7 @@ VkResult IcdRoot::wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *in
         return VK_ERROR_DEVICE_LOST;
     }
     if (made->connection()->refuses("vkWaitSemaphores")) return VK_ERROR_DEVICE_LOST;
-    SemaphoreWaitProbe probe(made->connection()->transport(), device, info);
+    SemaphoreWaitProbe probe(made->connection()->transport(), translation_, device, info);
     HostCompletionWait wait(kmt_, timeout);
     static_cast<void>(wait.run(probe));
     return probe.result();
@@ -1722,8 +1713,8 @@ VkResult IcdRoot::query_pool_results(VkDevice device, VkQueryPool pool, uint32_t
     if (made->connection()->refuses("vkGetQueryPoolResults")) return VK_ERROR_DEVICE_LOST;
     ClientTransport &transport = made->connection()->transport();
     if ((flags & VK_QUERY_RESULT_WAIT_BIT) == 0u)
-        return vkproto::av_vkGetQueryPoolResults(transport, device, pool, first, count, size, data, stride, flags);
-    QueryWaitProbe     probe(transport, kmt_, device, pool, first, count, size, data, stride, flags);
+        return vkproto::av_vkGetQueryPoolResults(transport, translation_, device, pool, first, count, size, data, stride, flags);
+    QueryWaitProbe     probe(transport, translation_, kmt_, device, pool, first, count, size, data, stride, flags);
     HostCompletionWait wait(kmt_, SlicedWait::forever);
     static_cast<void>(wait.run(probe));
     return probe.result();
@@ -1758,14 +1749,14 @@ VkResult IcdRoot::queue_wait_idle(VkQueue queue)
     if (fence == VK_NULL_HANDLE) {
         VkFenceCreateInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        const VkResult created = vkproto::av_vkCreateFence(transport, device, &info, nullptr, &fence);
+        const VkResult created = vkproto::av_vkCreateFence(transport, translation_, device, &info, nullptr, &fence);
         if (created != VK_SUCCESS) return created;
         made->keep_idle_fence(HandleBits(fence).value());
     } else {
-        const VkResult reset = vkproto::av_vkResetFences(transport, device, 1u, &fence);
+        const VkResult reset = vkproto::av_vkResetFences(transport, translation_, device, 1u, &fence);
         if (reset != VK_SUCCESS) return reset;
     }
-    const VkResult submitted = vkproto::av_vkQueueSubmit(transport, queue, 0u, nullptr, fence);
+    const VkResult submitted = vkproto::av_vkQueueSubmit(transport, translation_, queue, 0u, nullptr, fence);
     if (submitted != VK_SUCCESS) return submitted;
     const VkResult waited = wait_for_fences(device, 1u, &fence, VK_TRUE, SlicedWait::forever);
     if (waited == VK_SUCCESS) made->mark_idle(connection.submissions());
@@ -1788,7 +1779,7 @@ VkResult IcdRoot::signal_acquire(VkDevice device, VkSemaphore semaphore, VkFence
     submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submit.signalSemaphoreCount = semaphore != VK_NULL_HANDLE ? 1u : 0u;
     submit.pSignalSemaphores = &semaphore;
-    return vkproto::av_vkQueueSubmit(made->connection()->transport(), static_cast<VkQueue>(static_cast<void *>(queue)),
+    return vkproto::av_vkQueueSubmit(made->connection()->transport(), translation_, static_cast<VkQueue>(static_cast<void *>(queue)),
                                       1u, &submit, fence);
 }
 

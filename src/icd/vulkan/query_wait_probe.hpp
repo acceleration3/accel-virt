@@ -19,12 +19,16 @@ class ClientTransport;
 class Kmt;
 }  // namespace av
 
+namespace av::vkproto {
+class HandleTranslation;
+}  // namespace av::vkproto
+
 namespace av::icd {
 
 class QueryWaitProbe final : public CompletionProbe {
 public:
     /* The application's call, `flags` without VK_QUERY_RESULT_WAIT_BIT. */
-    QueryWaitProbe(ClientTransport &wire, Kmt &kmt, VkDevice device, VkQueryPool pool, uint32_t first,
+    QueryWaitProbe(ClientTransport &wire, vkproto::HandleTranslation &handles, Kmt &kmt, VkDevice device, VkQueryPool pool, uint32_t first,
                    uint32_t count, size_t size, void *data, VkDeviceSize stride, VkQueryResultFlags flags);
 
     [[nodiscard]] bool ask(uint64_t slice) override;
@@ -34,6 +38,7 @@ public:
 
 private:
     ClientTransport   &wire_;
+    vkproto::HandleTranslation &handles_;
     PollPause          polls_;
     VkDevice           device_;
     VkQueryPool        pool_;

@@ -29,6 +29,10 @@ namespace av {
 class ClientTransport;
 }
 
+namespace av::vkproto {
+class HandleTranslation;
+}  // namespace av::vkproto
+
 namespace av::icd {
 
 struct PhysicalDeviceViewProbe;
@@ -42,7 +46,7 @@ public:
 
     /* `latest_version` is the API version the ICD implements; `name` the
      * adapter's (Connection::adapter_name), empty to keep the host's. */
-    PhysicalDeviceView(ClientTransport &transport, uint64_t luid, const char *name, uint32_t latest_version,
+    PhysicalDeviceView(ClientTransport &transport, vkproto::HandleTranslation &handles, uint64_t luid, const char *name, uint32_t latest_version,
                        LogSink &log);
     PhysicalDeviceView(const PhysicalDeviceView &) = delete;
     PhysicalDeviceView &operator=(const PhysicalDeviceView &) = delete;
@@ -60,6 +64,7 @@ private:
     void               write_name(VkPhysicalDeviceProperties &properties) const;
 
     ClientTransport    &transport_;
+    vkproto::HandleTranslation &handles_;
     uint64_t            luid_;
     const char         *name_;
     uint32_t            latest_version_;

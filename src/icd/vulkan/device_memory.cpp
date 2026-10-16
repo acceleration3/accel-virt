@@ -10,8 +10,8 @@
 
 namespace av::icd {
 
-DeviceMemory::DeviceMemory(Kmt &kmt, Connection &connection, LogSink &log)
-    : connection_(connection), log_(log), lines_(log, "avvk: "), types_(kmt, connection.adapter()), learnt_(false)
+DeviceMemory::DeviceMemory(Kmt &kmt, Connection &connection, vkproto::HandleTranslation &handles, LogSink &log)
+    : connection_(connection), handles_(handles), log_(log), lines_(log, "avvk: "), types_(kmt, connection.adapter()), learnt_(false)
 {
     AV_SCOPE("DeviceMemory::DeviceMemory");
 }
@@ -21,7 +21,7 @@ bool DeviceMemory::learn(VkPhysicalDevice physical)
     AV_SCOPE("DeviceMemory::learn");
     if (learnt_) return true;
     VkPhysicalDeviceMemoryProperties host = {};
-    vkproto::av_vkGetPhysicalDeviceMemoryProperties(connection_.transport(), physical, &host);
+    vkproto::av_vkGetPhysicalDeviceMemoryProperties(connection_.transport(), handles_, physical, &host);
     if (connection_.lost()) {
         log_.write("avvk: vkAllocateMemory: the device's memory types cannot be learnt on a lost device");
         return false;
@@ -47,7 +47,7 @@ VkResult DeviceMemory::allocate(VkPhysicalDevice physical, VkDevice device, cons
         if (link->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT)
             return lend(info, *reinterpret_cast<const VkImportMemoryHostPointerInfoEXT *>(link), memory);
     if (!types_.host_visible(info.memoryTypeIndex)) {
-        return vkproto::av_vkAllocateMemory(connection_.transport(), device, &info, allocator, &memory);
+        return vkproto::av_vkAllocateMemory(connection_.transport(), handles_, device, &info, allocator, &memory);
     }
     if (info.allocationSize == 0u) return refusal();
     HostAllocation *made = nullptr;
@@ -125,7 +125,7 @@ void DeviceMemory::free(VkDevice device, VkDeviceMemory memory, const VkAllocati
     if (memory == VK_NULL_HANDLE) return;
     HostAllocation *const held = find(memory);
     if (held == nullptr) {
-        vkproto::av_vkFreeMemory(connection_.transport(), device, memory, allocator);
+        vkproto::av_vkFreeMemory(connection_.transport(), handles_, device, memory, allocator);
         return;
     }
     const Status released = connection_.channel().close_memory(*held);

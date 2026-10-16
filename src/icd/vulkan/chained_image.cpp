@@ -4,7 +4,7 @@
 #include "icd/common/slot_format.hpp"
 #include "icd/common/window_chains.hpp"
 #include "icd/vulkan/entry_lookup.hpp"
-#include "proto/generated/vulkan/vk_serialize.h"
+#include "icd/vulkan/handle_bits.hpp"
 #include "proto/vulkan/exportable_image_info.hpp"
 
 namespace av::icd {
@@ -47,10 +47,8 @@ bool ChainedImage::open(void *window, uint64_t luid, VkFormat format, VkExtent2D
 bool ChainedImage::make_image(const SlotFormat &slot, VkExtent2D extent)
 {
     AV_SCOPE("ChainedImage::make_image");
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    /* Not branched on: the slots refused an open that answered no handle,
-     * and the conversion of a non-zero one is a copy of the same width. */
-    static_cast<void>(vkproto::wire_to_handle(slots_.memory(0u), memory));
+    /* The slots refused an open that answered no handle. */
+    const VkDeviceMemory memory = HandleBits(slots_.memory(0u)).as<VkDeviceMemory>();
     const ExportableImageInfo described(extent.width, extent.height, 1u, 1u, 1u, slot.dxgi(), slot.bind_flags());
     const auto create = reinterpret_cast<CreateImage>(entries_.entry("vkCreateImage"));
     if (create(device_, &described.info(), nullptr, &image_) != VK_SUCCESS) {

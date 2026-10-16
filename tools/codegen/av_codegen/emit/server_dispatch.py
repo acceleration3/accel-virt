@@ -129,7 +129,7 @@ def _handle_slots(reg: Registry, name: str, counted: frozenset[str] = frozenset(
     """How many handles one of `name` carries out in its own members.
 
     The host must have room to remember every handle a reply carries before
-    the driver makes them (handles_room). Handles behind a pointer are counted
+    the driver makes them (ServerDispatch::room_for). Handles behind a pointer are counted
     by the caller only where the structure is the command's own output and
     names the room it gave (`counted`, its caller arrays); anywhere else a
     count no member gives is refused here rather than left uncounted."""
@@ -153,7 +153,7 @@ def _handle_slots(reg: Registry, name: str, counted: frozenset[str] = frozenset(
 def _ending_lines(reg: Registry, cmd: Command) -> list[str]:
     """What a destroy, free or reset tells the host has ended."""
     if cmd.name in _ENDS_CHILDREN:
-        return [f"    handle_children_ended(as_number({_ENDS_CHILDREN[cmd.name]}));"]
+        return [f"    s.children_ended(as_number({_ENDS_CHILDREN[cmd.name]}));"]
     if not cmd.name.startswith(("vkDestroy", "vkFree")):
         return []
     ended = [p for p in cmd.params if p.direction == "in" and p.type.base in reg.handles]
@@ -161,10 +161,10 @@ def _ending_lines(reg: Registry, cmd: Command) -> list[str]:
         raise ValueError(f"{cmd.name} destroys and names no handle")
     last = ended[-1]
     if classify.classify(reg, last, cmd.params) == "in_handle":
-        return [f"    handle_ended(as_number({last.name}));"]
+        return [f"    s.ended(as_number({last.name}));"]
     return [
         f"    for (size_t av_e = 0; av_e < {last.name}_storage_count; ++av_e) {{",
-        f"        handle_ended(as_number({last.name}_storage[av_e]));",
+        f"        s.ended(as_number({last.name}_storage[av_e]));",
         "    }",
     ]
 
@@ -234,7 +234,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             out_after_call.append(f"        for (uint32_t k = 0; k < {sent}; ++k) {{")
             if arr.type.base in reg.structs or arr.type.base in reg.handles:
                 out_after_call.append(
-                    f"            serialize_{arr.type.base}(reply, {arr.name}_storage[k]);"
+                    f"            {serialize.serialize_call(reg, arr.type.base, 'reply', f'{arr.name}_storage[k]', 's')};"
                 )
             else:
                 out_after_call.append(
@@ -250,7 +250,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             call_args.append("nullptr")
         elif kind == "in_handle":
             decl_lines.append(f"    {p.type.base} {p.name} = VK_NULL_HANDLE;")
-            decode_lines.append(f"    if (!deserialize_{p.type.base}(r, {p.name})) return false;")
+            decode_lines.append(f"    if (!deserialize_{p.type.base}(r, s, {p.name})) return false;")
             if p.null_refused and not reg.handles[p.type.base].dispatchable:
                 decode_lines.append(f"    if ({p.name} == VK_NULL_HANDLE) return false;")
             call_args.append(p.name)
@@ -287,7 +287,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         elif kind == "in_struct_ptr":
             decl_lines.append(f"    {p.type.base} {p.name}_local{{}};")
             decode_lines.append(
-                f"    if (!deserialize_{p.type.base}(r, &{p.name}_local, arena)) return false;"
+                f"    if (!{serialize.deserialize_call(reg, p.type.base, 'r', f'&{p.name}_local', 'arena', 's')}) return false;"
             )
             call_args.append(f"&{p.name}_local")
         elif kind in ("in_handle_array", "in_struct_array", "in_pod_array"):
@@ -315,11 +315,11 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             )
             if kind == "in_handle_array":
                 decode_lines.append(
-                    f"{pad}        if (!deserialize_{elem}(r, {p.name}_storage[av_i])) return false;"
+                    f"{pad}        if (!deserialize_{elem}(r, s, {p.name}_storage[av_i])) return false;"
                 )
             elif kind == "in_struct_array":
                 decode_lines.append(
-                    f"{pad}        if (!deserialize_{elem}(r, &{p.name}_storage[av_i], arena)) return false;"
+                    f"{pad}        if (!{serialize.deserialize_call(reg, elem, 'r', f'&{p.name}_storage[av_i]', 'arena', 's')}) return false;"
                 )
             else:  # in_pod_array
                 decode_lines.append(
@@ -352,7 +352,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             decode_lines.append("            for (uint32_t av_j = 0; av_j < av_n; ++av_j) {")
             if kind == "in_struct_array2":
                 decode_lines.append(
-                    f"                if (!deserialize_{elem}(r, &av_inner[av_j], arena)) return false;")
+                    f"                if (!{serialize.deserialize_call(reg, elem, 'r', '&av_inner[av_j]', 'arena', 's')}) return false;")
             else:
                 decode_lines.append("                if (!r.read_pod(av_inner[av_j])) return false;")
             decode_lines.append("            }")
@@ -369,7 +369,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             # Constitution V: the guest's length is a claim. The template this
             # side decoded says what the length must be.
             decode_lines.append(
-                f"    if (av_blob != descriptor_template_bytes({handle})) return false;"
+                f"    if (av_blob != s.template_bytes({handle})) return false;"
             )
             alloc = _storage_alloc(
                 "    ", f"{p.name}_storage", "uint8_t", "av_blob", zero_fill=False
@@ -413,7 +413,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             decl_lines.append(f"    {p.type.base} {p.name}_out = VK_NULL_HANDLE;")
             cleared_on_failure.append(f"        {p.name}_out = VK_NULL_HANDLE;")
             call_args.append(f"&{p.name}_out")
-            out_after_call.append(f"    serialize_{p.type.base}(reply, {p.name}_out);")
+            out_after_call.append(f"    serialize_{p.type.base}(reply, s, {p.name}_out);")
         elif kind == "out_struct":
             arrays = serialize.caller_arrays(reg, reg.structs[p.type.base])
             counted = frozenset(arr.name for arr, _ in arrays)
@@ -430,7 +430,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 # and serializing the struct afterwards walks the same
                 # chain back to the client.
                 decode_lines.append(
-                    f"    if (!deserialize_pnext_chain(r, "
+                    f"    if (!deserialize_pnext_chain(r, s, "
                     f"reinterpret_cast<VkBaseOutStructure*>(&{p.name}_out), arena)) "
                     f"return false;"
                 )
@@ -457,7 +457,8 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 cleared_on_failure.append(f"        {p.name}_blank.sType = {p.name}_out.sType;")
             cleared_on_failure.append(f"        {p.name}_out = {p.name}_blank;")
             call_args.append(f"&{p.name}_out")
-            out_after_call.append(f"    serialize_{p.type.base}(reply, {p.name}_out);")
+            out_after_call.append(
+                f"    {serialize.serialize_call(reg, p.type.base, 'reply', f'{p.name}_out', 's')};")
         elif kind == "out_pod":
             decl_lines.append(f"    {p.type.base} {p.name}_out{{}};")
             cleared_on_failure.append(f"        {p.name}_out = {{}};")
@@ -494,7 +495,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             )
             if kind in ("out_handle_array", "out_struct_array"):
                 out_after_call.append(
-                    f"        serialize_{elem}(reply, {p.name}_storage[av_k]);"
+                    f"        {serialize.serialize_call(reg, elem, 'reply', f'{p.name}_storage[av_k]', 's')};"
                 )
             else:
                 out_after_call.append(
@@ -514,11 +515,11 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     after_call = _ending_lines(reg, cmd)
     parent = _made_through(reg, cmd)
     if parent is not None:
-        after_call.append(f"    handles_made_through({parent});")
+        after_call.append(f"    s.made_through({parent});")
 
     room = None
     if room_terms:
-        room = "handles_room(" + " + ".join(f"static_cast<uint64_t>({t})" for t in room_terms) + ")"
+        room = "s.room_for(" + " + ".join(f"static_cast<uint64_t>({t})" for t in room_terms) + ")"
         if not is_void and failed is None:
             raise ValueError(f"{cmd.name} answers handles and no VkResult to refuse them with")
 
@@ -580,13 +581,36 @@ def emit(reg: Registry, out_dir: Path) -> None:
         '#include "proto/wire/wire_arena.hpp"',
         '#include "proto/wire/wire_writer.hpp"',
         '#include "proto/wire/wire_reader.hpp"',
+        '#include "vk_handle_translation.h"',
         "",
         "namespace av::vkproto {",
         "",
         "// User implements this; the dispatch table calls into it for every command.",
-        "class ServerDispatch {",
+        "//",
+        "// It is also the translation every handle in a frame for it is decoded",
+        "// and answered through, and is told what each command did to the",
+        "// handles it answers for: the shape OpenCL's ServerDispatch has, with",
+        "// `ended` for its released and a parent for what Vulkan frees with one.",
+        "class ServerDispatch : public HandleTranslation {",
         "public:",
         "    virtual ~ServerDispatch() = default;",
+        "",
+        "    // A handle a reply is about to give the guest: from here on the",
+        "    // number is that handle, made through the last `made_through`, into",
+        "    // the room `room_for` made.",
+        "    virtual void made(HandleKind kind, uint64_t handle) = 0;",
+        "    // Whether `handles` more can be remembered, asked before the driver",
+        "    // makes any: false refuses the command as out of host memory.",
+        "    [[nodiscard]] virtual bool room_for(uint64_t handles) = 0;",
+        "    // The handles the reply is about to carry were made through `parent`,",
+        "    // and end when it does.",
+        "    virtual void made_through(uint64_t parent) = 0;",
+        "    // `handle` was destroyed or freed, and with it what was made through it.",
+        "    virtual void ended(uint64_t handle) = 0;",
+        "    // What was made through `handle` was freed, and `handle` was not.",
+        "    virtual void children_ended(uint64_t handle) = 0;",
+        "    // A handle leaves as the host's own number, and is made by leaving.",
+        "    [[nodiscard]] uint64_t wire_for(HandleKind kind, uint64_t handle) final;",
         "",
     ]
     for cmd in cmds:
@@ -608,58 +632,9 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena);"
     )
     header.append("")
-    header.extend([
-        "// What a decoded command did to the handles the host answers for. A",
-        "// handle leaves through handle_to_wire and comes back through",
-        "// wire_to_handle; these say when one stops being an object at all, so",
-        "// a host that checks the way back in stops accepting it. Weakly",
-        "// defined to nothing, which is right wherever nothing is checked; see",
-        "// vk_handle_lifetime_default.cpp.",
-        "//",
-        "// The handles the reply is about to carry were made through `parent`,",
-        "// and end when it does.",
-        "void handles_made_through(uint64_t parent) noexcept;",
-        "// Whether `handles` more can be remembered, asked before the driver",
-        "// makes any: false refuses the command as out of host memory.",
-        "bool handles_room(uint64_t handles) noexcept;",
-        "// `handle` was destroyed or freed, and with it what was made through it.",
-        "void handle_ended(uint64_t handle) noexcept;",
-        "// What was made through `handle` was freed, and `handle` was not.",
-        "void handle_children_ended(uint64_t handle) noexcept;",
-        "",
-    ])
     header.append("}  // namespace av::vkproto")
     header.append("")
     write(out_dir / "vk_dispatch_server.h", header_guard("\n".join(header[1:])))
-
-    # The defaults in a file of their own, for the reason the handle hooks
-    # are two files (emit/serialize.py): on PE an archive member is displaced
-    # whole, so a host defining these must not also be defining anything the
-    # file beside them holds.
-    lifetime_default = [
-        GENERATED_BANNER,
-        "",
-        '#include "vk_dispatch_server.h"',
-        "",
-        "#include <stdint.h>",
-        "",
-        "#if defined(_WIN32)",
-        "#  define AV_HOOK_DEFAULT",
-        "#else",
-        "#  define AV_HOOK_DEFAULT [[gnu::weak]]",
-        "#endif",
-        "",
-        "namespace av::vkproto {",
-        "",
-        "AV_HOOK_DEFAULT void handles_made_through(uint64_t) noexcept {}",
-        "AV_HOOK_DEFAULT bool handles_room(uint64_t) noexcept { return true; }",
-        "AV_HOOK_DEFAULT void handle_ended(uint64_t) noexcept {}",
-        "AV_HOOK_DEFAULT void handle_children_ended(uint64_t) noexcept {}",
-        "",
-        "}  // namespace av::vkproto",
-        "",
-    ]
-    write(out_dir / "vk_handle_lifetime_default.cpp", "\n".join(lifetime_default))
 
     # ---- Source ----
     source = [
@@ -672,6 +647,11 @@ def emit(reg: Registry, out_dir: Path) -> None:
         '#include "vk_serialize.h"',
         "",
         "namespace av::vkproto {",
+        "",
+        "uint64_t ServerDispatch::wire_for(HandleKind kind, uint64_t handle) {",
+        "    made(kind, handle);",
+        "    return handle;",
+        "}",
         "",
         "bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, "
         "::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {",

@@ -6,9 +6,9 @@
 
 namespace av::icd {
 
-PhysicalDeviceView::PhysicalDeviceView(ClientTransport &transport, uint64_t luid, const char *name,
+PhysicalDeviceView::PhysicalDeviceView(ClientTransport &transport, vkproto::HandleTranslation &handles, uint64_t luid, const char *name,
                                        uint32_t latest_version, LogSink &log)
-    : transport_(transport), luid_(luid), name_(name), latest_version_(latest_version), log_(log), nodes_{}, types_{}, nexts_{}, remembered_(0u)
+    : transport_(transport), handles_(handles), luid_(luid), name_(name), latest_version_(latest_version), log_(log), nodes_{}, types_{}, nexts_{}, remembered_(0u)
     {
         AV_SCOPE("PhysicalDeviceView::PhysicalDeviceView");
     }
@@ -17,7 +17,7 @@ void PhysicalDeviceView::properties(VkPhysicalDevice physical_device, VkPhysical
 {
     AV_SCOPE("PhysicalDeviceView::properties");
     *answer = VkPhysicalDeviceProperties{};
-    vkproto::av_vkGetPhysicalDeviceProperties(transport_, physical_device, answer);
+    vkproto::av_vkGetPhysicalDeviceProperties(transport_, handles_, physical_device, answer);
     if (answer->apiVersion > latest_version_) answer->apiVersion = latest_version_;
     write_name(*answer);
 }
@@ -30,7 +30,7 @@ void PhysicalDeviceView::properties2(VkPhysicalDevice physical_device, VkPhysica
         return;
     }
     answer->properties = VkPhysicalDeviceProperties{};
-    vkproto::av_vkGetPhysicalDeviceProperties2(transport_, physical_device, answer);
+    vkproto::av_vkGetPhysicalDeviceProperties2(transport_, handles_, physical_device, answer);
     restore();
     if (answer->properties.apiVersion > latest_version_) answer->properties.apiVersion = latest_version_;
     write_name(answer->properties);

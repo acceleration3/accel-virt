@@ -213,8 +213,8 @@ def template_sibling(params: list[Param] | None) -> str | None:
     ``pData`` in the three ``WithTemplate`` commands has no ``len`` in vk.xml:
     its length is the template's, computed from the entries the template was
     created with. That is not in the call, so the only thing that can answer it
-    is a hook each side implements over its own table of templates - the shape
-    ``host_image_copy_bytes`` already has.
+    is each side's ``HandleTranslation::template_bytes``, over its own table of
+    templates.
     """
     if params is None:
         return None

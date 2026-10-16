@@ -42,8 +42,10 @@ def _out_handle_is_raw(reg: Registry, p, params) -> bool:
     return index > 0 and classify.is_count_array_pair(params, index - 1)
 
 
-def _signature(reg: Registry, cmd: Command) -> str:
-    args = ["::av::ClientTransport& t"]
+def _signature(reg: Registry, cmd: Command, translates: bool = True) -> str:
+    # The translation is every command's, so that a caller never has to ask
+    # which take one; a body that encodes no handle leaves it unnamed.
+    args = ["::av::ClientTransport& t", "HandleTranslation& handles" if translates else "HandleTranslation&"]
     for p in cmd.params:
         if _out_handle_is_raw(reg, p, cmd.params):
             args.append(f"uint64_t* {p.name}")
@@ -88,7 +90,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         if kind == "in_null":
             lines.append(f"(void){p.name};  // {p.type.base} not crossed over the wire")
         elif kind == "in_handle":
-            lines.append(f"serialize_{p.type.base}(payload, {p.name});")
+            lines.append(f"serialize_{p.type.base}(payload, handles, {p.name});")
         elif kind == "in_pod":
             # size_t is the machine's width, and the wire's is 64 bits.
             #
@@ -118,7 +120,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append("    }")
             lines.append("}")
         elif kind == "in_struct_ptr":
-            lines.append(f"serialize_{p.type.base}(payload, *{p.name});")
+            lines.append(f"{serialize.serialize_call(reg, p.type.base, 'payload', f'*{p.name}')};")
         elif kind in ("in_handle_array", "in_struct_array", "in_pod_array"):
             # A nullable array (Vulkan optional="true" on the pointer, e.g.
             # vkCmdBindVertexBuffers2's pSizes/pStrides) may arrive null;
@@ -127,7 +129,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             elem_line = (
                 f"    payload.write_pod({p.name}[av_i]);"
                 if kind == "in_pod_array"
-                else f"    serialize_{p.type.base}(payload, {p.name}[av_i]);"
+                else f"    {serialize.serialize_call(reg, p.type.base, 'payload', f'{p.name}[av_i]')};"
             )
             nullable = bool(p.optional_levels) and p.optional_levels[0]
             pad = ""
@@ -153,7 +155,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append(f"    const uint32_t av_n = static_cast<uint32_t>({sib}[av_i].{member});")
             lines.append(f"    for (uint32_t av_j = 0; av_j < av_n; ++av_j) {{")
             if kind == "in_struct_array2":
-                lines.append(f"        serialize_{p.type.base}(payload, {p.name}[av_i][av_j]);")
+                lines.append(f"        {serialize.serialize_call(reg, p.type.base, 'payload', f'{p.name}[av_i][av_j]')};")
             else:
                 lines.append(f"        payload.write_pod({p.name}[av_i][av_j]);")
             lines.append("    }")
@@ -165,7 +167,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             handle = classify.template_sibling(cmd.params)
             lines.append(
                 f"const uint64_t av_blob = ({p.name} != nullptr)"
-                f" ? descriptor_template_bytes({handle}) : 0;"
+                f" ? handles.template_bytes({handle}) : 0;"
             )
             lines.append("payload.write_varint(av_blob);")
             lines.append(
@@ -197,7 +199,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             # extended feature reads back as unsupported.
             if reg.structs[p.type.base].has_stype:
                 lines.append(f"payload.write_pod({p.name}->sType);")
-                lines.append(f"serialize_pnext_chain(payload, {p.name}->pNext);")
+                lines.append(f"serialize_pnext_chain(payload, handles, {p.name}->pNext);")
             # An array the caller hangs off the struct goes out as its room
             # and whether there is one, not its elements: they are what the
             # call writes, and uninitialised handles are numbers a host
@@ -269,7 +271,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append(f"    for (uint32_t k = 0; k < {answered}; ++k) {{")
             if element_is_struct:
                 lines.append(
-                    f"        if (!deserialize_{arr.type.base}(r, &{arr.name}[k], t.decode_arena())) {{"
+                    f"        if (!{serialize.deserialize_call(reg, arr.type.base, 'r', f'&{arr.name}[k]', 't.decode_arena()')}) {{"
                 )
             elif arr.type.base in classify.DISPATCHABLE_HANDLES:
                 # Raw 64 bits: the caller's array is uint64_t[] so
@@ -277,7 +279,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 lines.append(f"        if (!r.read_pod({arr.name}[k])) {{")
             elif element_is_handle:
                 lines.append(
-                    f"        if (!deserialize_{arr.type.base}(r, {arr.name}[k])) {{"
+                    f"        if (!deserialize_{arr.type.base}(r, handles, {arr.name}[k])) {{"
                 )
             else:  # POD / enum
                 lines.append(f"        if (!r.read_pod({arr.name}[k])) {{")
@@ -297,7 +299,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append(on_fail)
             lines.append("}")
         elif kind == "out_struct":
-            lines.append(f"if (!deserialize_{p.type.base}(r, {p.name}, t.decode_arena())) {{")
+            lines.append(f"if (!{serialize.deserialize_call(reg, p.type.base, 'r', p.name, 't.decode_arena()')}) {{")
             lines.append(on_fail)
             lines.append("}")
         elif kind == "out_pod":
@@ -325,7 +327,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 lines.append("    }")
             elif kind == "out_struct_array":
                 lines.append(
-                    f"    if (!deserialize_{elem}(r, &{p.name}[av_k], t.decode_arena())) {{"
+                    f"    if (!{serialize.deserialize_call(reg, elem, 'r', f'&{p.name}[av_k]', 't.decode_arena()')}) {{"
                 )
                 lines.append("    " + on_fail.lstrip())
                 lines.append("    }")
@@ -356,6 +358,10 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         "namespace av::vkproto {",
         "",
+        "// What every handle a command names crosses the wire as",
+        "// (vk_handle_translation.h).",
+        "class HandleTranslation;",
+        "",
     ]
     for cmd in cmds:
         header.append(_signature(reg, cmd) + ";")
@@ -380,11 +386,12 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
     ]
     for cmd in cmds:
-        source.append(_signature(reg, cmd) + " {")
+        body = _emit_body(reg, cmd)
+        source.append(_signature(reg, cmd, any("handles" in line for line in body)) + " {")
         # One trace scope per command sent (docs/trace.md); the serializers
         # it calls run per member and are not marked.
         source.append(f'    AV_SCOPE("av_{cmd.name}");')
-        for line in _emit_body(reg, cmd):
+        for line in body:
             source.append("    " + line)
         source.append("}")
         source.append("")

@@ -3,7 +3,7 @@
  *
  * `vkUpdateDescriptorSetWithTemplate` and `vkCmdPushDescriptorSetWithTemplate`
  * carry a `pData` whose length is the template's, not the call's, so the
- * generated serializer asks `descriptor_template_bytes` for it while it is
+ * generated serializer asks the translation's `template_bytes` for it while it is
  * writing the command. That happens on whatever thread called the command, and
  * templates are created and destroyed on other threads, so this table has a
  * lock of its own rather than borrowing the root's - nothing it does can reach

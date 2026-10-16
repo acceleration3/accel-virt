@@ -9,13 +9,36 @@
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_writer.hpp"
 #include "proto/wire/wire_reader.hpp"
+#include "vk_handle_translation.h"
 
 namespace av::vkproto {
 
 // User implements this; the dispatch table calls into it for every command.
-class ServerDispatch {
+//
+// It is also the translation every handle in a frame for it is decoded
+// and answered through, and is told what each command did to the
+// handles it answers for: the shape OpenCL's ServerDispatch has, with
+// `ended` for its released and a parent for what Vulkan frees with one.
+class ServerDispatch : public HandleTranslation {
 public:
     virtual ~ServerDispatch() = default;
+
+    // A handle a reply is about to give the guest: from here on the
+    // number is that handle, made through the last `made_through`, into
+    // the room `room_for` made.
+    virtual void made(HandleKind kind, uint64_t handle) = 0;
+    // Whether `handles` more can be remembered, asked before the driver
+    // makes any: false refuses the command as out of host memory.
+    [[nodiscard]] virtual bool room_for(uint64_t handles) = 0;
+    // The handles the reply is about to carry were made through `parent`,
+    // and end when it does.
+    virtual void made_through(uint64_t parent) = 0;
+    // `handle` was destroyed or freed, and with it what was made through it.
+    virtual void ended(uint64_t handle) = 0;
+    // What was made through `handle` was freed, and `handle` was not.
+    virtual void children_ended(uint64_t handle) = 0;
+    // A handle leaves as the host's own number, and is made by leaving.
+    [[nodiscard]] uint64_t wire_for(HandleKind kind, uint64_t handle) final;
 
     virtual void on_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) = 0;
     virtual void on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) = 0;
@@ -431,23 +454,5 @@ public:
 // length of the call; it is the caller's block, because it has to outlive
 // the decode that filled it.
 [[nodiscard]] bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena);
-
-// What a decoded command did to the handles the host answers for. A
-// handle leaves through handle_to_wire and comes back through
-// wire_to_handle; these say when one stops being an object at all, so
-// a host that checks the way back in stops accepting it. Weakly
-// defined to nothing, which is right wherever nothing is checked; see
-// vk_handle_lifetime_default.cpp.
-//
-// The handles the reply is about to carry were made through `parent`,
-// and end when it does.
-void handles_made_through(uint64_t parent) noexcept;
-// Whether `handles` more can be remembered, asked before the driver
-// makes any: false refuses the command as out of host memory.
-bool handles_room(uint64_t handles) noexcept;
-// `handle` was destroyed or freed, and with it what was made through it.
-void handle_ended(uint64_t handle) noexcept;
-// What was made through `handle` was freed, and `handle` was not.
-void handle_children_ended(uint64_t handle) noexcept;
 
 }  // namespace av::vkproto

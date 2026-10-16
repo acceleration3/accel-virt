@@ -14,11 +14,15 @@ namespace av {
 class ClientTransport;
 }  // namespace av
 
+namespace av::vkproto {
+class HandleTranslation;
+}  // namespace av::vkproto
+
 namespace av::icd {
 
 class FenceWaitProbe final : public CompletionProbe {
 public:
-    FenceWaitProbe(ClientTransport &wire, VkDevice device, uint32_t count, const VkFence *fences, VkBool32 wait_all);
+    FenceWaitProbe(ClientTransport &wire, vkproto::HandleTranslation &handles, VkDevice device, uint32_t count, const VkFence *fences, VkBool32 wait_all);
 
     [[nodiscard]] bool ask(uint64_t slice) override;
     void               pause(uint64_t slice) override;
@@ -27,6 +31,7 @@ public:
 
 private:
     ClientTransport &wire_;
+    vkproto::HandleTranslation &handles_;
     VkDevice         device_;
     uint32_t         count_;
     const VkFence   *fences_;

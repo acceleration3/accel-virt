@@ -77,9 +77,10 @@ public:
                                                  const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
                                                  const VkAllocationCallbacks *pAllocator,
                                                  VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate) override;
-    /* The bytes one update through `made` reads, for the generated decoder's
-     * hook; 0 for a template this context never made. */
-    uint64_t template_bytes(VkDescriptorUpdateTemplate made) const;
+    /* The bytes one update through `made` reads, which the decoder checks a
+     * WithTemplate blob's length against; 0 for a template this context never
+     * made. */
+    uint64_t template_bytes(VkDescriptorUpdateTemplate made) const override;
 
     /* A device is made able to import a host pointer whether or not the guest
      * asked, because every host-visible allocation the guest makes arrives as
@@ -223,39 +224,31 @@ public:
     /* Whether `handles` more can be remembered: asked by the decoder before
      * a command makes any, which refuses the command as out of host memory
      * when there is no room. */
-    bool     room_for(uint64_t handles);
+    bool     room_for(uint64_t handles) override;
     /* Records a handle this backend is about to hand the guest, made through
      * whatever the command being decoded named with made_through, into the
      * room room_for made for it. */
-    void     made(uint64_t raw, VulkanObjectKind kind = VulkanObjectKind::other);
+    void     made(vkproto::HandleKind kind, uint64_t handle) override;
+    /* The handle a guest names, when this backend made it (handle_for in the
+     * .cpp says how each kind is judged). */
+    bool     handle_for(vkproto::HandleKind kind, uint64_t wire, uint64_t &handle) const override;
     /* The object the command being decoded makes its handles through - its
      * device, its pool - so that they end when it does. Nothing between
      * commands: every run forgets it when the decode returns. */
-    void     made_through(uint64_t parent);
+    void     made_through(uint64_t parent) override;
     /* A destroy or free the decoder ran: `raw`, and everything made through
      * it, is no longer a handle the guest can name. */
-    void     ended(uint64_t raw);
+    void     ended(uint64_t raw) override;
     /* A reset that freed what was made through `raw` and left `raw`. */
-    void     children_ended(uint64_t raw);
-    /* Whether this backend made the handle a guest just named. What the
-     * generated decoder asks through wire_to_handle. */
+    void     children_ended(uint64_t raw) override;
+    /* Whether this backend made the handle a guest just named. */
     bool     knows_handle(uint64_t raw) const;
     /* And that it made it as this kind, which is what the five handles the
      * loader dispatches on are judged by. */
     bool     knows_handle(uint64_t raw, VulkanObjectKind kind) const;
-    /* The backend whose handles the decoder is inside. One context runs on one
-     * worker and one call at a time - the ABI says so - so the answer is the
-     * thread's, which is the only shape a hook with no user pointer can take. */
-    static VulkanBackend *deciding();
 
 private:
     friend struct VulkanBackendProbe;
-
-    /* Decodes one command into `driver` with this backend deciding its
-     * handles. Always this backend's own driver but in a test, which puts one
-     * with no GPU behind it there. */
-    [[nodiscard]] bool run_through(vkproto::ServerDispatch &driver, uint32_t command_id,
-                                   WireReader &payload, WireWriter &reply, WireArena &arena);
 
     /* Adds VK_KHR_get_physical_device_properties2 to the extensions an
      * instance is made with, unless the guest enabled it or its list has no

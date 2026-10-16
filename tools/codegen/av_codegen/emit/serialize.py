@@ -15,6 +15,7 @@ What's still not handled (would need pNext support, opaque blobs, unions, etc.):
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from ..ir import Registry, Struct, StructMember
@@ -42,57 +43,86 @@ def _referenced_handle_names(reg: Registry) -> list[str]:
     return sorted(seen)
 
 
-DISPATCHABLE_HANDLE_TYPES = (
-    "VkInstance",
-    "VkPhysicalDevice",
-    "VkDevice",
-    "VkQueue",
-    "VkCommandBuffer",
-)
+def handle_kind(name: str) -> str:
+    """The ``HandleKind`` enumerator of a handle type:
+    ``VkAccelerationStructureKHR`` is ``acceleration_structure_khr``."""
+    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name[2:]).lower()
 
 
 def _emit_handle_helpers(name: str) -> list[str]:
-    is_dispatchable = name in DISPATCHABLE_HANDLE_TYPES
-    if is_dispatchable:
-        # Dispatchable handles route through ``handle_to_wire`` so the
-        # client side can override and unwrap its loader-magic-marked
-        # ``AvWrappedHandle`` to the server's real driver handle. The
-        # default linkage (used by the server and by loopback tests) is
-        # identity. See ``vk_handle_default.cpp``.
-        return [
-            f"inline void serialize_{name}(::av::WireWriter& buf, {name} v) noexcept {{",
-            f"    buf.write_pod(handle_to_wire(v));",
-            "}",
-            "",
-            "[[nodiscard]] inline bool "
-            f"deserialize_{name}(::av::WireReader& r, {name}& out) noexcept {{",
-            "    uint64_t raw = 0;",
-            "    if (!r.read_pod(raw)) {",
-            "        return false;",
-            "    }",
-            f"    return wire_to_handle(raw, out);",
-            "}",
-            "",
-        ]
+    kind = handle_kind(name)
     return [
-        f"inline void serialize_{name}(::av::WireWriter& buf, {name} v) noexcept {{",
-        "    // Through the hook, like the dispatchable handles: a host that",
-        "    // must refuse a handle it did not make needs to know which it did,",
-        "    // and every handle it ever gave the guest went out through here",
-        "    // (feature 042).",
-        f"    buf.write_pod(handle_to_wire(v));",
+        f"inline void serialize_{name}(::av::WireWriter& buf, HandleTranslation& handles, {name} v) noexcept {{",
+        f"    buf.write_pod(handles.wire_for(HandleKind::{kind}, as_number(v)));",
         "}",
         "",
         "[[nodiscard]] inline bool "
-        f"deserialize_{name}(::av::WireReader& r, {name}& out) noexcept {{",
+        f"deserialize_{name}(::av::WireReader& r, const HandleTranslation& handles, {name}& out) noexcept {{",
         "    uint64_t raw = 0;",
         "    if (!r.read_pod(raw)) {",
         "        return false;",
         "    }",
-        f"    return wire_to_handle(raw, out);",
+        "    uint64_t named = 0;",
+        f"    if (!handles.handle_for(HandleKind::{kind}, raw, named)) {{",
+        "        return false;",
+        "    }",
+        f"    out = as_handle<{name}>(named);",
+        "    return true;",
         "}",
         "",
     ]
+
+
+_CARRIERS: dict[int, frozenset[str]] = {}
+
+
+def carriers(reg: Registry) -> frozenset[str]:
+    """Every struct whose encoder or decoder needs the ``HandleTranslation``.
+
+    One that holds a handle, a chain (whose nodes may), a blob only a template
+    sizes, or such a struct. The rest - an extent, a copy region, a viewport -
+    are plain data and are not handed one: the hottest commands carry arrays
+    of them, and a parameter nothing reads is a register spent per element.
+    """
+    key = id(reg)
+    if key in _CARRIERS:
+        return _CARRIERS[key]
+    direct = ("pnext", "nested_handle", "handle_array", "template_blob")
+    found = {name for name in BESPOKE_STRUCT_BODIES if name in reg.structs}
+    for s in reg.structs.values():
+        if s.is_union:
+            continue
+        if any(_classify_member(reg, m) in direct for m in s.members):
+            found.add(s.name)
+    nested = ("nested_struct", "struct_array", "optional_struct_ptr")
+    grew = True
+    while grew:
+        grew = False
+        for s in reg.structs.values():
+            if s.name in found or s.is_union:
+                continue
+            if any(m.type.base in found and _classify_member(reg, m) in nested for m in s.members):
+                found.add(s.name)
+                grew = True
+    _CARRIERS[key] = frozenset(found)
+    return _CARRIERS[key]
+
+
+def serialize_call(reg: Registry, type_name: str, buf: str, value: str, via: str = "handles") -> str:
+    """A call to ``type_name``'s encoder, handed ``via`` where it takes one."""
+    if type_name in reg.handles or type_name in carriers(reg):
+        return f"serialize_{type_name}({buf}, {via}, {value})"
+    return f"serialize_{type_name}({buf}, {value})"
+
+
+def deserialize_call(reg: Registry, type_name: str, r: str, out: str, arena: str,
+                     via: str = "handles") -> str:
+    """A call to ``type_name``'s decoder; a handle's takes no arena."""
+    if type_name in reg.handles:
+        return f"deserialize_{type_name}({r}, {via}, {out})"
+    if type_name in carriers(reg):
+        return f"deserialize_{type_name}({r}, {via}, {out}, {arena})"
+    return f"deserialize_{type_name}({r}, {out}, {arena})"
 
 
 # ---- Member classification ------------------------------------------------
@@ -198,7 +228,7 @@ def _classify_member(reg: Registry, m: StructMember) -> str:
             return "struct_array"
         if m.type.base in reg.handles and parts:
             # Arrays of Vulkan handles MUST go through ``serialize_<H>``
-            # so the ``handle_to_wire`` hook can unwrap dispatchable
+            # so the translation can unwrap dispatchable
             # handles (VkCommandBuffer in VkSubmitInfo.pCommandBuffers,
             # VkSemaphore in pWaitSemaphores, etc.). Without this they'd
             # write the raw client-side wrapper pointer.
@@ -321,12 +351,13 @@ def _deserialize_caller_array(reg: Registry, m: StructMember, count: StructMembe
     """
     kind = _classify_member(reg, m)
     answered = f"{count.name}_answered"
-    if kind == "struct_array":
-        read = f"deserialize_{m.type.base}(r, &{{0}}[i], arena)"
-    elif kind == "handle_array":
-        read = f"deserialize_{m.type.base}(r, {{0}}[i])"
+    if kind in ("struct_array", "handle_array"):
+        def read(array: str) -> str:
+            element = f"&{array}[i]" if kind == "struct_array" else f"{array}[i]"
+            return deserialize_call(reg, m.type.base, "r", element, "arena")
     else:
-        read = "r.read_pod({0}[i])"
+        def read(array: str) -> str:
+            return f"r.read_pod({array}[i])"
     return [
         "    {",
         "        uint8_t present = 0;",
@@ -335,7 +366,7 @@ def _deserialize_caller_array(reg: Registry, m: StructMember, count: StructMembe
         f"            if ({answered} > out->{count.name}) {{ return false; }}",
         f"            if (present == 0 && {answered} != 0) {{ return false; }}",
         f"            for (uint32_t i = 0; i < {answered}; ++i) {{",
-        f"                if (!{read.format('out->' + m.name)}) {{ return false; }}",
+        f"                if (!{read('out->' + m.name)}) {{ return false; }}",
         "            }",
         f"            out->{count.name} = {answered};",
         "        } else {",
@@ -343,7 +374,7 @@ def _deserialize_caller_array(reg: Registry, m: StructMember, count: StructMembe
         f"            if (present != 0 && {answered} != 0) {{",
         f"                auto* arr = arena.allocate<{m.type.base}>(static_cast<size_t>({answered}));",
         f"                for (uint32_t i = 0; i < {answered}; ++i) {{",
-        f"                    if (!{read.format('arr')}) {{ return false; }}",
+        f"                    if (!{read('arr')}) {{ return false; }}",
         "                }",
         f"                out->{m.name} = arr;",
         "            }",
@@ -372,13 +403,11 @@ def _is_size_t(m) -> bool:
 def _serialize_member(reg: Registry, m: StructMember) -> list[str]:
     kind = _classify_member(reg, m)
     if kind == "pnext":
-        return ["    serialize_pnext_chain(buf, v.pNext);"]
+        return ["    serialize_pnext_chain(buf, handles, v.pNext);"]
     if kind == "fixed_array":
         return [f"    buf.write(&v.{m.name}[0], sizeof(v.{m.name}));"]
-    if kind == "nested_struct":
-        return [f"    serialize_{m.type.base}(buf, v.{m.name});"]
-    if kind == "nested_handle":
-        return [f"    serialize_{m.type.base}(buf, v.{m.name});"]
+    if kind in ("nested_struct", "nested_handle"):
+        return [f"    {serialize_call(reg, m.type.base, 'buf', f'v.{m.name}')};"]
     if kind == "pod":
         if classify.is_machine_width(m.type):
             # 64 bits, stated. See classify.MACHINE_WIDTH_TYPES for why
@@ -406,7 +435,7 @@ def _serialize_member(reg: Registry, m: StructMember) -> list[str]:
             "            buf.write_pod<uint8_t>(0);",
             "        } else {",
             "            buf.write_pod<uint8_t>(1);",
-            f"            serialize_{m.type.base}(buf, *p);",
+            f"            {serialize_call(reg, m.type.base, 'buf', '*p')};",
             "        }",
             "    }",
         ]
@@ -418,7 +447,7 @@ def _serialize_member(reg: Registry, m: StructMember) -> list[str]:
             "        buf.write_pod(present);",
             "        if (present) {",
             f"            for (uint32_t i = 0; i < static_cast<uint32_t>({_expr_to_cpp(count, "v.")}); ++i) {{",
-            f"                serialize_{m.type.base}(buf, v.{m.name}[i]);",
+            f"                {serialize_call(reg, m.type.base, 'buf', f'v.{m.name}[i]')};",
             "            }",
             "        }",
             "    }",
@@ -441,7 +470,7 @@ def _serialize_member(reg: Registry, m: StructMember) -> list[str]:
         template = _template_sibling(reg, m)
         return [
             "    {",
-            f"        const uint64_t av_blob = v.{m.name} != nullptr ? descriptor_template_bytes(v.{template}) : 0;",
+            f"        const uint64_t av_blob = v.{m.name} != nullptr ? handles.template_bytes(v.{template}) : 0;",
             "        buf.write_varint(av_blob);",
             f"        if (av_blob != 0) {{ buf.write(v.{m.name}, static_cast<size_t>(av_blob)); }}",
             "    }",
@@ -465,7 +494,7 @@ def _serialize_member(reg: Registry, m: StructMember) -> list[str]:
             "        buf.write_pod(present);",
             "        if (present) {",
             f"            for (uint32_t i = 0; i < static_cast<uint32_t>({_expr_to_cpp(count, "v.")}); ++i) {{",
-            f"                serialize_{m.type.base}(buf, v.{m.name}[i]);",
+            f"                {serialize_call(reg, m.type.base, 'buf', f'v.{m.name}[i]')};",
             "            }",
             "        }",
             "    }",
@@ -544,7 +573,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
         # On the client that pointer is the application's own chain, and
         # replacing it would orphan the structs it is about to read.
         return [
-            "    if (!deserialize_pnext_chain(r, "
+            "    if (!deserialize_pnext_chain(r, handles, "
             "reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }",
         ]
     if kind == "fixed_array":
@@ -553,7 +582,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
         ]
     if kind == "nested_struct":
         return [
-            f"    if (!deserialize_{m.type.base}(r, &out->{m.name}, arena)) {{ return false; }}"
+            f"    if (!{deserialize_call(reg, m.type.base, 'r', f'&out->{m.name}', 'arena')}) {{ return false; }}"
         ]
     if kind == "nested_handle":
         refuse = (
@@ -562,7 +591,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             else []
         )
         return [
-            f"    if (!deserialize_{m.type.base}(r, out->{m.name})) {{ return false; }}",
+            f"    if (!{deserialize_call(reg, m.type.base, 'r', f'out->{m.name}', 'arena')}) {{ return false; }}",
             *refuse,
         ]
     if kind == "pod":
@@ -615,7 +644,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             *_absent_struct(m),
             "        } else {",
             f"            auto* p = arena.allocate<{m.type.base}>();",
-            f"            if (!deserialize_{m.type.base}(r, p, arena)) {{ return false; }}",
+            f"            if (!{deserialize_call(reg, m.type.base, 'r', 'p', 'arena')}) {{ return false; }}",
             f"            out->{m.name} = p;",
             "        }",
             "    }",
@@ -632,7 +661,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "        } else {",
             f"            auto* arr = arena.allocate<{m.type.base}>(static_cast<size_t>({_expr_to_cpp(count, "out->")}));",
             f"            for (uint32_t i = 0; i < static_cast<uint32_t>({_expr_to_cpp(count, "out->")}); ++i) {{",
-            f"                if (!deserialize_{m.type.base}(r, &arr[i], arena)) {{ return false; }}",
+            f"                if (!{deserialize_call(reg, m.type.base, 'r', '&arr[i]', 'arena')}) {{ return false; }}",
             "            }",
             f"            out->{m.name} = arr;",
             "        }",
@@ -640,10 +669,15 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "    }",
         ]
     if kind == "template_blob":
+        # The length is a claim, checked as the command form's is
+        # (server_dispatch): the template decoded before it says what it must
+        # be, and a side with no templates answers 0 for every one.
+        template = _template_sibling(reg, m)
         return [
             "    {",
             "        uint64_t av_blob = 0;",
             "        if (!r.read_varint(av_blob)) { return false; }",
+            f"        if (av_blob != handles.template_bytes(out->{template})) {{ return false; }}",
             "        if (av_blob == 0) {",
             f"            out->{m.name} = nullptr;",
             "        } else {",
@@ -705,7 +739,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "        } else {",
             f"            auto* arr = arena.allocate<{elem}>(static_cast<size_t>({_expr_to_cpp(count, "out->")}));",
             f"            for (uint32_t i = 0; i < static_cast<uint32_t>({_expr_to_cpp(count, "out->")}); ++i) {{",
-            f"                if (!deserialize_{elem}(r, arr[i])) {{ return false; }}",
+            f"                if (!{deserialize_call(reg, elem, 'r', 'arr[i]', 'arena')}) {{ return false; }}",
             "            }",
             f"            out->{m.name} = arr;",
             "        }",
@@ -821,7 +855,7 @@ def _emit_pnext_codec(reg: Registry) -> list[str]:
         "    }",
         "}",
         "",
-        "inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {",
+        "inline void serialize_pnext_chain(::av::WireWriter& buf, HandleTranslation& handles, const void* pNext) {",
         "    const auto* p = static_cast<const VkBaseInStructure*>(pNext);",
         "    while (p != nullptr && !pnext_is_encodable(p->sType)) { p = p->pNext; }",
         "    if (p == nullptr) { buf.write_varint(0); return; }",
@@ -832,7 +866,7 @@ def _emit_pnext_codec(reg: Registry) -> list[str]:
     for s in nodes:
         lines.append(f"    case {_stype_of(s)}:")
         lines.append(
-            f"        serialize_{s.name}(buf, *reinterpret_cast<const {s.name}*>(p));"
+            f"        {serialize_call(reg, s.name, 'buf', f'*reinterpret_cast<const {s.name}*>(p)')};"
         )
         lines.append("        break;")
     lines.extend([
@@ -841,7 +875,7 @@ def _emit_pnext_codec(reg: Registry) -> list[str]:
         "}",
         "",
         "[[nodiscard]] inline bool deserialize_pnext_chain("
-        "::av::WireReader& r, VkBaseOutStructure* out, "
+        "::av::WireReader& r, const HandleTranslation& handles, VkBaseOutStructure* out, "
         "::av::WireArena& arena) {",
         "    uint64_t present = 0;",
         "    if (!r.read_varint(present)) { return false; }",
@@ -869,7 +903,7 @@ def _emit_pnext_codec(reg: Registry) -> list[str]:
             f"        auto* typed = (dst != nullptr) ? reinterpret_cast<{s.name}*>(dst)",
             f"                                       : arena.allocate<{s.name}>();",
             "        if (typed == nullptr) { return false; }",
-            f"        if (!deserialize_{s.name}(r, typed, arena)) {{ return false; }}",
+            f"        if (!{deserialize_call(reg, s.name, 'r', 'typed', 'arena')}) {{ return false; }}",
             "        if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }",
             "        break;",
             "    }",
@@ -899,38 +933,34 @@ def _emit_pnext_codec(reg: Registry) -> list[str]:
 BESPOKE_STRUCT_BODIES: dict[str, tuple[list[str], list[str]]] = {
     # The regions carry a raw host pointer whose length is a function of
     # the destination image's format — information this struct does not
-    # contain and the server cannot recover. The client resolves it
-    # through ``host_image_copy_bytes`` and puts an explicit length on
-    # the wire; an unknown format yields 0, which sends no pixels rather
-    # than a null pointer with a non-zero size for the driver to walk.
+    # contain and the server cannot recover. Nothing on the guest keeps an
+    # image's format either, so each region goes with a length of 0: no
+    # pixels, rather than a null pointer with a non-zero size for the driver
+    # to walk. The length is on the wire for a client that comes to know it.
     "VkCopyMemoryToImageInfo": (
         [
             "    buf.write_pod(v.sType);",
-            "    serialize_pnext_chain(buf, v.pNext);",
+            "    serialize_pnext_chain(buf, handles, v.pNext);",
             "    buf.write_pod(v.flags);",
-            "    serialize_VkImage(buf, v.dstImage);",
+            "    serialize_VkImage(buf, handles, v.dstImage);",
             "    buf.write_pod(v.dstImageLayout);",
             "    buf.write_pod(v.regionCount);",
             "    for (uint32_t i = 0; i < v.regionCount; ++i) {",
-            "        const VkMemoryToImageCopy& rg = v.pRegions[i];",
-            "        serialize_VkMemoryToImageCopy(buf, rg);",
-            "        const uint64_t n = (rg.pHostPointer != nullptr)",
-            "            ? host_image_copy_bytes(v.dstImage, rg) : 0;",
-            "        buf.write_varint(n);",
-            "        if (n != 0) { buf.write(rg.pHostPointer, static_cast<size_t>(n)); }",
+            "        serialize_VkMemoryToImageCopy(buf, handles, v.pRegions[i]);",
+            "        buf.write_varint(0);",
             "    }",
         ],
         [
             "    if (!r.read_pod(out->sType)) { return false; }",
-            "    if (!deserialize_pnext_chain(r, "
+            "    if (!deserialize_pnext_chain(r, handles, "
             "reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }",
             "    if (!r.read_pod(out->flags)) { return false; }",
-            "    if (!deserialize_VkImage(r, out->dstImage)) { return false; }",
+            "    if (!deserialize_VkImage(r, handles, out->dstImage)) { return false; }",
             "    if (!r.read_pod(out->dstImageLayout)) { return false; }",
             "    if (!r.read_pod(out->regionCount)) { return false; }",
             "    auto* regions = arena.allocate<VkMemoryToImageCopy>(out->regionCount);",
             "    for (uint32_t i = 0; i < out->regionCount; ++i) {",
-            "        if (!deserialize_VkMemoryToImageCopy(r, &regions[i], arena)) { return false; }",
+            "        if (!deserialize_VkMemoryToImageCopy(r, handles, &regions[i], arena)) { return false; }",
             "        uint64_t n = 0;",
             "        if (!r.read_varint(n)) { return false; }",
             "        if (n == 0) { regions[i].pHostPointer = nullptr; continue; }",
@@ -945,35 +975,35 @@ BESPOKE_STRUCT_BODIES: dict[str, tuple[list[str], list[str]]] = {
     "VkDescriptorGetInfoEXT": (
         [
             "    buf.write_pod(v.sType);",
-            "    serialize_pnext_chain(buf, v.pNext);",
+            "    serialize_pnext_chain(buf, handles, v.pNext);",
             "    buf.write_pod(v.type);",
             "    switch (v.type) {",
             "    case VK_DESCRIPTOR_TYPE_SAMPLER:",
-            "        serialize_optional_sampler(buf, v.data.pSampler);",
+            "        serialize_optional_sampler(buf, handles, v.data.pSampler);",
             "        break;",
             "    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:",
-            "        serialize_optional_image_info(buf, v.data.pCombinedImageSampler);",
+            "        serialize_optional_image_info(buf, handles, v.data.pCombinedImageSampler);",
             "        break;",
             "    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:",
-            "        serialize_optional_image_info(buf, v.data.pSampledImage);",
+            "        serialize_optional_image_info(buf, handles, v.data.pSampledImage);",
             "        break;",
             "    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:",
-            "        serialize_optional_image_info(buf, v.data.pStorageImage);",
+            "        serialize_optional_image_info(buf, handles, v.data.pStorageImage);",
             "        break;",
             "    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:",
-            "        serialize_optional_image_info(buf, v.data.pInputAttachmentImage);",
+            "        serialize_optional_image_info(buf, handles, v.data.pInputAttachmentImage);",
             "        break;",
             "    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:",
-            "        serialize_optional_addr_info(buf, v.data.pUniformTexelBuffer);",
+            "        serialize_optional_addr_info(buf, handles, v.data.pUniformTexelBuffer);",
             "        break;",
             "    case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:",
-            "        serialize_optional_addr_info(buf, v.data.pStorageTexelBuffer);",
+            "        serialize_optional_addr_info(buf, handles, v.data.pStorageTexelBuffer);",
             "        break;",
             "    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:",
-            "        serialize_optional_addr_info(buf, v.data.pUniformBuffer);",
+            "        serialize_optional_addr_info(buf, handles, v.data.pUniformBuffer);",
             "        break;",
             "    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:",
-            "        serialize_optional_addr_info(buf, v.data.pStorageBuffer);",
+            "        serialize_optional_addr_info(buf, handles, v.data.pStorageBuffer);",
             "        break;",
             "    case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:",
             "        buf.write_pod(v.data.accelerationStructure);",
@@ -986,28 +1016,28 @@ BESPOKE_STRUCT_BODIES: dict[str, tuple[list[str], list[str]]] = {
         ],
         [
             "    if (!r.read_pod(out->sType)) { return false; }",
-            "    if (!deserialize_pnext_chain(r, "
+            "    if (!deserialize_pnext_chain(r, handles, "
             "reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }",
             "    if (!r.read_pod(out->type)) { return false; }",
             "    switch (out->type) {",
             "    case VK_DESCRIPTOR_TYPE_SAMPLER:",
-            "        return deserialize_optional_sampler(r, &out->data.pSampler, arena);",
+            "        return deserialize_optional_sampler(r, handles, &out->data.pSampler, arena);",
             "    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:",
-            "        return deserialize_optional_image_info(r, &out->data.pCombinedImageSampler, arena);",
+            "        return deserialize_optional_image_info(r, handles, &out->data.pCombinedImageSampler, arena);",
             "    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:",
-            "        return deserialize_optional_image_info(r, &out->data.pSampledImage, arena);",
+            "        return deserialize_optional_image_info(r, handles, &out->data.pSampledImage, arena);",
             "    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:",
-            "        return deserialize_optional_image_info(r, &out->data.pStorageImage, arena);",
+            "        return deserialize_optional_image_info(r, handles, &out->data.pStorageImage, arena);",
             "    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:",
-            "        return deserialize_optional_image_info(r, &out->data.pInputAttachmentImage, arena);",
+            "        return deserialize_optional_image_info(r, handles, &out->data.pInputAttachmentImage, arena);",
             "    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:",
-            "        return deserialize_optional_addr_info(r, &out->data.pUniformTexelBuffer, arena);",
+            "        return deserialize_optional_addr_info(r, handles, &out->data.pUniformTexelBuffer, arena);",
             "    case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:",
-            "        return deserialize_optional_addr_info(r, &out->data.pStorageTexelBuffer, arena);",
+            "        return deserialize_optional_addr_info(r, handles, &out->data.pStorageTexelBuffer, arena);",
             "    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:",
-            "        return deserialize_optional_addr_info(r, &out->data.pUniformBuffer, arena);",
+            "        return deserialize_optional_addr_info(r, handles, &out->data.pUniformBuffer, arena);",
             "    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:",
-            "        return deserialize_optional_addr_info(r, &out->data.pStorageBuffer, arena);",
+            "        return deserialize_optional_addr_info(r, handles, &out->data.pStorageBuffer, arena);",
             "    case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:",
             "        return r.read_pod(out->data.accelerationStructure);",
             "    default:",
@@ -1023,18 +1053,35 @@ def _is_address_union(s: Struct) -> bool:
     return s.is_union and {m.name for m in s.members} == {"deviceAddress", "hostAddress"}
 
 
+def _serializer_head(reg: Registry, name: str) -> str:
+    handles = "HandleTranslation& handles, " if name in carriers(reg) else ""
+    return f"inline void serialize_{name}(::av::WireWriter& buf, {handles}const {name}& v) {{"
+
+
+def _deserializer_head(reg: Registry, name: str) -> str:
+    handles = "const HandleTranslation& handles, " if name in carriers(reg) else ""
+    return ("[[nodiscard]] inline bool "
+            f"deserialize_{name}(::av::WireReader& r, {handles}{name}* out, ::av::WireArena& arena) {{")
+
+
+def _unread_translation(reg: Registry, name: str, body: list[str]) -> list[str]:
+    """A carrier's translation, marked read in the direction that never asks
+    it: a template blob's length is asked of it going out only."""
+    if name in carriers(reg) and not any("handles" in line for line in body):
+        return ["    (void)handles;"]
+    return []
+
+
 def _emit_struct_helpers(reg: Registry, s: Struct, outputs: set[str]) -> list[str]:
     bespoke = BESPOKE_STRUCT_BODIES.get(s.name)
     if bespoke is not None:
         ser_body, de_body = bespoke
         return [
-            f"inline void serialize_{s.name}(::av::WireWriter& buf, const {s.name}& v) {{",
+            _serializer_head(reg, s.name),
             *ser_body,
             "}",
             "",
-            "[[nodiscard]] inline bool "
-            f"deserialize_{s.name}(::av::WireReader& r, {s.name}* out, "
-            "::av::WireArena& arena) {",
+            _deserializer_head(reg, s.name),
             *de_body,
             "}",
             "",
@@ -1046,13 +1093,11 @@ def _emit_struct_helpers(reg: Registry, s: Struct, outputs: set[str]) -> list[st
         # proxy supports: a host pointer means nothing on the far side of
         # the connection.
         return [
-            f"inline void serialize_{s.name}(::av::WireWriter& buf, const {s.name}& v) {{",
+            _serializer_head(reg, s.name),
             "    buf.write_pod(v.deviceAddress);",
             "}",
             "",
-            "[[nodiscard]] inline bool "
-            f"deserialize_{s.name}(::av::WireReader& r, {s.name}* out, "
-            "::av::WireArena& arena) {",
+            _deserializer_head(reg, s.name),
             "    (void)arena;",
             "    return r.read_pod(out->deviceAddress);",
             "}",
@@ -1065,56 +1110,212 @@ def _emit_struct_helpers(reg: Registry, s: Struct, outputs: set[str]) -> list[st
         # alternative would be to walk every member every time, which
         # reads invalid memory for inactive members.
         return [
-            f"inline void serialize_{s.name}(::av::WireWriter& buf, const {s.name}& v) {{",
+            _serializer_head(reg, s.name),
             "    buf.write(&v, sizeof(v));",
             "}",
             "",
-            "[[nodiscard]] inline bool "
-            f"deserialize_{s.name}(::av::WireReader& r, {s.name}* out, "
-            "::av::WireArena& arena) {",
+            _deserializer_head(reg, s.name),
             "    (void)arena;",
             "    return r.read(out, sizeof(*out));",
             "}",
             "",
         ]
     out: list[str] = []
-    out.append(
-        f"inline void serialize_{s.name}(::av::WireWriter& buf, const {s.name}& v) {{"
-    )
-    for m in s.members:
-        out.extend(_serialize_member(reg, m))
+    out.append(_serializer_head(reg, s.name))
+    encoded = [line for m in s.members for line in _serialize_member(reg, m)]
+    out.extend(_unread_translation(reg, s.name, encoded))
+    out.extend(encoded)
     out.append("}")
     out.append("")
-    out.append(
-        "[[nodiscard]] inline bool "
-        f"deserialize_{s.name}(::av::WireReader& r, {s.name}* out, "
-        "::av::WireArena& arena) {"
-    )
+    out.append(_deserializer_head(reg, s.name))
     out.append("    (void)arena;")
+    decoded: list[str] = []
     arrays = {m.name: count for m, count in caller_arrays(reg, s)} if s.name in outputs else {}
     counts = {count.name for count in arrays.values()}
     bounds = _fixed_array_bounds(s)
     for m in s.members:
         if m.name in counts:
-            out.append(f"    decltype(out->{m.name}) {m.name}_answered{{}};")
-            out.append(f"    if (!r.read_pod({m.name}_answered)) {{ return false; }}")
+            decoded.append(f"    decltype(out->{m.name}) {m.name}_answered{{}};")
+            decoded.append(f"    if (!r.read_pod({m.name}_answered)) {{ return false; }}")
         elif m.name in arrays:
-            out.extend(_deserialize_caller_array(reg, m, arrays[m.name]))
+            decoded.extend(_deserialize_caller_array(reg, m, arrays[m.name]))
         elif m.name in bounds:
-            out.extend(_deserialize_bounded_count(m, bounds[m.name]))
+            decoded.extend(_deserialize_bounded_count(m, bounds[m.name]))
         else:
-            out.extend(_deserialize_member(reg, m))
+            decoded.extend(_deserialize_member(reg, m))
         # A name the API promises is terminated inside its array is one an
         # application hands to strlen; a sender that filled every byte would
         # have it read past the structure. Terminating the last byte changes
         # nothing a sender keeping the promise wrote. Found by
         # tests/fuzz/fuzz_generated_client_replies.cpp (T036).
         if m.type.is_fixed_array and m.type.base == "char" and _len_components(m) == ["null-terminated"]:
-            out.append(f"    out->{m.name}[sizeof(out->{m.name}) - 1u] = '\\0';")
+            decoded.append(f"    out->{m.name}[sizeof(out->{m.name}) - 1u] = '\\0';")
+    out.extend(_unread_translation(reg, s.name, decoded))
+    out.extend(decoded)
     out.append("    return true;")
     out.append("}")
     out.append("")
     return out
+
+
+def _translation_declarations(reg: Registry) -> list[str]:
+    """The kinds of handle, what translates them, and the identity."""
+    lines = [
+        "// The kinds of handle that cross the wire: one per handle type the",
+        "// profile carries.",
+        "enum class HandleKind : uint8_t {",
+    ]
+    lines += [f"    {handle_kind(h)}," for h in _referenced_handle_names(reg)]
+    lines += [
+        "};",
+        "",
+        "// What a handle is on the other side of the wire, and the one length a",
+        "// call leaves for its own side to know. Every encoder and decoder below",
+        "// that can meet a handle is handed one: on the host it is the",
+        "// ServerDispatch the frame is for, which answers only for the handles it",
+        "// made and refuses every other number a guest names (feature 042); in the",
+        "// guest ICD it unwraps the handles the loader dispatches on into the",
+        "// host's own; HandleIdentity is a caller's whose handles are already the",
+        "// host's numbers. The same shape as OpenCL's ServerDispatch::handle_for.",
+        "class HandleTranslation {",
+        "public:",
+        "    // The number `handle`, a `kind`, crosses the wire as.",
+        "    [[nodiscard]] virtual uint64_t wire_for(HandleKind kind, uint64_t handle) = 0;",
+        "    // The `kind` the number `wire` names, into `handle`: false for a",
+        "    // number that names none, and the frame is refused. Null is a value",
+        "    // Vulkan gives most handles and never a dispatchable one, so it is",
+        "    // judged here too rather than passed.",
+        "    [[nodiscard]] virtual bool handle_for(HandleKind kind, uint64_t wire, uint64_t& handle) const = 0;",
+        "    // How many bytes one update through `made` reads. The length of a",
+        "    // descriptor blob is the template's, from the entries it was created",
+        "    // with, and nothing in the call carries it: each side answers from its",
+        "    // own table of templates, 0 for one it never made (feature 047).",
+        "    [[nodiscard]] virtual uint64_t template_bytes(VkDescriptorUpdateTemplate made) const = 0;",
+        "",
+        "protected:",
+        "    HandleTranslation() = default;",
+        "    ~HandleTranslation() = default;",
+        "};",
+        "",
+        "// The numbers are the caller's own, and it made no templates: the",
+        "// guest's test programs, which speak to the executor in the host's",
+        "// handles directly.",
+        "class HandleIdentity final : public HandleTranslation {",
+        "public:",
+        "    [[nodiscard]] uint64_t wire_for(HandleKind kind, uint64_t handle) override;",
+        "    [[nodiscard]] bool handle_for(HandleKind kind, uint64_t wire, uint64_t& handle) const override;",
+        "    [[nodiscard]] uint64_t template_bytes(VkDescriptorUpdateTemplate made) const override;",
+        "};",
+        "",
+    ]
+    return lines
+
+
+def _optional_helpers(reg: Registry) -> list[str]:
+    """Optional-pointer helpers for the bespoke struct bodies. Each writes a
+    presence byte then the pointee, and allocates from the arena on the way
+    back in."""
+    lines = [
+        "// Optional pointer helpers (used by hand-written struct bodies).",
+        "inline void serialize_optional_sampler(::av::WireWriter& buf, HandleTranslation& handles, "
+        "const VkSampler* p) {",
+        "    const uint8_t present = p != nullptr ? 1 : 0;",
+        "    buf.write_pod(present);",
+        "    if (present) { serialize_VkSampler(buf, handles, *p); }",
+        "}",
+        "",
+        "[[nodiscard]] inline bool deserialize_optional_sampler("
+        "::av::WireReader& r, const HandleTranslation& handles, const VkSampler** out, "
+        "::av::WireArena& arena) {",
+        "    uint8_t present = 0;",
+        "    if (!r.read_pod(present)) { return false; }",
+        "    if (!present) { *out = nullptr; return true; }",
+        "    auto* v = arena.allocate<VkSampler>();",
+        "    if (!deserialize_VkSampler(r, handles, *v)) { return false; }",
+        "    *out = v;",
+        "    return true;",
+        "}",
+        "",
+        "inline void serialize_optional_image_info(::av::WireWriter& buf, HandleTranslation& handles, "
+        "const VkDescriptorImageInfo* p) {",
+        "    const uint8_t present = p != nullptr ? 1 : 0;",
+        "    buf.write_pod(present);",
+        f"    if (present) {{ {serialize_call(reg, 'VkDescriptorImageInfo', 'buf', '*p')}; }}",
+        "}",
+        "",
+        "[[nodiscard]] inline bool deserialize_optional_image_info("
+        "::av::WireReader& r, const HandleTranslation& handles, const VkDescriptorImageInfo** out, "
+        "::av::WireArena& arena) {",
+        "    uint8_t present = 0;",
+        "    if (!r.read_pod(present)) { return false; }",
+        "    if (!present) { *out = nullptr; return true; }",
+        "    auto* v = arena.allocate<VkDescriptorImageInfo>();",
+        f"    if (!{deserialize_call(reg, 'VkDescriptorImageInfo', 'r', 'v', 'arena')}) {{ return false; }}",
+        "    *out = v;",
+        "    return true;",
+        "}",
+        "",
+    ]
+    # Only if the struct is in this build.
+    #
+    # These helpers are for hand-written struct bodies, and the body
+    # that uses this one belongs to VK_EXT_descriptor_buffer. Drop
+    # that extension from the profile and the helper still emitted,
+    # referring to a serializer for a struct nobody generated — the
+    # build then failed on a name, several thousand lines from the
+    # decision that caused it.
+    if "VkDescriptorAddressInfoEXT" in reg.structs:
+        lines += [
+            "inline void serialize_optional_addr_info(::av::WireWriter& buf, HandleTranslation& handles, "
+            "const VkDescriptorAddressInfoEXT* p) {",
+            "    const uint8_t present = p != nullptr ? 1 : 0;",
+            "    buf.write_pod(present);",
+            f"    if (present) {{ {serialize_call(reg, 'VkDescriptorAddressInfoEXT', 'buf', '*p')}; }}",
+            "}",
+            "",
+            "[[nodiscard]] inline bool deserialize_optional_addr_info("
+            "::av::WireReader& r, const HandleTranslation& handles, const VkDescriptorAddressInfoEXT** out, "
+            "::av::WireArena& arena) {",
+            "    uint8_t present = 0;",
+            "    if (!r.read_pod(present)) { return false; }",
+            "    if (!present) { *out = nullptr; return true; }",
+            "    auto* v = arena.allocate<VkDescriptorAddressInfoEXT>();",
+            f"    if (!{deserialize_call(reg, 'VkDescriptorAddressInfoEXT', 'r', 'v', 'arena')}) {{ return false; }}",
+            "    *out = v;",
+            "    return true;",
+            "}",
+            "",
+        ]
+    return lines
+
+
+def _emit_identity(reg: Registry) -> str:
+    """vk_handle_identity.cpp: HandleIdentity's definitions."""
+    return "\n".join([
+        GENERATED_BANNER,
+        "",
+        '#include "vk_handle_translation.h"',
+        "",
+        "#include <stdint.h>",
+        "",
+        "namespace av::vkproto {",
+        "",
+        "uint64_t HandleIdentity::wire_for(HandleKind, uint64_t handle) {",
+        "    return handle;",
+        "}",
+        "",
+        "bool HandleIdentity::handle_for(HandleKind, uint64_t wire, uint64_t& handle) const {",
+        "    handle = wire;",
+        "    return true;",
+        "}",
+        "",
+        "uint64_t HandleIdentity::template_bytes(VkDescriptorUpdateTemplate) const {",
+        "    return 0;",
+        "}",
+        "",
+        "}  // namespace av::vkproto",
+        "",
+    ])
 
 
 def emit(reg: Registry, out_dir: Path) -> None:
@@ -1133,6 +1334,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         # the committed output, which is one of the ways generated/ had
         # drifted out of reach of check-codegen.
         '#include "proto/wire/wire_reader.hpp"',
+        '#include "vk_handle_translation.h"',
         "",
         "namespace av::vkproto {",
         "",
@@ -1145,27 +1347,6 @@ def emit(reg: Registry, out_dir: Path) -> None:
         'static_assert(sizeof(void*) == 8 || sizeof(void*) == 4,',
         '              "AV assumes 32- or 64-bit pointers");',
         "",
-        "// Hook for translating dispatchable handles to their wire form.",
-        "// The default implementations (linked from vk_handle_default.cpp,",
-        "// weakly bound) are identity — correct for the server replay path",
-        "// and for loopback tests. The ICD links a strong override that",
-        "// unwraps its loader-magic-marked AvWrappedHandle to the server's",
-        "// real driver handle.",
-        "// How many bytes VkMemoryToImageCopy::pHostPointer covers.",
-        "// Only the client can answer: the size depends on the destination",
-        "// image's format, which lives in the application's own driver",
-        "// state, not in the struct. Weakly defined to 0 (send nothing) so",
-        "// the server and loopback tests link without an image registry.",
-        "[[nodiscard]] uint64_t host_image_copy_bytes("
-        "VkImage image, const VkMemoryToImageCopy& region) noexcept;",
-        "// How many bytes one update through `t` reads. The length of a",
-        "// descriptor blob is the template's, from the entries it was created",
-        "// with, and nothing in the call carries it: each side answers from its",
-        "// own table of templates (feature 047, DescriptorTemplateLayout).",
-        "// Weakly defined to 0 - no templates, so no bytes - so a build with no",
-        "// table links.",
-        "[[nodiscard]] uint64_t descriptor_template_bytes("
-        "VkDescriptorUpdateTemplate t) noexcept;",
         "// Any field, as the number it holds. A value off the wire is a value",
         "// its own type may not have - an enum with an unlisted value, most of",
         "// all - and loading one as that type is undefined. Everything that",
@@ -1179,22 +1360,18 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "    return raw;",
         "}",
         "",
-    ]
-    for h in _referenced_handle_names(reg):
-        header.append(f"[[nodiscard]] uint64_t handle_to_wire({h} v) noexcept;")
-    header += [
+        "// The other way: a number as a handle of type H, in whichever shape the",
+        "// build gives H - a pointer, or on x86 a 4-byte pointer for a",
+        "// dispatchable handle and a NonDispatchableHandle for the rest.",
+        "template <typename H>",
+        "[[nodiscard]] inline H as_handle(uint64_t raw) noexcept {",
+        "    H handle{};",
+        "    static_assert(sizeof(H) <= sizeof(raw));",
+        "    __builtin_memcpy(&handle, &raw, sizeof(H));",
+        "    return handle;",
+        "}",
         "",
-        "// The other direction, and the one that decides whether a handle off",
-        "// the wire is a pointer the host will dereference. The default is",
-        "// identity, which is right on the guest side - the numbers are the",
-        "// application's own - and wrong on the host, where they are an",
-        "// attacker's: a host answers false for any handle it did not make",
-        "// itself. Weakly defined so the guest and the loopback tests link",
-        "// without a registry; see vk_handle_default.cpp (feature 042).",
     ]
-    for h in _referenced_handle_names(reg):
-        header.append(f"[[nodiscard]] bool wire_to_handle(uint64_t raw, {h}& out) noexcept;")
-    header.append("")
 
     for h in _referenced_handle_names(reg):
         header.extend(_emit_handle_helpers(h))
@@ -1205,96 +1382,26 @@ def emit(reg: Registry, out_dir: Path) -> None:
         # helpers: a struct serializer emits its pNext through the codec,
         # and the codec dispatches back into a struct serializer.
         header.append(
-            "inline void serialize_pnext_chain(::av::WireWriter&, const void*);"
+            "inline void serialize_pnext_chain(::av::WireWriter&, HandleTranslation&, const void*);"
         )
         header.append(
             "[[nodiscard]] inline bool deserialize_pnext_chain("
-            "::av::WireReader&, VkBaseOutStructure*, "
+            "::av::WireReader&, const HandleTranslation&, VkBaseOutStructure*, "
             "::av::WireArena&);"
         )
         for n in reg.struct_order:
+            carried = n in carriers(reg)
             header.append(
-                f"inline void serialize_{n}(::av::WireWriter&, const {n}&);"
+                f"inline void serialize_{n}(::av::WireWriter&, "
+                f"{'HandleTranslation&, ' if carried else ''}const {n}&);"
             )
             header.append(
                 "[[nodiscard]] inline bool "
-                f"deserialize_{n}(::av::WireReader&, {n}*, "
-                "::av::WireArena&);"
+                f"deserialize_{n}(::av::WireReader&, "
+                f"{'const HandleTranslation&, ' if carried else ''}{n}*, ::av::WireArena&);"
             )
         header.append("")
-        # Optional-pointer helpers used by the bespoke struct bodies. Each
-        # writes a presence byte then the pointee, and allocates from the
-        # arena on the way back in.
-        header.extend([
-            "// Optional pointer helpers (used by hand-written struct bodies).",
-            "inline void serialize_optional_sampler(::av::WireWriter& buf, const VkSampler* p) {",
-            "    const uint8_t present = p != nullptr ? 1 : 0;",
-            "    buf.write_pod(present);",
-            "    if (present) { serialize_VkSampler(buf, *p); }",
-            "}",
-            "",
-            "[[nodiscard]] inline bool deserialize_optional_sampler("
-            "::av::WireReader& r, const VkSampler** out, "
-            "::av::WireArena& arena) {",
-            "    uint8_t present = 0;",
-            "    if (!r.read_pod(present)) { return false; }",
-            "    if (!present) { *out = nullptr; return true; }",
-            "    auto* v = arena.allocate<VkSampler>();",
-            "    if (!deserialize_VkSampler(r, *v)) { return false; }",
-            "    *out = v;",
-            "    return true;",
-            "}",
-            "",
-            "inline void serialize_optional_image_info(::av::WireWriter& buf, "
-            "const VkDescriptorImageInfo* p) {",
-            "    const uint8_t present = p != nullptr ? 1 : 0;",
-            "    buf.write_pod(present);",
-            "    if (present) { serialize_VkDescriptorImageInfo(buf, *p); }",
-            "}",
-            "",
-            "[[nodiscard]] inline bool deserialize_optional_image_info("
-            "::av::WireReader& r, const VkDescriptorImageInfo** out, "
-            "::av::WireArena& arena) {",
-            "    uint8_t present = 0;",
-            "    if (!r.read_pod(present)) { return false; }",
-            "    if (!present) { *out = nullptr; return true; }",
-            "    auto* v = arena.allocate<VkDescriptorImageInfo>();",
-            "    if (!deserialize_VkDescriptorImageInfo(r, v, arena)) { return false; }",
-            "    *out = v;",
-            "    return true;",
-            "}",
-            "",
-        ])
-        # Only if the struct is in this build.
-        #
-        # These helpers are for hand-written struct bodies, and the body
-        # that uses this one belongs to VK_EXT_descriptor_buffer. Drop
-        # that extension from the profile and the helper still emitted,
-        # referring to a serializer for a struct nobody generated — the
-        # build then failed on a name, several thousand lines from the
-        # decision that caused it.
-        if "VkDescriptorAddressInfoEXT" in reg.structs:
-            header.extend([
-            "inline void serialize_optional_addr_info(::av::WireWriter& buf, "
-            "const VkDescriptorAddressInfoEXT* p) {",
-            "    const uint8_t present = p != nullptr ? 1 : 0;",
-            "    buf.write_pod(present);",
-            "    if (present) { serialize_VkDescriptorAddressInfoEXT(buf, *p); }",
-            "}",
-            "",
-            "[[nodiscard]] inline bool deserialize_optional_addr_info("
-            "::av::WireReader& r, const VkDescriptorAddressInfoEXT** out, "
-            "::av::WireArena& arena) {",
-            "    uint8_t present = 0;",
-            "    if (!r.read_pod(present)) { return false; }",
-            "    if (!present) { *out = nullptr; return true; }",
-            "    auto* v = arena.allocate<VkDescriptorAddressInfoEXT>();",
-            "    if (!deserialize_VkDescriptorAddressInfoEXT(r, v, arena)) { return false; }",
-            "    *out = v;",
-            "    return true;",
-            "}",
-            "",
-        ])
+        header.extend(_optional_helpers(reg))
 
     outputs = _output_structs(reg)
     for n in reg.struct_order:
@@ -1307,144 +1414,17 @@ def emit(reg: Registry, out_dir: Path) -> None:
     header.append("")
 
     write(out_dir / "vk_serialize.h", header_guard("\n".join(header[1:])))
-
-    # The default hook definitions, in two translation units.
-    #
-    # Anyone who wants a different translation (the ICD unwrap, mainly)
-    # links a strong definition over the weak one and the linker picks
-    # the strong one. That is an ELF sentence: PE has no weak
-    # definitions at all — gcc turns one into a weak external, which
-    # defines nothing, and the link fails on an undefined reference with
-    # the object sitting right there in the archive. So on Windows the
-    # default is a plain definition, and the *file* rather than the
-    # symbol is what an overrider displaces: an archive member is pulled
-    # only for a symbol nothing else defines. Which is why the two hook
-    # families are two files. The ICD defines every handle_to_wire and
-    # so never pulls the first; it defines no host_image_copy_bytes and
-    # so pulls the second, and gets the default.
-    weak = [
-        "#if defined(_WIN32)",
-        "// PE: no weak definitions. See the comment in the emitter.",
-        "#  define AV_HOOK_DEFAULT",
-        "#else",
-        "#  define AV_HOOK_DEFAULT [[gnu::weak]]",
-        "#endif",
-    ]
-
-    host_image_default = [
-        GENERATED_BANNER,
-        "",
-        '#include "vk_serialize.h"',
+    translation = [
         "",
         "#include <stdint.h>",
         "",
-        *weak,
+        "#include <vulkan/vulkan_core.h>",
         "",
         "namespace av::vkproto {",
         "",
-        "// Default: no image registry here, so no pixels are sent.",
-        "// The ICD overrides this; see icd/host_image_copy.cpp.",
-        "AV_HOOK_DEFAULT uint64_t host_image_copy_bytes("
-        "VkImage, const VkMemoryToImageCopy&) noexcept { return 0; }",
-        "",
+        *_translation_declarations(reg),
         "}  // namespace av::vkproto",
         "",
     ]
-    write(out_dir / "vk_host_image_default.cpp", "\n".join(host_image_default))
-
-    # vk_descriptor_template_default.cpp: its own file, for the reason above.
-    # The ICD and the device each define descriptor_template_bytes and so never
-    # pull this member; a side that defines neither hook family gets both
-    # defaults, which is what the loopback tests want.
-    template_default = [
-        GENERATED_BANNER,
-        "",
-        '#include "vk_serialize.h"',
-        "",
-        "#include <stdint.h>",
-        "",
-        *weak,
-        "",
-        "namespace av::vkproto {",
-        "",
-        "// Default: no template table here, so no descriptors are sent.",
-        "AV_HOOK_DEFAULT uint64_t descriptor_template_bytes("
-        "VkDescriptorUpdateTemplate) noexcept { return 0; }",
-        "",
-        "}  // namespace av::vkproto",
-        "",
-    ]
-    write(out_dir / "vk_descriptor_template_default.cpp", "\n".join(template_default))
-
-    # vk_handle_default.cpp: identity definitions of handle_to_wire.
-    handle_default = [
-        GENERATED_BANNER,
-        "",
-        '#include "vk_serialize.h"',
-        "",
-        "#include <stdint.h>",
-        "",
-        *weak,
-        "",
-        "namespace av::vkproto {",
-        "",
-        "namespace {",
-        "template<typename H>",
-        "[[nodiscard]] uint64_t identity(H v) noexcept {",
-        "    uint64_t raw = 0;",
-        "    static_assert(sizeof(H) <= sizeof(raw));",
-        "    // sizeof(H), not sizeof(raw): a 32-bit handle is 4 bytes, and",
-        "    // copying 8 out of it reads past the end of the argument.",
-        "    __builtin_memcpy(&raw, &v, sizeof(H));",
-        "    return raw;",
-        "}",
-        "}  // namespace",
-        "",
-    ]
-    # The dispatchable handles' handle_to_wire are a file of their own: the
-    # Vulkan ICD defines those five and must not pull a second definition of
-    # them on PE, while it still needs every identity below (feature 045).
-    handles = _referenced_handle_names(reg)
-    dispatchable = [h for h in handles if reg.handles[h].dispatchable]
-    for h in handles:
-        if h in dispatchable:
-            continue
-        handle_default.append(
-            f"AV_HOOK_DEFAULT uint64_t handle_to_wire({h} v) noexcept "
-            f"{{ return identity(v); }}"
-        )
-    handle_default.append("")
-    handle_default.append("// Identity inbound as well, which is right where the numbers are the")
-    handle_default.append("// caller's own. A host overrides every one of these, because there they")
-    handle_default.append("// are an attacker's (feature 042).")
-    for h in _referenced_handle_names(reg):
-        handle_default.append(
-            f"AV_HOOK_DEFAULT bool wire_to_handle(uint64_t raw, {h}& out) noexcept "
-            f"{{ __builtin_memcpy(&out, &raw, sizeof(out)); return true; }}"
-        )
-    handle_default.append("")
-    handle_default.append("}  // namespace av::vkproto")
-    handle_default.append("")
-    write(out_dir / "vk_handle_default.cpp", "\n".join(handle_default))
-
-    dispatchable_default = [
-        GENERATED_BANNER,
-        "",
-        '#include "vk_serialize.h"',
-        "",
-        "#include <stdint.h>",
-        "",
-        *weak,
-        "",
-        "namespace av::vkproto {",
-        "",
-    ]
-    for h in dispatchable:
-        dispatchable_default.append(
-            f"AV_HOOK_DEFAULT uint64_t handle_to_wire({h} v) noexcept "
-            f"{{ uint64_t raw = 0; __builtin_memcpy(&raw, &v, sizeof(v)); return raw; }}"
-        )
-    dispatchable_default.append("")
-    dispatchable_default.append("}  // namespace av::vkproto")
-    dispatchable_default.append("")
-    write(out_dir / "vk_dispatchable_handle_default.cpp", "\n".join(dispatchable_default))
+    write(out_dir / "vk_handle_translation.h", header_guard("\n".join(translation)))
+    write(out_dir / "vk_handle_identity.cpp", _emit_identity(reg))

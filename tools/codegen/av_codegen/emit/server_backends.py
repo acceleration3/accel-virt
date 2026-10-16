@@ -98,6 +98,19 @@ def _emit_default(reg: Registry) -> str:
         "// added to the codegen profile inherit a sane default automatically.",
         "class DefaultServerDispatch : public ServerDispatch {",
         "public:",
+        "    // Every number is a handle and nothing is remembered, as the",
+        "    // commands do nothing: there is no driver behind them to protect.",
+        "    bool handle_for(HandleKind, uint64_t wire, uint64_t& handle) const override {",
+        "        handle = wire;",
+        "        return true;",
+        "    }",
+        "    uint64_t template_bytes(VkDescriptorUpdateTemplate) const override { return 0; }",
+        "    void made(HandleKind, uint64_t) override {}",
+        "    bool room_for(uint64_t) override { return true; }",
+        "    void made_through(uint64_t) override {}",
+        "    void ended(uint64_t) override {}",
+        "    void children_ended(uint64_t) override {}",
+        "",
     ]
     for cmd in sorted(reg.commands.values(), key=lambda c: c.cmd_id):
         body = _default_body(cmd)

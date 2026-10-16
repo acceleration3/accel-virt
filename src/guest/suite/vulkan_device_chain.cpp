@@ -19,7 +19,7 @@ constexpr uint32_t queue_family = 0u;
 }  // namespace
 
 VulkanDeviceChain::VulkanDeviceChain(ScenarioSteps &steps, ClientTransport &transport)
-    : steps_(steps), transport_(transport), instance_(0u), physical_device_(0u), device_(0u)
+    : steps_(steps), transport_(transport), handles_(), instance_(0u), physical_device_(0u), device_(0u)
     {
         AV_SCOPE("VulkanDeviceChain::VulkanDeviceChain");
     }
@@ -45,7 +45,7 @@ Status VulkanDeviceChain::make_instance()
     instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instance_info.pApplicationInfo = &application;
     uint64_t       instance = 0u;
-    const VkResult made = vkproto::av_vkCreateInstance(transport_, &instance_info, nullptr, &instance);
+    const VkResult made = vkproto::av_vkCreateInstance(transport_, handles_, &instance_info, nullptr, &instance);
     const Status   instanced = steps_.check_result("instance", made);
     if (instanced == Status::ok) instance_ = instance;
     return instanced;
@@ -59,11 +59,11 @@ Status VulkanDeviceChain::find_physical_device()
     AV_SCOPE("VulkanDeviceChain::find_physical_device");
     const VkInstance instance = reinterpret_cast<VkInstance>(instance_);
     uint32_t         count = 0u;
-    VkResult         listed = vkproto::av_vkEnumeratePhysicalDevices(transport_, instance, &count, nullptr);
+    VkResult         listed = vkproto::av_vkEnumeratePhysicalDevices(transport_, handles_, instance, &count, nullptr);
     uint64_t         devices[max_physical_devices] = {};
     uint32_t         room = max_physical_devices;
     if (listed == VK_SUCCESS && count != 0u)
-        listed = vkproto::av_vkEnumeratePhysicalDevices(transport_, instance, &room, devices);
+        listed = vkproto::av_vkEnumeratePhysicalDevices(transport_, handles_, instance, &room, devices);
     if (listed != VK_SUCCESS) return steps_.check_result("physical_device", listed);
     const Status found = steps_.check_measured("physical_device", count != 0u ? Status::ok : Status::not_found, count);
     if (found == Status::ok) physical_device_ = devices[0];
@@ -85,7 +85,7 @@ Status VulkanDeviceChain::make_device()
     device_info.pQueueCreateInfos = &queue;
     uint64_t       device = 0u;
     const VkResult created =
-        vkproto::av_vkCreateDevice(transport_, physical_device(), &device_info, nullptr, &device);
+        vkproto::av_vkCreateDevice(transport_, handles_, physical_device(), &device_info, nullptr, &device);
     const Status judged = steps_.check_result("device", created);
     if (judged == Status::ok) device_ = device;
     return judged;
@@ -96,8 +96,8 @@ Status VulkanDeviceChain::make_device()
 void VulkanDeviceChain::destroy()
 {
     AV_SCOPE("VulkanDeviceChain::destroy");
-    if (device_ != 0u) vkproto::av_vkDestroyDevice(transport_, device(), nullptr);
-    if (instance_ != 0u) vkproto::av_vkDestroyInstance(transport_, reinterpret_cast<VkInstance>(instance_), nullptr);
+    if (device_ != 0u) vkproto::av_vkDestroyDevice(transport_, handles_, device(), nullptr);
+    if (instance_ != 0u) vkproto::av_vkDestroyInstance(transport_, handles_, reinterpret_cast<VkInstance>(instance_), nullptr);
     device_ = 0u;
     physical_device_ = 0u;
     instance_ = 0u;
@@ -113,6 +113,12 @@ VkDevice VulkanDeviceChain::device() const
 {
     AV_SCOPE("VulkanDeviceChain::device");
     return reinterpret_cast<VkDevice>(device_);
+}
+
+vkproto::HandleTranslation &VulkanDeviceChain::handles()
+{
+    AV_SCOPE("VulkanDeviceChain::handles");
+    return handles_;
 }
 
 /* Each handle is only ever held with the one it was made from. */

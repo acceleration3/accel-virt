@@ -9,8 +9,8 @@
  *
  * Three locks, always taken in one order. The memory lock serializes every
  * device's memory, and is taken before either of the others. The send lock is
- * held by a connection while a command is encoded and sent, and handle_to_wire
- * takes the root's own lock inside it; nothing here holds the root's lock while
+ * held by a connection while a command is encoded and sent, and the handle
+ * translation takes the root's own lock inside it; nothing here holds the root's lock while
  * calling into a wrapper or taking another lock, so the reverse never happens. Instance creation is serialized by the
  * loader, which holds its loader_lock around the whole of vkCreateInstance
  * (Vulkan-Loader bde79ad2dd83, trampoline.c:554-804): the connection opened for
@@ -33,6 +33,7 @@
 #include "icd/vulkan/icd_entry_lookup.hpp"
 #include "icd/vulkan/instance_span.hpp"
 #include "icd/vulkan/descriptor_template_table.hpp"
+#include "icd/vulkan/guest_handle_translation.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/vulkan/external_objects.hpp"
 #include "icd/vulkan/icd_binding.hpp"
@@ -199,9 +200,8 @@ public:
     void            *wrap(LoaderHandle::Kind kind, uint64_t host, Connection *connection);
     /* The WSI entries' state (feature 046). */
     Presentation    &presentation();
-    /* The templates this process made, which size every blob a
-     * WithTemplate command carries (feature 047). */
-    DescriptorTemplateTable &templates();
+    /* What every command this ICD encodes translates its handles through. */
+    vkproto::HandleTranslation &wire_handles();
     /* vkCreateDescriptorUpdateTemplate through the generated wrapper,
      * with what it made remembered; a create the host refused is not. */
     VkResult create_descriptor_update_template(VkDevice device,
@@ -260,7 +260,6 @@ public:
      * swapchains call, having already found the device they belong to. */
     PFN_vkVoidFunction entry(const char *name) const;
     Connection      *connection_of(void *handle, LoaderHandle::Kind kind);
-    uint64_t         wire(void *handle, LoaderHandle::Kind kind);
     void             destroy_wrapper(void *handle, LoaderHandle::Kind kind);
     /* The loader reached this through the command buffer's own dispatch table,
      * so it is a command buffer this ICD made. */
@@ -334,6 +333,7 @@ private:
     IcdEntryLookup         entries_;
     Presentation           presentation_;
     DescriptorTemplateTable templates_;
+    GuestHandleTranslation  translation_;
     ExternalObjects         externals_;
     /* The NT handles this process holds for the objects in `externals_`, which
      * is what makes one of them nameable in another process (feature 053). */

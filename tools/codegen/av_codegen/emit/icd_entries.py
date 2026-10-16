@@ -37,6 +37,11 @@ from .common import GENERATED_BANNER, header_guard, write
 # and don't need this treatment. Defined once, in classify.
 DISPATCHABLE_HANDLES = classify.DISPATCHABLE_HANDLES
 
+# What every wrapper encodes its handles through: the ICD's own translation,
+# which unwraps a handle it gave the application into the host's number
+# (src/proto/client/icd_handle_registry.hpp).
+_TRANSLATION = "::av::icd::wire_handles()"
+
 
 def _is_recordable(cmd: Command, parent: Param) -> bool:
     """Does this command belong in a per-command-buffer batch?
@@ -169,7 +174,7 @@ def _emit_create_instance(cmd: Command) -> list[str]:
         "    // client and send back a handle no object is at.",
         "    uint64_t server_instance = 0;",
         f"    const VkResult av_rc = ::av::vkproto::av_{cmd.name}("
-        + "conn->transport(), "
+        + f"conn->transport(), {_TRANSLATION}, "
         + ", ".join(forwarded)
         + ");",
         "    if (av_rc != VK_SUCCESS) {",
@@ -194,8 +199,8 @@ def _emit_destroy_instance(cmd: Command) -> list[str]:
     forwarded: list[str] = []
     for p in cmd.params:
         # Pass the wrapped handle through; serialize_<H> in the wire
-        # layer routes through ``handle_to_wire`` which the ICD overrides
-        # to do the unwrap. Avoiding it here prevents double-unwrap.
+        # layer unwraps it through the ICD's HandleTranslation. Avoiding
+        # it here prevents double-unwrap.
         forwarded.append(p.name)
 
     return [
@@ -203,7 +208,7 @@ def _emit_destroy_instance(cmd: Command) -> list[str]:
         "        return;",
         "    }",
         f"    auto* conn = ::av::icd::connection_of({inst_param.name});",
-        f"    ::av::vkproto::av_{cmd.name}(conn->transport(), "
+        f"    ::av::vkproto::av_{cmd.name}(conn->transport(), {_TRANSLATION}, "
         + ", ".join(forwarded) + ");",
         f"    ::av::icd::destroy_wrapper({inst_param.name});",
         "    ::av::icd::release_connection(conn);",
@@ -300,9 +305,9 @@ def _emit_default_body(cmd: Command, reg: Registry) -> list[str]:
     # real transport. The generated body is otherwise identical, which
     # is the point — nothing below here knows batching exists.
     if _is_recordable(cmd, parent):
-        transport = f"::av::icd::record_target({parent.name})"
+        transport = f"::av::icd::record_target({parent.name}), {_TRANSLATION}"
     else:
-        transport = "conn->transport()"
+        transport = f"conn->transport(), {_TRANSLATION}"
 
     i = 0
     while i < len(cmd.params):
@@ -316,7 +321,7 @@ def _emit_default_body(cmd: Command, reg: Registry) -> list[str]:
                 vec_name = f"server_{arr.name}"
                 # Query-only mode forwards directly. Dispatchable handle
                 # args pass through unwrapped — ``serialize_<H>`` does the
-                # unwrap via ``handle_to_wire`` so double-unwrap doesn't
+                # unwrap through the translation, so double-unwrap doesn't
                 # happen.
                 pre_call.append(f"    if ({arr.name} == nullptr) {{")
                 forward_args: list[str] = []
@@ -369,8 +374,8 @@ def _emit_default_body(cmd: Command, reg: Registry) -> list[str]:
 
         if p.type.base in DISPATCHABLE_HANDLES and p.type.pointer_depth == 0:
             # Pass the wrapped handle through; serialize_<H> on the wire
-            # layer unwraps via ``handle_to_wire`` (the ICD's strong
-            # override). Avoids double-unwrap.
+            # layer unwraps it through the ICD's HandleTranslation. Avoids
+            # double-unwrap.
             call_args.append(p.name)
         elif (
             p.type.base in DISPATCHABLE_HANDLES

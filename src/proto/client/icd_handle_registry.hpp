@@ -1,8 +1,7 @@
 /* What the generated Vulkan ICD wrappers ask of the handle registry (063
- * contracts/generated_code.md §F), for the five dispatchable handle types. The
- * definitions are in src/icd/vulkan/icd_hooks.cpp, each one line into the bound
- * IcdRoot; the unwrap in the other direction is the ICD's strong handle_to_wire
- * in the same file. */
+ * contracts/generated_code.md §F), for the five dispatchable handle types, and
+ * the translation that unwraps them on the way out. The definitions are in
+ * src/icd/vulkan/icd_hooks.cpp, each one line into the bound IcdRoot. */
 #ifndef AV_PROTO_ICD_HANDLE_REGISTRY_HPP
 #define AV_PROTO_ICD_HANDLE_REGISTRY_HPP
 
@@ -12,6 +11,10 @@
 
 namespace av {
 class ClientTransport;
+}
+
+namespace av::vkproto {
+class HandleTranslation;
 }
 
 namespace av::icd {
@@ -47,6 +50,10 @@ void destroy_wrapper(VkInstance instance);
 /* Where a command buffer's commands go: its own CommandBatch, which ships them
  * when the command buffer ends. */
 ClientTransport &record_target(VkCommandBuffer command_buffer);
+
+/* What every wrapper encodes its handles through: a handle this ICD made
+ * crosses as the host's number behind it (GuestHandleTranslation). */
+vkproto::HandleTranslation &wire_handles();
 
 }  // namespace av::icd
 
