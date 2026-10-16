@@ -20,6 +20,7 @@
 #ifndef AV_GL_SHARED_BUFFER_HPP
 #define AV_GL_SHARED_BUFFER_HPP
 
+#include "executor/shim/gl_error_flags.hpp"
 #include "proto/generated/opengl/gl_types.h"
 
 #include <stdint.h>
@@ -60,7 +61,7 @@ private:
     void (APIENTRY *storage_mem_)(GLuint, GLsizeiptr, GLuint, GLuint64);
     void (APIENTRY *buffer_parameter_)(GLuint, GLenum, GLint64 *);
     void (APIENTRY *delete_buffers_)(GLsizei, const GLuint *);
-    GLenum (APIENTRY *get_error_)();
+    GlErrorFlags errors_;
     GlContext    *context_;
     GlHostImport *import_;
 };

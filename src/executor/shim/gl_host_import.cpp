@@ -20,7 +20,6 @@ constexpr GLenum handle_type_opaque_fd = 0x9586u;
 constexpr GLenum dedicated_memory_object = 0x9581u;
 constexpr GLenum num_extensions = 0x821Du;
 constexpr GLenum extensions_name = 0x1F03u;
-constexpr GLenum no_error = 0u;
 
 }  // namespace
 
@@ -28,7 +27,7 @@ GlHostImport::GlHostImport()
     : create_memory_objects_(nullptr), import_memory_fd_(nullptr), memory_parameter_(nullptr),
       delete_memory_objects_(nullptr),
       gen_semaphores_(nullptr), import_semaphore_fd_(nullptr), delete_semaphores_(nullptr),
-      get_integerv_(nullptr), get_stringi_(nullptr), get_error_(nullptr), context_(nullptr),
+      get_integerv_(nullptr), get_stringi_(nullptr), errors_(), context_(nullptr),
       memory_(false), fences_(false)
 {
     AV_SCOPE("GlHostImport::GlHostImport");
@@ -54,11 +53,11 @@ void GlHostImport::configure(GlContext &context)
         reinterpret_cast<void(APIENTRY *)(GLsizei, const GLuint *)>(context.resolve("glDeleteSemaphoresEXT"));
     get_integerv_ = reinterpret_cast<void(APIENTRY *)(GLenum, GLint *)>(context.resolve("glGetIntegerv"));
     get_stringi_ = reinterpret_cast<const GLubyte *(APIENTRY *)(GLenum, GLuint)>(context.resolve("glGetStringi"));
-    get_error_ = reinterpret_cast<GLenum(APIENTRY *)()>(context.resolve("glGetError"));
+    errors_.resolve(context);
     memory_ = create_memory_objects_ != nullptr && import_memory_fd_ != nullptr && memory_parameter_ != nullptr &&
-              delete_memory_objects_ != nullptr && get_error_ != nullptr && lists("GL_EXT_memory_object_fd");
+              delete_memory_objects_ != nullptr && errors_.resolved() && lists("GL_EXT_memory_object_fd");
     fences_ = gen_semaphores_ != nullptr && import_semaphore_fd_ != nullptr && delete_semaphores_ != nullptr &&
-              get_error_ != nullptr && lists("GL_EXT_semaphore_fd");
+              errors_.resolved() && lists("GL_EXT_semaphore_fd");
 }
 
 void GlHostImport::give_back()
@@ -103,7 +102,7 @@ bool GlHostImport::import_memory(int fd, uint64_t size, uint32_t &name)
     if (taken < 0) return false;
     GLuint made = 0u;
     create_memory_objects_(1, &made);
-    while (get_error_() != no_error) {}
+    static_cast<void>(errors_.clear());
     /* Shared memory is one image's own allocation - a Direct3D surface's, or a
      * Vulkan dedicated one - and radeonsi reads such an image's layout from the
      * dma-buf only when told it is dedicated: otherwise it lays the texture out
@@ -112,9 +111,9 @@ bool GlHostImport::import_memory(int fd, uint64_t size, uint32_t &name)
     const GLint dedicated = 1;
     memory_parameter_(made, dedicated_memory_object, &dedicated);
     import_memory_fd_(made, static_cast<GLuint64>(size), handle_type_opaque_fd, taken);
-    if (get_error_() != no_error) {
+    if (!errors_.clear()) {
         delete_memory_objects_(1, &made);
-        while (get_error_() != no_error) {}
+        static_cast<void>(errors_.clear());
         close(taken);
         return false;
     }
@@ -131,11 +130,11 @@ bool GlHostImport::import_semaphore(int fd, uint32_t &name)
     if (taken < 0) return false;
     GLuint made = 0u;
     gen_semaphores_(1, &made);
-    while (get_error_() != no_error) {}
+    static_cast<void>(errors_.clear());
     import_semaphore_fd_(made, handle_type_opaque_fd, taken);
-    if (get_error_() != no_error) {
+    if (!errors_.clear()) {
         delete_semaphores_(1, &made);
-        while (get_error_() != no_error) {}
+        static_cast<void>(errors_.clear());
         close(taken);
         return false;
     }
@@ -149,7 +148,7 @@ void GlHostImport::delete_memory(uint32_t name)
     if (!memory_ || current() == nullptr) return;
     const GLuint named = name;
     delete_memory_objects_(1, &named);
-    while (get_error_() != no_error) {}
+    static_cast<void>(errors_.clear());
 }
 
 void GlHostImport::delete_semaphore(uint32_t name)
@@ -158,7 +157,7 @@ void GlHostImport::delete_semaphore(uint32_t name)
     if (!fences_ || current() == nullptr) return;
     const GLuint named = name;
     delete_semaphores_(1, &named);
-    while (get_error_() != no_error) {}
+    static_cast<void>(errors_.clear());
 }
 
 }  // namespace av

@@ -14,6 +14,7 @@
 #ifndef AV_GL_RENDERBUFFER_TEXTURE_HPP
 #define AV_GL_RENDERBUFFER_TEXTURE_HPP
 
+#include "executor/shim/gl_error_flags.hpp"
 #include "proto/generated/opengl/gl_types.h"
 
 #include <stdint.h>
@@ -56,7 +57,7 @@ private:
     void (APIENTRY *gen_textures_)(GLsizei, GLuint *);
     void (APIENTRY *bind_texture_)(GLenum, GLuint);
     void (APIENTRY *delete_textures_)(GLsizei, const GLuint *);
-    GLenum (APIENTRY *get_error_)();
+    GlErrorFlags errors_;
     GlContext       *context_;
     const GlDisplay *display_;
 };

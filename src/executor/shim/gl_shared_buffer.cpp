@@ -14,7 +14,7 @@ constexpr GLenum buffer_size = 0x8764u;
 
 GlSharedBuffer::GlSharedBuffer()
     : create_buffers_(nullptr), storage_mem_(nullptr), buffer_parameter_(nullptr), delete_buffers_(nullptr),
-      get_error_(nullptr), context_(nullptr), import_(nullptr)
+      errors_(), context_(nullptr), import_(nullptr)
 {
     AV_SCOPE("GlSharedBuffer::GlSharedBuffer");
 }
@@ -32,7 +32,7 @@ void GlSharedBuffer::configure(GlContext &context, GlHostImport &import)
         context.resolve("glGetNamedBufferParameteri64v"));
     delete_buffers_ =
         reinterpret_cast<void(APIENTRY *)(GLsizei, const GLuint *)>(context.resolve("glDeleteBuffers"));
-    get_error_ = reinterpret_cast<GLenum(APIENTRY *)()>(context.resolve("glGetError"));
+    errors_.resolve(context);
 }
 
 void GlSharedBuffer::give_back()
@@ -47,7 +47,7 @@ bool GlSharedBuffer::makes_buffers() const
     AV_SCOPE("GlSharedBuffer::makes_buffers");
     return import_ != nullptr && import_->imports_memory() && create_buffers_ != nullptr &&
            storage_mem_ != nullptr && buffer_parameter_ != nullptr && delete_buffers_ != nullptr &&
-           get_error_ != nullptr;
+           errors_.resolved();
 }
 
 GlContext *GlSharedBuffer::current()
@@ -73,9 +73,9 @@ bool GlSharedBuffer::make(int fd, uint64_t size, uint32_t &memory, uint32_t &buf
     }
     if (stored != static_cast<GLint64>(size)) {
         if (made != 0u) {
-            /* The one flag the refused storage raised, taken so it is not
-             * read as an error of whatever the context runs next. */
-            static_cast<void>(get_error_());
+            /* What the refused storage raised, cleared so it is not read as
+             * an error of whatever the context runs next. */
+            static_cast<void>(errors_.clear());
             delete_buffers_(1, &made);
         }
         import_->delete_memory(imported);

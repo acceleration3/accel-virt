@@ -8,7 +8,6 @@ namespace av {
 
 namespace {
 
-constexpr GLenum no_error = 0u;
 /* Binding points and nothing more: the vehicle draws with neither. */
 constexpr GLenum copy_read_buffer = 0x8F36u;
 constexpr GLenum copy_write_buffer = 0x8F37u;
@@ -26,7 +25,7 @@ GlObjectBytes::GlObjectBytes()
     : is_buffer_(nullptr), bind_buffer_(nullptr), get_buffer_parameter_(nullptr), get_buffer_sub_data_(nullptr),
       buffer_sub_data_(nullptr), is_texture_(nullptr), bind_texture_(nullptr), get_level_parameter_(nullptr),
       get_tex_image_(nullptr), tex_sub_image_1d_(nullptr), tex_sub_image_2d_(nullptr), tex_sub_image_3d_(nullptr),
-      pixel_store_(nullptr), get_error_(nullptr), finish_(nullptr), context_(nullptr)
+      pixel_store_(nullptr), errors_(), finish_(nullptr), context_(nullptr)
 {
     AV_SCOPE("GlObjectBytes::GlObjectBytes");
 }
@@ -51,7 +50,7 @@ void GlObjectBytes::configure(GlContext &context)
     tex_sub_image_2d_ = reinterpret_cast<decltype(tex_sub_image_2d_)>(context.resolve("glTexSubImage2D"));
     tex_sub_image_3d_ = reinterpret_cast<decltype(tex_sub_image_3d_)>(context.resolve("glTexSubImage3D"));
     pixel_store_ = reinterpret_cast<decltype(pixel_store_)>(context.resolve("glPixelStorei"));
-    get_error_ = reinterpret_cast<decltype(get_error_)>(context.resolve("glGetError"));
+    errors_.resolve(context);
     finish_ = reinterpret_cast<decltype(finish_)>(context.resolve("glFinish"));
 }
 
@@ -68,7 +67,7 @@ bool GlObjectBytes::moves_bytes() const
            get_buffer_sub_data_ != nullptr && buffer_sub_data_ != nullptr && is_texture_ != nullptr &&
            bind_texture_ != nullptr && get_level_parameter_ != nullptr && get_tex_image_ != nullptr &&
            tex_sub_image_1d_ != nullptr && tex_sub_image_2d_ != nullptr && tex_sub_image_3d_ != nullptr &&
-           pixel_store_ != nullptr && get_error_ != nullptr && finish_ != nullptr;
+           pixel_store_ != nullptr && errors_.resolved() && finish_ != nullptr;
 }
 
 GlContext *GlObjectBytes::current()
@@ -81,9 +80,7 @@ GlContext *GlObjectBytes::current()
 bool GlObjectBytes::quiet()
 {
     AV_SCOPE("GlObjectBytes::quiet");
-    bool raised = false;
-    while (get_error_() != no_error) raised = true;
-    return !raised;
+    return errors_.clear();
 }
 
 bool GlObjectBytes::buffer_size(uint32_t buffer, uint64_t &bytes)

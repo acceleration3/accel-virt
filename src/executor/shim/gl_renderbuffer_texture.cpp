@@ -11,8 +11,6 @@ namespace av {
 
 namespace {
 
-constexpr GLenum no_error = 0u;
-
 using CreateImage = void *(*)(void *, void *, unsigned, void *, const int32_t *);
 using DestroyImage = unsigned (*)(void *, void *);
 
@@ -20,7 +18,7 @@ using DestroyImage = unsigned (*)(void *, void *);
 
 GlRenderbufferTexture::GlRenderbufferTexture()
     : create_image_(nullptr), destroy_image_(nullptr), image_target_texture_(nullptr), gen_textures_(nullptr),
-      bind_texture_(nullptr), delete_textures_(nullptr), get_error_(nullptr), context_(nullptr), display_(nullptr)
+      bind_texture_(nullptr), delete_textures_(nullptr), errors_(), context_(nullptr), display_(nullptr)
 {
     AV_SCOPE("GlRenderbufferTexture::GlRenderbufferTexture");
 }
@@ -39,7 +37,7 @@ void GlRenderbufferTexture::configure(GlContext &context, const GlDisplay &displ
     bind_texture_ = reinterpret_cast<void(APIENTRY *)(GLenum, GLuint)>(context.resolve("glBindTexture"));
     delete_textures_ =
         reinterpret_cast<void(APIENTRY *)(GLsizei, const GLuint *)>(context.resolve("glDeleteTextures"));
-    get_error_ = reinterpret_cast<GLenum(APIENTRY *)()>(context.resolve("glGetError"));
+    errors_.resolve(context);
 }
 
 void GlRenderbufferTexture::give_back()
@@ -54,7 +52,7 @@ bool GlRenderbufferTexture::makes_textures() const
     AV_SCOPE("GlRenderbufferTexture::makes_textures");
     return create_image_ != nullptr && destroy_image_ != nullptr && image_target_texture_ != nullptr &&
            gen_textures_ != nullptr && bind_texture_ != nullptr && delete_textures_ != nullptr &&
-           get_error_ != nullptr && display_ != nullptr;
+           errors_.resolved() && display_ != nullptr;
 }
 
 GlContext *GlRenderbufferTexture::current()
@@ -75,15 +73,15 @@ bool GlRenderbufferTexture::make(uint32_t renderbuffer, uint32_t &texture, void 
     if (made == nullptr) return false;
     GLuint over = 0u;
     gen_textures_(1, &over);
-    while (get_error_() != no_error) {}
+    static_cast<void>(errors_.clear());
     bind_texture_(texture_2d, over);
     image_target_texture_(texture_2d, made);
-    const bool taken = get_error_() == no_error;
+    const bool taken = errors_.clear();
     bind_texture_(texture_2d, 0u);
     if (!taken) {
         delete_textures_(1, &over);
         static_cast<void>(destroy_image_(display_->handle(), made));
-        while (get_error_() != no_error) {}
+        static_cast<void>(errors_.clear());
         return false;
     }
     texture = over;
@@ -97,7 +95,7 @@ void GlRenderbufferTexture::destroy(uint32_t texture, void *image)
     if (!makes_textures() || current() == nullptr) return;
     const GLuint named = texture;
     if (named != 0u) delete_textures_(1, &named);
-    while (get_error_() != no_error) {}
+    static_cast<void>(errors_.clear());
     if (image != nullptr) static_cast<void>(destroy_image_(display_->handle(), image));
 }
 

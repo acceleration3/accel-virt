@@ -14,6 +14,7 @@
 #ifndef AV_GL_HOST_IMPORT_HPP
 #define AV_GL_HOST_IMPORT_HPP
 
+#include "executor/shim/gl_error_flags.hpp"
 #include "proto/generated/opengl/gl_types.h"
 
 #include <stdint.h>
@@ -71,7 +72,7 @@ private:
     void (APIENTRY *delete_semaphores_)(GLsizei, const GLuint *);
     void (APIENTRY *get_integerv_)(GLenum, GLint *);
     const GLubyte *(APIENTRY *get_stringi_)(GLenum, GLuint);
-    GLenum (APIENTRY *get_error_)();
+    GlErrorFlags errors_;
     GlContext *context_;
     bool memory_;
     bool fences_;

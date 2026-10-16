@@ -15,6 +15,7 @@
 #ifndef AV_GL_OBJECT_BYTES_HPP
 #define AV_GL_OBJECT_BYTES_HPP
 
+#include "executor/shim/gl_error_flags.hpp"
 #include "proto/generated/opengl/gl_types.h"
 
 #include <stdint.h>
@@ -74,7 +75,7 @@ private:
     void (APIENTRY *tex_sub_image_3d_)(GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum,
                                        GLenum, const void *);
     void (APIENTRY *pixel_store_)(GLenum, GLint);
-    GLenum (APIENTRY *get_error_)();
+    GlErrorFlags errors_;
     void (APIENTRY *finish_)();
     GlContext *context_;
 };
