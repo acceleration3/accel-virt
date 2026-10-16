@@ -324,6 +324,10 @@ private:
     ObjectPool<CommandBatch> batches_;
     ObjectPool<DeviceMemory> memories_;
     HandleRegistry         handles_;
+    /* The NT handles this process holds for the objects it shares, which is
+     * what makes one of them nameable in another process (feature 053).
+     * Before the connections: each opens what a handle names through it. */
+    SharedHandles           shared_handles_;
     ObjectPool<Connection> connections_;
     Connection            *pending_;
     /* One per application instance: the instances it spans. */
@@ -334,10 +338,10 @@ private:
     Presentation           presentation_;
     DescriptorTemplateTable templates_;
     GuestHandleTranslation  translation_;
+    /* The objects this process exported, each with the identity and the NT
+     * handle it was published under; what it opened is its connection's
+     * (OpenedObjects). */
     ExternalObjects         externals_;
-    /* The NT handles this process holds for the objects in `externals_`, which
-     * is what makes one of them nameable in another process (feature 053). */
-    SharedHandles           shared_handles_;
     /* The NTSTATUS of the last kernel call that refused; 0 until one does. */
     uint32_t                kernel_refusal_;
     /* vkQueueWaitIdle calls answered here and sent to the host, for the log. */

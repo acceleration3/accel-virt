@@ -1,15 +1,15 @@
-/* The Win32 handles this process holds, and the host objects they name
- * (feature 047 US3, feature 053 US2; contracts/external_objects.md).
+/* The objects this process exported, and the identities they were published
+ * under (feature 047 US3, feature 053 US2; contracts/external_objects.md).
  *
- * A handle used to be this table's own address, which meant something inside
- * one process and nothing outside it. Since 053 it is an NT handle over a
- * carrier allocation, minted by the kernel and resolved by
- * `icd::SharedHandles`, so the refusal of "a handle this process did not
- * export" lives there and this table no longer guesses at it. What is left
- * here is what only the ICD knows: which host object a handle names *in this
- * process*, which identity it was published under, and - for an object this
- * process exported - the carrier allocation that identity was minted into,
- * which nothing else will destroy.
+ * A handle is an NT handle over a carrier allocation, minted by the kernel and
+ * resolved by `icd::SharedHandles`, so the refusal of "a handle this process
+ * did not export" lives there and this table does not guess at it. What is
+ * left here is what only the ICD knows of an object it exported: which host
+ * object a handle names *in this process*, which identity it was published
+ * under, and the carrier allocation that identity was minted into, which
+ * nothing else will destroy. What this process opened from a handle is its
+ * connection's (icd::OpenedObjects), found by the handle the device answered,
+ * which is the Vulkan object itself.
  *
  * The lock is its own: an export happens on the calling application's thread,
  * and nothing it does reaches back into the root. */
@@ -35,7 +35,7 @@ class ThreadLock;
 
 namespace av::icd {
 
-/* One object this process shares. A type of its own so the table's slots are
+/* One object this process exported. A type of its own so the table's slots are
  * complete (tools/header_scan.py reads a class's members only to its first
  * nested type). */
 struct ExternalObjectSlot {
@@ -51,8 +51,7 @@ struct ExternalObjectSlot {
     /* The NT handle that names `object_id_` to another process. */
     uint64_t       handle_;
     /* The one-page allocation the identity was minted into, which this ICD
-     * created and must destroy; 0 for an object this process opened rather
-     * than exported, whose carrier belongs to whoever created it. */
+     * created and must destroy. */
     uint32_t       carrier_;
 };
 
@@ -64,12 +63,12 @@ public:
     ExternalObjects(const ExternalObjects &) = delete;
     ExternalObjects &operator=(const ExternalObjects &) = delete;
 
-    /* An object this process shares, with the identity it was published under
-     * and the handle that names it. Exactly one of `memory` and `semaphore` is
-     * set. `carrier` is the allocation the identity was minted into for an
-     * object this process exported, and 0 for one it opened. False for neither
-     * object or both, an id or a handle of 0, an object already held, and no
-     * memory for a row - the one a caller that passes a valid row can meet. */
+    /* An object this process exported, with the identity it was published
+     * under, the handle that names it and the carrier the identity was minted
+     * into. Exactly one of `memory` and `semaphore` is set. False for neither
+     * object or both, an id, a handle or a carrier of 0, an object already
+     * held, and no memory for a row - the one a caller that passes a valid
+     * row can meet. */
     [[nodiscard]] bool remember(VkDevice device, VkDeviceMemory memory, VkSemaphore semaphore,
                                 uint64_t object_id, uint64_t size, uint64_t handle, uint32_t carrier);
     /* The NT handle `memory` was published under, or 0 for memory this process
@@ -78,8 +77,8 @@ public:
     uint64_t           handle_of_memory(VkDeviceMemory memory) const;
     uint64_t           handle_of_semaphore(VkSemaphore semaphore) const;
     /* The row published under `object_id`, copied into `row`; false for an id
-     * no object of this process holds - which is what an object another
-     * process published looks like from here. */
+     * this process did not export - which is what an object another process
+     * published looks like from here. */
     [[nodiscard]] bool holder_of(uint64_t object_id, ExternalObjectSlot &row) const;
     /* The row naming the object, dropped and copied into `row`, so its caller
      * can release what it names. False for an object this table does not hold,
@@ -92,8 +91,8 @@ public:
 
     uint32_t live() const;
 
-    /* A row names exactly one object of one device under one non-zero id and
-     * handle, and no object, id or handle appears twice. */
+    /* A row names exactly one object of one device under one non-zero id,
+     * handle and carrier, and no object, id or handle appears twice. */
     bool invariants_hold() const;
 
 private:

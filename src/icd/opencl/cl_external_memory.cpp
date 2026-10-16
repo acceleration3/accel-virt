@@ -68,14 +68,14 @@ cl_int ClExternalMemory::open(ClientTransport &wire, uint32_t device, const ClPr
         log_.write("avcl: an external memory handle type this driver does not take, or two at once");
         return CL_INVALID_PROPERTY;
     }
-    return answer(opened_.open(wire, device, named, SharedObjectKind::memory, size, made));
+    return answer(opened_.open(wire, device, named, SharedObjectKind::memory, size, 0u, made));
 }
 
 cl_int ClExternalMemory::open_own(ClientTransport &wire, uint32_t device, uint64_t handle, uint64_t size,
                                   uint64_t &made, bool &closed)
 {
     AV_SCOPE("ClExternalMemory::open_own");
-    const cl_int answered = answer(opened_.open(wire, device, handle, SharedObjectKind::memory, size, made));
+    const cl_int answered = answer(opened_.open(wire, device, handle, SharedObjectKind::memory, size, 0u, made));
     uint64_t     object_id = 0u;
     closed = handles_.resolve(handle, object_id);
     if (closed) handles_.forget(handle);

@@ -22,6 +22,7 @@
 #include "icd/common/adapter_facts.hpp"
 #include "icd/common/host_channel.hpp"
 #include "icd/common/loss_latch.hpp"
+#include "icd/common/opened_objects.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -41,6 +42,7 @@ class ThreadLock;
 
 namespace av::icd {
 
+class SharedHandles;
 struct ConnectionProbe;
 
 class Connection {
@@ -50,8 +52,10 @@ public:
     static constexpr size_t   command_bytes = 256u * 1024u;
 
     /* `log` takes the lines the channel writes, and `lock` is its send lock;
-     * `lines` is the root's, where a loss is said once per entry point. */
-    Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink &log, KeyedLog &lines);
+     * `lines` is the root's, where a loss is said once per entry point.
+     * `handles` resolves the Win32 handles an import names. */
+    Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink &log, KeyedLog &lines,
+               SharedHandles &handles);
     ~Connection();
     Connection(const Connection &) = delete;
     Connection &operator=(const Connection &) = delete;
@@ -104,6 +108,11 @@ public:
     /* The channel the connection's host memory is opened on and kept by,
      * for each device of its instance (HostChannel::open_memory). */
     HostChannel         &channel();
+    /* The shared objects the instance's context opened, for every device of
+     * it (feature 053): what a Win32 handle another process or another of
+     * this process's devices published was imported as. Its caller holds the
+     * root's memory lock. */
+    OpenedObjects       &opened_objects();
 
     /* Its fields on the line `writer` has open: whether open and lost, and
      * why, and the adapter, LUID, device and context it sends through. */
@@ -124,6 +133,7 @@ private:
     /* What Windows says of the adapter: its LUID, and the name Vulkan shows. */
     AdapterFacts                   adapter_;
     bool                           host_dma_buf_;
+    OpenedObjects                  opened_objects_;
 
     friend struct ConnectionProbe;
 };

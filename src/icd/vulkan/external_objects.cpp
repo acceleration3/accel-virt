@@ -33,7 +33,7 @@ bool ExternalObjects::remember(VkDevice device, VkDeviceMemory memory, VkSemapho
                                uint64_t object_id, uint64_t size, uint64_t handle, uint32_t carrier)
 {
     AV_SCOPE("ExternalObjects::remember");
-    if (device == VK_NULL_HANDLE || object_id == 0u || handle == 0u) return false;
+    if (device == VK_NULL_HANDLE || object_id == 0u || handle == 0u || carrier == 0u) return false;
     /* Exactly one kind, because a row is one object and the two are told apart
      * by which field is set; and each kind's own size rule, which is the wire
      * body's. */
@@ -131,7 +131,7 @@ bool ExternalObjects::invariants_hold() const
         const bool memory = slot.memory_ != VK_NULL_HANDLE;
         const bool semaphore = slot.semaphore_ != VK_NULL_HANDLE;
         if (slot.device_ == VK_NULL_HANDLE || memory == semaphore) return false;
-        if (slot.object_id_ == 0u || slot.handle_ == 0u) return false;
+        if (slot.object_id_ == 0u || slot.handle_ == 0u || slot.carrier_ == 0u) return false;
         if (memory != (slot.size_ != 0u)) return false;
         uint32_t alike = 0u;
         slots_.for_each([&slot, &alike](const ExternalObjectSlot &other) {

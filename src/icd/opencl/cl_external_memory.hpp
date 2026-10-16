@@ -85,8 +85,8 @@ public:
      * CL_INVALID_PROPERTY for a handle type this path does not take;
      * CL_INVALID_VALUE for a handle of 0, a handle this process may not open,
      * a size of 0 or one no whole number of pages holds, and an object this
-     * context already holds - which the device refuses too, because a context
-     * with two cl_mem over one object could release it twice;
+     * context already holds - which the device refuses, since it keeps what
+     * each context holds;
      * CL_OUT_OF_HOST_MEMORY when no row can be had; CL_OUT_OF_RESOURCES when
      * the device would not open it. `made` is 0 unless CL_SUCCESS. */
     cl_int open(ClientTransport &wire, uint32_t device, const ClPropertyList &list, uint64_t size,

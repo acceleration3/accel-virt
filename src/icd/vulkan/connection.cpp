@@ -9,11 +9,12 @@
 
 namespace av::icd {
 
-Connection::Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink &log, KeyedLog &lines)
+Connection::Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink &log, KeyedLog &lines,
+                       SharedHandles &handles)
     : kmt_(kmt), search_(kmt), connection_(kmt),
       channel_(memory, log, "avvk: ", ChannelShape(SubApi::vulkan, ring_order, reply_bytes, command_bytes, 0u, 0u),
                lock),
-      loss_(lines), opened_(false), adapter_(), host_dma_buf_(false)
+      loss_(lines), opened_(false), adapter_(), host_dma_buf_(false), opened_objects_(handles, memory, log, "avvk: ")
 {
     AV_SCOPE("Connection::Connection");
 }
@@ -63,6 +64,7 @@ void Connection::report(StateWriter &writer) const
     writer.hex("luid", adapter_.luid());
     writer.number("device", opened() ? connection_.device() : 0u);
     writer.number("context", opened() ? channel_.transport().context() : 0u);
+    opened_objects_.report(writer);
 }
 
 bool             Connection::opened() const
@@ -135,10 +137,16 @@ HostChannel &Connection::channel()
     return channel_;
 }
 
+OpenedObjects &Connection::opened_objects()
+{
+    AV_SCOPE("Connection::opened_objects");
+    return opened_objects_;
+}
+
 bool Connection::invariants_hold() const
 {
     AV_SCOPE("Connection::invariants_hold");
-    if (!connection_.invariants_hold()) return false;
+    if (!connection_.invariants_hold() || !opened_objects_.invariants_hold()) return false;
     if (!channel_.invariants_hold() || !loss_.invariants_hold()) return false;
     if (loss_.lost() && opened() && !channel_.lost()) return false;
     if (!opened()) return !channel_.opened() && !connection_.opened() && !search_.found();

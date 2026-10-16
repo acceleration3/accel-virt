@@ -145,7 +145,7 @@ uint32_t GlExternalObjects::import(ClientTransport &wire, uint32_t device, uint3
     }
     const uint64_t named = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle));
     uint64_t       opened = 0u;
-    const Status   taken = opened_.open(wire, device, named, wire_kind(*row), size, opened);
+    const Status   taken = opened_.open(wire, device, named, wire_kind(*row), size, 0u, opened);
     if (taken == Status::invalid_parameter) return gl_invalid_value;
     if (taken == Status::not_found || taken == Status::conflict) return gl_invalid_operation;
     if (taken != Status::ok) return gl_out_of_memory;

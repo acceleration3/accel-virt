@@ -309,10 +309,10 @@ IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &se
       binding_(binding),
       api_version_(vulkan_1_3), before_instance_(local_rows, before_instance_rows),
       entry_points_(local_rows, local_row_count),
-      extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), connections_(memory), pending_(nullptr), spans_(memory),
+      extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), shared_handles_(kmt, lock, memory), connections_(memory), pending_(nullptr), spans_(memory),
       entries_(*this), presentation_(memory, kmt, windows, chains, log, *this, entries_, present_thread, handed, shown, present_lock), templates_(memory, lock),
       translation_(lock, handles_, templates_),
-      externals_(lock, memory), shared_handles_(kmt, lock, memory), kernel_refusal_(0u), idle_skipped_(0u), idle_waited_(0u),
+      externals_(lock, memory), kernel_refusal_(0u), idle_skipped_(0u), idle_waited_(0u),
       memory_handles_(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT,
                       VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT),
       semaphore_handles_(VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT,
@@ -396,7 +396,7 @@ Status IcdRoot::open_connection(Connection *&opened, uint64_t luid)
 {
     AV_SCOPE("IcdRoot::open_connection");
     const ThreadLockHold release(lock_);
-    const Status made = connections_.create(opened, kmt_, memory_, send_lock_, log_, lines_);
+    const Status made = connections_.create(opened, kmt_, memory_, send_lock_, log_, lines_, shared_handles_);
     if (made != Status::ok) return made;
     const Status status = opened->open(luid);
     if (status == Status::ok) return Status::ok;
@@ -911,11 +911,7 @@ void IcdRoot::release_shared(LoaderHandle &made, const ExternalObjectSlot &row)
     SharedObjectCall call(made.connection()->transport());
     static_cast<void>(call.release(row.object_id_, kind, size));
     shared_handles_.forget(row.handle_);
-    /* Only a carrier this process made: an object it opened was minted into
-     * somebody else's allocation, and SharedHandles destroyed the one its own
-     * open created. */
-    if (row.carrier_ != 0u)
-        static_cast<void>(kmt_.destroy_shared_allocation(made.connection()->device(), row.carrier_));
+    static_cast<void>(kmt_.destroy_shared_allocation(made.connection()->device(), row.carrier_));
 }
 
 /* Nothing is asked of the host or the kernel here. The identity and the NT
@@ -1097,8 +1093,9 @@ void IcdRoot::external_buffer_properties(VkPhysicalDevice physical_device,
                                                              &answered);
     properties->externalMemoryProperties.externalMemoryFeatures =
         answered.externalMemoryProperties.externalMemoryFeatures;
-    properties->externalMemoryProperties.exportFromImportedHandleTypes =
-        memory_handles_.reported(answered.externalMemoryProperties.exportFromImportedHandleTypes);
+    /* Memory opened from a handle has no identity of this process's to
+     * publish again: its handle is the one it was opened from. */
+    properties->externalMemoryProperties.exportFromImportedHandleTypes = 0u;
     properties->externalMemoryProperties.compatibleHandleTypes =
         memory_handles_.reported(answered.externalMemoryProperties.compatibleHandleTypes);
 }
@@ -1211,25 +1208,14 @@ VkResult IcdRoot::imported_allocation(LoaderHandle &made, VkDevice device,
     ExternalObjectSlot holder = {};
     if (externals_.holder_of(object_id, holder) && holder.memory_ != VK_NULL_HANDLE)
         return own_process_allocation(made, device, holder, info, allocator, memory);
-    SharedObjectCall call(made.connection()->transport());
-    uint64_t         opened = 0u;
-    const Status     answered = call.open(object_id, SharedObjectKind::memory, size, opened);
-    if (answered != Status::ok) {
-        lines_.note("vkAllocateMemory: the device would not open a shared object, status", call.device_status());
-        return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-    }
-    /* SharedObjectCall::judge has already refused an open that answered no
-     * handle. */
+    uint64_t     opened = 0u;
+    const Status answered = made.connection()->opened_objects().open(
+        made.connection()->transport(), made.connection()->device(),
+        static_cast<uint64_t>(reinterpret_cast<uintptr_t>(importing.handle_)), SharedObjectKind::memory, size,
+        made.host(), opened);
+    if (answered == Status::no_memory) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    if (answered != Status::ok) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     memory = HandleBits(opened).as<VkDeviceMemory>();
-    /* As in publish: only a process with no memory left refuses the row, and
-     * then what the device opened is given back. */
-    if (!externals_.remember(device, memory, VK_NULL_HANDLE, object_id, size,
-                             static_cast<uint64_t>(reinterpret_cast<uintptr_t>(importing.handle_)), 0u)) {
-        log_.write("avvk: no memory to remember an opened shared object; it is given back");
-        static_cast<void>(call.release(object_id, SharedObjectKind::memory, size));
-        memory = VK_NULL_HANDLE;
-        return VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
     return VK_SUCCESS;
 }
 
@@ -1242,8 +1228,12 @@ void IcdRoot::destroy_device(VkDevice device, const VkAllocationCallbacks *alloc
     /* A process that exits holding everything leaves nothing: each object's
      * reference on the device, its NT handle and its carrier are given back
      * before the device that owns them goes (feature 053, T033). */
-    ExternalObjectSlot row = {};
-    while (externals_.take_any_of_device(device, row)) release_shared(*made, row);
+    {
+        const ThreadLockHold release(memory_lock_);
+        ExternalObjectSlot   row = {};
+        while (externals_.take_any_of_device(device, row)) release_shared(*made, row);
+        made->connection()->opened_objects().give_back_into(made->connection()->transport(), made->host());
+    }
     /* A swapchain frees its memory through the device: before the device's own. */
     presentation_.forget_device(device);
     release_device_memory(*made);
@@ -1405,14 +1395,14 @@ void IcdRoot::free_memory(VkDevice device, VkDeviceMemory memory, const VkAlloca
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return;
     const ThreadLockHold release(memory_lock_);
+    /* Memory this context opened was made by the device inside the open and
+     * is destroyed by the release; memory it exported is given back and then
+     * freed as any it allocated itself. */
+    if (made->connection()->opened_objects().give_back(made->connection()->transport(), SharedObjectKind::memory,
+                                                       HandleBits(memory).value()))
+        return;
     ExternalObjectSlot row = {};
-    if (externals_.take_memory(memory, row)) {
-        release_shared(*made, row);
-        /* Memory this process opened was made by the device inside the open
-         * and destroyed by the release; only memory it allocated itself is
-         * still the host's to free. */
-        if (row.carrier_ == 0u) return;
-    }
+    if (externals_.take_memory(memory, row)) release_shared(*made, row);
     DeviceMemory *const owned = memory_of(*made);
     if (owned != nullptr) owned->free(device, memory, allocator);
 }
