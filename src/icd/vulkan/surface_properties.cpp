@@ -1,6 +1,7 @@
 #include "icd/vulkan/surface_properties.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "icd/common/window_extent.hpp"
 #include "icd/common/window_surface.hpp"
 
 namespace av::icd {
@@ -24,17 +25,19 @@ SurfaceProperties::SurfaceProperties(WindowSurface &windows, void *window) : win
 VkResult SurfaceProperties::capabilities(VkSurfaceCapabilitiesKHR &answer)
 {
     AV_SCOPE("SurfaceProperties::capabilities");
-    uint32_t width = 0u;
-    uint32_t height = 0u;
-    if (window_ == nullptr || !windows_.client_size(window_, width, height)) return VK_ERROR_SURFACE_LOST_KHR;
+    WindowExtent              window(windows_, window_);
+    const WindowExtent::Look  seen = window.look();
+    if (seen == WindowExtent::Look::gone) return VK_ERROR_SURFACE_LOST_KHR;
+    const uint32_t width = window.width();
+    const uint32_t height = window.height();
+    /* A minimized window has no area, and nothing can be made for it. */
+    const bool     empty = seen == WindowExtent::Look::empty;
     answer = VkSurfaceCapabilitiesKHR{};
     answer.minImageCount = min_images;
     answer.maxImageCount = max_images;
     answer.currentExtent = {width, height};
-    /* A minimized window has no area, and nothing can be made for it. */
-    answer.minImageExtent = {width == 0u || height == 0u ? 0u : 1u, width == 0u || height == 0u ? 0u : 1u};
-    answer.maxImageExtent = {width == 0u || height == 0u ? 0u : max_extent,
-                             width == 0u || height == 0u ? 0u : max_extent};
+    answer.minImageExtent = {empty ? 0u : 1u, empty ? 0u : 1u};
+    answer.maxImageExtent = {empty ? 0u : max_extent, empty ? 0u : max_extent};
     answer.maxImageArrayLayers = 1u;
     answer.supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
     answer.currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;

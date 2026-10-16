@@ -4,6 +4,7 @@
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/log_sink.hpp"
+#include "icd/common/window_extent.hpp"
 #include "icd/common/window_surface.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/surface_properties.hpp"
@@ -218,11 +219,12 @@ VkResult Swapchain::present_chained(VkQueue queue, uint32_t index, uint32_t wait
 VkResult Swapchain::window_state() const
 {
     AV_SCOPE("Swapchain::window_state");
-    uint32_t width = 0u;
-    uint32_t height = 0u;
-    if (!windows_.client_size(window_, width, height)) return VK_ERROR_SURFACE_LOST_KHR;
-    if (width != extent_.width || height != extent_.height) return VK_ERROR_OUT_OF_DATE_KHR;
-    return VK_SUCCESS;
+    WindowExtent window(windows_, window_, extent_.width, extent_.height);
+    switch (window.look()) {
+    case WindowExtent::Look::gone: return VK_ERROR_SURFACE_LOST_KHR;
+    case WindowExtent::Look::same: return VK_SUCCESS;
+    default: return VK_ERROR_OUT_OF_DATE_KHR;
+    }
 }
 
 /* An RGBA image's red and blue trade places, since a DIB is BGRA; the rows

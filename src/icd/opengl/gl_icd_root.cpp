@@ -4,7 +4,6 @@
 #include "icd/common/report_gate.hpp"
 #include "icd/common/thread_lock_hold.hpp"
 #include "icd/opengl/granted_profile.hpp"
-#include "icd/opengl/window_visibility.hpp"
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
@@ -17,6 +16,7 @@
 #include "icd/opengl/gl_icd_binding.hpp"
 #include "icd/opengl/system_opengl.hpp"
 #include "icd/opengl/thread_slot.hpp"
+#include "icd/common/window_extent.hpp"
 #include "icd/common/window_surface.hpp"
 
 #include "gl_dispatch_client.h"
@@ -396,7 +396,8 @@ GlIcdRoot::Shown GlIcdRoot::show_frame(void *dc)
     /* Nor does a window nobody can see: the frame is read back through the
      * host GPU and blitted for a client area that is not there (feature 051,
      * US2.3). */
-    if (!WindowVisibility(surface_, window).showing()) return Shown::nothing;
+    const icd::WindowExtent::Look seen = icd::WindowExtent(surface_, window).look();
+    if (seen == icd::WindowExtent::Look::gone || seen == icd::WindowExtent::Look::empty) return Shown::nothing;
     /* Minecraft swapped 175 times a second and every frame was read back and
      * blitted onto its window for DWM to show 60 of. */
     if (!context->pacing().admits()) return Shown::nothing;

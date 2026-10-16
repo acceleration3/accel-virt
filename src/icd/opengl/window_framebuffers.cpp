@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/opengl/pixel_format.hpp"
+#include "icd/common/window_extent.hpp"
 #include "icd/common/window_surface.hpp"
 
 #include "gl_dispatch_client.h"
@@ -169,9 +170,7 @@ void WindowFramebuffers::drop_gone(ClientTransport &wire, icd::WindowSurface &su
 {
     AV_SCOPE("WindowFramebuffers::drop_gone");
     presenters_.erase_if([this, &wire, &surface](uint64_t, BackBufferPresenter *&presenter) {
-        uint32_t width = 0u;
-        uint32_t height = 0u;
-        if (surface.client_size(presenter->window(), width, height)) return false;
+        if (icd::WindowExtent(surface, presenter->window()).look() != icd::WindowExtent::Look::gone) return false;
         presenter->release(&wire);
         forget(presenter);
         return true;

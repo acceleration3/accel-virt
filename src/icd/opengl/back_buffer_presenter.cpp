@@ -7,6 +7,7 @@
 #include "core/log/log_sink.hpp"
 #include "icd/common/row_pieces.hpp"
 #include "icd/opengl/client_array_state.hpp"
+#include "icd/common/window_extent.hpp"
 #include "icd/common/window_surface.hpp"
 #include "icd/opengl/gl_present_loop.hpp"
 #include "proto/client/client_blob_arena.hpp"
@@ -44,11 +45,13 @@ Status BackBufferPresenter::prepare(ClientTransport &wire, void *window, const P
                                     icd::WindowSurface &surface)
 {
     AV_SCOPE("BackBufferPresenter::prepare");
-    uint32_t width = 0u;
-    uint32_t height = 0u;
-    if (!surface.client_size(window, width, height) || width > max_edge || height > max_edge)
+    icd::WindowExtent        extent(surface, window, width_, height_);
+    const icd::WindowExtent::Look seen = extent.look();
+    const uint32_t           width = extent.width();
+    const uint32_t           height = extent.height();
+    if (seen == icd::WindowExtent::Look::gone || width > max_edge || height > max_edge)
         return Status::invalid_parameter;
-    if (framebuffers_[draw] != 0u && window == window_ && width == width_ && height == height_) return Status::ok;
+    if (framebuffers_[draw] != 0u && window == window_ && seen == icd::WindowExtent::Look::same) return Status::ok;
     /* The thread may be showing a frame of the old size from the old room. */
     settle();
     delete_objects(wire);

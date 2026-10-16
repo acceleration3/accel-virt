@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
+#include "icd/common/window_extent.hpp"
 #include "icd/common/window_surface.hpp"
 
 namespace av::glicd {
@@ -42,9 +43,8 @@ void WindowTable::drop_gone(icd::WindowSurface &surface)
 {
     AV_SCOPE("WindowTable::drop_gone");
     formats_.erase_if([&surface](uint64_t window, int32_t &) {
-        uint32_t width = 0u;
-        uint32_t height = 0u;
-        return !surface.client_size(reinterpret_cast<void *>(static_cast<uintptr_t>(window)), width, height);
+        return icd::WindowExtent(surface, reinterpret_cast<void *>(static_cast<uintptr_t>(window))).look() ==
+               icd::WindowExtent::Look::gone;
     });
 }
 
