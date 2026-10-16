@@ -209,10 +209,10 @@ extern "C" HRESULT APIENTRY avumd_d3d12_Evict(D3D12DDI_HDEVICE handle, const D3D
 { D3d12Device &target = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); const HRESULT answer = target.evict(a1); target.trace_call("Evict", a1); return target.answered("Evict", answer); }
 
 extern "C" D3D12DDI_HEAP_AND_RESOURCE_SIZES APIENTRY avumd_d3d12_CalcPrivateOpenedHeapAndResourceSizes(D3D12DDI_HDEVICE handle, const D3D12DDIARG_OPENHEAP_0003 * a1, D3D12DDI_HPROTECTEDRESOURCESESSION_0030 a2)
-{ static_cast<void>(a1); static_cast<void>(a2); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnCalcPrivateOpenedHeapAndResourceSizes"); return D3D12DDI_HEAP_AND_RESOURCE_SIZES{}; }
+{ D3d12Device &target = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); const D3D12DDI_HEAP_AND_RESOURCE_SIZES answer = target.calc_private_opened_heap_and_resource_sizes(a1, a2); target.trace_call("CalcPrivateOpenedHeapAndResourceSizes", a1, a2); return answer; }
 
 extern "C" HRESULT APIENTRY avumd_d3d12_OpenHeapAndResource(D3D12DDI_HDEVICE handle, const D3D12DDIARG_OPENHEAP_0003 * a1, D3D12DDI_HHEAP a2, D3D12DDI_HRTRESOURCE a3, D3D12DDI_HPROTECTEDRESOURCESESSION_0030 a4, D3D12DDI_HRESOURCE a5)
-{ static_cast<void>(a1); static_cast<void>(a2); static_cast<void>(a3); static_cast<void>(a4); static_cast<void>(a5); d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device().unsupported("pfnOpenHeapAndResource"); return E_NOTIMPL; }
+{ D3d12Device &target = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); const HRESULT answer = target.open_heap_and_resource(a1, a2, a3, a4, a5); target.trace_call("OpenHeapAndResource", a1, a2, a3, a4, a5); return target.answered("OpenHeapAndResource", answer); }
 
 extern "C" VOID APIENTRY avumd_d3d12_CopyDescriptors(D3D12DDI_HDEVICE handle, UINT a1, const D3D12DDI_CPU_DESCRIPTOR_HANDLE * a2, const UINT * a3, UINT a4, const D3D12DDI_CPU_DESCRIPTOR_HANDLE * a5, const UINT * a6, D3D12DDI_DESCRIPTOR_HEAP_TYPE a7)
 { D3d12Device &target = d3d::DeviceBlock<D3d12Device>(handle.pDrvPrivate).device(); target.copy_descriptors(a1, a2, a3, a4, a5, a6, a7); target.trace_call("CopyDescriptors", a1, a2, a3, a4, a5, a6, a7); }

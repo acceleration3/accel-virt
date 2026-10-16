@@ -123,6 +123,22 @@ private:
                               D3D12DDI_HRTRESOURCE runtime, const D3D12DDIARG_CREATERESOURCE_0109 *args,
                               const D3D12DDI_CLEAR_VALUES *clear, D3D12DDI_HRESOURCE handle);
     HRESULT                  make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap, bool committed);
+    /* A CPU-visible heap's memory: an upload heap's from the host window, a
+     * write-back heap's pages of this process's own, lent. */
+    HRESULT                  heap_memory(uint64_t bytes, HeapRecord &heap);
+    /* `bytes` of fresh write-watched pages of this process lent to the device
+     * as readback memory (docs/host-memory.md, "Application memory"): the
+     * memory D3D12_HEAP_FLAG_ALLOW_WRITE_WATCH promises, which D3D12Core asks
+     * for as nothing but a write-back heap. */
+    Status                   lend_pages(uint64_t bytes, HeapRecord &heap);
+    /* An existing heap (OpenExistingHeapFromAddress, OpenExistingHeapFromFileMapping):
+     * the application's pages D3D12Core made an allocation of, lent to the
+     * device where they are, and the buffer spanning them. */
+    HRESULT                  open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRecord &heap,
+                                           ResourceRecord &resource);
+    /* Where the application's pages behind an existing heap's allocation
+     * are: null when the kernel will not say. */
+    void                    *existing_pages(D3DKMT_HANDLE allocation);
     HRESULT                  make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, const D3D12DDI_CLEAR_VALUES *clear,
                                            HeapRecord &heap, uint64_t offset, ResourceRecord &resource);
     /* A record of `desc`, stamped with a new id and no heap. */
@@ -167,6 +183,9 @@ private:
     void *const                          &list_table_;
     D3D12DDI_HRTDEVICE                    runtime_;
     const D3D12DDI_CORELAYER_DEVICECALLBACKS_0050 *core_;
+    /* The kernel thunks, which lock an existing heap's allocation to learn
+     * whose pages it is. */
+    const D3DDDI_DEVICECALLBACKS                  *kernel_;
     /* How a queue's context waits for the work the ring carried. */
     ObjectStorage<d3d::BatchFollower>     follower_;
     /* The kernel allocations shown surfaces own, paged on D3D12Core's queue. */

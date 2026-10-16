@@ -46,6 +46,20 @@ public:
     /* `bytes` of the readback buffer's mapping into `pixels`: RGBA rows, top
      * row first, as the copy left them. */
     virtual int32_t read_back(uint8_t *pixels, uint32_t bytes) = 0;
+    /* A heap over 2 * `bytes` of the probe's own memory
+     * (ID3D12Device3::OpenExistingHeapFromAddress): `pattern` written into its
+     * first half through the probe's pointer, a buffer placed over each half,
+     * the first copied into the second on the queue, and the second half read
+     * through the probe's pointer into `copied`. `aliased` is 1 when Map of
+     * the first buffer answered the probe's own pointer. */
+    virtual int32_t existing_heap(const uint8_t *pattern, uint8_t *copied, uint32_t bytes, uint32_t &aliased) = 0;
+    /* A committed buffer on a CUSTOM write-back L0 heap made with
+     * D3D12_HEAP_FLAG_ALLOW_WRITE_WATCH, as GFXReconstruct's capture makes
+     * every upload buffer: mapped, two of its pages written, and the count
+     * of written pages GetWriteWatch answered for the mapping in `pages`, or
+     * 0xFFFFFFFF when it refused the mapping. The result is the buffer's
+     * creation and its Map. */
+    virtual int32_t write_watch(uint32_t &pages) = 0;
     virtual void    release() = 0;
 
 protected:

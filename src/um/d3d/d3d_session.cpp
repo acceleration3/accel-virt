@@ -145,6 +145,13 @@ Status D3dSession::open_memory(uint64_t bytes, HostMemoryRequest memory, HostAll
     return channel_.open_memory(bytes, memory, made);
 }
 
+Status D3dSession::adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made)
+{
+    AV_SCOPE("D3dSession::adopt_memory");
+    const icd::ThreadLockHold held(lock_);
+    return channel_.adopt_memory(address, bytes, memory, made);
+}
+
 void D3dSession::close_memory(HostAllocation &allocation)
 {
     AV_SCOPE("D3dSession::close_memory");

@@ -105,6 +105,9 @@ public:
      * kept until close_memory or the session's close, under the session's
      * lock (HostChannel::open_memory). */
     [[nodiscard]] Status            open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made);
+    /* The process's own memory lent the same way (HostChannel::adopt_memory). */
+    [[nodiscard]] Status            adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory,
+                                                 HostAllocation *&made);
     void                            close_memory(HostAllocation &allocation);
 
 private:

@@ -80,6 +80,7 @@ IMPLEMENTED = {
         "pfnCreateDepthStencilView", "pfnCalcPrivateRootSignatureSize", "pfnCreateRootSignature",
         "pfnDestroyRootSignature", "pfnMapHeap", "pfnUnmapHeap", "pfnCalcPrivateHeapAndResourceSizes",
         "pfnCreateHeapAndResource", "pfnDestroyHeapAndResource", "pfnMakeResident", "pfnEvict",
+        "pfnCalcPrivateOpenedHeapAndResourceSizes", "pfnOpenHeapAndResource",
         "pfnCopyDescriptors", "pfnCopyDescriptorsSimple",
         "pfnCalcPrivateQueryHeapSize", "pfnCreateQueryHeap", "pfnDestroyQueryHeap",
         "pfnCheckResourceVirtualAddress", "pfnCheckResourceAllocationInfo", "pfnCheckSubresourceInfo",

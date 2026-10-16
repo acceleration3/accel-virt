@@ -6,6 +6,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/log/log_sink.hpp"
 #include "guest/transport/host_allocation.hpp"
+#include "proto/resources/allocation_descriptor.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "um/d3d/d3d12_device.hpp"
 #include "um/d3d/d3d_session.hpp"
@@ -37,6 +38,7 @@ constexpr uint32_t state_copy_dest = 0x400u;
 constexpr uint32_t buffer_dimension = 1u;
 constexpr uint64_t buffer_alignment = uint64_t{64} * 1024u;
 constexpr uint64_t refused_size = ~uint64_t{0};
+constexpr uint64_t page_bytes = 4096u;
 /* The runtime sums a resource's data, its additional data header and its
  * additional data, aligning the running size up to each part's alignment in
  * turn and taking any wrap as UINT64_MAX (d3d12core DDIRAIToAPIRAI). Aligned to
@@ -186,15 +188,8 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
         return E_OUTOFMEMORY;
     }
     if (heap.type != heap_default) {
-        /* Written by the CPU and read by the GPU, or the other way about: the
-         * memory the host gives either is the one native drivers use. */
-        const HostMemoryRequest memory(heap.type == heap_upload ? HostMemoryRequest::Kind::upload
-                                                                : HostMemoryRequest::Kind::readback,
-                                       0u);
-        if (session_.open_memory(args.ByteSize, memory, heap.memory) != Status::ok) {
-            log_.write("avumd: no host memory for an upload or readback heap");
-            return E_OUTOFMEMORY;
-        }
+        const HRESULT memory = heap_memory(args.ByteSize, heap);
+        if (FAILED(memory)) return memory;
     } else if (committed) {
         /* A committed resource in the GPU's own memory is one host object; the
          * heap the runtime asked for with it names nothing there. */
@@ -207,6 +202,44 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
         return E_OUTOFMEMORY;
     heap.made = 1u;
     return S_OK;
+}
+
+HRESULT D3d12Device::heap_memory(uint64_t bytes, HeapRecord &heap)
+{
+    AV_SCOPE("D3d12Device::heap_memory");
+    if (heap.type == heap_readback && lend_pages(bytes, heap) == Status::ok) return S_OK;
+    /* Written by the CPU and read by the GPU, or the other way about: the
+     * memory the host gives either is the one native drivers use. A
+     * write-back heap the device would not take pages for is host memory
+     * too, which GetWriteWatch knows nothing of. */
+    const HostMemoryRequest memory(heap.type == heap_upload ? HostMemoryRequest::Kind::upload
+                                                            : HostMemoryRequest::Kind::readback,
+                                   0u);
+    if (session_.open_memory(bytes, memory, heap.memory) == Status::ok) return S_OK;
+    log_.write("avumd: no host memory for an upload or readback heap");
+    return E_OUTOFMEMORY;
+}
+
+/* Every write-back heap, since D3D12Core passes D3D12_HEAP_FLAG_ALLOW_WRITE_WATCH
+ * on to no driver: it is a write-back heap whose mapping GetWriteWatch must
+ * answer for - GFXReconstruct's capture makes every upload buffer one - and
+ * only memory the process allocated with MEM_WRITE_WATCH is. */
+Status D3d12Device::lend_pages(uint64_t bytes, HeapRecord &heap)
+{
+    AV_SCOPE("D3d12Device::lend_pages");
+    const uint64_t pages = (bytes + page_bytes - 1u) & ~(page_bytes - 1u);
+    void *const    own = VirtualAlloc(nullptr, static_cast<SIZE_T>(pages), MEM_RESERVE | MEM_COMMIT | MEM_WRITE_WATCH,
+                                      PAGE_READWRITE);
+    if (own == nullptr) return Status::no_memory;
+    const Status lent =
+        session_.adopt_memory(own, pages, HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u), heap.memory);
+    if (lent != Status::ok) {
+        static_cast<void>(VirtualFree(own, 0u, MEM_RELEASE));
+        log_.write("avumd: the device took no write-back heap's pages; its memory is the host's");
+        return lent;
+    }
+    heap.own_pages = own;
+    return Status::ok;
 }
 
 HRESULT D3d12Device::make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, const D3D12DDI_CLEAR_VALUES *clear,
@@ -349,6 +382,89 @@ HRESULT D3d12Device::place_resource(D3D12DDI_HHEAP heap_handle, const D3D12DDIAR
     return make_resource(*args, clear, *in, offset, *static_cast<ResourceRecord *>(handle.pDrvPrivate));
 }
 
+D3D12DDI_HEAP_AND_RESOURCE_SIZES D3d12Device::calc_private_opened_heap_and_resource_sizes(
+    const D3D12DDIARG_OPENHEAP_0003 *, D3D12DDI_HPROTECTEDRESOURCESESSION_0030)
+{
+    AV_SCOPE("D3d12Device::calc_private_opened_heap_and_resource_sizes");
+    return D3D12DDI_HEAP_AND_RESOURCE_SIZES{sizeof(HeapRecord), sizeof(ResourceRecord)};
+}
+
+/* D3D12Core opens an existing heap as it opens a shared one: an allocation it
+ * made itself - D3DKMT_STANDARDALLOCATIONTYPE_EXISTINGHEAP over the
+ * application's pages, which the kernel describes as a one-row GDI surface
+ * (StandardAllocation) - with the buffer spanning it. A heap shared from
+ * elsewhere is still not opened. */
+HRESULT D3d12Device::open_heap_and_resource(const D3D12DDIARG_OPENHEAP_0003 *args, D3D12DDI_HHEAP heap_handle,
+                                            D3D12DDI_HRTRESOURCE, D3D12DDI_HPROTECTEDRESOURCESESSION_0030,
+                                            D3D12DDI_HRESOURCE handle)
+{
+    AV_SCOPE("D3d12Device::open_heap_and_resource");
+    if (args == nullptr || heap_handle.pDrvPrivate == nullptr || handle.pDrvPrivate == nullptr ||
+        args->NumAllocations != 1u || args->pOpenAllocationInfo == nullptr)
+        return E_INVALIDARG;
+    return open_existing(*args, *static_cast<HeapRecord *>(heap_handle.pDrvPrivate),
+                         *static_cast<ResourceRecord *>(handle.pDrvPrivate));
+}
+
+void *D3d12Device::existing_pages(D3DKMT_HANDLE allocation)
+{
+    AV_SCOPE("D3d12Device::existing_pages");
+    if (kernel_ == nullptr || kernel_->pfnLockCb == nullptr) return nullptr;
+    D3DDDICB_LOCK lock = {};
+    lock.hAllocation = allocation;
+    if (FAILED(kernel_->pfnLockCb(runtime_.handle, &lock))) return nullptr;
+    /* The pages stay the application's whether locked or not: the lock only
+     * says where they are. */
+    D3DDDICB_UNLOCK unlock = {};
+    unlock.NumAllocations = 1u;
+    unlock.phAllocations = &allocation;
+    if (kernel_->pfnUnlockCb != nullptr) static_cast<void>(kernel_->pfnUnlockCb(runtime_.handle, &unlock));
+    return lock.pData;
+}
+
+HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRecord &heap, ResourceRecord &resource)
+{
+    AV_SCOPE("D3d12Device::open_existing");
+    const D3DDDI_OPENALLOCATIONINFO &opened = args.pOpenAllocationInfo[0];
+    AllocationDescriptor             described;
+    if (opened.pPrivateDriverData == nullptr ||
+        described.decode(static_cast<const uint8_t *>(opened.pPrivateDriverData), opened.PrivateDriverDataSize) !=
+            Status::ok ||
+        described.kind() != AllocationKind::gdi || !described.cpu_visible() || described.layout().height() != 1u) {
+        unsupported("pfnOpenHeapAndResource of a shared heap");
+        return E_NOTIMPL;
+    }
+    void *const pages = existing_pages(opened.hAllocation);
+    if (pages == nullptr) return E_INVALIDARG;
+    heap = HeapRecord{};
+    stamp(heap.header, HeapRecord::tag, next_id());
+    heap.type = heap_readback;
+    heap.size = described.size();
+    heap.address = addresses_.reserve(heap.size);
+    if (heap.address == 0u) return E_OUTOFMEMORY;
+    const HostMemoryRequest readback(HostMemoryRequest::Kind::readback, 0u);
+    if (session_.adopt_memory(pages, heap.size, readback, heap.memory) != Status::ok) {
+        log_.write("avumd: the device took no existing heap's pages");
+        return E_OUTOFMEMORY;
+    }
+    if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.id, properties_of(heap.type), 0u, heap.size,
+                                                 buffer_alignment, heap.memory->handle()),
+              "CreateHeap12"))
+        return E_OUTOFMEMORY;
+    heap.made = 1u;
+    D3D12DDIARG_CREATERESOURCE_0109 spanning = {};
+    spanning.ResourceType = D3D12DDI_RT_BUFFER;
+    spanning.Width = heap.size;
+    spanning.Height = 1u;
+    spanning.DepthOrArraySize = 1u;
+    spanning.MipLevels = 1u;
+    spanning.Format = DXGI_FORMAT_UNKNOWN;
+    spanning.SampleDesc.Count = 1u;
+    spanning.Layout = D3D12DDI_TL_ROW_MAJOR;
+    spanning.Flags = D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE;
+    return make_resource(spanning, nullptr, heap, 0u, resource);
+}
+
 VOID D3d12Device::destroy_heap_and_resource(D3D12DDI_HHEAP heap_handle, D3D12DDI_HRESOURCE handle)
 {
     AV_SCOPE("D3d12Device::destroy_heap_and_resource");
@@ -363,6 +479,7 @@ VOID D3d12Device::destroy_heap_and_resource(D3D12DDI_HHEAP heap_handle, D3D12DDI
     if (!heap.header.stamp.holds(HeapRecord::tag)) return;
     if (heap.made != 0u) static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), heap.header.stamp.id()), "Destroy12"));
     if (heap.memory != nullptr) session_.close_memory(*heap.memory);
+    if (heap.own_pages != nullptr) static_cast<void>(VirtualFree(heap.own_pages, 0u, MEM_RELEASE));
     heap = HeapRecord{};
 }
 

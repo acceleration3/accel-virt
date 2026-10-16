@@ -21,7 +21,7 @@ public:
     static constexpr std::uint32_t library_bytes = 8u;
 
     enum class Call : unsigned { create_device, adapter_luid, pipeline_library, create_queue, create_render_target,
-                                 clear_and_copy, wait, read_back, release, count };
+                                 clear_and_copy, wait, read_back, existing_heap, write_watch, release, count };
 
     ScriptedD3d12();
     ScriptedD3d12(const ScriptedD3d12 &) = delete;
@@ -34,6 +34,11 @@ public:
      * its own. */
     void          miscolour(unsigned channel);
     std::uint32_t calls(Call call) const;
+    /* The existing heap's Map answers the driver's own memory, not the
+     * probe's; its copy loses one byte; GetWriteWatch answers `pages`. */
+    void          map_elsewhere();
+    void          drop_a_byte();
+    void          watch(std::uint32_t pages);
     bool          live() const;
     std::uint32_t width() const;
 
@@ -45,6 +50,9 @@ public:
     std::int32_t clear_and_copy(const std::uint8_t *colour) override;
     std::int32_t wait() override;
     std::int32_t read_back(std::uint8_t *pixels, std::uint32_t bytes) override;
+    std::int32_t existing_heap(const std::uint8_t *pattern, std::uint8_t *copied, std::uint32_t bytes,
+                               std::uint32_t &aliased) override;
+    std::int32_t write_watch(std::uint32_t &pages) override;
     void         release() override;
 
 private:
@@ -62,6 +70,9 @@ private:
     bool          copied_;
     bool          waited_;
     unsigned      miscoloured_;
+    bool          elsewhere_ = false;
+    bool          dropped_ = false;
+    std::uint32_t watched_ = 2u;
 };
 
 }  // namespace av

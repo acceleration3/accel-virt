@@ -244,6 +244,130 @@ int32_t WindowsD3d12Entry::read_back(uint8_t *pixels, uint32_t bytes)
     return asked;
 }
 
+int32_t WindowsD3d12Entry::place_buffer(ID3D12Heap *heap, uint64_t offset, uint32_t bytes, ID3D12Resource *&buffer)
+{
+    AV_SCOPE("WindowsD3d12Entry::place_buffer");
+    D3D12_RESOURCE_DESC described = {};
+    described.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    described.Width = bytes;
+    described.Height = 1u;
+    described.DepthOrArraySize = 1u;
+    described.MipLevels = 1u;
+    described.Format = DXGI_FORMAT_UNKNOWN;
+    described.SampleDesc.Count = 1u;
+    described.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    return device_->CreatePlacedResource(heap, offset, &described, D3D12_RESOURCE_STATE_COMMON, nullptr,
+                                         __uuidof(ID3D12Resource), reinterpret_cast<void **>(&buffer));
+}
+
+int32_t WindowsD3d12Entry::copy_and_wait(ID3D12Resource *from, ID3D12Resource *into, uint32_t bytes)
+{
+    AV_SCOPE("WindowsD3d12Entry::copy_and_wait");
+    HRESULT asked = allocator_->Reset();
+    if (asked < 0) return asked;
+    asked = commands_->Reset(allocator_, nullptr);
+    if (asked < 0) return asked;
+    commands_->CopyBufferRegion(into, 0u, from, 0u, bytes);
+    asked = commands_->Close();
+    if (asked < 0) return asked;
+    ID3D12CommandList *const list = commands_;
+    queue_->ExecuteCommandLists(1u, &list);
+    signalled_++;
+    asked = queue_->Signal(fence_, signalled_);
+    if (asked < 0) return asked;
+    return wait();
+}
+
+int32_t WindowsD3d12Entry::copy_within(ID3D12Heap *heap, uint8_t *memory, uint32_t bytes, uint32_t &aliased)
+{
+    AV_SCOPE("WindowsD3d12Entry::copy_within");
+    ID3D12Resource *source = nullptr;
+    ID3D12Resource *destination = nullptr;
+    HRESULT         asked = place_buffer(heap, 0u, bytes, source);
+    if (asked >= 0) asked = place_buffer(heap, bytes, bytes, destination);
+    void *mapped = nullptr;
+    if (asked >= 0) asked = source->Map(0u, nullptr, &mapped);
+    if (asked >= 0) {
+        aliased = mapped == memory ? 1u : 0u;
+        source->Unmap(0u, nullptr);
+        asked = copy_and_wait(source, destination, bytes);
+    }
+    if (destination != nullptr) destination->Release();
+    if (source != nullptr) source->Release();
+    return asked;
+}
+
+int32_t WindowsD3d12Entry::existing_heap(const uint8_t *pattern, uint8_t *copied, uint32_t bytes, uint32_t &aliased)
+{
+    AV_SCOPE("WindowsD3d12Entry::existing_heap");
+    aliased = 0u;
+    D3D12_FEATURE_DATA_EXISTING_HEAPS existing = {};
+    HRESULT asked = device_->CheckFeatureSupport(D3D12_FEATURE_EXISTING_HEAPS, &existing, sizeof existing);
+    if (asked < 0) return asked;
+    if (!existing.Supported) return static_cast<int32_t>(DXGI_ERROR_UNSUPPORTED);
+    auto *const memory = static_cast<uint8_t *>(
+        VirtualAlloc(nullptr, SIZE_T{2u} * bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+    if (memory == nullptr) return static_cast<int32_t>(E_OUTOFMEMORY);
+    for (uint32_t index = 0u; index < bytes; index++) memory[index] = pattern[index];
+    ID3D12Device3 *device = nullptr;
+    ID3D12Heap    *heap = nullptr;
+    asked = device_->QueryInterface(__uuidof(ID3D12Device3), reinterpret_cast<void **>(&device));
+    if (asked >= 0)
+        asked = device->OpenExistingHeapFromAddress(memory, __uuidof(ID3D12Heap), reinterpret_cast<void **>(&heap));
+    if (asked >= 0) asked = copy_within(heap, memory, bytes, aliased);
+    if (heap != nullptr) heap->Release();
+    if (device != nullptr) device->Release();
+    /* Read once the heap is gone: the application's pages keep what the GPU
+     * wrote into them after the driver let go. */
+    for (uint32_t index = 0u; index < bytes; index++) copied[index] = memory[bytes + index];
+    static_cast<void>(VirtualFree(memory, 0u, MEM_RELEASE));
+    return asked;
+}
+
+int32_t WindowsD3d12Entry::write_watch(uint32_t &pages)
+{
+    AV_SCOPE("WindowsD3d12Entry::write_watch");
+    pages = 0u;
+    constexpr uint32_t buffer_pages = 16u;
+    /* GetWriteWatch refused the mapping: memory no write watch covers. */
+    constexpr uint32_t unwatched = 0xFFFFFFFFu;
+    constexpr uint32_t page = 4096u;
+    D3D12_HEAP_PROPERTIES heap = {};
+    heap.Type = D3D12_HEAP_TYPE_CUSTOM;
+    heap.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
+    heap.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
+    D3D12_RESOURCE_DESC described = {};
+    described.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    described.Width = buffer_pages * page;
+    described.Height = 1u;
+    described.DepthOrArraySize = 1u;
+    described.MipLevels = 1u;
+    described.Format = DXGI_FORMAT_UNKNOWN;
+    described.SampleDesc.Count = 1u;
+    described.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    ID3D12Resource *buffer = nullptr;
+    HRESULT asked = device_->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_ALLOW_WRITE_WATCH, &described,
+                                                     D3D12_RESOURCE_STATE_COMMON, nullptr,
+                                                     __uuidof(ID3D12Resource), reinterpret_cast<void **>(&buffer));
+    if (asked < 0) return asked;
+    void *mapped = nullptr;
+    asked = buffer->Map(0u, nullptr, &mapped);
+    if (asked >= 0) {
+        auto *const bytes = static_cast<uint8_t *>(mapped);
+        static_cast<void>(ResetWriteWatch(mapped, buffer_pages * page));
+        bytes[page] = 1u;
+        bytes[5u * page + 17u] = 2u;
+        void     *written[buffer_pages] = {};
+        ULONG_PTR count = buffer_pages;
+        ULONG     granularity = 0u;
+        const UINT watched = GetWriteWatch(0u, mapped, buffer_pages * page, written, &count, &granularity);
+        pages = watched == 0u ? static_cast<uint32_t>(count) : unwatched;
+        buffer->Unmap(0u, nullptr);
+    }
+    buffer->Release();
+    return asked;
+}
+
 void WindowsD3d12Entry::release()
 {
     AV_SCOPE("WindowsD3d12Entry::release");

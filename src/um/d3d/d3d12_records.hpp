@@ -43,6 +43,10 @@ struct HeapRecord {
     uint64_t        size;
     uint64_t        address;
     HostAllocation *memory;
+    /* The pages a write-back heap's memory is, which this driver allocated
+     * write-watched and lent the device (D3d12Device::lend_pages); null for
+     * every other heap, an existing heap's pages included. */
+    void           *own_pages;
     uint32_t     type; /* D3D12_HEAP_TYPE */
     uint32_t     flags;
     /* Whether the host has a heap of this id: a committed resource in the

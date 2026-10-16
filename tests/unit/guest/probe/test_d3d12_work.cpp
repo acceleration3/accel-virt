@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 
 namespace av {
 
@@ -93,7 +94,12 @@ TEST(d3d12_work, every_step_passes_and_the_target_is_the_colour_the_list_cleared
   CHECK(std::strstr(report, "ok d3d12.fence") != nullptr);
   CHECK(std::strstr(report, "ok d3d12.readback") != nullptr);
   CHECK(std::strstr(report, "ok d3d12.pixels 4096") != nullptr);
-  CHECK(std::strstr(report, "avd3d12probe: 10 passed, 0 failed") != nullptr);
+  CHECK(std::strstr(report, "ok d3d12.existing_heap") != nullptr);
+  CHECK(std::strstr(report, "ok d3d12.existing_alias 1") != nullptr);
+  CHECK(std::strstr(report, "ok d3d12.existing_copy 65536") != nullptr);
+  CHECK(std::strstr(report, "ok d3d12.write_watch") != nullptr);
+  CHECK(std::strstr(report, "ok d3d12.write_watch_pages 2") != nullptr);
+  CHECK(std::strstr(report, "avd3d12probe: 15 passed, 0 failed") != nullptr);
   /* The library before the queue, as the engine that needed it asks. */
   CHECK(std::strstr(report, "ok d3d12.pipeline_library") < std::strstr(report, "ok d3d12.queue"));
   CHECK_EQ(rig.serialized_library(), ScriptedD3d12::library_bytes);
@@ -111,11 +117,53 @@ TEST(d3d12_work, a_target_of_the_wrong_colour_fails_with_the_count)
       const char *report = rig.run();
       CHECK(std::strstr(report, "FAIL d3d12.pixels") != nullptr);
       CHECK(std::strstr(report, " 4095\n") != nullptr);
-      CHECK(std::strstr(report, "avd3d12probe: 9 passed, 1 failed") != nullptr);
+      CHECK(std::strstr(report, "avd3d12probe: 14 passed, 1 failed") != nullptr);
   }
   D3d12Rig alpha;
   alpha.d3d12().miscolour(3u);
   CHECK(std::strstr(alpha.run(), "ok d3d12.pixels 4096") != nullptr); }
+
+/* The application's memory: a Map that is not the probe's own pointer, a
+ * copy that lost a byte and a write watch that saw other than the two pages
+ * written are each the failure, with what was measured. */
+TEST(d3d12_work, application_memory_that_is_not_the_applications_fails_each_step)
+{ { D3d12Rig rig;
+    rig.d3d12().map_elsewhere();
+    const char *report = rig.run();
+    CHECK(std::strstr(report, "FAIL d3d12.existing_alias") != nullptr);
+    CHECK(std::strstr(report, "ok d3d12.existing_copy 65536") != nullptr);
+    CHECK(std::strstr(report, "avd3d12probe: 14 passed, 1 failed") != nullptr); }
+  { D3d12Rig rig;
+    rig.d3d12().drop_a_byte();
+    const char *report = rig.run();
+    CHECK(std::strstr(report, "FAIL d3d12.existing_copy") != nullptr);
+    CHECK(std::strstr(report, " 65535\n") != nullptr); }
+  for (const std::uint32_t pages : {0u, 1u, 3u, 0xFFFFFFFFu}) {
+      D3d12Rig rig;
+      rig.d3d12().watch(pages);
+      const char *report = rig.run();
+      CHECK(std::strstr(report, "FAIL d3d12.write_watch_pages") != nullptr);
+      CHECK(std::strstr(report, "avd3d12probe: 14 passed, 1 failed") != nullptr);
+  } }
+
+/* A refused existing heap judges nothing of it, and the write watch still
+ * runs; a refused write-watched buffer measures no pages. */
+TEST(d3d12_work, a_refused_existing_heap_or_write_watch_is_the_one_failure)
+{ constexpr std::int32_t unsupported = static_cast<std::int32_t>(0x887A0004);
+  { D3d12Rig rig;
+    rig.d3d12().fail(Call::existing_heap, 1u, unsupported);
+    const char *report = rig.run();
+    CHECK(std::strstr(report, "FAIL d3d12.existing_heap") != nullptr);
+    CHECK(std::strstr(report, "existing_alias") == nullptr);
+    CHECK(std::strstr(report, "existing_copy") == nullptr);
+    CHECK(std::strstr(report, "ok d3d12.write_watch_pages 2") != nullptr);
+    CHECK(std::strstr(report, "avd3d12probe: 12 passed, 1 failed") != nullptr); }
+  D3d12Rig rig;
+  rig.d3d12().fail(Call::write_watch, 1u, unsupported);
+  const char *report = rig.run();
+  CHECK(std::strstr(report, "FAIL d3d12.write_watch") != nullptr);
+  CHECK(std::strstr(report, "write_watch_pages") == nullptr);
+  CHECK(std::strstr(report, "avd3d12probe: 13 passed, 1 failed") != nullptr); }
 
 /* Every call refused, one at a time. */
 TEST(d3d12_work, a_refusal_at_each_call_stops_the_run_there)

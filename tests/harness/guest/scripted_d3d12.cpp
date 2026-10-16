@@ -134,6 +134,42 @@ std::int32_t ScriptedD3d12::read_back(std::uint8_t *pixels, std::uint32_t bytes)
     return 0;
 }
 
+void ScriptedD3d12::map_elsewhere()
+{
+    elsewhere_ = true;
+}
+
+void ScriptedD3d12::drop_a_byte()
+{
+    dropped_ = true;
+}
+
+void ScriptedD3d12::watch(std::uint32_t pages)
+{
+    watched_ = pages;
+}
+
+std::int32_t ScriptedD3d12::existing_heap(const std::uint8_t *pattern, std::uint8_t *copied, std::uint32_t bytes,
+                                          std::uint32_t &aliased)
+{
+    const std::int32_t refused = refusal(Call::existing_heap);
+    if (refused != 0) return refused;
+    CHECK(queue_);
+    for (std::uint32_t index = 0u; index < bytes; index++) copied[index] = pattern[index];
+    if (dropped_) copied[bytes / 2u] = static_cast<std::uint8_t>(copied[bytes / 2u] + 1u);
+    aliased = elsewhere_ ? 0u : 1u;
+    return 0;
+}
+
+std::int32_t ScriptedD3d12::write_watch(std::uint32_t &pages)
+{
+    const std::int32_t refused = refusal(Call::write_watch);
+    if (refused != 0) return refused;
+    CHECK(live_);
+    pages = watched_;
+    return 0;
+}
+
 void ScriptedD3d12::release()
 {
     calls_[static_cast<unsigned>(Call::release)]++;

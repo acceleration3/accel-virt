@@ -8,6 +8,8 @@
 #ifndef AV_D3D12_WORK_HPP
 #define AV_D3D12_WORK_HPP
 
+#include "guest/probe/app_pointer_check.hpp"
+
 #include <stdint.h>
 
 namespace av {
@@ -24,6 +26,8 @@ public:
     static constexpr uint32_t pixel_bytes = 4u;
     /* The same colour the other probes clear to, red first. */
     static constexpr uint8_t colour[4] = {64u, 128u, 191u, 255u};
+    /* The pages GFXReconstruct's write-watched buffer has written. */
+    static constexpr uint32_t watched_pages = 2u;
 
     /* `images` keeps the frame as d3d12-clear. */
     D3d12Work(D3d12Entry &d3d12, ImageSink &images);
@@ -41,6 +45,8 @@ public:
 
 private:
     uint32_t coloured() const;
+    /* The application-memory steps, after the frame. */
+    void     run_application_memory(ScenarioSteps &steps);
 
     D3d12Entry &d3d12_;
     ImageSink  &images_;
@@ -50,6 +56,7 @@ private:
     bool        made_;
     bool        read_;
     uint8_t     frame_[pixels * pixel_bytes];
+    AppPointerCheck existing_;
 
     friend struct D3d12WorkProbe;
 };

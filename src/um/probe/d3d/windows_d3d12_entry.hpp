@@ -27,9 +27,18 @@ public:
     int32_t clear_and_copy(const uint8_t *colour) override;
     int32_t wait() override;
     int32_t read_back(uint8_t *pixels, uint32_t bytes) override;
+    int32_t existing_heap(const uint8_t *pattern, uint8_t *copied, uint32_t bytes, uint32_t &aliased) override;
+    int32_t write_watch(uint32_t &pages) override;
     void    release() override;
 
 private:
+    /* A buffer of `bytes` at `offset` of `heap`, in the common state. */
+    int32_t place_buffer(ID3D12Heap *heap, uint64_t offset, uint32_t bytes, ID3D12Resource *&buffer);
+    /* `from` copied into `into` on the queue, and the fence waited for. */
+    int32_t copy_and_wait(ID3D12Resource *from, ID3D12Resource *into, uint32_t bytes);
+    /* The two buffers over the heap, and the copy between them. */
+    int32_t copy_within(ID3D12Heap *heap, uint8_t *memory, uint32_t bytes, uint32_t &aliased);
+
     IDXGIFactory4             *factory_;
     IDXGIAdapter1             *adapter_;
     ID3D12Device              *device_;

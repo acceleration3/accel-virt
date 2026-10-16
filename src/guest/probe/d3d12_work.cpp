@@ -17,7 +17,7 @@ constexpr uint8_t tolerance = 1u;
 
 D3d12Work::D3d12Work(D3d12Entry &d3d12, ImageSink &images)
     : d3d12_(d3d12), images_(images), adapter_(0u), feature_level_(0u), serialized_library_(0u), made_(false),
-      read_(false), frame_{}
+      read_(false), frame_{}, existing_()
 {
     AV_SCOPE("D3d12Work::D3d12Work");
 }
@@ -45,6 +45,20 @@ void D3d12Work::run(ScenarioSteps &steps)
     images_.save("d3d12-clear", BmpImage(frame_, extent, extent, BmpImage::Rows::top_first));
     const uint32_t right = coloured();
     steps.check_measured("pixels", right == pixels ? Status::ok : Status::invalid_state, right);
+    run_application_memory(steps);
+}
+
+void D3d12Work::run_application_memory(ScenarioSteps &steps)
+{
+    AV_SCOPE("D3d12Work::run_application_memory");
+    static const char *const names[3] = {"existing_heap", "existing_alias", "existing_copy"};
+    uint32_t                 aliased = 0u;
+    const int32_t            made =
+        d3d12_.existing_heap(existing_.pattern(), existing_.copied(), AppPointerCheck::bytes, aliased);
+    existing_.judge(steps, names, made, aliased);
+    uint32_t pages = 0u;
+    if (steps.check_result("write_watch", d3d12_.write_watch(pages)) != Status::ok) return;
+    steps.check_measured("write_watch_pages", pages == watched_pages ? Status::ok : Status::invalid_state, pages);
 }
 
 uint64_t D3d12Work::adapter() const
@@ -85,7 +99,7 @@ bool D3d12Work::invariants_hold() const
 {
     AV_SCOPE("D3d12Work::invariants_hold");
     if (!made_ && (read_ || adapter_ != 0u || feature_level_ != 0u || serialized_library_ != 0u)) return false;
-    return coloured() <= pixels;
+    return coloured() <= pixels && existing_.invariants_hold();
 }
 
 }  // namespace av
