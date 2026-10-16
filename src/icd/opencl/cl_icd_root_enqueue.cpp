@@ -5,6 +5,7 @@
 #include "icd/opencl/cl_icd_root.hpp"
 
 #include "core/platform/thread_lock.hpp"
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/sliced_wait.hpp"
 #include "icd/opencl/cl_image_region.hpp"
@@ -247,10 +248,11 @@ cl_mem ClIcdRoot::create_sub_buffer(cl_mem buffer, cl_mem_flags flags, cl_buffer
     void *const     wrapped = wrap(*wire, ClObject::Kind::mem, made, held->context(), context, error);
     if (wrapped == nullptr) return nullptr;
     ClObject *const sub = static_cast<ClObject *>(wrapped);
-    lock_.acquire();
-    held->retain();
-    sub->slice_of(*held);
-    lock_.release();
+    {
+        const ThreadLockHold locked(lock_);
+        held->retain();
+        sub->slice_of(*held);
+    }
     /* The host accepted the region, so it lies inside the buffer. */
     if (held->backed()) sub->back_with(held->backing_offset() + region.origin, region.size);
     if (held->application_memory() != nullptr) sub->use_application_memory(held->application_memory() + region.origin);

@@ -5,7 +5,6 @@
 #include "icd/opencl/cl_icd_root.hpp"
 
 #include "core/log/log_sink.hpp"
-#include "core/platform/thread_lock.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
@@ -291,9 +290,7 @@ cl_int ClIcdRoot::program_info(cl_program program, cl_program_info name, size_t 
     const ClInfoRequest asked(value_bytes, value, size_ret);
     switch (name) {
     case CL_PROGRAM_REFERENCE_COUNT: {
-        lock_.acquire();
-        const cl_uint count = held->references();
-        lock_.release();
+        const cl_uint count = reference_count(*held);
         return asked.give(&count, sizeof count);
     }
     case CL_PROGRAM_CONTEXT: {
@@ -434,9 +431,7 @@ cl_int ClIcdRoot::kernel_info(cl_kernel kernel, cl_kernel_info name, size_t valu
     const ClInfoRequest asked(value_bytes, value, size_ret);
     switch (name) {
     case CL_KERNEL_REFERENCE_COUNT: {
-        lock_.acquire();
-        const cl_uint count = held->references();
-        lock_.release();
+        const cl_uint count = reference_count(*held);
         return asked.give(&count, sizeof count);
     }
     case CL_KERNEL_CONTEXT: {

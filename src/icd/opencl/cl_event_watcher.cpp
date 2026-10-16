@@ -1,6 +1,7 @@
 #include "icd/opencl/cl_event_watcher.hpp"
 
 #include "core/platform/thread_lock.hpp"
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "core/log/log_sink.hpp"
@@ -32,18 +33,15 @@ cl_int ClEventWatcher::watch(ClObject *event, uint64_t wire, ClientTransport *wi
     AV_SCOPE("ClEventWatcher::watch");
     ClWatchedEvent registration;
     if (!registration.take(event, wire, wire_of_context, status_wanted, notify, user_data)) return CL_INVALID_VALUE;
-    lock_.acquire();
     uint32_t slot = 0u;
-    while (slot < rows_.size() && rows_.at(slot).registration_.held()) ++slot;
-    const Row row{registration, driven, false};
-    if (slot < rows_.size()) {
-        rows_.at(slot) = row;
-    } else if (rows_.append(row) != Status::ok) {
-        lock_.release();
-        return CL_OUT_OF_HOST_MEMORY;
+    {
+        const ThreadLockHold locked(lock_);
+        while (slot < rows_.size() && rows_.at(slot).registration_.held()) ++slot;
+        const Row row{registration, driven, false};
+        if (slot < rows_.size()) rows_.at(slot) = row;
+        else if (rows_.append(row) != Status::ok) return CL_OUT_OF_HOST_MEMORY;
+        ++held_;
     }
-    ++held_;
-    lock_.release();
     /* The thread starts with the first registration, so a process that never
      * asks for a callback never starts one; from then on it rests while
      * nothing is registered, and this ends the rest. Started already is the
@@ -53,10 +51,11 @@ cl_int ClEventWatcher::watch(ClObject *event, uint64_t wire, ClientTransport *wi
     if (started == Status::invalid_state) {
         thread_.wake();
     } else if (started != Status::ok) {
-        lock_.acquire();
-        rows_.at(slot).registration_.give_up();
-        --held_;
-        lock_.release();
+        {
+            const ThreadLockHold locked(lock_);
+            rows_.at(slot).registration_.give_up();
+            --held_;
+        }
         log_.write("avcl: no thread to watch events on");
         return CL_OUT_OF_RESOURCES;
     }
@@ -113,25 +112,30 @@ bool ClEventWatcher::turn()
      * that ended when the last callback ran was one the next registration
      * found still "running" and never started again, and no callback after
      * the first batch ever came (Affinity waits on one to make a document). */
-    lock_.acquire();
-    const uint32_t held = held_;
-    lock_.release();
-    if (held == 0u) {
+    bool     driven = false;
+    uint32_t rows = 0u;
+    {
+        const ThreadLockHold locked(lock_);
+        if (held_ != 0u) {
+            driven = mark_oldest();
+            rows = rows_.size();
+        }
+    }
+    /* Left at 0 while nothing is registered: every held registration is a row. */
+    if (rows == 0u) {
         thread_.rest();
         return true;
     }
-    lock_.acquire();
-    const bool     driven = mark_oldest();
-    const uint32_t rows = rows_.size();
-    lock_.release();
     uint32_t asks = 0u;
     bool     ran = false;
     uint32_t step = 0u;
     for (; step < rows && asks < asks_per_turn; ++step) {
         const uint32_t slot = (next_ + step) % rows;
-        lock_.acquire();
-        const Row asked = rows_.at(slot);
-        lock_.release();
+        Row asked{};
+        {
+            const ThreadLockHold locked(lock_);
+            asked = rows_.at(slot);
+        }
         if (!asked.oldest_ || !asked.registration_.held()) continue;
         cl_int status = CL_QUEUED;
         if (!completed(asked.registration_, status)) {
@@ -184,15 +188,17 @@ bool ClEventWatcher::deliver(uint32_t slot, const ClWatchedEvent &asked, cl_int 
      * one asked about, since a context released meanwhile forgets it: a
      * callback that releases its own event, or the context it belongs to, is
      * releasing something this is no longer holding. */
-    lock_.acquire();
-    ClWatchedEvent &row = rows_.at(slot).registration_;
-    const bool      still = row.held() && row.event() == asked.event() && row.wire() == asked.wire();
-    if (still) {
-        row.give_up();
-        --held_;
-        ++delivered_;
+    bool still = false;
+    {
+        const ThreadLockHold locked(lock_);
+        ClWatchedEvent      &row = rows_.at(slot).registration_;
+        still = row.held() && row.event() == asked.event() && row.wire() == asked.wire();
+        if (still) {
+            row.give_up();
+            --held_;
+            ++delivered_;
+        }
     }
-    lock_.release();
     if (!still) return false;
     /* Whatever the event owes the application arrives before the callback
      * does: a callback on a non-blocking read that could not see the bytes

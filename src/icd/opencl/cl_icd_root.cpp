@@ -21,6 +21,7 @@
 #include "icd/common/sliced_wait.hpp"
 
 #include "core/platform/thread_lock.hpp"
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
@@ -148,9 +149,8 @@ cl_int ClIcdRoot::platform_info(cl_platform_id platform, cl_platform_info name, 
      * handles alone - no device is opened for it, which every process asking
      * would then pay. */
     if (name == CL_PLATFORM_NAME) {
-        lock_.acquire();
+        const ThreadLockHold locked(lock_);
         learn_devices();
-        lock_.release();
     }
     return platform_.info(platform, name, value_bytes, value, size_ret);
 }
@@ -307,15 +307,17 @@ cl_int ClIcdRoot::device_ids(cl_platform_id platform, cl_device_type type, cl_ui
     /* Every device whose adapter opens, in their order: the count is what
      * there is, and the list as many of them as fit. */
     cl_uint found = 0u;
-    lock_.acquire();
-    learn_devices();
-    for (uint32_t index = 0u; index < devices_.count(); ++index) {
-        ClDevice &device = devices_.at(index);
-        if (open_device(device) != Status::ok) continue;
-        if (devices != nullptr && found < num_entries) devices[found] = reinterpret_cast<cl_device_id>(device.object());
-        ++found;
+    {
+        const ThreadLockHold locked(lock_);
+        learn_devices();
+        for (uint32_t index = 0u; index < devices_.count(); ++index) {
+            ClDevice &device = devices_.at(index);
+            if (open_device(device) != Status::ok) continue;
+            if (devices != nullptr && found < num_entries)
+                devices[found] = reinterpret_cast<cl_device_id>(device.object());
+            ++found;
+        }
     }
-    lock_.release();
     if (num_devices != nullptr) *num_devices = found;
     return found != 0u ? CL_SUCCESS : CL_DEVICE_NOT_FOUND;
 }
@@ -492,6 +494,13 @@ cl_int ClIcdRoot::refusal_for(ClObject::Kind kind) const
     return wrong_kind(kind);
 }
 
+cl_uint ClIcdRoot::reference_count(const ClObject &held)
+{
+    AV_SCOPE("ClIcdRoot::reference_count");
+    const ThreadLockHold locked(lock_);
+    return held.references();
+}
+
 void ClIcdRoot::give_back_to_host(ClientTransport &wire, ClObject::Kind kind, uint64_t handle)
 {
     AV_SCOPE("ClIcdRoot::give_back_to_host");
@@ -631,7 +640,7 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
         report_error(error, d3d11_shared);
         return nullptr;
     }
-    lock_.acquire();
+    const ThreadLockHold locked(lock_);
     GuestClContext *context = nullptr;
     Status          made =
         contexts_.create(context, device->connection(), memory_, send_lock_, blocks_lock_, log_, lines_, shared_handles_);
@@ -640,7 +649,6 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
     if (made == Status::ok) context->notify_with(notify);
     if (made != Status::ok) {
         if (context != nullptr) static_cast<void>(contexts_.destroy(context));
-        lock_.release();
         /* A context the device would not put in that GL context's share group
          * is the extension's refusal, not a missing device. */
         report_error(error, made == Status::no_memory ? CL_OUT_OF_HOST_MEMORY
@@ -664,7 +672,6 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
     }
     if (host_context == 0u) {
         static_cast<void>(contexts_.destroy(context));
-        lock_.release();
         report_error(error, host_error != CL_SUCCESS ? host_error : CL_DEVICE_NOT_AVAILABLE);
         return nullptr;
     }
@@ -675,7 +682,6 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
         context->d3d11().share_with(d3d11_device);
         d3d11_.hold(d3d11_device);
     }
-    lock_.release();
     return static_cast<cl_context>(wrapped);
 }
 
@@ -694,31 +700,45 @@ cl_int ClIcdRoot::release_context(cl_context context)
 cl_int ClIcdRoot::retain(void *object, ClObject::Kind kind)
 {
     AV_SCOPE("ClIcdRoot::retain");
-    lock_.acquire();
-    ClObject *const held = judged(object, kind);
-    if (held != nullptr) held->retain();
-    lock_.release();
-    return held != nullptr ? CL_SUCCESS : refusal_for(kind);
+    const ThreadLockHold locked(lock_);
+    ClObject *const      held = judged(object, kind);
+    if (held == nullptr) return refusal_for(kind);
+    held->retain();
+    return CL_SUCCESS;
 }
 
 cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
 {
     AV_SCOPE("ClIcdRoot::release");
-    lock_.acquire();
-    ClObject *const held = judged(object, kind);
-    if (held == nullptr) {
-        lock_.release();
-        return refusal_for(kind);
+    ClDestructorCallbacks::Due due(memory_);
+    ClObject                  *sliced_from = nullptr;
+    {
+        const ThreadLockHold locked(lock_);
+        ClObject *const      held = judged(object, kind);
+        if (held == nullptr) return refusal_for(kind);
+        sliced_from = drop_reference(object, *held, kind, due);
     }
+    if (due.lost() != 0u) refused_.failed("a destructor callback, for want of memory", CL_OUT_OF_HOST_MEMORY);
+    /* After the host let go and the context's transport went, as a driver
+     * calls them once the object's memory is gone, and with no lock held: a
+     * callback may release or make another object. */
+    due.run();
+    if (sliced_from != nullptr) static_cast<void>(release(sliced_from, ClObject::Kind::mem));
+    return CL_SUCCESS;
+}
+
+ClObject *ClIcdRoot::drop_reference(void *object, ClObject &held, ClObject::Kind kind, ClDestructorCallbacks::Due &due)
+{
+    AV_SCOPE("ClIcdRoot::drop_reference");
     /* The application's count is this ICD's. The host is told once, when the
      * last of them goes; a context takes its own transport with it, and the
      * host's objects go with that. */
-    GuestClContext *const context = held->context();
-    const uint64_t        wire_handle = held->wire();
-    const bool            last = held->references() == 1u;
+    GuestClContext *const context = held.context();
+    const uint64_t        wire_handle = held.wire();
+    const bool            last = held.references() == 1u;
     /* A sub-buffer's last reference gives back the one it held on its
      * buffer, once this one has gone and the lock is free again. */
-    ClObject *const       sliced_from = last ? held->sliced_from() : nullptr;
+    ClObject *const       sliced_from = last ? held.sliced_from() : nullptr;
     /* One over a Direct3D 11 resource lets go of the resource, which the
      * extension's reference is the cl_mem's: whether or not the device can
      * still be told, since the resource is this process's either way. */
@@ -736,7 +756,7 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
             case ClObject::Kind::command_queue: {
                 /* Work it still holds is no longer any queue's to wait for:
                  * memory let go of under it waits for the context. */
-                if (!held->known_idle()) context->orphan_work();
+                if (!held.known_idle()) context->orphan_work();
                 /* Reads queued on it will never be waited for now, and their
                  * destinations are memory the application is about to reuse.
                  * The markers the ICD made for them go back with them. */
@@ -764,8 +784,8 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
                  * its queues hold over the buffer is done: a released
                  * cl_mem lives on in the kernels queued over it, and the
                  * next buffer would be given memory they still write. */
-                if (held->sliced_from() == nullptr && (held->backed() || held->lent() != nullptr))
-                    let_go_of_memory(*context, *held);
+                if (held.sliced_from() == nullptr && (held.backed() || held.lent() != nullptr))
+                    let_go_of_memory(*context, held);
                 break;
             default:
                 give_back_to_host(*wire, kind, wire_handle);
@@ -782,7 +802,7 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
     GuestClContext *freed = nullptr;
     const void     *gone[ClDestructorCallbacks::max_gone] = {};
     uint32_t        went = 0u;
-    static_cast<void>(objects_.release(*held, freed, gone, ClDestructorCallbacks::max_gone, went));
+    static_cast<void>(objects_.release(held, freed, gone, ClDestructorCallbacks::max_gone, went));
     if (freed != nullptr) {
         /* Callbacks registered on this context's events are dropped first:
          * their transport is about to go, and asking the host over a torn
@@ -793,16 +813,8 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
          * the host held on it go now. */
         static_cast<void>(contexts_.destroy(freed));
     }
-    ClDestructorCallbacks::Due due(memory_);
     destructor_callbacks_.take(gone, went, due);
-    lock_.release();
-    if (due.lost() != 0u) refused_.failed("a destructor callback, for want of memory", CL_OUT_OF_HOST_MEMORY);
-    /* After the host let go and the context's transport went, as a driver
-     * calls them once the object's memory is gone, and with no lock held: a
-     * callback may release or make another object. */
-    due.run();
-    if (sliced_from != nullptr) static_cast<void>(release(sliced_from, ClObject::Kind::mem));
-    return CL_SUCCESS;
+    return sliced_from;
 }
 
 void ClIcdRoot::report(StateWriter &writer)
@@ -1274,10 +1286,11 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
         /* An event the application did not ask for is one the ICD keeps
          * until the read delivers: it is the row's name, and releasing it
          * now would let the host hand the number to something else. */
-        lock_.acquire();
-        const bool recorded = reads_.record(produced, held->wire(), named->wire(), offset, bytes, into,
-                                            event == nullptr);
-        lock_.release();
+        bool recorded = false;
+        {
+            const ThreadLockHold locked(lock_);
+            recorded = reads_.record(produced, held->wire(), named->wire(), offset, bytes, into, event == nullptr);
+        }
         if (recorded) {
             if (event != nullptr) {
                 *event = static_cast<cl_event>(
@@ -1822,9 +1835,7 @@ cl_int ClIcdRoot::context_info(cl_context context, cl_context_info name, size_t 
     const ClInfoRequest asked(value_bytes, value, size_ret);
     switch (name) {
     case CL_CONTEXT_REFERENCE_COUNT: {
-        lock_.acquire();
-        const cl_uint count = held->references();
-        lock_.release();
+        const cl_uint count = reference_count(*held);
         return asked.give(&count, sizeof count);
     }
     case CL_CONTEXT_NUM_DEVICES: {
@@ -1873,9 +1884,7 @@ cl_int ClIcdRoot::queue_info(cl_command_queue queue, cl_command_queue_info name,
         return asked.give(&device, sizeof device);
     }
     case CL_QUEUE_REFERENCE_COUNT: {
-        lock_.acquire();
-        const cl_uint count = held->references();
-        lock_.release();
+        const cl_uint count = reference_count(*held);
         return asked.give(&count, sizeof count);
     }
     case CL_QUEUE_DEVICE_DEFAULT: {
@@ -1909,9 +1918,7 @@ cl_int ClIcdRoot::mem_object_info(cl_mem object, cl_mem_info name, size_t value_
         return asked.give(&over, sizeof over);
     }
     case CL_MEM_REFERENCE_COUNT: {
-        lock_.acquire();
-        const cl_uint count = held->references();
-        lock_.release();
+        const cl_uint count = reference_count(*held);
         return asked.give(&count, sizeof count);
     }
     /* The host's pointer is nothing in this process: the answer is the
@@ -2020,9 +2027,10 @@ cl_int ClIcdRoot::watch_event(cl_event event, cl_int status, ClWatchedEvent::Not
     /* The application may release this event on its next line and the
      * callback still has to run and still has to be handed it, so the
      * registration gets a reference of its own. */
-    lock_.acquire();
-    held->retain();
-    lock_.release();
+    {
+        const ThreadLockHold locked(lock_);
+        held->retain();
+    }
     const cl_int registered = watcher_.watch(held, held->wire(), wire, status, notify, user_data, context->wakes());
     if (registered != CL_SUCCESS) static_cast<void>(release(held, ClObject::Kind::event));
     return registered;
@@ -2041,12 +2049,9 @@ cl_int ClIcdRoot::deliver_reads(ClientTransport &wire, ClArenaBlocks &blocks, co
          * that finds the row taken has to find the bytes there too, so it
          * waits for the fetch rather than only the claim. The lock comes
          * before the send lock, as it does for a release. */
-        lock_.acquire();
+        const ThreadLockHold locked(lock_);
         ClPendingRead *const waiting = reads_.waiting_on(events[index]);
-        if (waiting == nullptr) {
-            lock_.release();
-            continue;
-        }
+        if (waiting == nullptr) continue;
         /* The fetch the enqueue deferred. The host has reached the marker, so
          * everything queued before the read has run and this answers at once;
          * it is sent blocking because there is nothing left to wait for. */
@@ -2057,7 +2062,6 @@ cl_int ClIcdRoot::deliver_reads(ClientTransport &wire, ClArenaBlocks &blocks, co
             static_cast<void>(av::clproto::av_clReleaseEvent(wire, waiting->event()));
         waiting->give_up();
         reads_.count_delivery();
-        lock_.release();
         if (read != CL_SUCCESS && answer == CL_SUCCESS) answer = read;
     }
     return answer;
@@ -2071,13 +2075,14 @@ cl_int ClIcdRoot::deliver_queued(ClientTransport &wire, ClArenaBlocks &blocks, u
      * row up, so the table is walked again each time rather than while it
      * changes underneath. */
     for (uint32_t taken = 0u; taken < ClPendingReads::max_reads; ++taken) {
-        uint64_t             event = 0u;
-        lock_.acquire();
-        for (uint32_t slot = 0u; slot < ClPendingReads::max_reads && event == 0u; ++slot) {
-            const ClPendingRead *const row = reads_.at(slot);
-            if (row->held() && row->queue() == queue) event = row->event();
+        uint64_t event = 0u;
+        {
+            const ThreadLockHold locked(lock_);
+            for (uint32_t slot = 0u; slot < ClPendingReads::max_reads && event == 0u; ++slot) {
+                const ClPendingRead *const row = reads_.at(slot);
+                if (row->held() && row->queue() == queue) event = row->event();
+            }
         }
-        lock_.release();
         if (event == 0u) break;
         const cl_int one = deliver_reads(wire, blocks, &event, 1u);
         if (one != CL_SUCCESS && answer == CL_SUCCESS) answer = one;
@@ -2730,11 +2735,14 @@ cl_int ClIcdRoot::device_ids_for_luid(uint64_t luid, cl_device_id *devices, cl_u
     AV_SCOPE("ClIcdRoot::device_ids_for_luid");
     /* Only the asked adapter's device is opened: an application asking about
      * each of its adapters in turn opens no device it was not given. */
-    lock_.acquire();
-    learn_devices();
-    ClDevice *const device = devices_.on(luid);
-    const bool      opened = device != nullptr && open_device(*device) == Status::ok;
-    lock_.release();
+    ClDevice *device = nullptr;
+    bool      opened = false;
+    {
+        const ThreadLockHold locked(lock_);
+        learn_devices();
+        device = devices_.on(luid);
+        opened = device != nullptr && open_device(*device) == Status::ok;
+    }
     if (!opened) {
         if (num_devices != nullptr) *num_devices = 0u;
         return CL_DEVICE_NOT_FOUND;
@@ -2889,11 +2897,14 @@ cl_int ClIcdRoot::gl_context_info(const cl_context_properties *properties, cl_gl
         return CL_INVALID_VALUE;
     /* The OpenGL ICD runs every context on the adapter the primary display is
      * on, which AvgpuAdapters lists first, as the first device is. */
-    lock_.acquire();
-    learn_devices();
-    ClDevice *const device = devices_.count() != 0u ? &devices_.at(0u) : nullptr;
-    const bool      opened = device != nullptr && open_device(*device) == Status::ok;
-    lock_.release();
+    ClDevice *device = nullptr;
+    bool      opened = false;
+    {
+        const ThreadLockHold locked(lock_);
+        learn_devices();
+        device = devices_.count() != 0u ? &devices_.at(0u) : nullptr;
+        opened = device != nullptr && open_device(*device) == Status::ok;
+    }
     if (!opened) return CL_OUT_OF_RESOURCES;
     /* A device that does not report cl_khr_gl_sharing - the executor strikes it
      * where the host's OpenCL refused its GL context, as NVIDIA's refuses

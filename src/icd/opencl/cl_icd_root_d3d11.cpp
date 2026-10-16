@@ -3,6 +3,7 @@
 #include "icd/opencl/cl_icd_root.hpp"
 
 #include "core/platform/thread_lock.hpp"
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/sliced_wait.hpp"
 #include "icd/opencl/d3d_adapter_source.hpp"
@@ -115,9 +116,8 @@ cl_mem ClIcdRoot::create_from_d3d11_texture(cl_context context, cl_mem_flags fla
             d3d11_.let_go(twin);
             return nullptr;
         }
-        lock_.acquire();
+        const ThreadLockHold locked(lock_);
         owner->d3d11().find(kept)->pair(twin);
-        lock_.release();
         return kept;
     }
     const cl_image_format format = {static_cast<cl_channel_order>(mapped.cl_order()),
@@ -184,19 +184,19 @@ cl_int ClIcdRoot::d3d11_resource(cl_context context, cl_mem_flags flags, void *r
         described.multisampled())
         return invalid_d3d11_resource;
     if (!described.holds(subresource)) return CL_INVALID_VALUE;
-    lock_.acquire();
-    const bool made = owner->d3d11().made_over(resource, subresource);
-    lock_.release();
-    return made ? invalid_d3d11_resource : CL_SUCCESS;
+    const ThreadLockHold locked(lock_);
+    return owner->d3d11().made_over(resource, subresource) ? invalid_d3d11_resource : CL_SUCCESS;
 }
 
 cl_mem ClIcdRoot::d3d11_object(cl_mem made, GuestClContext &owner, void *resource, uint32_t subresource,
                                const D3d11Resource &described, cl_mem_flags flags, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::d3d11_object");
-    lock_.acquire();
-    const Status kept = owner.d3d11().keep(made, resource, subresource, described, flags);
-    lock_.release();
+    Status kept = Status::ok;
+    {
+        const ThreadLockHold locked(lock_);
+        kept = owner.d3d11().keep(made, resource, subresource, described, flags);
+    }
     if (kept != Status::ok) {
         static_cast<void>(release(made, ClObject::Kind::mem));
         report_d3d11_error(error, CL_OUT_OF_HOST_MEMORY);
@@ -216,18 +216,19 @@ cl_int ClIcdRoot::enqueue_acquire_d3d11(cl_command_queue queue, cl_uint count, c
     ClientTransport *wire = nullptr;
     const cl_int     ready = d3d11_queue(queue, waits, events, held, context, wire);
     if (ready != CL_SUCCESS) return ready;
-    lock_.acquire();
-    const cl_int taken = context->d3d11().take(objects, count);
-    lock_.release();
+    cl_int taken = CL_SUCCESS;
+    {
+        const ThreadLockHold locked(lock_);
+        taken = context->d3d11().take(objects, count);
+    }
     if (taken != CL_SUCCESS) return taken;
     cl_int done = d3d11_copy_in(queue, *context, objects, count);
     if (done == CL_SUCCESS) done = marker_event(*wire, *held, event);
     /* An acquire that failed leaves every object Direct3D's, to be acquired
      * again. */
     if (done != CL_SUCCESS) {
-        lock_.acquire();
+        const ThreadLockHold locked(lock_);
         context->d3d11().untake(objects, count);
-        lock_.release();
     }
     return done;
 }
@@ -241,9 +242,11 @@ cl_int ClIcdRoot::enqueue_release_d3d11(cl_command_queue queue, cl_uint count, c
     ClientTransport *wire = nullptr;
     const cl_int     ready = d3d11_queue(queue, waits, events, held, context, wire);
     if (ready != CL_SUCCESS) return ready;
-    lock_.acquire();
-    const cl_int given = context->d3d11().give(objects, count);
-    lock_.release();
+    cl_int given = CL_SUCCESS;
+    {
+        const ThreadLockHold locked(lock_);
+        given = context->d3d11().give(objects, count);
+    }
     if (given != CL_SUCCESS) return given;
     /* Every command that used the objects has run before a byte is copied
      * back: the copy is what Direct3D sees next. */
@@ -253,9 +256,8 @@ cl_int ClIcdRoot::enqueue_release_d3d11(cl_command_queue queue, cl_uint count, c
     /* A release that failed leaves every object OpenCL's, to be released
      * again. */
     if (done != CL_SUCCESS) {
-        lock_.acquire();
+        const ThreadLockHold locked(lock_);
         context->d3d11().ungive(objects, count);
-        lock_.release();
     }
     return done;
 }
@@ -284,9 +286,7 @@ cl_int ClIcdRoot::d3d11_copy_in(cl_command_queue queue, GuestClContext &context,
 {
     AV_SCOPE("ClIcdRoot::d3d11_copy_in");
     for (cl_uint index = 0u; index < count; ++index) {
-        lock_.acquire();
-        const D3d11Object *const object = context.d3d11().find(objects[index]);
-        lock_.release();
+        const D3d11Object *const object = d3d11_object_in(context, objects[index]);
         /* OpenCL only writes this one, and is never shown its bytes. */
         if (!object->reads_resource()) continue;
         if (object->twin() != nullptr) {
@@ -307,9 +307,7 @@ cl_int ClIcdRoot::d3d11_copy_out(cl_command_queue queue, GuestClContext &context
 {
     AV_SCOPE("ClIcdRoot::d3d11_copy_out");
     for (cl_uint index = 0u; index < count; ++index) {
-        lock_.acquire();
-        const D3d11Object *const object = context.d3d11().find(objects[index]);
-        lock_.release();
+        const D3d11Object *const object = d3d11_object_in(context, objects[index]);
         /* OpenCL only read this one, and changed nothing to copy back. */
         if (!object->writes_resource()) continue;
         if (object->twin() != nullptr) {
@@ -328,11 +326,14 @@ cl_int ClIcdRoot::d3d11_copy_out(cl_command_queue queue, GuestClContext &context
 D3d11Object *ClIcdRoot::d3d11_object_of(ClObject &mem)
 {
     AV_SCOPE("ClIcdRoot::d3d11_object_of");
-    GuestClContext *const owner = context_of(mem);
-    lock_.acquire();
-    D3d11Object *const object = owner->d3d11().find(&mem);
-    lock_.release();
-    return object;
+    return d3d11_object_in(*context_of(mem), &mem);
+}
+
+D3d11Object *ClIcdRoot::d3d11_object_in(GuestClContext &owner, const void *mem)
+{
+    AV_SCOPE("ClIcdRoot::d3d11_object_in");
+    const ThreadLockHold locked(lock_);
+    return owner.d3d11().find(mem);
 }
 
 }  // namespace av::clicd

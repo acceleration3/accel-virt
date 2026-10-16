@@ -383,9 +383,10 @@ bool GlIcdRoot::swap_buffers(void *dc)
 GlIcdRoot::Shown GlIcdRoot::show_frame(void *dc)
 {
     AV_SCOPE("GlIcdRoot::show_frame");
-    lock_.acquire();
-    windows_.drop_gone(surface_);
-    lock_.release();
+    {
+        const ThreadLockHold locked(lock_);
+        windows_.drop_gone(surface_);
+    }
     GuestGlContext *const context = currents_.current();
     void *const           window = surface_.window_of(dc);
     if (context == nullptr || windows_.format_of(window) != context->pixel_format()) return Shown::refused;
@@ -472,9 +473,11 @@ void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *at
     }
     const uint32_t thread = slot_.thread_id();
     uint64_t       handle = 0u;
-    lock_.acquire();
-    const Status created = contexts_.create(format, options, handle);
-    lock_.release();
+    Status         created = Status::ok;
+    {
+        const ThreadLockHold locked(lock_);
+        created = contexts_.create(format, options, handle);
+    }
     if (created != Status::ok) {
         fail(error_not_enough_memory);
         return nullptr;
@@ -483,9 +486,11 @@ void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *at
     /* A context just created takes a share. */
     if (share_name != 0u) static_cast<void>(context->share(share_name));
     const Status made = context->make();
-    lock_.acquire();
-    const Status pended = made == Status::ok ? put_pending(thread, handle) : made;
-    lock_.release();
+    Status       pended = made;
+    if (made == Status::ok) {
+        const ThreadLockHold locked(lock_);
+        pended = put_pending(thread, handle);
+    }
     void *const hglrc = pended == Status::ok ? system_.create_context(dc) : nullptr;
     const ThreadLockHold release(lock_);
     const uint64_t unclaimed = take_pending(thread);

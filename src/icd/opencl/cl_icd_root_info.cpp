@@ -5,6 +5,7 @@
 #include "icd/opencl/cl_icd_root.hpp"
 
 #include "core/platform/thread_lock.hpp"
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/support/extension_words.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/opencl/cl_extension_policy.hpp"
@@ -92,10 +93,8 @@ cl_int ClIcdRoot::watch_destruction(cl_context context, ClDestructorCallbacks::C
     AV_SCOPE("ClIcdRoot::watch_destruction");
     if (judged(context, ClObject::Kind::context) == nullptr) return CL_INVALID_CONTEXT;
     if (callback == nullptr) return CL_INVALID_VALUE;
-    lock_.acquire();
-    const Status kept = destructor_callbacks_.keep(context, callback, user_data);
-    lock_.release();
-    return kept == Status::ok ? CL_SUCCESS : CL_OUT_OF_HOST_MEMORY;
+    const ThreadLockHold locked(lock_);
+    return destructor_callbacks_.keep(context, callback, user_data) == Status::ok ? CL_SUCCESS : CL_OUT_OF_HOST_MEMORY;
 }
 
 cl_int ClIcdRoot::watch_destruction(cl_mem object, ClDestructorCallbacks::MemCallback callback, void *user_data)
@@ -103,10 +102,8 @@ cl_int ClIcdRoot::watch_destruction(cl_mem object, ClDestructorCallbacks::MemCal
     AV_SCOPE("ClIcdRoot::watch_destruction");
     if (judged(object, ClObject::Kind::mem) == nullptr) return CL_INVALID_MEM_OBJECT;
     if (callback == nullptr) return CL_INVALID_VALUE;
-    lock_.acquire();
-    const Status kept = destructor_callbacks_.keep(object, callback, user_data);
-    lock_.release();
-    return kept == Status::ok ? CL_SUCCESS : CL_OUT_OF_HOST_MEMORY;
+    const ThreadLockHold locked(lock_);
+    return destructor_callbacks_.keep(object, callback, user_data) == Status::ok ? CL_SUCCESS : CL_OUT_OF_HOST_MEMORY;
 }
 
 cl_int ClIcdRoot::create_sub_devices(cl_device_id device, const cl_device_partition_property *, cl_uint,
@@ -133,9 +130,7 @@ cl_int ClIcdRoot::sampler_info(cl_sampler sampler, cl_sampler_info name, size_t 
     if (held == nullptr) return CL_INVALID_SAMPLER;
     const ClInfoRequest asked(value_bytes, value, size_ret);
     if (name == CL_SAMPLER_REFERENCE_COUNT) {
-        lock_.acquire();
-        const cl_uint count = held->references();
-        lock_.release();
+        const cl_uint count = reference_count(*held);
         return asked.give(&count, sizeof count);
     }
     if (name == CL_SAMPLER_CONTEXT) {

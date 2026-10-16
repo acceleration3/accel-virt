@@ -739,6 +739,8 @@ private:
                                     cl_uint count);
     /* The object `mem` is over a Direct3D 11 resource as, or null. */
     D3d11Object     *d3d11_object_of(ClObject &mem);
+    /* The same, for `mem` in `owner`, looked up under lock_. */
+    D3d11Object     *d3d11_object_in(GuestClContext &owner, const void *mem);
     /* A drain, unless the queue is known idle; idle after one (ClObject). */
     /* `queue` known idle, and its context's retired memory given back when
      * every queue of it is (GuestClContext::reclaim). */
@@ -842,6 +844,15 @@ private:
     /* What an entry answers when the pointer it was given is not an object of
      * that kind: the API's own error for each. */
     cl_int           refusal_for(ClObject::Kind kind) const;
+    /* Under lock_: one of the application's references to `held`, which is
+     * `object`, let go - with the last, the host's object, and the context
+     * once nothing holds it - and the destructor callbacks that came due
+     * moved to `due`, to run once the lock is let go. The buffer a
+     * sub-buffer's last reference held, to release then too; null for none. */
+    ClObject        *drop_reference(void *object, ClObject &held, ClObject::Kind kind, ClDestructorCallbacks::Due &due);
+    /* `held`'s count of the application's references, read under lock_:
+     * another thread may be retaining or releasing it. */
+    cl_uint          reference_count(const ClObject &held);
 
     ThreadLock            &lock_;
     LogSink          &log_;
