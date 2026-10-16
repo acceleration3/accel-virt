@@ -4420,10 +4420,9 @@ static bool decode_glDeleteSync(const RealGl& av_gl, ::av::WireReader& av_r, ::a
     (void)av_arena; (void)av_reply; (void)av_r;
     uint64_t sync_token = 0;
     if (!av_r.read_pod(sync_token)) return false;
-    GLsync sync = static_cast<GLsync>((av_gl.av_sync_for == nullptr ? nullptr : av_gl.av_sync_for(av_gl.av_sync_user, sync_token)));
     if (av_gl.glDeleteSync == nullptr) return false;
+    GLsync sync = static_cast<GLsync>((av_gl.av_forget_sync == nullptr ? nullptr : av_gl.av_forget_sync(av_gl.av_sync_user, sync_token)));
     av_gl.glDeleteSync(sync);
-    if (av_gl.av_forget_sync != nullptr) { av_gl.av_forget_sync(av_gl.av_sync_user, sync_token); }
     return true;
 }
 

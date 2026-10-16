@@ -616,10 +616,13 @@ int32_t GlIcdRoot::force_context_fault()
     return 0;
 }
 
+/* Threads with contexts of their own mint at once and take no lock: a plain
+ * increment could hand two the same token, or step back, and the host refuses
+ * a token not newer than every one its context bound before. */
 uint64_t GlIcdRoot::mint_sync_token()
 {
     AV_SCOPE("GlIcdRoot::mint_sync_token");
-    return ++sync_tokens_;
+    return __atomic_add_fetch(&sync_tokens_, uint64_t{1}, __ATOMIC_RELAXED);
 }
 
 /* What the host granted the first context this process made, named once: a

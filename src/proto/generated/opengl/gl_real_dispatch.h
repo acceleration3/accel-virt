@@ -40,9 +40,13 @@ struct RealGl {
     // rather than free functions for the reason av_blob is one:
     // a parameterless hook cannot reach one context's state, and
     // this project has no file-scope place to put it (042).
+    // av_forget_sync takes a token out for glDeleteSync and
+    // answers the sync to delete with it, which is not always the
+    // one av_sync_for answers: a sync the host already saw
+    // signaled may answer through one that others share.
     void (*av_bind_sync)(void*, uint64_t, void*) = nullptr;
     void* (*av_sync_for)(void*, uint64_t) = nullptr;
-    void (*av_forget_sync)(void*, uint64_t) = nullptr;
+    void* (*av_forget_sync)(void*, uint64_t) = nullptr;
     void* av_sync_user = nullptr;
 
     // Whether the context has the compatibility profile's

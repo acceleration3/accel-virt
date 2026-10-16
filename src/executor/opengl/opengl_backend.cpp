@@ -21,6 +21,13 @@ constexpr uint32_t gl_context_profile_mask = 0x9126u, gl_context_core_profile_bi
  * context answering GL_CONTEXT_LOST to every look. */
 constexpr uint32_t error_flags = 8u;
 constexpr uint32_t gl_context_lost = 0x0507u;
+constexpr uint32_t gl_sync_flush_commands_bit = 0x1u;
+constexpr uint32_t gl_already_signaled = 0x911Au, gl_condition_satisfied = 0x911Cu;
+/* How long a full table waits for its oldest sync: Windows' own TDR delay,
+ * past which a guest takes its GPU for hung. A GPU that has not reached a
+ * fence made SyncTokens::max_live fences ago by then is, and the newest fence
+ * is refused rather than the worker held longer. */
+constexpr uint64_t oldest_sync_wait_ns = 2'000'000'000u;
 
 /* The generated table's loader signature: a name and whatever the caller wants
  * to reach, which here is the context the entry points come from. */
@@ -45,10 +52,10 @@ void *sync_for(void *user, uint64_t token)
     return static_cast<OpenGlBackend *>(user)->fence_for(token);
 }
 
-void forget_sync(void *user, uint64_t token)
+void *forget_sync(void *user, uint64_t token)
 {
     AV_SCOPE("forget_sync");
-    static_cast<OpenGlBackend *>(user)->forget_fence(token);
+    return static_cast<OpenGlBackend *>(user)->forget_fence(token);
 }
 
 uint8_t *blob_at(void *user, uint64_t offset, uint64_t bytes)
@@ -91,6 +98,19 @@ bool OpenGlBackend::initialize(const GlDisplay *display, const AvContextOptions 
         !context_.open(*display, GlContextAttributes(options), share != nullptr ? &share->context_ : nullptr))
         return false;
     resolved_ = static_cast<uint32_t>(load_real_gl(gl_, resolve_through, &context_));
+    install_hooks();
+    gl_.av_fixed_function = granted_fixed_function();
+    import_.configure(context_);
+    /* Opened is served. A driver that resolves fewer entry points than the
+     * table has is not refused here: the decoder refuses each command whose
+     * entry point is null, one command at a time, which is the degradation a
+     * guest can live with rather than a context it cannot have at all. */
+    return true;
+}
+
+void OpenGlBackend::install_hooks()
+{
+    AV_SCOPE("OpenGlBackend::install_hooks");
     gl_.av_bind_sync = bind_sync;
     gl_.av_sync_for = sync_for;
     gl_.av_forget_sync = forget_sync;
@@ -99,13 +119,6 @@ bool OpenGlBackend::initialize(const GlDisplay *display, const AvContextOptions 
     gl_.av_pack_blob = pack_blob;
     gl_.av_unpack_blob = unpack_blob;
     gl_.av_blob_user = this;
-    gl_.av_fixed_function = granted_fixed_function();
-    import_.configure(context_);
-    /* Opened is served. A driver that resolves fewer entry points than the
-     * table has is not refused here: the decoder refuses each command whose
-     * entry point is null, one command at a time, which is the degradation a
-     * guest can live with rather than a context it cannot have at all. */
-    return true;
 }
 
 /* A context from before profiles has no mask to ask for, and the asking is
@@ -266,27 +279,53 @@ void OpenGlBackend::abandon(ImportedBlob &blob)
     pack_.abandon();
 }
 
-bool     OpenGlBackend::bind_fence(uint64_t token, void *fence)
+bool OpenGlBackend::bind_fence(uint64_t token, void *fence)
 {
     AV_SCOPE("OpenGlBackend::bind_fence");
+    if (fences_.full()) retire_oldest_fence();
     if (fences_.bind(token, fence)) return true;
-    /* A sync no token names is one nothing would ever delete: a guest past
-     * the table's bound, or reusing a live token, gets none rather than the
-     * host keeping one for good. */
-    if (fence != nullptr && gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(fence));
-    lines_.write("a GLsync no token could keep was deleted as it was made");
+    if (fence == nullptr) {
+        LogLine(lines_).text("glFenceSync made no GLsync for token ").number(token).write();
+        return false;
+    }
+    /* A sync no token names is one nothing would ever delete: a token reused
+     * or out of order, or a table whose oldest sync never signaled, gets none
+     * rather than the host keeping one for good. */
+    if (gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(fence));
+    LogLine(lines_).text("the GLsync of token ").number(token).text(" was deleted as it was made").write();
     return false;
 }
-void    *OpenGlBackend::fence_for(uint64_t token) const
+
+/* Fences on one context signal in the order they were made, so the oldest is
+ * the first the GPU passes, and a wait for it cannot be a wait on anything
+ * the guest has yet to send. */
+void OpenGlBackend::retire_oldest_fence()
+{
+    AV_SCOPE("OpenGlBackend::retire_oldest_fence");
+    if (gl_.glClientWaitSync == nullptr) return;
+    const uint32_t reached =
+        gl_.glClientWaitSync(static_cast<GLsync>(fences_.oldest()), gl_sync_flush_commands_bit, oldest_sync_wait_ns);
+    if (reached != gl_already_signaled && reached != gl_condition_satisfied) {
+        LogLine(lines_).text("the oldest of ").number(SyncTokens::max_live).text(" GLsyncs did not signal: ")
+            .hex(reached, 4u).write();
+        return;
+    }
+    void *const retired = fences_.retire_oldest();
+    if (retired != nullptr && gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(retired));
+}
+
+void *OpenGlBackend::fence_for(uint64_t token) const
 {
     AV_SCOPE("OpenGlBackend::fence_for");
     return fences_.fence_for(token);
 }
-void     OpenGlBackend::forget_fence(uint64_t token)
+
+void *OpenGlBackend::forget_fence(uint64_t token)
 {
     AV_SCOPE("OpenGlBackend::forget_fence");
-    fences_.forget(token);
+    return fences_.forget(token);
 }
+
 uint8_t *OpenGlBackend::guest_bytes(uint64_t offset, uint64_t bytes) const
 {
     AV_SCOPE("OpenGlBackend::guest_bytes");

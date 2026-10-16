@@ -84,7 +84,8 @@ public:
      * it: a parameterless hook could not reach one context's state. */
     [[nodiscard]] bool bind_fence(uint64_t token, void *fence);
     void              *fence_for(uint64_t token) const;
-    void               forget_fence(uint64_t token);
+    /* What glDeleteSync deletes for `token` (SyncTokens::forget). */
+    void              *forget_fence(uint64_t token);
     /* The bytes of the imported region its bulk-data commands name. */
     uint8_t           *guest_bytes(uint64_t offset, uint64_t bytes) const;
     /* A pixel transfer into the region packed into it by the GPU
@@ -97,6 +98,10 @@ public:
     uint64_t ran() const;
 
 private:
+    /* The table's hooks into this backend: its fences and its region. */
+    void install_hooks();
+    /* Room in a full table of fences, made once the GPU passes its oldest. */
+    void retire_oldest_fence();
     /* The entry point a kind is destroyed through. */
     void destroy_made(uint32_t kind, uint32_t name);
     /* Whether the context the host made has the fixed-function vertex arrays

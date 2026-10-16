@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <pthread.h>
 
 using av::GlIcdRig;
 using av::MockKmt;
@@ -935,6 +936,58 @@ TEST(gl_icd_root, a_dropped_command_is_logged_and_sync_tokens_count_up)
   CHECK_EQ(rig.log().holding("avgl: gl glBufferData not sent: its encoding overflowed at byte 300000"), 1u);
   CHECK_EQ(rig.root().mint_sync_token(), 1u);
   CHECK_EQ(rig.root().mint_sync_token(), 2u); }
+
+namespace {
+
+constexpr std::uint32_t minted_per_thread = 100000u;
+
+/* One thread's tokens, minted as fast as it can. */
+struct MintingThread {
+    GlIcdRoot    *root;
+    std::uint64_t tokens[minted_per_thread];
+};
+
+MintingThread minting[2];
+bool          minted[2u * minted_per_thread + 1u];
+
+void *mint_tokens(void *argument)
+{
+    MintingThread &thread = *static_cast<MintingThread *>(argument);
+    for (std::uint64_t &token : thread.tokens) token = thread.root->mint_sync_token();
+    return nullptr;
+}
+
+}  // namespace
+
+/* Threads with contexts of their own call glFenceSync at once with no lock
+ * between them. The host refuses a token not newer than every one its
+ * context bound, so a token handed out twice, or one smaller than the last a
+ * thread was handed, is a fence that answers nothing. */
+TEST(gl_icd_root, sync_tokens_minted_on_threads_at_once_are_each_new_and_increasing)
+{ GlIcdRig rig;
+  pthread_t threads[2];
+  for (std::uint32_t i = 0u; i < 2u; i++) {
+      minting[i].root = &rig.root();
+      CHECK_EQ(pthread_create(&threads[i], nullptr, mint_tokens, &minting[i]), 0);
+  }
+  for (const pthread_t thread : threads) CHECK_EQ(pthread_join(thread, nullptr), 0);
+  std::memset(minted, 0, sizeof minted);
+  std::uint32_t repeated = 0u, backwards = 0u;
+  for (const MintingThread &thread : minting) {
+      std::uint64_t previous = 0u;
+      for (const std::uint64_t token : thread.tokens) {
+          backwards += token <= previous ? 1u : 0u;
+          previous = token;
+          if (token == 0u || token > 2u * minted_per_thread || minted[token]) {
+              repeated++;
+              continue;
+          }
+          minted[token] = true;
+      }
+  }
+  CHECK_EQ(repeated, 0u);
+  CHECK_EQ(backwards, 0u);
+  CHECK_EQ(rig.root().mint_sync_token(), 2u * minted_per_thread + 1u); }
 
 TEST(gl_icd_binding, holds_the_root_that_bound_itself)
 { av::glicd::GlIcdBinding binding;

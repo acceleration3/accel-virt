@@ -57,6 +57,8 @@ struct OpenGlBackendProbe {
     }
     /* Whether a pixel read has had a pack buffer made over the region. */
     static bool packs(OpenGlBackend &backend) { return backend.pack_.packing(); }
+    /* The driver syncs the backend holds for live tokens. */
+    static std::uint32_t live_syncs(OpenGlBackend &backend) { return backend.fences_.count(); }
 };
 
 }  // namespace av
@@ -153,6 +155,94 @@ private:
     AvHostMemory          answered_;
     av::SourceMemory     *memory_;
 };
+
+constexpr unsigned gl_sync_gpu_commands_complete = 0x9117;
+constexpr unsigned gl_sync_status = 0x9114;
+constexpr int      gl_signaled = 0x9119;
+constexpr unsigned gl_already_signaled = 0x911A;
+constexpr unsigned gl_condition_satisfied = 0x911C;
+constexpr unsigned gl_sync_flush_commands_bit = 0x1;
+constexpr std::uint64_t second_ns = 1000000000u;
+
+/* One command run as the guest sends it, `frame` its payload; the reply's
+ * bytes land in `reply`, and how many in `replied`. */
+bool run_command(OpenGlBackend &backend, std::uint32_t id, const av::WireWriter &frame, const std::uint8_t *bytes,
+                 std::uint8_t *reply, std::size_t reply_bytes, std::size_t &replied)
+{
+    std::uint8_t   block[4096];
+    av::WireArena  arena(block, sizeof block);
+    av::WireReader payload(bytes, frame.offset());
+    av::WireWriter answer(reply, reply_bytes);
+    const bool ran = backend.run(id, payload, answer, arena);
+    replied = answer.offset();
+    return ran;
+}
+
+/* glFenceSync, its token minted by the guest. */
+bool fence_sync(OpenGlBackend &backend, std::uint64_t token)
+{
+    std::uint8_t   frame[32];
+    av::WireWriter writer(frame, sizeof frame);
+    writer.write_pod<std::uint64_t>(token);
+    writer.write_varint<std::uint64_t>(gl_sync_gpu_commands_complete);
+    writer.write_varint<std::uint64_t>(0u);
+    std::uint8_t reply[16];
+    std::size_t  replied = 0u;
+    return run_command(backend, av::glproto::kCmd_glFenceSync, writer, frame, reply, sizeof reply, replied);
+}
+
+/* glGetSynciv(token, GL_SYNC_STATUS) as the guest reads it back: the value,
+ * 0 where the host answered nothing - a sync the driver was never handed -
+ * and -1 where the command did not run. */
+int sync_status(OpenGlBackend &backend, std::uint64_t token)
+{
+    std::uint8_t   frame[32];
+    av::WireWriter writer(frame, sizeof frame);
+    writer.write_pod<std::uint64_t>(token);
+    writer.write_varint<std::uint64_t>(gl_sync_status);
+    writer.write_varint<std::uint64_t>(1u);
+    writer.write_pod<std::uint8_t>(0u);
+    writer.write_pod<std::uint8_t>(1u);
+    writer.write_varint<std::uint64_t>(sizeof(int));
+    std::uint8_t reply[32];
+    std::size_t  replied = 0u;
+    if (!run_command(backend, av::glproto::kCmd_glGetSynciv, writer, frame, reply, sizeof reply, replied)) return -1;
+    av::WireReader answer(reply, replied);
+    std::uint64_t  bytes = 0u;
+    int            value = -1;
+    if (!answer.read_varint(bytes) || bytes != sizeof value || !answer.read(&value, sizeof value)) return -1;
+    return value;
+}
+
+/* glClientWaitSync(token, GL_SYNC_FLUSH_COMMANDS_BIT, a second): what it
+ * answered, 0 where the command did not run. */
+unsigned client_wait(OpenGlBackend &backend, std::uint64_t token)
+{
+    std::uint8_t   frame[32];
+    av::WireWriter writer(frame, sizeof frame);
+    writer.write_pod<std::uint64_t>(token);
+    writer.write_varint<std::uint64_t>(gl_sync_flush_commands_bit);
+    writer.write_varint<std::uint64_t>(second_ns);
+    std::uint8_t reply[16];
+    std::size_t  replied = 0u;
+    if (!run_command(backend, av::glproto::kCmd_glClientWaitSync, writer, frame, reply, sizeof reply, replied))
+        return 0u;
+    av::WireReader answer(reply, replied);
+    std::uint64_t  reached = 0u;
+    return answer.read_varint(reached) ? static_cast<unsigned>(reached) : 0u;
+}
+
+bool delete_sync(OpenGlBackend &backend, std::uint64_t token)
+{
+    std::uint8_t   frame[16];
+    av::WireWriter writer(frame, sizeof frame);
+    writer.write_pod<std::uint64_t>(token);
+    std::uint8_t reply[16];
+    std::size_t  replied = 0u;
+    return run_command(backend, av::glproto::kCmd_glDeleteSync, writer, frame, reply, sizeof reply, replied);
+}
+
+bool passed(unsigned reached) { return reached == gl_already_signaled || reached == gl_condition_satisfied; }
 
 int integer(OpenGlBackend &backend, unsigned name)
 {
@@ -528,4 +618,77 @@ TEST(opengl_backend_device, a_context_imports_more_than_any_fixed_table_held)
       for (std::uint32_t i = 1u; i < many; i++) CHECK(made[i] != made[i - 1u]);
       for (const std::uint64_t name : made) backend.release_object(AV_SHARED_MEMORY, name, detail);
       backend.shut_down();
+  } }
+
+/* DaVinci Resolve fences every frame, deletes no sync, and polls each one's
+ * status to learn when a texture is free again. Past the 256 syncs the table
+ * once held, every later sync answered nothing - never signaled - and Resolve
+ * made a new texture, and a new OpenCL image of it, every frame until the
+ * host ran out of memory. Thousands of syncs, none deleted, each answered
+ * signaled once the GPU passed it, with the driver syncs held bounded; a
+ * token never minted, or deleted, still answers nothing. */
+TEST(opengl_backend_device, a_context_that_never_deletes_a_sync_has_every_one_answered)
+{ Displays displays;
+  constexpr std::uint64_t fences = 3000u;
+  for (std::uint32_t index = 0u; index < displays.count(); index++) {
+      OpenGlBackend backend;
+      CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
+      for (std::uint64_t token = 1u; token <= fences; token++) {
+          CHECK(fence_sync(backend, token));
+          CHECK(OpenGlBackendProbe::live_syncs(backend) <= av::SyncTokens::max_live);
+      }
+      CHECK_EQ(OpenGlBackendProbe::live_syncs(backend), av::SyncTokens::max_live);
+      /* The newest passed, so has every one before it. */
+      CHECK(passed(client_wait(backend, fences)));
+      std::uint64_t signaled = 0u;
+      for (std::uint64_t token = 1u; token <= fences; token++)
+          signaled += sync_status(backend, token) == gl_signaled ? 1u : 0u;
+      CHECK_EQ(signaled, fences);
+      CHECK_EQ(sync_status(backend, fences + 1u), 0);
+      CHECK_EQ(sync_status(backend, 0u), 0);
+      /* A retired one is waited on like any signaled sync. */
+      CHECK_EQ(client_wait(backend, 1u), gl_already_signaled);
+      /* Deleted, a retired token answers nothing and the rest still answer:
+       * what they answer through was not deleted with it. */
+      CHECK(delete_sync(backend, 1u));
+      CHECK_EQ(sync_status(backend, 1u), 0);
+      CHECK_EQ(sync_status(backend, 2u), gl_signaled);
+      CHECK(delete_sync(backend, fences));
+      CHECK_EQ(sync_status(backend, fences), 0);
+      CHECK_EQ(sync_status(backend, fences - 1u), gl_signaled);
+      CHECK_EQ(OpenGlBackendProbe::live_syncs(backend), av::SyncTokens::max_live - 1u);
+      backend.end_batch();
+      backend.shut_down();
+  } }
+
+/* Tokens are minted per process, so two contexts fencing in turn each see
+ * every other one. Each answers its own, all of them, and not the other's
+ * recent ones - the ones whose GPU work may still be running. */
+TEST(opengl_backend_device, contexts_fencing_in_turn_answer_only_their_own_recent_syncs)
+{ Displays displays;
+  constexpr std::uint64_t fences = 1000u;
+  for (std::uint32_t index = 0u; index < displays.count(); index++) {
+      OpenGlBackend contexts[2];
+      for (OpenGlBackend &context : contexts) CHECK(context.initialize(displays.at(index), nullptr, nullptr));
+      for (std::uint64_t token = 1u; token <= 2u * fences; token++) {
+          OpenGlBackend &context = contexts[token % 2u];
+          CHECK(fence_sync(context, token));
+          context.end_batch();
+      }
+      for (std::uint32_t which = 0u; which < 2u; which++) {
+          OpenGlBackend &context = contexts[which];
+          const std::uint64_t newest = 2u * fences - (which == 0u ? 0u : 1u);
+          CHECK(passed(client_wait(context, newest)));
+          std::uint64_t signaled = 0u;
+          for (std::uint64_t token = 2u - which; token <= 2u * fences; token += 2u)
+              signaled += sync_status(context, token) == gl_signaled ? 1u : 0u;
+          CHECK_EQ(signaled, fences);
+          /* The other's newest, still live there, and the other's token
+           * between this one's two newest retired. */
+          CHECK_EQ(sync_status(context, newest - 1u), 0);
+          CHECK_EQ(sync_status(context, newest - 2u * av::SyncTokens::max_live - 1u), 0);
+          CHECK_EQ(sync_status(context, newest - 2u * av::SyncTokens::max_live), gl_signaled);
+          context.end_batch();
+      }
+      for (OpenGlBackend &context : contexts) context.shut_down();
   } }

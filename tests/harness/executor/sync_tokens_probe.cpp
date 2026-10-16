@@ -10,4 +10,10 @@ void SyncTokensProbe::set_token(uint32_t index, uint64_t token) { tokens.tokens_
 
 void SyncTokensProbe::set_fence(uint32_t index, void *fence) { tokens.fences_[index] = fence; }
 
+void SyncTokensProbe::set_newest(uint64_t newest) { tokens.newest_ = newest; }
+
+void SyncTokensProbe::set_stand_in(void *fence) { tokens.stand_in_ = fence; }
+
+RetiredSyncTokens &SyncTokensProbe::retired() { return tokens.retired_; }
+
 }  // namespace av

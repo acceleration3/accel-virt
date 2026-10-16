@@ -15,6 +15,10 @@ struct SyncTokensProbe {
     void set_count(uint32_t count);
     void set_token(uint32_t index, uint64_t token);
     void set_fence(uint32_t index, void *fence);
+    void set_newest(uint64_t newest);
+    void set_stand_in(void *fence);
+    /* The retired tokens, for a probe of their own. */
+    RetiredSyncTokens &retired();
 
     SyncTokens &tokens;
 };

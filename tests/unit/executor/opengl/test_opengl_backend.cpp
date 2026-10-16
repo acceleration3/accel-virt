@@ -15,6 +15,7 @@
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/generated/opengl/gl_dispatch_server.h"
 #include "proto/generated/opengl/gl_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -31,6 +32,8 @@ struct OpenGlBackendProbe {
     static glproto::RealGl &gl(OpenGlBackend &backend) { return backend.gl_; }
     static bool granted_fixed_function(OpenGlBackend &backend) { return backend.granted_fixed_function(); }
     static void made_current(OpenGlBackend &backend) { backend.current_ = true; }
+    static void install_hooks(OpenGlBackend &backend) { backend.install_hooks(); }
+    static std::uint32_t live_syncs(OpenGlBackend &backend) { return backend.fences_.count(); }
 };
 
 }  // namespace av
@@ -149,8 +152,9 @@ TEST(opengl_backend, a_fence_is_found_only_by_the_token_it_was_bound_to)
   CHECK(backend.bind_fence(7u, &fence));
   CHECK(backend.fence_for(7u) == &fence);
   CHECK(backend.fence_for(8u) == nullptr);
-  backend.forget_fence(7u);
-  CHECK(backend.fence_for(7u) == nullptr); }
+  CHECK(backend.forget_fence(7u) == &fence);
+  CHECK(backend.fence_for(7u) == nullptr);
+  CHECK(backend.forget_fence(7u) == nullptr); }
 
 /* The resolver the thousand-odd bulk-data sites call. Every offset and length
  * it is asked for came off the wire. */
@@ -366,8 +370,9 @@ void count_deleted_sync(GLsync) { deleted_syncs++; }
 
 }  // namespace
 
-/* A sync the table cannot keep - its token already live - is deleted as it
- * is made, not left for ever with no token to name it. */
+/* A sync the table cannot keep - its token already live, or older than one
+ * bound - is deleted as it is made, not left for ever with no token to name
+ * it. */
 TEST(opengl_backend, a_sync_no_token_can_keep_is_deleted_at_once)
 { OpenGlBackend backend;
   OpenGlBackendProbe::gl(backend).glDeleteSync = count_deleted_sync;
@@ -376,11 +381,184 @@ TEST(opengl_backend, a_sync_no_token_can_keep_is_deleted_at_once)
   CHECK(backend.bind_fence(7u, &first));
   CHECK(!backend.bind_fence(7u, &second));
   CHECK_EQ(deleted_syncs, 1u);
+  CHECK(!backend.bind_fence(6u, &second));
+  CHECK_EQ(deleted_syncs, 2u);
   CHECK(backend.fence_for(7u) == &first);
+  CHECK(backend.fence_for(6u) == nullptr);
   /* A failed glFenceSync made nothing to delete. */
   CHECK(!backend.bind_fence(8u, nullptr));
-  CHECK_EQ(deleted_syncs, 1u);
-  backend.forget_fence(7u); }
+  CHECK_EQ(deleted_syncs, 2u);
+  CHECK(backend.forget_fence(7u) == &first); }
+
+namespace {
+
+constexpr GLenum gl_already_signaled = 0x911Au, gl_timeout_expired = 0x911Bu, gl_condition_satisfied = 0x911Cu,
+                 gl_wait_failed = 0x911Du;
+constexpr GLbitfield gl_sync_flush_commands_bit = 0x1u;
+
+/* glClientWaitSync as the stand-in driver answers it: what it was asked, and
+ * the answer this test chose. */
+GLenum        wait_answer = gl_already_signaled;
+GLsync        waited_on = nullptr;
+GLbitfield    waited_flags = 0u;
+GLuint64      waited_ns = 0u;
+std::uint32_t waits = 0u;
+
+GLenum client_wait_sync(GLsync sync, GLbitfield flags, GLuint64 timeout)
+{
+    waited_on = sync;
+    waited_flags = flags;
+    waited_ns = timeout;
+    waits++;
+    return wait_answer;
+}
+
+/* glDeleteSync as the stand-in driver answers it: each sync deleted, in
+ * order, and how many. */
+constexpr std::uint32_t most_deleted = 16u;
+GLsync        deleted[most_deleted] = {};
+GLsync        last_deleted = nullptr;
+std::uint32_t deletes = 0u;
+
+void record_deleted_sync(GLsync sync)
+{
+    if (deletes < most_deleted) deleted[deletes] = sync;
+    last_deleted = sync;
+    deletes++;
+}
+
+/* As many distinct driver syncs as a table holds, and a few more. */
+char syncs[av::SyncTokens::max_live + 8u];
+
+GLsync sync_at(std::uint32_t index) { return reinterpret_cast<GLsync>(&syncs[index]); }
+
+/* A backend with no context whose table waits and deletes through the
+ * functions above, answering `answer`, and holds max_live fences: tokens 1
+ * to max_live on syncs 0 to max_live - 1. */
+void fill_waiting(OpenGlBackend &backend, GLenum answer)
+{
+    av::glproto::RealGl &gl = OpenGlBackendProbe::gl(backend);
+    gl.glClientWaitSync = client_wait_sync;
+    gl.glDeleteSync = record_deleted_sync;
+    wait_answer = answer;
+    waited_on = nullptr;
+    waits = 0u;
+    deletes = 0u;
+    for (std::uint32_t i = 0u; i < av::SyncTokens::max_live; i++) CHECK(backend.bind_fence(i + 1u, sync_at(i)));
+    CHECK_EQ(waits, 0u);
+}
+
+/* glDeleteSync(token) through the decoder, as a guest sends it. */
+bool delete_through_decoder(OpenGlBackend &backend, std::uint64_t token)
+{
+    std::uint8_t frame[16];
+    WireWriter   writer(frame, sizeof frame);
+    writer.write_pod<std::uint64_t>(token);
+    std::uint8_t   block[256];
+    WireArena      arena(block, sizeof block);
+    std::uint8_t   reply[16];
+    WireReader     payload(frame, writer.offset());
+    WireWriter     answer(reply, sizeof reply);
+    return av::glproto::dispatch_command(OpenGlBackendProbe::gl(backend), av::glproto::kCmd_glDeleteSync, payload,
+                                         answer, arena);
+}
+
+}  // namespace
+
+/* A guest that never deletes a sync - DaVinci Resolve - fences past the
+ * table: the oldest is waited for (flushed, so the wait cannot be on work
+ * not yet sent), retired, and the newest bound. The first retired stays as
+ * the stand-in every retired token answers through; each later one is
+ * deleted as it is retired. */
+TEST(opengl_backend, a_full_table_retires_its_oldest_once_the_gpu_passed_it)
+{ OpenGlBackend backend;
+  fill_waiting(backend, gl_already_signaled);
+  const std::uint64_t next = av::SyncTokens::max_live + 1u;
+  CHECK(backend.bind_fence(next, sync_at(next - 1u)));
+  CHECK_EQ(waits, 1u);
+  CHECK(waited_on == sync_at(0u));
+  CHECK_EQ(waited_flags, gl_sync_flush_commands_bit);
+  CHECK(waited_ns > 0u);
+  CHECK_EQ(deletes, 0u);
+  CHECK(backend.fence_for(1u) == sync_at(0u));
+  CHECK(backend.fence_for(next) == sync_at(next - 1u));
+  /* A wait that had to wait is as good as one that did not. */
+  wait_answer = gl_condition_satisfied;
+  CHECK(backend.bind_fence(next + 1u, sync_at(next)));
+  CHECK_EQ(waits, 2u);
+  CHECK(waited_on == sync_at(1u));
+  CHECK_EQ(deletes, 1u);
+  CHECK(deleted[0] == sync_at(1u));
+  CHECK(backend.fence_for(2u) == sync_at(0u));
+  CHECK(backend.fence_for(1u) == sync_at(0u));
+  CHECK_EQ(OpenGlBackendProbe::live_syncs(backend), av::SyncTokens::max_live);
+  /* Closing deletes every live sync and the stand-in, each once. */
+  backend.shut_down();
+  CHECK_EQ(deletes, 1u + av::SyncTokens::max_live + 1u);
+  CHECK(last_deleted == sync_at(0u));
+  CHECK(backend.fence_for(1u) == nullptr); }
+
+/* A table full of syncs the GPU has not reached refuses the newest rather
+ * than retiring one that has not signaled: the guest's token answers
+ * nothing, and the sync is deleted as it is made. */
+TEST(opengl_backend, a_full_table_whose_oldest_never_signals_refuses_the_newest)
+{ const GLenum unsignaled[] = {gl_timeout_expired, gl_wait_failed};
+  for (const GLenum answer : unsignaled) {
+      OpenGlBackend backend;
+      fill_waiting(backend, answer);
+      const std::uint64_t next = av::SyncTokens::max_live + 1u;
+      CHECK(!backend.bind_fence(next, sync_at(next - 1u)));
+      CHECK_EQ(waits, 1u);
+      CHECK_EQ(deletes, 1u);
+      CHECK(deleted[0] == sync_at(next - 1u));
+      CHECK(backend.fence_for(next) == nullptr);
+      CHECK(backend.fence_for(1u) == sync_at(0u));
+      /* Once it signals, the next fence makes room as ever. */
+      wait_answer = gl_already_signaled;
+      CHECK(backend.bind_fence(next + 1u, sync_at(next)));
+      CHECK(backend.fence_for(1u) == sync_at(0u));
+      backend.shut_down();
+  } }
+
+/* A driver with no glClientWaitSync cannot say the oldest was passed, so
+ * nothing is retired and the newest is refused. */
+TEST(opengl_backend, a_full_table_with_no_way_to_wait_refuses_the_newest)
+{ OpenGlBackend backend;
+  fill_waiting(backend, gl_already_signaled);
+  OpenGlBackendProbe::gl(backend).glClientWaitSync = nullptr;
+  const std::uint64_t next = av::SyncTokens::max_live + 1u;
+  CHECK(!backend.bind_fence(next, sync_at(next - 1u)));
+  CHECK_EQ(deletes, 1u);
+  CHECK(backend.fence_for(1u) == sync_at(0u));
+  backend.shut_down(); }
+
+/* A retired sync's driver object is the stand-in, which other retired tokens
+ * still answer through: the decoder's glDeleteSync deletes nothing for one,
+ * a live token's own sync for another, and nothing for a token never bound. */
+TEST(opengl_backend, deleting_a_retired_sync_through_the_decoder_spares_the_stand_in)
+{ OpenGlBackend backend;
+  fill_waiting(backend, gl_already_signaled);
+  OpenGlBackendProbe::install_hooks(backend);
+  const std::uint64_t next = av::SyncTokens::max_live + 1u;
+  CHECK(backend.bind_fence(next, sync_at(next - 1u)));
+  CHECK(backend.bind_fence(next + 1u, sync_at(next)));
+  CHECK_EQ(deletes, 1u);
+  CHECK(delete_through_decoder(backend, 1u));
+  CHECK_EQ(deletes, 2u);
+  CHECK(deleted[1] == nullptr);
+  CHECK(backend.fence_for(1u) == nullptr);
+  CHECK(backend.fence_for(2u) == sync_at(0u));
+  CHECK(delete_through_decoder(backend, next));
+  CHECK(deleted[2] == sync_at(next - 1u));
+  CHECK(backend.fence_for(next) == nullptr);
+  CHECK(delete_through_decoder(backend, next + 100u));
+  CHECK(deleted[3] == nullptr);
+  /* A driver with no glDeleteSync refuses the command and keeps the token. */
+  OpenGlBackendProbe::gl(backend).glDeleteSync = nullptr;
+  CHECK(!delete_through_decoder(backend, 2u));
+  CHECK(backend.fence_for(2u) == sync_at(0u));
+  OpenGlBackendProbe::gl(backend).glDeleteSync = record_deleted_sync;
+  backend.shut_down(); }
 
 /* A batch whose context answers GL_CONTEXT_LOST is a lost device, as a lost
  * Vulkan or OpenCL device is: the session faults, which is how the guest's

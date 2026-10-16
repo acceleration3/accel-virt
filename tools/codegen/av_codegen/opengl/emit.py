@@ -768,7 +768,15 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
 # The host's side
 # ---------------------------------------------------------------------
 
-def _decode_param(p: Param, out: list[str]) -> None:
+# The commands whose sync is taken out of the table rather than looked up:
+# the host's object the token names - none for a token the host retired,
+# whose answers come from a sync that other tokens still stand on - is
+# deleted, and the token names nothing after. Taken once the entry point is
+# known to be there, so a token is never dropped by a call that cannot run.
+SYNC_TAKEN = {"glDeleteSync"}
+
+
+def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
     name = p.name
     if p.role is Role.IGNORED:
         out.append(f"    {p.type.cpp()} {name} = nullptr;")
@@ -789,6 +797,8 @@ def _decode_param(p: Param, out: list[str]) -> None:
         # never a handle. See the av_sync_* fields on RealGl.
         out.append(f"    uint64_t {name}_token = 0;")
         out.append(f"    if (!av_r.read_pod({name}_token)) return false;")
+        if taken:
+            return
         out.append(f"    GLsync {name} = static_cast<GLsync>("
                    f"(av_gl.av_sync_for == nullptr ? nullptr : av_gl.av_sync_for(av_gl.av_sync_user, {name}_token)));")
         return
@@ -1835,7 +1845,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             c.append("    uint64_t av_token = 0;")
             c.append("    if (!av_r.read_pod(av_token)) return false;")
         for p in cmd.params:
-            _decode_param(p, c)
+            _decode_param(p, c, cmd.name in SYNC_TAKEN)
         c.extend(_refusals(cmd))
         for p in cmd.params:
             if p.role in (Role.ARRAY_OUT, Role.STRING_OUT):
@@ -1858,6 +1868,12 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
              else (f"({p.name}_packs ? {p.name}_packed : {p.name})" if p in packed else p.name))
             for p in cmd.params)
         c.append(f"    if (av_gl.{cmd.name} == nullptr) return false;")
+        if cmd.name in SYNC_TAKEN:
+            for p in cmd.params:
+                if p.role is Role.SYNC:
+                    c.append(f"    GLsync {p.name} = static_cast<GLsync>("
+                             f"(av_gl.av_forget_sync == nullptr ? nullptr : "
+                             f"av_gl.av_forget_sync(av_gl.av_sync_user, {p.name}_token)));")
         for p in packed:
             c.append(f"    void* {p.name}_packed = nullptr;")
             c.append(f"    const bool {p.name}_packs = {p.name}_via_blob && av_gl.av_pack_blob != nullptr &&")
@@ -1897,10 +1913,6 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 c.append(f"        av_reply.write_varint(static_cast<uint64_t>({p.name}_bytes));")
                 c.append(f"        if ({p.name}_bytes != 0) av_reply.write({p.name}, {p.name}_bytes);")
                 c.append("    }")
-        if cmd.name == "glDeleteSync":
-            # The host's object is gone; without this the table keeps a
-            # dead entry per fence, and a game makes one a frame.
-            c.append("    if (av_gl.av_forget_sync != nullptr) { av_gl.av_forget_sync(av_gl.av_sync_user, sync_token); }")
         c.append("    return true;")
         c.append("}")
         c.append("")
@@ -1967,9 +1979,13 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
            "    // rather than free functions for the reason av_blob is one:",
            "    // a parameterless hook cannot reach one context's state, and",
            "    // this project has no file-scope place to put it (042).",
+           "    // av_forget_sync takes a token out for glDeleteSync and",
+           "    // answers the sync to delete with it, which is not always the",
+           "    // one av_sync_for answers: a sync the host already saw",
+           "    // signaled may answer through one that others share.",
            "    void (*av_bind_sync)(void*, uint64_t, void*) = nullptr;",
            "    void* (*av_sync_for)(void*, uint64_t) = nullptr;",
-           "    void (*av_forget_sync)(void*, uint64_t) = nullptr;",
+           "    void* (*av_forget_sync)(void*, uint64_t) = nullptr;",
            "    void* av_sync_user = nullptr;",
            "",
            "    // Whether the context has the compatibility profile's",
