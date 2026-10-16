@@ -1,7 +1,7 @@
 /* A buffer's bytes moved between the application's memory and the host in
- * commands that each fit what one command carries inline: the room a request
- * has going (GuestGlContext::staging_bytes) and the reply slot coming back
- * (GuestGlContext::reply_bytes), less room for the command's own fields.
+ * commands that each fit what one command carries inline (TransferRoom): the
+ * room a request has going and the reply slot coming back, less room for the
+ * command's own fields.
  *
  * One command larger than either is not a short transfer but a lost one: its
  * writer overflows and it is dropped, its answer does not fit the reply slot,
@@ -12,8 +12,6 @@
  * the writes are queued in order, so the pieces land as one transfer would. */
 #ifndef AV_GLICD_BUFFER_PIECES_HPP
 #define AV_GLICD_BUFFER_PIECES_HPP
-
-#include "icd/opengl/guest_gl_context.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -26,10 +24,6 @@ namespace av::glicd {
 
 class BufferPieces {
 public:
-    /* Generous, because a piece a little smaller costs nothing and one a
-     * little larger costs the context. */
-    static constexpr size_t write_room = GuestGlContext::staging_bytes - 4096u;
-    static constexpr size_t read_room = GuestGlContext::reply_bytes - 4096u;
     /* The most a transfer is cut for. Past it a size is not a transfer but a
      * negative GLsizeiptr read as unsigned, or more than any buffer holds, and
      * goes to the host whole to be refused there. */

@@ -49,12 +49,6 @@ class ClStagingBlock;
 
 class ClTransferChunks {
 public:
-    /* What one command may carry each way, less room for the command's own
-     * fields and the reply's: the handles, the offsets, the result, the
-     * counts. Generous, because a chunk a little smaller costs nothing and one
-     * a little larger costs the context. */
-    static constexpr size_t write_room = GuestClContext::staging_bytes - 4096u;
-    static constexpr size_t read_room = GuestClContext::reply_bytes - 4096u;
 
     /* `blocks` is the context's arena, which transfers are staged in. */
     ClTransferChunks(ClientTransport &wire, uint64_t queue, ClArenaBlocks &blocks);

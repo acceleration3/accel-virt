@@ -36,12 +36,6 @@ public:
         map_read = 0x0001u, map_write = 0x0002u, map_invalidate_range = 0x0004u, map_invalidate_buffer = 0x0008u,
         map_flush_explicit = 0x0010u, map_unsynchronized = 0x0020u, map_persistent = 0x0040u,
     };
-    /* What one read asks for: the reply slot holds it with room for its length. */
-    static constexpr size_t   read_bytes = size_t{48} << 10u;
-    /* What one write sends: a quarter of the smallest arena through a lease,
-     * and what fits a command's staging inline. */
-    static constexpr size_t   blob_write_bytes = size_t{4} << 20u;
-    static constexpr size_t   inline_write_bytes = size_t{192} << 10u;
     static constexpr uint64_t max_length = uint64_t{1} << 30u;
     /* Changes closer than this go back as one write: the bytes between are
      * the host's own, and a write costs a command. */
@@ -96,10 +90,6 @@ private:
     /* Where the run of changes from `from` ends: past its last changed word
      * before merge_gap bytes in a row stay the same. */
     uint64_t change_end(const uint8_t *known, uint64_t from) const;
-    /* The next write's bytes: a lease's worth when the arena has room for it
-     * - after asking the host something, which retires the arena, if it has
-     * not - and an inline command's otherwise. */
-    size_t chunk_for(ClientTransport &wire, uint64_t left) const;
 
     BlockSource   &memory_;
     BufferShadows &shadows_;

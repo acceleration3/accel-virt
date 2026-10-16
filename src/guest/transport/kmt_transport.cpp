@@ -31,7 +31,8 @@ constexpr size_t   max_batch = 0xFFFFFFFFu;
 KmtTransport::KmtTransport(GuestConnection &connection, BlockSource &memory, SubApi sub_api, uint8_t ring_order,
                            uint32_t reply_bytes, uint8_t *staging, size_t staging_bytes)
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
-      staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{},
+      staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u),
+      room_(staging != nullptr ? staging_bytes : 0u, reply_bytes), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
       path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), pending_(nullptr, 0u), answered_(false), answered_fence_(0u),
       decode_arena_(nullptr, 0u), blobs_(), spill_(memory), answer_(memory)
@@ -42,7 +43,8 @@ KmtTransport::KmtTransport(GuestConnection &connection, BlockSource &memory, Sub
 KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t ring_order, uint32_t reply_bytes,
                            uint8_t *staging, size_t staging_bytes)
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
-      staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{},
+      staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u),
+      room_(staging != nullptr ? staging_bytes : 0u, reply_bytes), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
       path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), pending_(nullptr, 0u), answered_(false), answered_fence_(0u),
       decode_arena_(nullptr, 0u), blobs_(), spill_(), answer_()
@@ -532,9 +534,16 @@ bool KmtTransport::drain()
 /* The oldest batches the host has yet to run are waited for one at a time,
  * so the host keeps working on the rest while their leases come back. What
  * is held is sent first: its leases come back only once it has run. */
+const TransferRoom &KmtTransport::room() const
+{
+    AV_SCOPE("KmtTransport::room");
+    return room_;
+}
+
 bool KmtTransport::make_room_for_blobs(size_t bytes)
 {
     AV_SCOPE("KmtTransport::make_room_for_blobs");
+    if (!blobs_.ready()) return false;
     if (blobs_.room() >= bytes) return true;
     if (flush() != TransportResult::ok) return false;
     retire_consumed();

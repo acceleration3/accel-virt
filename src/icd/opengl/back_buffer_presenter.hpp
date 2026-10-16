@@ -53,10 +53,6 @@ struct BackBufferPresenterProbe;
 class BackBufferPresenter {
 public:
     static constexpr uint32_t max_edge = 8192u;
-    /* The rows one read-back asks for: half the arena's default when bulk
-     * data crosses there, and what a reply holds inline otherwise. */
-    static constexpr size_t   blob_read_bytes = size_t{8} << 20u;
-    static constexpr size_t   inline_read_bytes = size_t{48} << 10u;
     /* Frames the present thread may hold at once: one being shown while the
      * next is drawn, as a native driver queues. */
     static constexpr uint32_t slot_count = 2u;

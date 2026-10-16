@@ -7,6 +7,7 @@
 #include "icd/opengl/buffer_shadows.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/client/client_transport.hpp"
+#include "proto/client/transfer_room.hpp"
 
 #include "gl_dispatch_client.h"
 
@@ -163,7 +164,7 @@ void BufferMapping::start(ClientTransport &wire)
 void BufferMapping::read(ClientTransport &wire)
 {
     AV_SCOPE("BufferMapping::read");
-    icd::Pieces pieces(length_, read_bytes);
+    icd::Pieces pieces(length_, wire.room().inline_read());
     while (pieces.next())
         glproto::av_glGetNamedBufferSubData(wire, buffer_, static_cast<GLintptr>(offset_ + pieces.offset()),
                                              static_cast<GLsizeiptr>(pieces.count()), block_ + pieces.offset());
@@ -173,7 +174,7 @@ void BufferMapping::send(ClientTransport &wire, uint64_t at, uint64_t end)
 {
     AV_SCOPE("BufferMapping::send");
     while (at < end) {
-        const size_t chunk = chunk_for(wire, end - at);
+        const size_t chunk = wire.room().write_piece(wire, end - at);
         glproto::av_glNamedBufferSubData(wire, buffer_, static_cast<GLintptr>(offset_ + at),
                                           static_cast<GLsizeiptr>(chunk), block_ + at);
         at += chunk;
@@ -216,19 +217,6 @@ uint64_t BufferMapping::change_end(const uint8_t *known, uint64_t from) const
         __builtin_memcmp(block_ + at, known + at, static_cast<size_t>(length_ - at)) != 0)
         end = length_;
     return end;
-}
-
-size_t BufferMapping::chunk_for(ClientTransport &wire, uint64_t left) const
-{
-    AV_SCOPE("BufferMapping::chunk_for");
-    ClientBlobArena &blobs = wire.blobs();
-    const size_t     inline_chunk = left < inline_write_bytes ? static_cast<size_t>(left) : inline_write_bytes;
-    if (!blobs.ready()) return inline_chunk;
-    const size_t wanted = left < blob_write_bytes ? static_cast<size_t>(left) : blob_write_bytes;
-    /* An answered call goes behind everything held, so its answer retires
-     * every lease the transport has lent: the host has run them all. */
-    if (blobs.room() < wanted) static_cast<void>(glproto::av_glIsBuffer(wire, buffer_));
-    return blobs.room() >= wanted ? wanted : inline_chunk;
 }
 
 }  // namespace av::glicd

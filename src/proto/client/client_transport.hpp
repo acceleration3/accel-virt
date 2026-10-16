@@ -18,11 +18,13 @@
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace av {
 
 class ClientBlobArena;
+class TransferRoom;
 
 enum class TransportResult : uint32_t {
     ok = 0u,
@@ -60,6 +62,13 @@ public:
     /* The arena a large array is lent room in, to cross as a blob rather than
      * inline (OpenGL). `ready()` false means fall back to inline. */
     virtual ClientBlobArena &blobs() = 0;
+    /* Room for a `bytes` lease in blobs(), made by having the host run the
+     * oldest batches whose leases are still live - what is held sent first.
+     * False with no arena, when even the host having run everything leaves
+     * too little, or when the context faulted. */
+    [[nodiscard]] virtual bool make_room_for_blobs(size_t bytes) = 0;
+    /* What one piece of a bulk transfer carries on this transport. */
+    virtual const TransferRoom &room() const = 0;
 
 protected:
     ClientTransport() = default;

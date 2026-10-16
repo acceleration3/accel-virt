@@ -22,7 +22,7 @@ static_assert(Connection::command_bytes % CommandBatch::first_block == 0u && (do
 
 CommandBatch::CommandBatch(BlockSource &memory, Connection &connection)
     : memory_(memory), connection_(connection), framed_(nullptr, 0u), last_(0u), failure_(Status::ok),
-      refused_(0u), decode_arena_(nullptr, 0u), blobs_(), spill_(memory)
+      refused_(0u), decode_arena_(nullptr, 0u), blobs_(), room_(command_room, 0u), spill_(memory)
       {
           AV_SCOPE("CommandBatch::CommandBatch");
       }
@@ -168,6 +168,18 @@ ClientBlobArena &CommandBatch::blobs()
 {
     AV_SCOPE("CommandBatch::blobs");
     return blobs_;
+}
+
+bool CommandBatch::make_room_for_blobs(size_t)
+{
+    AV_SCOPE("CommandBatch::make_room_for_blobs");
+    return false;
+}
+
+const TransferRoom &CommandBatch::room() const
+{
+    AV_SCOPE("CommandBatch::room");
+    return room_;
 }
 
 void CommandBatch::report(StateWriter &writer) const

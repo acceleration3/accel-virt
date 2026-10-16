@@ -30,6 +30,8 @@ public:
     void             end_call() override;
     WireArena       &decode_arena() override;
     ClientBlobArena &blobs() override;
+    [[nodiscard]] bool make_room_for_blobs(size_t bytes) override;
+    const TransferRoom &room() const override;
 
 private:
     D3dCommandStream &stream_;

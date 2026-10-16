@@ -23,6 +23,7 @@
 #include "guest/transport/framed_block.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/client/client_transport.hpp"
+#include "proto/client/transfer_room.hpp"
 #include "proto/wire/spill_block.hpp"
 #include "proto/wire/wire_arena.hpp"
 
@@ -69,6 +70,10 @@ public:
     void             end_call() override;
     WireArena       &decode_arena() override;
     ClientBlobArena &blobs() override;
+    /* Never: a recording has no arena. */
+    [[nodiscard]] bool make_room_for_blobs(size_t bytes) override;
+    /* A recorded command's room, and no reply. */
+    const TransferRoom &room() const override;
 
     /* The recording fits a block no larger than the command limit and its last
      * command ends where the recording does; the only failure latched is
@@ -96,6 +101,7 @@ private:
     uint32_t        refused_;
     WireArena       decode_arena_;
     ClientBlobArena blobs_;
+    TransferRoom    room_;
     /* A command longer than its room, while it is written and recorded. */
     SpillBlock      spill_;
 

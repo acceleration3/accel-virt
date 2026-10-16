@@ -4,6 +4,7 @@
 #include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
+#include "proto/client/transfer_room.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 
@@ -93,12 +94,18 @@ Status D3dDeviceChannel::execute(const uint8_t *commands, size_t length)
     return Status::ok;
 }
 
-bool D3dDeviceChannel::make_room_for(size_t bytes)
+bool D3dDeviceChannel::make_room_for_blobs(size_t bytes)
 {
-    AV_SCOPE("D3dDeviceChannel::make_room_for");
-    if (bytes <= D3dCommandStream::inline_data) return true;
+    AV_SCOPE("D3dDeviceChannel::make_room_for_blobs");
+    if (stream_.room().inline_both(bytes)) return true;
     const ThreadLockHold release(lock_);
-    return stream_.make_room_for(bytes);
+    return stream_.make_room_for_blobs(bytes);
+}
+
+const TransferRoom &D3dDeviceChannel::room() const
+{
+    AV_SCOPE("D3dDeviceChannel::room");
+    return stream_.room();
 }
 
 bool D3dDeviceChannel::close()

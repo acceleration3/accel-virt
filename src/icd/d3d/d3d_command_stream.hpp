@@ -13,8 +13,8 @@
  * Bulk data - a texture upload, a readback - crosses through the transport's
  * blob arena rather than the batch. A lease comes back once the host has run
  * the batch that carried its command, so when the arena runs short the
- * device asks for room (make_room_for), which sends what is held and waits
- * for the oldest batches.
+ * device asks for room (make_room_for_blobs), which sends what is held and
+ * waits for the oldest batches.
  *
  * Every device the process makes speaks on this one stream, so the doorbell
  * and ring it costs are spent once per process: the stream remembers which
@@ -53,13 +53,6 @@ public:
      * so its data goes inline, and half a command's room leaves the rest for
      * the command's other fields. */
     static constexpr size_t recorded_data = command_room / 2u;
-    /* Data up to this needs no room made in the blob arena: sent, it crosses
-     * in its command when the arena has none (the generated put_bytes falls
-     * back inline), and asked for, it comes back in the reply slot. */
-    static constexpr size_t inline_data = 32u * 1024u;
-    /* The most data one command carries through the arena: half the
-     * smallest session's arena, so a piece always fits once it is emptied. */
-    static constexpr size_t arena_piece = 16u << 20u;
     /* What is recorded before an idle host is sent it: a few dozen draws, so
      * a submission's cost is spread over enough of them to stay small. */
     static constexpr size_t stream_bytes = 1024u;
@@ -109,11 +102,6 @@ public:
      * when they are not whole commands; no_space when a recording cannot grow
      * to hold them. */
     [[nodiscard]] Status append_recorded(const uint8_t *bytes, size_t length);
-    /* The blob arena has `bytes` free, what is held sent and the oldest
-     * batches waited for when it has not. False when even an empty arena is
-     * too small. A recording's data goes inline instead: false when `bytes`
-     * is more than one recorded command carries. */
-    [[nodiscard]] bool   make_room_for(size_t bytes);
     /* Commands recorded after this run on `device`. False when the selection
      * could not be sent, which fails the stream. Device 0 selects nothing. */
     [[nodiscard]] bool   speak_as(uint32_t device);
@@ -132,6 +120,11 @@ public:
     void             end_call() override;
     WireArena       &decode_arena() override;
     ClientBlobArena &blobs() override;
+    /* The transport's (KmtTransport::make_room_for_blobs). A recording's data
+     * goes inline instead: false when `bytes` is more than one recorded
+     * command carries. */
+    [[nodiscard]] bool make_room_for_blobs(size_t bytes) override;
+    const TransferRoom &room() const override;
 
     bool invariants_hold() const;
 

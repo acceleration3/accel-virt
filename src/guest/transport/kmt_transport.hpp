@@ -42,6 +42,7 @@
 #include "proto/wire/spill_block.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/client/client_transport.hpp"
+#include "proto/client/transfer_room.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/escape/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
@@ -203,9 +204,11 @@ public:
     void            end_call() override;
     /* Room for a `bytes` lease in the blob arena: what is held is sent, and
      * the oldest batches the host has yet to run are waited for - not all of
-     * them. false when even the host having run everything leaves too little,
-     * or the context faulted. */
-    [[nodiscard]] bool make_room_for_blobs(size_t bytes);
+     * them. false with no arena, when even the host having run everything
+     * leaves too little, or the context faulted. */
+    [[nodiscard]] bool make_room_for_blobs(size_t bytes) override;
+    /* The staging's room going, the reply slot's coming back. */
+    const TransferRoom &room() const override;
     /* `length` bytes of CommandHeader-framed commands, published behind what
      * is held as one batch: the whole batch is judged before anything is
      * written, and one that does not frame exactly is refused without
@@ -300,6 +303,7 @@ private:
     uint32_t         reply_bytes_;
     uint8_t         *staging_;
     size_t           staging_bytes_;
+    TransferRoom     room_;
     uint32_t         allocations_[allocation_count];   /* name, dma */
     uint64_t         dma_address_;
     uint32_t         context_;

@@ -1,6 +1,7 @@
 #include "icd/common/locked_transport.hpp"
 
 #include "core/platform/thread_lock.hpp"
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 
@@ -59,6 +60,19 @@ ClientBlobArena &LockedTransport::blobs()
 {
     AV_SCOPE("LockedTransport::blobs");
     return inner_.blobs();
+}
+
+bool LockedTransport::make_room_for_blobs(size_t bytes)
+{
+    AV_SCOPE("LockedTransport::make_room_for_blobs");
+    const ThreadLockHold hold(lock_);
+    return inner_.make_room_for_blobs(bytes);
+}
+
+const TransferRoom &LockedTransport::room() const
+{
+    AV_SCOPE("LockedTransport::room");
+    return inner_.room();
 }
 
 bool LockedTransport::invariants_hold() const

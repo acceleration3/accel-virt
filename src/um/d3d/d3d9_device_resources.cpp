@@ -11,6 +11,7 @@
 #include "core/log/log_line.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/client/transfer_room.hpp"
 #include "core/log/log_sink.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/common/pieces.hpp"
@@ -375,11 +376,11 @@ HRESULT D3d9Device::write_buffer(uint32_t id, uint32_t offset, const void *data,
     AV_SCOPE("D3d9Device::write_buffer");
     const auto *const from = static_cast<const uint8_t *>(data);
     written_ += bytes;
-    icd::Pieces pieces(bytes, d3d::D3dCommandStream::arena_piece);
+    icd::Pieces pieces(bytes, TransferRoom::lent_bytes);
     while (pieces.next()) {
         const uint32_t done = static_cast<uint32_t>(pieces.offset());
         const uint32_t piece = static_cast<uint32_t>(pieces.count());
-        if (!wire().make_room_for(piece)) return lost(__func__);
+        if (!wire().make_room_for_blobs(piece)) return lost(__func__);
         if (!d3d9proto::av_d3d9_WriteBuffer9(wire(), id, offset + done, pieces.first() ? flags : flags & ~write_discard,
                                              from + done, piece))
             return lost(__func__);
@@ -416,7 +417,7 @@ HRESULT D3d9Device::write_texture(const D3d9Resource &resource, uint32_t index, 
     const uint32_t           back = box.Back > box.Front ? box.Back : box.Front + 1u;
     const d3dproto::Box      region = {box.Left, box.Top, box.Front, box.Right, box.Bottom, back};
     const d3d::TextureUpload upload(D3d9FormatLayout(static_cast<uint32_t>(resource.format)), region, row_pitch,
-                                    slice_pitch, d3d::D3dCommandStream::arena_piece);
+                                    slice_pitch, TransferRoom::lent_bytes);
     if (!upload.readable()) return E_INVALIDARG;
     TextureWriter writer(*this, id, subresource, flags);
     return upload.send(writer, data) ? S_OK : lost(__func__);
@@ -428,7 +429,7 @@ bool D3d9Device::write_piece(uint32_t id, uint32_t index, const d3d9proto::Box &
     AV_SCOPE("D3d9Device::write_piece");
     written_ += bytes;
     const uint64_t started = clock_.microseconds();
-    const bool     room = wire().make_room_for(bytes);
+    const bool     room = wire().make_room_for_blobs(bytes);
     trace_wait("wait-room", started, static_cast<uint32_t>(bytes));
     if (room && d3d9proto::av_d3d9_WriteTexture9(wire(), id, index, box, row_pitch, slice_pitch, flags, data, bytes))
         return true;
@@ -467,7 +468,7 @@ HRESULT D3d9Device::read_surface(const D3d9Resource &resource, uint32_t index, u
     constexpr uint32_t pitch_slack = 256u;
     const size_t capacity = (size_t{layout.row_bytes(level.width)} + pitch_slack) * layout.rows(level.height);
     if (capacity == 0u || !readback_room(capacity)) return E_OUTOFMEMORY;
-    if (!wire().make_room_for(capacity)) return lost(__func__);
+    if (!wire().make_room_for_blobs(capacity)) return lost(__func__);
     uint32_t hresult = 1u, width = 0u, height = 0u, format = 0u;
     uint64_t read = 0u;
     const uint64_t started = clock_.microseconds();

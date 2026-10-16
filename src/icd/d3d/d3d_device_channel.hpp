@@ -45,8 +45,7 @@ public:
     /* The same for a Direct3D 9 device (CreateDevice9), on a stream told to
      * speak Direct3D 9's selection (D3dCommandStream::speak_with). */
     [[nodiscard]] bool   open9(uint32_t &hresult);
-    /* The stream's flush, and its make_room_for for data past what crosses
-     * inline (D3dCommandStream::inline_data), under the lock. */
+    /* The stream's flush, under the lock. */
     [[nodiscard]] Status flush();
     [[nodiscard]] Status application_flush();
     /* The publish barrier, under the lock (KmtTransport::run_held): before
@@ -58,7 +57,6 @@ public:
     /* A command list run on this device: from and back to the default state,
      * as ExecuteCommandList leaves an immediate context. */
     [[nodiscard]] Status execute(const uint8_t *commands, size_t length);
-    [[nodiscard]] bool   make_room_for(size_t bytes);
     /* The device is destroyed on the host, and the stream stops speaking for it. */
     [[nodiscard]] bool   close();
     /* The same for a Direct3D 9 device (Destroy9). */
@@ -70,6 +68,10 @@ public:
     void             end_call() override;
     WireArena       &decode_arena() override;
     ClientBlobArena &blobs() override;
+    /* The stream's, under the lock, for data past what crosses inline either
+     * way (TransferRoom::inline_both); that needs none. */
+    [[nodiscard]] bool make_room_for_blobs(size_t bytes) override;
+    const TransferRoom &room() const override;
 
     /* The lock is held exactly while a command is written or a reply read,
      * and the stream is sound. */

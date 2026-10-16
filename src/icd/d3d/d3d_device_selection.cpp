@@ -47,4 +47,16 @@ ClientBlobArena &D3dDeviceSelection::blobs()
     return stream_.blobs();
 }
 
+bool D3dDeviceSelection::make_room_for_blobs(size_t bytes)
+{
+    AV_SCOPE("D3dDeviceSelection::make_room_for_blobs");
+    return stream_.make_room_for_blobs(bytes);
+}
+
+const TransferRoom &D3dDeviceSelection::room() const
+{
+    AV_SCOPE("D3dDeviceSelection::room");
+    return stream_.room();
+}
+
 }  // namespace av::d3d

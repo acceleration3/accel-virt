@@ -8,6 +8,7 @@
 #include "icd/opencl/cl_image_region.hpp"
 #include "icd/opencl/cl_staged_rows.hpp"
 #include "icd/opencl/cl_staging_block.hpp"
+#include "proto/client/transfer_room.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 #include "proto/resources/texel_layout.hpp"
 
@@ -90,7 +91,7 @@ cl_int ClTransferChunks::write_buffer_rect(uint64_t buffer, const ClBufferRect &
 cl_int ClTransferChunks::read_inline(uint64_t buffer, size_t offset, size_t bytes, uint8_t *to)
 {
     AV_SCOPE("ClTransferChunks::read_inline");
-    icd::Pieces pieces(bytes, read_room);
+    icd::Pieces pieces(bytes, wire_.room().inline_read());
     while (pieces.next()) {
         ++commands_;
         const cl_int read = av::clproto::av_clEnqueueReadBuffer(wire_, queue_, buffer, CL_TRUE,
@@ -109,7 +110,7 @@ cl_int ClTransferChunks::write_inline(uint64_t buffer, size_t offset, size_t byt
      * command, so a piece needs no answer of its own: the caller's drain after
      * the last one is the answer for all of them. */
     icd::UnansweredTransport unanswered(wire_);
-    icd::Pieces              pieces(bytes, write_room);
+    icd::Pieces              pieces(bytes, wire_.room().inline_write());
     while (pieces.next()) {
         ++commands_;
         const cl_int written = av::clproto::av_clEnqueueWriteBuffer(
@@ -127,7 +128,8 @@ cl_int ClTransferChunks::read_image_inline(uint64_t image, const ClImageRegion &
 {
     AV_SCOPE("ClTransferChunks::read_image_inline");
     const TexelLayout texels(static_cast<uint32_t>(region.element_bytes()), 1u, 1u);
-    const size_t      most = region.rows_packed() || region.row_bytes() > read_room ? read_room : region.row_bytes();
+    const size_t      reply_room = wire_.room().inline_read();
+    const size_t      most = region.rows_packed() || region.row_bytes() > reply_room ? reply_room : region.row_bytes();
     for (size_t slice = 0u; slice < region.slices(); ++slice) {
         uint8_t *const plane = to + region.row_offset(0u, slice);
         icd::RowPieces pieces(texels, static_cast<uint32_t>(region.width()), static_cast<uint32_t>(region.rows()),
@@ -158,7 +160,7 @@ cl_int ClTransferChunks::write_image_inline(uint64_t image, const ClImageRegion 
         const uint8_t *const plane = source + region.row_offset(0u, slice);
         icd::RowPieces       pieces(texels, static_cast<uint32_t>(region.width()),
                                     static_cast<uint32_t>(region.rows()), static_cast<uint32_t>(region.row_pitch()),
-                                    write_room);
+                                    wire_.room().inline_write());
         while (pieces.next()) {
             size_t origin[3] = {};
             region.origin_of(pieces.left(), pieces.top(), slice, origin);
@@ -182,8 +184,8 @@ cl_int ClTransferChunks::read_rect_inline(uint64_t buffer, const ClBufferRect &r
     const ClImageRegion &buffer_side = rect.buffer_side();
     const ClImageRegion &application = rect.application();
     const TexelLayout bytes(1u, 1u, 1u);
-    const size_t      most =
-        application.rows_packed() || application.row_bytes() > read_room ? read_room : application.row_bytes();
+    const size_t      reply_room = wire_.room().inline_read();
+    const size_t      most = application.rows_packed() || application.row_bytes() > reply_room ? reply_room : application.row_bytes();
     const size_t at_corner[3] = {};
     for (size_t slice = 0u; slice < application.slices(); ++slice) {
         uint8_t *const plane = to + application.row_offset(0u, slice);
@@ -218,7 +220,7 @@ cl_int ClTransferChunks::write_rect_inline(uint64_t buffer, const ClBufferRect &
         const uint8_t *const plane = source + application.row_offset(0u, slice);
         icd::RowPieces       pieces(bytes, static_cast<uint32_t>(application.width()),
                                     static_cast<uint32_t>(application.rows()),
-                                    static_cast<uint32_t>(application.row_pitch()), write_room);
+                                    static_cast<uint32_t>(application.row_pitch()), wire_.room().inline_write());
         while (pieces.next()) {
             size_t origin[3] = {};
             buffer_side.origin_of(pieces.left(), pieces.top(), slice, origin);

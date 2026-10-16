@@ -4,6 +4,7 @@
 #include "core/log/log_line.hpp"
 #include "core/platform/thread_lock.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/client/transfer_room.hpp"
 #include "core/log/log_sink.hpp"
 #include "icd/d3d/device_table.hpp"
 #include "icd/d3d/texture_upload.hpp"
@@ -300,7 +301,7 @@ void D3d11Device::upload(const ResourceRecord &resource, uint32_t subresource, c
 size_t D3d11Device::piece_bytes() const
 {
     AV_SCOPE("D3d11Device::piece_bytes");
-    return parent_ != nullptr ? d3d::D3dCommandStream::recorded_data : d3d::D3dCommandStream::arena_piece;
+    return parent_ != nullptr ? d3d::D3dCommandStream::recorded_data : TransferRoom::lent_bytes;
 }
 
 bool D3d11Device::upload_piece_of(uint32_t resource, uint32_t subresource, const d3dproto::Box &box,
@@ -310,7 +311,7 @@ bool D3d11Device::upload_piece_of(uint32_t resource, uint32_t subresource, const
     AV_SCOPE("D3d11Device::upload_piece_of");
     /* Large data leases the arena; an arena short of room is emptied first,
      * which is one round trip rather than a refused upload. */
-    if (!wire().make_room_for(bytes)) lines_.once("an upload larger than the arena");
+    if (!wire().make_room_for_blobs(bytes)) lines_.once("an upload larger than the arena");
     if (d3dproto::av_d3d_UpdateSubresource(wire(), resource, subresource, 1u, box, row_pitch, depth_pitch, copy_flags,
                                             data, bytes))
         return true;
@@ -321,7 +322,7 @@ bool D3d11Device::upload_piece_of(uint32_t resource, uint32_t subresource, const
 bool D3d11Device::read_back(const ResourceRecord &resource, uint32_t subresource, uint8_t *out, size_t capacity)
 {
     AV_SCOPE("D3d11Device::read_back");
-    if (!wire().make_room_for(capacity)) return false;
+    if (!wire().make_room_for_blobs(capacity)) return false;
     uint32_t hresult = 1u, row_pitch = 0u, depth_pitch = 0u;
     uint64_t read = 0u;
     if (!d3dproto::av_d3d_ReadSubresource(wire(), resource.stamp.id(), subresource, &hresult, &row_pitch, &depth_pitch, out,

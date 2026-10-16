@@ -166,11 +166,17 @@ bool D3dCommandStream::room_for(size_t wanted)
     return true;
 }
 
-bool D3dCommandStream::make_room_for(size_t bytes)
+bool D3dCommandStream::make_room_for_blobs(size_t bytes)
 {
-    AV_SCOPE("D3dCommandStream::make_room_for");
+    AV_SCOPE("D3dCommandStream::make_room_for_blobs");
     if (recording_ != nullptr) return bytes <= recorded_data;
-    return transport_.blobs().ready() && transport_.make_room_for_blobs(bytes);
+    return transport_.make_room_for_blobs(bytes);
+}
+
+const TransferRoom &D3dCommandStream::room() const
+{
+    AV_SCOPE("D3dCommandStream::room");
+    return transport_.room();
 }
 
 void D3dCommandStream::speak_with(uint32_t select_command, uint32_t flush_command)

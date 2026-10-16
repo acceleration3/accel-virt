@@ -37,6 +37,9 @@ public:
     void             end_call() override;
     WireArena       &decode_arena() override;
     ClientBlobArena &blobs() override;
+    /* Under the lock. */
+    [[nodiscard]] bool make_room_for_blobs(size_t bytes) override;
+    const TransferRoom &room() const override;
 
     /* The lock is held exactly while a command is written or a reply read. */
     bool invariants_hold() const;

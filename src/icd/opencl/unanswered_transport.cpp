@@ -53,4 +53,16 @@ ClientBlobArena &UnansweredTransport::blobs()
     return inner_.blobs();
 }
 
+bool UnansweredTransport::make_room_for_blobs(size_t bytes)
+{
+    AV_SCOPE("UnansweredTransport::make_room_for_blobs");
+    return inner_.make_room_for_blobs(bytes);
+}
+
+const TransferRoom &UnansweredTransport::room() const
+{
+    AV_SCOPE("UnansweredTransport::room");
+    return inner_.room();
+}
+
 }  // namespace av::icd

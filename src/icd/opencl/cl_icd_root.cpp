@@ -24,6 +24,7 @@
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/client/transfer_room.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "core/log/log_sink.hpp"
@@ -1009,7 +1010,7 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
      * fits rides inside the create, which costs one round trip rather than
      * four. */
     const bool copies_after = (flags & static_cast<cl_mem_flags>(CL_MEM_COPY_HOST_PTR)) != 0u &&
-                              host_pointer != nullptr && bytes > ClTransferChunks::write_room;
+                              host_pointer != nullptr && bytes > wire->room().inline_write();
     if (buffer == 0u) {
         buffer = av::clproto::av_clCreateBuffer(
             *wire, held->wire(),

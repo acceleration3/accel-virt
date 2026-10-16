@@ -11,8 +11,10 @@
 #include "icd/common/window_extent.hpp"
 #include "icd/common/window_surface.hpp"
 #include "icd/opengl/gl_present_loop.hpp"
+#include "icd/opengl/guest_gl_context.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/client/client_transport.hpp"
+#include "proto/client/transfer_room.hpp"
 #include "proto/resources/texel_layout.hpp"
 
 #include "gl_dispatch_client.h"
@@ -24,7 +26,7 @@ namespace {
 
 }  // namespace
 
-static_assert(BackBufferPresenter::max_edge * 4u <= BackBufferPresenter::inline_read_bytes,
+static_assert(BackBufferPresenter::max_edge * 4u + TransferRoom::command_bytes <= GuestGlContext::reply_bytes,
               "a read-back of one row fits a reply");
 
 BackBufferPresenter::BackBufferPresenter(BlockSource &memory, LogSink &log)
@@ -314,7 +316,7 @@ void BackBufferPresenter::read_back(ClientTransport &wire)
 {
     AV_SCOPE("BackBufferPresenter::read_back");
     const TexelLayout pixels(bytes_per_pixel, 1u, 1u);
-    const size_t      chunk = wire.blobs().ready() ? blob_read_bytes : inline_read_bytes;
+    const size_t      chunk = wire.room().read_piece(wire);
     icd::RowPieces    pieces(pixels, width_, height_, width_ * bytes_per_pixel, chunk);
     while (pieces.next())
         glproto::av_glGetTextureSubImage(wire, texture_, 0, static_cast<GLint>(pieces.left()),
