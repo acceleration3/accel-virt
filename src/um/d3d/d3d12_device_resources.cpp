@@ -447,7 +447,7 @@ HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRe
         log_.write("avumd: the device took no existing heap's pages");
         return E_OUTOFMEMORY;
     }
-    if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.id, properties_of(heap.type), 0u, heap.size,
+    if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.stamp.id(), properties_of(heap.type), 0u, heap.size,
                                                  buffer_alignment, heap.memory->handle()),
               "CreateHeap12"))
         return E_OUTOFMEMORY;
