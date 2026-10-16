@@ -5,10 +5,10 @@
  * call; the Khronos OpenCL loader and the Direct3D runtimes promise nothing
  * (research 052 §3, gap 2), so the first call runs under RunOnce for all four.
  *
- * Seams has `log` (the driver's FileLog), `root` (what tracing reports) and
- * `trace` (its ProcessTrace), and `initialize()`, the fallible half of its
- * construction: a process it fails in is refused for good, and the DLL
- * answers every call as a driver that does not serve here. */
+ * Seams has `process` (its DriverSeams: heap, log, D3DKMT and trace) and
+ * `root` (what tracing reports). The process's fallible half is the D3DKMT
+ * wait event: a process it fails in is refused for good, and the DLL answers
+ * every call as a driver that does not serve here. */
 #ifndef AV_UM_LAZY_DRIVER_HPP
 #define AV_UM_LAZY_DRIVER_HPP
 
@@ -74,7 +74,7 @@ template <typename Seams>
 long LazyDriver<Seams>::crashed(void *pointers)
 {
     AV_SCOPE("LazyDriver::crashed");
-    return seams_.constructed() ? seams_.object().trace.crashed(pointers) : 0;
+    return seams_.constructed() ? seams_.object().process.trace().crashed(pointers) : 0;
 }
 
 template <typename Seams>
@@ -83,13 +83,13 @@ void LazyDriver<Seams>::run_once()
     AV_SCOPE("LazyDriver::run_once");
     if (seams_.construct() != Status::ok) return;
     Seams         &seams = seams_.object();
-    DriverLog lines(seams.log, prefix_);
-    if (seams.initialize() != Status::ok) {
+    DriverLog lines(seams.process.log(), prefix_);
+    if (seams.process.initialize() != Status::ok) {
         lines.write("no D3DKMT wait event; this process is refused");
         seams_.destroy();
         return;
     }
-    if (seams.trace.start(module_, seams.root, crashed_) != Status::ok)
+    if (seams.process.trace().start(module_, seams.root, crashed_) != Status::ok)
         lines.write("tracing is off: its section, pin or service failed");
 }
 

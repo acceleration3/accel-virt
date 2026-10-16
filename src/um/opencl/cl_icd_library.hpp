@@ -9,13 +9,11 @@
 #define AV_UM_CL_ICD_LIBRARY_HPP
 
 #include "icd/opencl/cl_icd_root.hpp"
-#include "um/kmt/gdi_kmt.hpp"
+#include "um/common/driver_seams.hpp"
 #include "um/opencl/windows_d3d_adapter_source.hpp"
 #include "um/opencl/windows_d3d11_bridge.hpp"
 #include "um/opencl/windows_gl_share_source.hpp"
-#include "um/common/file_log.hpp"
 #include "um/common/lazy_driver.hpp"
-#include "um/common/process_heap.hpp"
 #include "um/common/srw_lock.hpp"
 #include "um/common/windows_service_thread.hpp"
 #include "um/trace/process_trace.hpp"
@@ -49,17 +47,11 @@ private:
         Seams();
         Seams(const Seams &) = delete;
         Seams &operator=(const Seams &) = delete;
-        /* The D3DKMT wait event the driver's waits need; without it the
-         * process is refused (LazyDriver). */
-        [[nodiscard]] Status initialize();
-
-        ProcessHeap      heap;
+        DriverSeams      process;
         SrwLock          lock;
         SrwLock          send_lock;
         SrwLock          objects_lock;
         SrwLock          blocks_lock;
-        FileLog          log;
-        GdiKmt           kmt;
         /* Declared before the root, so it is stopped after the root has let
          * its watcher go. */
         WindowsServiceThread watcher;
@@ -67,7 +59,6 @@ private:
         WindowsD3dAdapterSource d3d_adapters;
         WindowsD3d11Bridge d3d11;
         clicd::ClIcdRoot root;
-        ProcessTrace     trace;
     };
 
 

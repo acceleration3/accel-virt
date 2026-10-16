@@ -1843,7 +1843,7 @@ uint32_t IcdRoot::handles_on_connections() const
 void IcdRoot::report(StateWriter &writer)
 {
     AV_SCOPE("IcdRoot::report");
-    const ReportGate gate(lock_, writer, "root");
+    const ReportGate gate(lock_, writer, "avvk");
     if (!gate.held()) return;
     writer.number("connections", connections_.live());
     writer.number("handles", handles_.live());

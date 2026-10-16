@@ -264,9 +264,9 @@ public:
      * pending outside vkCreateInstance. */
     bool invariants_hold() const;
 
-    /* `root/0` with the counts, then each connection with its handles
+    /* `avvk/0` with the counts, then each connection with its handles
      * (docs/trace.md). Never waits: with the root's lock held elsewhere only
-     * `root/0 busy=true` is written. */
+     * `avvk/0 busy=true` is written. */
     void report(StateWriter &writer) override;
 
 private:

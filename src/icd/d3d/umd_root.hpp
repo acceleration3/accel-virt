@@ -98,9 +98,9 @@ public:
     /* What a DXGI thunk resolves its argument's hDevice through. */
     UmdDevice *device_of(void *block) const;
 
-    /* `umd/0` with the adapter and device counts, then each open connection, each
+    /* `avumd/0` with the adapter and device counts, then each open connection, each
      * adapter and each device (docs/trace.md). Never waits: with the lock held
-     * elsewhere only `umd/0 busy=true` is written. */
+     * elsewhere only `avumd/0 busy=true` is written. */
     void report(StateWriter &writer) override;
 
     bool invariants_hold() const;

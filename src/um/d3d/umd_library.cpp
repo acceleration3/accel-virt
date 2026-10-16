@@ -11,17 +11,10 @@
 namespace av {
 
 UmdLibrary::Seams::Seams()
-    : heap(), lock(), log(L"avumd"), kmt(), driver(heap, kmt, log),
-      root(heap, kmt, lock, log, d3d::umd_binding, &driver), trace()
+    : process(L"avumd"), lock(), driver(process.heap(), process.kmt(), process.log()),
+      root(process.heap(), process.kmt(), lock, process.log(), d3d::umd_binding, &driver)
 {
     AV_SCOPE("UmdLibrary::Seams::Seams");
-    log.open();
-}
-
-Status UmdLibrary::Seams::initialize()
-{
-    AV_SCOPE("UmdLibrary::Seams::initialize");
-    return kmt.initialize();
 }
 
 d3d::Hresult UmdLibrary::open_adapter10_2(void *args)

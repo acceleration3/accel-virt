@@ -8,12 +8,10 @@
 #define AV_UM_ICD_LIBRARY_HPP
 
 #include "icd/vulkan/icd_root.hpp"
-#include "um/kmt/gdi_kmt.hpp"
+#include "um/common/driver_seams.hpp"
 #include "um/common/dxgi_window_chains.hpp"
-#include "um/common/file_log.hpp"
-#include "um/common/lazy_driver.hpp"
 #include "um/common/gdi_window_surface.hpp"
-#include "um/common/process_heap.hpp"
+#include "um/common/lazy_driver.hpp"
 #include "um/common/srw_lock.hpp"
 #include "um/trace/process_trace.hpp"
 
@@ -43,22 +41,15 @@ private:
         Seams();
         Seams(const Seams &) = delete;
         Seams &operator=(const Seams &) = delete;
-        /* The D3DKMT wait event the driver's waits need; without it the
-         * process is refused (LazyDriver). */
-        [[nodiscard]] Status initialize();
-
-        ProcessHeap  heap;
+        DriverSeams  process;
         SrwLock      lock;
         SrwLock      send_lock;
         SrwLock      memory_lock;
-        FileLog      log;
-        GdiKmt       kmt;
         GdiWindowSurface windows;
         SrwLock      chains_lock;
         /* Before the root, which closes its swapchains' chains as it goes. */
         DxgiWindowChains chains;
         icd::IcdRoot root;
-        ProcessTrace trace;
     };
 
 

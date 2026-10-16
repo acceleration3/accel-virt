@@ -8,19 +8,11 @@
 namespace av {
 
 ClIcdLibrary::Seams::Seams()
-    : heap(), lock(), send_lock(), objects_lock(), blocks_lock(), log(L"avcl"), kmt(), watcher(), gl_share(), d3d_adapters(),
-      d3d11(), root(heap, kmt, lock, send_lock, objects_lock, blocks_lock, log, watcher, gl_share, d3d_adapters, d3d11,
-                    clicd::cl_icd_binding),
-      trace()
+    : process(L"avcl"), lock(), send_lock(), objects_lock(), blocks_lock(), watcher(), gl_share(), d3d_adapters(),
+      d3d11(), root(process.heap(), process.kmt(), lock, send_lock, objects_lock, blocks_lock, process.log(), watcher,
+                    gl_share, d3d_adapters, d3d11, clicd::cl_icd_binding)
 {
     AV_SCOPE("ClIcdLibrary::Seams::Seams");
-    log.open();
-}
-
-Status ClIcdLibrary::Seams::initialize()
-{
-    AV_SCOPE("ClIcdLibrary::Seams::initialize");
-    return kmt.initialize();
 }
 
 cl_int ClIcdLibrary::platform_ids(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms)

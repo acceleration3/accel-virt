@@ -11,11 +11,10 @@
 
 #include "icd/opengl/gl_icd_root.hpp"
 #include "icd/opengl/gl_present_loop.hpp"
+#include "um/common/driver_seams.hpp"
 #include "um/kmt/gdi_kmt.hpp"
 #include "um/common/dxgi_window_chains.hpp"
-#include "um/common/file_log.hpp"
 #include "um/common/lazy_driver.hpp"
-#include "um/common/process_heap.hpp"
 #include "um/common/srw_lock.hpp"
 #include "um/common/gdi_window_surface.hpp"
 #include "um/common/windows_service_thread.hpp"
@@ -61,16 +60,9 @@ private:
         Seams();
         Seams(const Seams &) = delete;
         Seams &operator=(const Seams &) = delete;
-        /* The D3DKMT wait event the driver's waits need, without which the
-         * process is refused (LazyDriver), then the present thread's events,
-         * without which frames are shown on the swapping thread. */
-        [[nodiscard]] Status initialize();
-
-        ProcessHeap       heap;
+        DriverSeams       process;
         SrwLock           lock;
         SrwLock           send_lock;
-        FileLog           log;
-        GdiKmt            kmt;
         GdiWindowSurface  surface;
         TlsThreadSlot     slot;
         LoadedOpengl32    opengl32;
@@ -86,7 +78,6 @@ private:
         WindowsWakeSignal    present_shown;
         glicd::GlPresentLoop presents;
         glicd::GlIcdRoot  root;
-        ProcessTrace      trace;
     };
 
     bool ready();

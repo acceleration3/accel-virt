@@ -7,27 +7,24 @@
 namespace av {
 
 GlIcdLibrary::Seams::Seams()
-    : heap(), lock(), send_lock(), log(L"avgl"), kmt(), surface(), slot(), opengl32(), chains_lock(),
-      chains(heap, kmt, chains_lock, log), present_lock(), present_kmt(), present_thread(), present_handed(),
-      present_shown(),
-      presents(heap, present_thread, present_handed, present_shown, present_lock, present_kmt, surface, chains, log),
-      root(heap, kmt, lock, send_lock, log, surface, slot, opengl32, presents, glicd::gl_icd_binding), trace()
+    : process(L"avgl"), lock(), send_lock(), surface(), slot(), opengl32(), chains_lock(),
+      chains(process.heap(), process.kmt(), chains_lock, process.log()), present_lock(), present_kmt(), present_thread(),
+      present_handed(), present_shown(),
+      presents(process.heap(), present_thread, present_handed, present_shown, present_lock, present_kmt, surface, chains,
+               process.log()),
+      root(process.heap(), process.kmt(), lock, send_lock, process.log(), surface, slot, opengl32, presents,
+           glicd::gl_icd_binding)
 {
     AV_SCOPE("GlIcdLibrary::Seams::Seams");
-    log.open();
-}
-
-Status GlIcdLibrary::Seams::initialize()
-{
-    AV_SCOPE("GlIcdLibrary::Seams::initialize");
-    const Status opened = kmt.initialize();
-    if (opened != Status::ok) return opened;
+    /* The present thread's D3DKMT event and wake events: without them frames
+     * are shown on the swapping thread, which costs the process nothing else,
+     * so their failure refuses only the loop. The seams are made on the first
+     * call, never under the loader lock. */
     if (present_kmt.initialize() != Status::ok || present_handed.initialize() != Status::ok ||
         present_shown.initialize() != Status::ok) {
-        log.write("avgl: no present thread: its D3DKMT event or wake events could not be made");
+        process.log().write("avgl: no present thread: its D3DKMT event or wake events could not be made");
         presents.refuse();
     }
-    return Status::ok;
 }
 
 bool GlIcdLibrary::ready()

@@ -136,8 +136,9 @@ copied the table.
   create a global object.
 - `SrwLock` marks the table: `waiting` only when `TryAcquireSRWLockExclusive`
   fails, `acquired` once held, `released` before it lets go. A state dump takes
-  the root's lock with `try_acquire` and writes `root/0 busy=true` if it is
-  held.
+  the root's lock with `try_acquire` and writes `<driver>/0 busy=true` if it
+  is held - each root's section is its driver's name: `avvk`, `avgl`, `avcl`,
+  `avumd`.
 - The crash filter (`WindowsCrash`) records the crash in the table, unwinds the
   faulting thread from a copy of its `CONTEXT` (`RtlLookupFunctionEntry`,
   `RtlVirtualUnwind`, 48 frames at most) and writes `CrashReport`'s lines -
@@ -145,7 +146,7 @@ copied the table.
   each native frame with its module and offset - to
   `C:\ProgramData\av\crash-<module>-<pid>.txt`, then returns what the filter
   it replaced returns.
-- The Vulkan ICD's dump: `root/0 busy= connections= handles= batches=
+- The Vulkan ICD's dump: `avvk/0 busy= connections= handles= batches=
   memories=`, then per connection `connection/<i> opened= faulted= adapter=
   luid= device= context=`, its handles numbered in the registry's order
   `connection/<i>/handle/<n> kind= host= parent=<n|none>`, and under a device

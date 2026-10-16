@@ -658,7 +658,7 @@ void GlIcdRoot::note_dropped(const char *api, const char *command, size_t writte
 void GlIcdRoot::report(StateWriter &writer)
 {
     AV_SCOPE("GlIcdRoot::report");
-    const icd::ReportGate gate(lock_, writer, "root");
+    const icd::ReportGate gate(lock_, writer, "avgl");
     if (!gate.held()) return;
     writer.number("callbacks", callback_count_);
     writer.number("current_anywhere", currents_.anywhere());

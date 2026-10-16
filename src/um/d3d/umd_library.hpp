@@ -9,10 +9,8 @@
 #include "icd/d3d/hresult.hpp"
 #include "icd/d3d/umd_root.hpp"
 #include "um/d3d/umd_drivers.hpp"
-#include "um/kmt/gdi_kmt.hpp"
-#include "um/common/file_log.hpp"
+#include "um/common/driver_seams.hpp"
 #include "um/common/lazy_driver.hpp"
-#include "um/common/process_heap.hpp"
 #include "um/common/srw_lock.hpp"
 #include "um/trace/process_trace.hpp"
 
@@ -46,17 +44,10 @@ private:
         Seams();
         Seams(const Seams &) = delete;
         Seams &operator=(const Seams &) = delete;
-        /* The D3DKMT wait event the driver's waits need; without it the
-         * process is refused (LazyDriver). */
-        [[nodiscard]] Status initialize();
-
-        ProcessHeap   heap;
+        DriverSeams   process;
         SrwLock       lock;
-        FileLog       log;
-        GdiKmt        kmt;
         UmdDrivers    driver;
         d3d::UmdRoot  root;
-        ProcessTrace  trace;
     };
 
 

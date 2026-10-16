@@ -333,7 +333,7 @@ UmdDevice *UmdRoot::device_of(void *block) const
 void UmdRoot::report(StateWriter &writer)
 {
     AV_SCOPE("UmdRoot::report");
-    const icd::ReportGate gate(lock_, writer, "umd");
+    const icd::ReportGate gate(lock_, writer, "avumd");
     if (!gate.held()) return;
     writer.number("adapters", adapters_.open_adapters());
     writer.number("devices", devices_.live_devices());

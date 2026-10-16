@@ -792,7 +792,7 @@ void ClIcdRoot::report(StateWriter &writer)
     AV_SCOPE("ClIcdRoot::report");
     /* Read under the root's lock, as every root's dump is: the trace thread
      * runs while application threads release objects and open devices. */
-    const icd::ReportGate gate(lock_, writer, "clicd");
+    const icd::ReportGate gate(lock_, writer, "avcl");
     if (!gate.held()) return;
     devices_.report(writer);
     objects_.report(writer);

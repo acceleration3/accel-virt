@@ -6,18 +6,11 @@
 namespace av {
 
 IcdLibrary::Seams::Seams()
-    : heap(), lock(), send_lock(), memory_lock(), log(L"avvk"), kmt(), windows(), chains_lock(),
-      chains(heap, kmt, chains_lock, log), root(heap, kmt, lock, send_lock, memory_lock, log, icd::icd_binding, windows, chains),
-      trace()
+    : process(L"avvk"), lock(), send_lock(), memory_lock(), windows(), chains_lock(),
+      chains(process.heap(), process.kmt(), chains_lock, process.log()),
+      root(process.heap(), process.kmt(), lock, send_lock, memory_lock, process.log(), icd::icd_binding, windows, chains)
 {
     AV_SCOPE("IcdLibrary::Seams::Seams");
-    log.open();
-}
-
-Status IcdLibrary::Seams::initialize()
-{
-    AV_SCOPE("IcdLibrary::Seams::initialize");
-    return kmt.initialize();
 }
 
 VkResult IcdLibrary::negotiate(uint32_t *version)
