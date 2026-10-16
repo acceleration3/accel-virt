@@ -8,6 +8,7 @@
 #include "device/abi/av_executor.h"
 #include "executor/host_gpu.hpp"
 #include "executor/imported_blob.hpp"
+#include "proto/vulkan/descriptor_template_layout.hpp"
 #include "proto/generated/vulkan/vk_command_names.h"
 #include "proto/generated/vulkan/vk_dispatch_server.h"
 #include "proto/wire/wire_reader.hpp"
@@ -26,6 +27,10 @@ namespace {
  * with no user pointer can take. */
 thread_local VulkanBackend *inside = nullptr;
 
+/* Devices before instances, the order the API requires and the order a guest
+ * would have used had it bothered. What a device made goes with it: the
+ * driver frees it. */
+constexpr VulkanObjectKind release_order[] = {VulkanObjectKind::device, VulkanObjectKind::instance};
 
 /* Every other handle. The driver dereferences these too - a VkBuffer this
  * executor never made is the same hole one layer down - but null is a value the
@@ -54,8 +59,8 @@ VulkanBackend::VulkanBackend() : VulkanBackend(heap_)
 /* heap_ is constructed before blocks_ is bound to it, whichever constructor
  * runs: it is declared first. */
 VulkanBackend::VulkanBackend(BlockSource &blocks)
-    : heap_(), blocks_(blocks), templates_(blocks), gpu_(nullptr), source_(nullptr), listed_(), extensions_(blocks),
-      application_(), instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), physical_(VK_NULL_HANDLE),
+    : heap_(), blocks_(blocks), gpu_(nullptr), source_(nullptr), listed_(), extensions_(blocks),
+      application_(), device_(VK_NULL_HANDLE), physical_(VK_NULL_HANDLE),
       memory_import_(false), handles_(blocks), adopted_(), import_(), types_(), types_learnt_(false), parent_(0u),
       ran_(0u)
 {
@@ -132,10 +137,18 @@ bool VulkanBackend::room_for(uint64_t handles)
  * made any, so remembering one cannot fail from the wire. Were it to, the
  * handle is one this host refuses when the guest names it - a refused
  * command, never a pointer the guest chose. */
-void VulkanBackend::made(uint64_t raw, HandleKind kind)
+void VulkanBackend::made(uint64_t raw, VulkanObjectKind kind)
 {
     AV_SCOPE("VulkanBackend::made");
-    if (handles_.remember(raw, parent_, kind) != Status::ok) {
+    keep(raw, kind, 0u);
+}
+
+/* The null handle is the API's own and is never anybody's to own. */
+void VulkanBackend::keep(uint64_t raw, VulkanObjectKind kind, uint64_t bytes)
+{
+    AV_SCOPE("VulkanBackend::keep");
+    if (raw == 0u || handles_.holds(raw)) return;
+    if (handles_.remember(raw, kind, parent_, bytes) != Status::ok) {
         AV_UNTESTABLE("room for every handle a reply carries is made before the driver is called");
     }
 }
@@ -161,13 +174,13 @@ void VulkanBackend::children_ended(uint64_t raw)
 bool VulkanBackend::knows_handle(uint64_t raw) const
 {
     AV_SCOPE("VulkanBackend::knows_handle");
-    return handles_.knows(raw);
+    return raw == 0u || handles_.holds(raw);
 }
 
-bool VulkanBackend::knows_handle(uint64_t raw, HandleKind kind) const
+bool VulkanBackend::knows_handle(uint64_t raw, VulkanObjectKind kind) const
 {
     AV_SCOPE("VulkanBackend::knows_handle");
-    return handles_.knows(raw, kind);
+    return handles_.find(raw, kind) != nullptr;
 }
 
 VulkanBackend *VulkanBackend::deciding()
@@ -239,63 +252,45 @@ VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateI
     VkInstanceCreateInfo create = *pCreateInfo;
     if (enable_identity(create) != Status::ok) return VK_ERROR_OUT_OF_HOST_MEMORY;
     adopt_host_version(create);
-    const VkResult result = RealVulkanDispatch::on_vkCreateInstance(&create, nullptr, pInstance);
-    /* Kept so shut_down can destroy what a dying context never did. Which
-     * handles the guest may name back is not decided here: every handle leaves
-     * through handle_to_wire, and that is where it is remembered. */
-    if (result == VK_SUCCESS) instance_ = *pInstance;
-    return result;
-}
-
-void VulkanBackend::on_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *)
-{
-    AV_SCOPE("VulkanBackend::on_vkDestroyInstance");
-    if (instance == instance_) instance_ = VK_NULL_HANDLE;
-    RealVulkanDispatch::on_vkDestroyInstance(instance, nullptr);
+    return RealVulkanDispatch::on_vkCreateInstance(&create, nullptr, pInstance);
 }
 
 /* A template the guest made: what it reads is remembered, because the length of
  * every blob an update through it carries is this template's and the guest's
- * claim about that length is not trusted (feature 047). A template this table
- * has no room for is refused rather than created, so no update can arrive for
- * one it cannot size. */
+ * claim about that length is not trusted (feature 047). The decoder made room
+ * for its handle before this was called, so no update can arrive for one this
+ * context cannot size. */
 VkResult VulkanBackend::on_vkCreateDescriptorUpdateTemplate(VkDevice device,
                                                             const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
                                                             const VkAllocationCallbacks *pAllocator,
                                                             VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate)
 {
     AV_SCOPE("VulkanBackend::on_vkCreateDescriptorUpdateTemplate");
-    /* Sized and given a slot before the driver is asked: a guest sending more
-     * templates than this context can track, or entries that cannot be sized,
-     * is refused rather than handed a template no update through it could be
+    /* Sized before the driver is asked: entries that cannot be sized - the
+     * guest sent them, so they are checked here rather than trusted - are
+     * refused rather than handed a template no update through it could be
      * checked against (constitution V). */
-    const Status ready = templates_.reserve(device, pCreateInfo);
-    if (ready == Status::no_memory) return VK_ERROR_OUT_OF_HOST_MEMORY;
-    if (ready != Status::ok) return VK_ERROR_INITIALIZATION_FAILED;
+    DescriptorTemplateLayout layout;
+    if (layout.take(pCreateInfo->pDescriptorUpdateEntries, pCreateInfo->descriptorUpdateEntryCount) != Status::ok)
+        return VK_ERROR_INITIALIZATION_FAILED;
     const VkResult result = RealVulkanDispatch::on_vkCreateDescriptorUpdateTemplate(device, pCreateInfo, pAllocator,
                                                                                     pDescriptorUpdateTemplate);
-    /* The driver's handle names the slot, and a null handle releases it.
-     * Vulkan sets the handle to VK_NULL_HANDLE when a create fails, so the
-     * driver's answer is read rather than branched on: there is no fault
-     * injection between here and the host's own driver, and a branch no test
-     * could take is a branch this does not have. */
-    templates_.name(*pDescriptorUpdateTemplate);
+    /* Vulkan sets the handle to VK_NULL_HANDLE when a create fails, and the
+     * null handle is never kept, so the driver's answer needs no branch of its
+     * own. A handle the driver hands out again is this template now. */
+    const uint64_t made = reinterpret_cast<uint64_t>(*pDescriptorUpdateTemplate);
+    handles_.forget(made);
+    made_through(reinterpret_cast<uint64_t>(device));
+    keep(made, VulkanObjectKind::descriptor_template, layout.bytes());
     return result;
-}
-
-void VulkanBackend::on_vkDestroyDescriptorUpdateTemplate(VkDevice device,
-                                                         VkDescriptorUpdateTemplate descriptorUpdateTemplate,
-                                                         const VkAllocationCallbacks *pAllocator)
-{
-    AV_SCOPE("VulkanBackend::on_vkDestroyDescriptorUpdateTemplate");
-    templates_.forget(descriptorUpdateTemplate);
-    RealVulkanDispatch::on_vkDestroyDescriptorUpdateTemplate(device, descriptorUpdateTemplate, pAllocator);
 }
 
 uint64_t VulkanBackend::template_bytes(VkDescriptorUpdateTemplate made) const
 {
     AV_SCOPE("VulkanBackend::template_bytes");
-    return templates_.bytes_of(made);
+    const uint64_t *const bytes =
+        handles_.find(reinterpret_cast<uint64_t>(made), VulkanObjectKind::descriptor_template);
+    return bytes != nullptr ? *bytes : 0u;
 }
 
 bool VulkanBackend::knows(uint32_t command_id) const
@@ -470,7 +465,7 @@ VkResult VulkanBackend::on_vkCreateImage(VkDevice device, const VkImageCreateInf
     const VkResult result = RealVulkanDispatch::on_vkCreateImage(device, &create, nullptr, pImage);
     if (bindable) {
         made_through(reinterpret_cast<uint64_t>(device));
-        made(reinterpret_cast<uint64_t>(*pImage), HandleKind::external_image);
+        made(reinterpret_cast<uint64_t>(*pImage), VulkanObjectKind::external_image);
     }
     return result;
 }
@@ -514,7 +509,7 @@ void VulkanBackend::on_vkGetImageMemoryRequirements(VkDevice device, VkImage ima
     RealVulkanDispatch::on_vkGetImageMemoryRequirements(device, image, pMemoryRequirements);
     pMemoryRequirements->memoryTypeBits =
         image_bits(pMemoryRequirements->memoryTypeBits,
-                   handles_.knows(reinterpret_cast<uint64_t>(image), HandleKind::external_image));
+                   knows_handle(reinterpret_cast<uint64_t>(image), VulkanObjectKind::external_image));
 }
 
 void VulkanBackend::on_vkGetImageMemoryRequirements2(VkDevice device, const VkImageMemoryRequirementsInfo2 *pInfo,
@@ -524,8 +519,8 @@ void VulkanBackend::on_vkGetImageMemoryRequirements2(VkDevice device, const VkIm
     RealVulkanDispatch::on_vkGetImageMemoryRequirements2(device, pInfo, pMemoryRequirements);
     VkMemoryRequirements &needs = pMemoryRequirements->memoryRequirements;
     needs.memoryTypeBits = image_bits(needs.memoryTypeBits,
-                                      handles_.knows(reinterpret_cast<uint64_t>(pInfo->image),
-                                                     HandleKind::external_image));
+                                      knows_handle(reinterpret_cast<uint64_t>(pInfo->image),
+                                                   VulkanObjectKind::external_image));
 }
 
 void VulkanBackend::on_vkGetImageMemoryRequirements2KHR(VkDevice device, const VkImageMemoryRequirementsInfo2 *pInfo,
@@ -640,7 +635,6 @@ void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallba
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyDevice");
     timing_.forget(device);
-    templates_.forget_device(device);
     fds_.forget_device(device);
     if (device == device_) device_ = VK_NULL_HANDLE;
     RealVulkanDispatch::on_vkDestroyDevice(device, nullptr);
@@ -764,7 +758,7 @@ bool VulkanBackend::adopt(ImportedBlob &blob)
      * device, as a command's handle would: the guest is copied through
      * instead, and nothing it already has breaks. */
     if (adopted_.add(blob) != Status::ok ||
-        handles_.remember(memory, reinterpret_cast<uint64_t>(device_)) != Status::ok) {
+        handles_.remember(memory, VulkanObjectKind::other, reinterpret_cast<uint64_t>(device_), 0u) != Status::ok) {
         abandon(blob);
         return false;
     }
@@ -785,7 +779,7 @@ bool VulkanBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t 
     handle_kind = 0u;
     fd = -1;
     if (device_ == VK_NULL_HANDLE || wire_handle == 0u) return false;
-    if (!handles_.knows(wire_handle)) return false;
+    if (!handles_.holds(wire_handle)) return false;
     if (kind == AV_SHARED_MONITORED_FENCE || kind == AV_SHARED_NATIVE_FENCE) {
         if (!import_.export_semaphore(device_, wire_handle, fd)) return false;
         handle_kind = AV_SHARED_HANDLE_OPAQUE_FD;
@@ -842,7 +836,7 @@ bool VulkanBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
 void VulkanBackend::release_object(uint32_t kind, uint64_t wire_handle, uint64_t)
 {
     AV_SCOPE("VulkanBackend::release_object");
-    if (wire_handle == 0u || device_ == VK_NULL_HANDLE || !handles_.knows(wire_handle)) return;
+    if (device_ == VK_NULL_HANDLE || !handles_.holds(wire_handle)) return;
     handles_.forget(wire_handle);
     if (kind == AV_SHARED_MEMORY) {
         import_.release(device_, wire_handle);
@@ -905,24 +899,25 @@ bool VulkanBackend::lost() const
     return false;
 }
 
+/* A device through the guest's own destroy, which forgets what it exported:
+ * the backend outlives the context in its slot, and an fd left listed here is
+ * one the next context could import, another context's memory. */
+void VulkanBackend::let_go(uint64_t raw, VulkanObjectKind kind)
+{
+    AV_SCOPE("VulkanBackend::let_go");
+    if (kind == VulkanObjectKind::device) {
+        on_vkDestroyDevice(reinterpret_cast<VkDevice>(raw), nullptr);
+        return;
+    }
+    ::vkDestroyInstance(reinterpret_cast<VkInstance>(raw), nullptr);
+}
+
 void VulkanBackend::shut_down()
 {
     AV_SCOPE("VulkanBackend::shut_down");
-    /* Device before instance, which is the order the API requires and the
-     * order a guest would have used had it bothered - and through the guest's
-     * own destroy, which forgets what the device exported. The backend
-     * outlives the context in its slot: an fd left listed here is one the
-     * next context could import, another context's memory. A device the
-     * guest replaced and never destroyed is not this backend's to name, so
-     * the tables are emptied whichever device filled them. */
-    if (device_ != VK_NULL_HANDLE) on_vkDestroyDevice(device_, nullptr);
+    handles_.release_all(release_order, sizeof release_order / sizeof release_order[0],
+                         [this](uint64_t raw, VulkanObjectKind kind, uint64_t &, uint32_t) { let_go(raw, kind); });
     fds_.forget_all();
-    templates_.forget_all();
-    if (instance_ != VK_NULL_HANDLE) {
-        ::vkDestroyInstance(instance_, nullptr);
-        instance_ = VK_NULL_HANDLE;
-    }
-    handles_.forget_all();
     adopted_.clear();
     /* The types were learnt of a physical device of the instance that just
      * died. */
@@ -950,7 +945,7 @@ namespace {
  * host made, so this is where it becomes one the host will accept back, in
  * the room handles_room made for it before the driver was called. */
 template <typename H>
-uint64_t remember(VulkanBackend *backend, H value, HandleKind kind = HandleKind::other)
+uint64_t remember(VulkanBackend *backend, H value, VulkanObjectKind kind = VulkanObjectKind::other)
 {
     AV_SCOPE("remember");
     uint64_t raw = 0u;
@@ -971,7 +966,7 @@ uint64_t remember(VulkanBackend *backend, H value, HandleKind kind = HandleKind:
  * (feature 042). */
 /* A handle the loader dispatches on. */
 template <typename H>
-bool answer(const VulkanBackend *backend, uint64_t raw, H &out, HandleKind kind)
+bool answer(const VulkanBackend *backend, uint64_t raw, H &out, VulkanObjectKind kind)
 {
     AV_SCOPE("answer");
     if (backend == nullptr) {
@@ -1034,31 +1029,31 @@ uint64_t descriptor_template_bytes(VkDescriptorUpdateTemplate t) noexcept
 bool wire_to_handle(uint64_t raw, VkInstance &out) noexcept
 {
     AV_SCOPE("wire_to_handle");
-    return answer(VulkanBackend::deciding(), raw, out, HandleKind::instance);
+    return answer(VulkanBackend::deciding(), raw, out, VulkanObjectKind::instance);
 }
 
 bool wire_to_handle(uint64_t raw, VkPhysicalDevice &out) noexcept
 {
     AV_SCOPE("wire_to_handle");
-    return answer(VulkanBackend::deciding(), raw, out, HandleKind::physical_device);
+    return answer(VulkanBackend::deciding(), raw, out, VulkanObjectKind::physical_device);
 }
 
 bool wire_to_handle(uint64_t raw, VkDevice &out) noexcept
 {
     AV_SCOPE("wire_to_handle");
-    return answer(VulkanBackend::deciding(), raw, out, HandleKind::device);
+    return answer(VulkanBackend::deciding(), raw, out, VulkanObjectKind::device);
 }
 
 bool wire_to_handle(uint64_t raw, VkQueue &out) noexcept
 {
     AV_SCOPE("wire_to_handle");
-    return answer(VulkanBackend::deciding(), raw, out, HandleKind::queue);
+    return answer(VulkanBackend::deciding(), raw, out, VulkanObjectKind::queue);
 }
 
 bool wire_to_handle(uint64_t raw, VkCommandBuffer &out) noexcept
 {
     AV_SCOPE("wire_to_handle");
-    return answer(VulkanBackend::deciding(), raw, out, HandleKind::command_buffer);
+    return answer(VulkanBackend::deciding(), raw, out, VulkanObjectKind::command_buffer);
 }
 
 bool wire_to_handle(uint64_t raw, VkAccelerationStructureKHR &out) noexcept
@@ -1280,7 +1275,7 @@ uint64_t handle_to_wire(VkBufferView v) noexcept
 uint64_t handle_to_wire(VkCommandBuffer v) noexcept
 {
     AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v, HandleKind::command_buffer);
+    return remember(VulkanBackend::deciding(), v, VulkanObjectKind::command_buffer);
 }
 
 uint64_t handle_to_wire(VkCommandPool v) noexcept
@@ -1322,7 +1317,7 @@ uint64_t handle_to_wire(VkDescriptorUpdateTemplate v) noexcept
 uint64_t handle_to_wire(VkDevice v) noexcept
 {
     AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v, HandleKind::device);
+    return remember(VulkanBackend::deciding(), v, VulkanObjectKind::device);
 }
 
 uint64_t handle_to_wire(VkDeviceMemory v) noexcept
@@ -1364,7 +1359,7 @@ uint64_t handle_to_wire(VkImageView v) noexcept
 uint64_t handle_to_wire(VkInstance v) noexcept
 {
     AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v, HandleKind::instance);
+    return remember(VulkanBackend::deciding(), v, VulkanObjectKind::instance);
 }
 
 uint64_t handle_to_wire(VkMicromapEXT v) noexcept
@@ -1376,7 +1371,7 @@ uint64_t handle_to_wire(VkMicromapEXT v) noexcept
 uint64_t handle_to_wire(VkPhysicalDevice v) noexcept
 {
     AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v, HandleKind::physical_device);
+    return remember(VulkanBackend::deciding(), v, VulkanObjectKind::physical_device);
 }
 
 uint64_t handle_to_wire(VkPipeline v) noexcept
@@ -1418,7 +1413,7 @@ uint64_t handle_to_wire(VkQueryPool v) noexcept
 uint64_t handle_to_wire(VkQueue v) noexcept
 {
     AV_SCOPE("handle_to_wire");
-    return remember(VulkanBackend::deciding(), v, HandleKind::queue);
+    return remember(VulkanBackend::deciding(), v, VulkanObjectKind::queue);
 }
 
 uint64_t handle_to_wire(VkRenderPass v) noexcept

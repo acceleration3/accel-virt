@@ -12,10 +12,10 @@
 
 #include "executor/vulkan/adopted_blobs.hpp"
 #include "executor/vulkan/extension_list.hpp"
-#include "executor/vulkan/handle_registry.hpp"
 #include "executor/vulkan/host_exported_fds.hpp"
-#include "executor/vulkan/host_template_table.hpp"
+#include "executor/vulkan/vulkan_object_kind.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
+#include "executor/host_object_registry.hpp"
 #include "executor/session_backend.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "executor/vulkan/vulkan_submit_timing.hpp"
@@ -60,24 +60,20 @@ public:
     void bind_signal(void (*signal)(void *context), void *context) override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
 
-    /* The two commands whose results this backend keeps: the instance and the
-     * device a dying context still owns, so shut_down can destroy them. */
+    /* Made with what the host needs of an instance (enable_identity,
+     * adopt_host_version). */
     VkResult on_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                  const VkAllocationCallbacks *pAllocator,
                                  VkInstance *pInstance) override;
-    void     on_vkDestroyInstance(VkInstance instance,
-                                  const VkAllocationCallbacks *pAllocator) override;
 
-    /* The descriptor update templates this context made, because the length of
-     * a blob a WithTemplate command carries is the template's and the guest's
-     * claim about it is checked against this (feature 047). */
+    /* The descriptor update templates this context made, kept with what one
+     * update through each reads, because the length of a blob a WithTemplate
+     * command carries is the template's and the guest's claim about it is
+     * checked against this (feature 047). */
     VkResult on_vkCreateDescriptorUpdateTemplate(VkDevice device,
                                                  const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
                                                  const VkAllocationCallbacks *pAllocator,
                                                  VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate) override;
-    void     on_vkDestroyDescriptorUpdateTemplate(VkDevice device,
-                                                  VkDescriptorUpdateTemplate descriptorUpdateTemplate,
-                                                  const VkAllocationCallbacks *pAllocator) override;
     /* The bytes one update through `made` reads, for the generated decoder's
      * hook; 0 for a template this context never made. */
     uint64_t template_bytes(VkDescriptorUpdateTemplate made) const;
@@ -212,8 +208,8 @@ public:
                                      uint64_t &wire_handle, uint64_t &detail) override;
     void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) override;
 
-    /* Destroys whatever the guest still owned - the instance it made, and the
-     * device with it - and forgets every handle. A context's host objects are
+    /* Destroys whatever the guest still owned - every device it made, then
+     * every instance - and forgets every handle. A context's host objects are
      * the context's, and a guest that never destroys them must not be able to
      * leak them by dying (feature 042). */
     void     shut_down() override;
@@ -228,7 +224,7 @@ public:
     /* Records a handle this backend is about to hand the guest, made through
      * whatever the command being decoded named with made_through, into the
      * room room_for made for it. */
-    void     made(uint64_t raw, HandleKind kind = HandleKind::other);
+    void     made(uint64_t raw, VulkanObjectKind kind = VulkanObjectKind::other);
     /* The object the command being decoded makes its handles through - its
      * device, its pool - so that they end when it does. Nothing between
      * commands: every run forgets it when the decode returns. */
@@ -243,7 +239,7 @@ public:
     bool     knows_handle(uint64_t raw) const;
     /* And that it made it as this kind, which is what the five handles the
      * loader dispatches on are judged by. */
-    bool     knows_handle(uint64_t raw, HandleKind kind) const;
+    bool     knows_handle(uint64_t raw, VulkanObjectKind kind) const;
     /* The backend whose handles the decoder is inside. One context runs on one
      * worker and one call at a time - the ABI says so - so the answer is the
      * thread's, which is the only shape a hook with no user pointer can take. */
@@ -280,10 +276,16 @@ private:
      * be made; a list the loader refuses is left as the guest sent it. */
     [[nodiscard]] Status enable_memory_import(VkDeviceCreateInfo &create, uint32_t &importing);
 
+    /* `raw`, made through parent_, held as `kind` with `bytes`: one already
+     * held keeps what it was made through and what it is - a queue fetched
+     * again, a physical device enumerated again. */
+    void keep(uint64_t raw, VulkanObjectKind kind, uint64_t bytes);
+    /* A device or an instance the guest never destroyed, destroyed. */
+    void let_go(uint64_t raw, VulkanObjectKind kind);
+
     /* Where the tables below grow from: first, as they are destroyed after it. */
     HostHeap          heap_;
     BlockSource      &blocks_;
-    HostTemplateTable templates_;
     HostExportedFds   fds_;
     /* Whether every fd the chain of an allocation names is one this context
      * exported, answering the last of them in `fd` - -1 for a chain that
@@ -328,9 +330,6 @@ private:
      * also how many bits a memory-type mask can have. */
     static constexpr uint32_t max_memory_types = 32u;
 
-    /* The device the imports belong to. A VkDeviceMemory is a device's, and
-     * the guest makes exactly one per context through vkCreateDevice, so this
-     * is taken from the command that made it rather than guessed. */
     const HostGpu     *gpu_;
     HostMemorySource  *source_;
     PhysicalDeviceList listed_;
@@ -339,12 +338,22 @@ private:
     ExtensionList      extensions_;
     /* The application an instance being made names, at the host's version. */
     VkApplicationInfo  application_;
-    VkInstance     instance_;
+    /* The device the imports belong to. A VkDeviceMemory is a device's, and
+     * an import arrives with no command to name one, so this is the device
+     * the guest made last; every device it made is in handles_, and goes
+     * with the context. */
     VkDevice         device_;
     VkPhysicalDevice physical_;
     /* The device imports go to was made able to import a dma-buf. */
     bool             memory_import_;
-    HandleRegistry   handles_;
+    /* Every handle this context made and nothing else, each with what it was
+     * made through - the null handle or one never made for nothing - and, a
+     * template's, the bytes one update through it reads. A handle crosses the
+     * wire as a number, and the host answers one only if it made it: the
+     * generated decoder used to hand any number to the driver as a pointer
+     * (found by tests/fuzz/fuzz_executor_vulkan.cpp on its first run, in
+     * vkDestroyInstance). */
+    HostObjectRegistry<uint64_t, VulkanObjectKind, uint64_t> handles_;
     AdoptedBlobs     adopted_;
     VulkanMemoryImport import_;
     GuestMemoryTypes types_;
