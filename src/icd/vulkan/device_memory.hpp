@@ -10,6 +10,7 @@
 #define AV_ICD_DEVICE_MEMORY_HPP
 
 #include "core/log/driver_log.hpp"
+#include "core/support/keyed_slots.hpp"
 #include "core/support/status.hpp"
 #include "icd/vulkan/memory_type_table.hpp"
 
@@ -18,6 +19,7 @@
 #include <vulkan/vulkan_core.h>
 
 namespace av {
+class BlockSource;
 class HostAllocation;
 class Kmt;
 class LogSink;
@@ -31,14 +33,17 @@ struct DeviceMemoryProbe;
 
 class DeviceMemory {
 public:
-    DeviceMemory(Kmt &kmt, Connection &connection, LogSink &log);
+    /* Its allocations are kept in what grows from `blocks`: as many as the
+     * application makes. */
+    DeviceMemory(Kmt &kmt, Connection &connection, LogSink &log, BlockSource &blocks);
     DeviceMemory(const DeviceMemory &) = delete;
     DeviceMemory &operator=(const DeviceMemory &) = delete;
 
     /* A host-visible type as host memory of that type, answering
      * VK_ERROR_OUT_OF_DEVICE_MEMORY for any refusal, or when the types cannot
      * be learnt from `physical` - VK_ERROR_DEVICE_LOST when the host faulted
-     * the connection meanwhile; any other type as the host answers it. */
+     * the connection meanwhile, VK_ERROR_OUT_OF_HOST_MEMORY when there is no
+     * memory here to keep it in; any other type as the host answers it. */
     VkResult allocate(VkPhysicalDevice physical, VkDevice device, const VkMemoryAllocateInfo &info,
                       const VkAllocationCallbacks *allocator, VkDeviceMemory &memory);
     /* vkGetMemoryHostPointerPropertiesEXT: the types a host allocation's
@@ -65,7 +70,6 @@ public:
     bool invariants_hold() const;
 
 private:
-    static constexpr uint32_t max_allocations = 4096u;
     /* minImportedHostPointerAlignment: what the device lends, a page. */
     static constexpr uintptr_t host_pointer_alignment = 4096u;
 
@@ -74,24 +78,24 @@ private:
      * memory"). */
     VkResult           lend(const VkMemoryAllocateInfo &info, const VkImportMemoryHostPointerInfoEXT &import,
                             VkDeviceMemory &memory);
-    /* Keeps `made` in a free slot and answers its handle. */
+    /* Keeps `made`, in the room made for it, and answers its handle. */
     VkResult           hold(HostAllocation &made, VkDeviceMemory &memory);
+    /* Room to keep one more: what is asked before the host opens any. */
+    [[nodiscard]] bool room();
     [[nodiscard]] bool learn(VkPhysicalDevice physical);
     VkResult           refusal() const;
     /* The host allocation the guest names `memory`, or null. */
     HostAllocation    *find(VkDeviceMemory memory) const;
-    /* The slot holding `allocation` - a free one for null - or max_allocations. */
-    uint32_t           slot_of(const HostAllocation *allocation) const;
 
     Connection     &connection_;
     LogSink        &log_;
     DriverLog       lines_;
     MemoryTypeTable types_;
     bool            learnt_;
-    /* This device's host allocations, which the connection's channel keeps:
-     * one channel serves every device of an instance. */
-    HostAllocation *held_[max_allocations];
-    uint32_t        count_;
+    /* This device's host allocations, by the handle the host answered, which
+     * the connection's channel keeps: one channel serves every device of an
+     * instance. */
+    KeyedSlots<uint64_t, HostAllocation *> held_;
 
     friend struct DeviceMemoryProbe;
 };

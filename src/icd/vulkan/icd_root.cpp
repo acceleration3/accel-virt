@@ -1367,7 +1367,7 @@ DeviceMemory *IcdRoot::memory_of(LoaderHandle &device)
     const ThreadLockHold release(lock_);
     if (device.device_memory() != nullptr) return device.device_memory();
     DeviceMemory *made = nullptr;
-    if (memories_.create(made, kmt_, *device.connection(), log_) != Status::ok) {
+    if (memories_.create(made, kmt_, *device.connection(), log_, memory_) != Status::ok) {
         log_.write("avvk: no memory to keep a device's allocations in");
         return nullptr;
     }
