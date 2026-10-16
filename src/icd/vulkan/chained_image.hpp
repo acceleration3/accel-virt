@@ -30,7 +30,10 @@ struct ChainedImageProbe;
 
 class ChainedImage {
 public:
-    ChainedImage(EntryLookup &entries, VkDevice device, WindowChains &chains, ClientTransport &wire);
+    /* `host_device` is the host's handle of `device`, which a slot's memory
+     * is opened into. */
+    ChainedImage(EntryLookup &entries, VkDevice device, uint64_t host_device, WindowChains &chains,
+                 ClientTransport &wire);
     ~ChainedImage();
     ChainedImage(const ChainedImage &) = delete;
     ChainedImage &operator=(const ChainedImage &) = delete;
@@ -57,6 +60,7 @@ private:
 
     EntryLookup     &entries_;
     VkDevice         device_;
+    uint64_t         host_device_;
     WindowChains    &chains_;
     ChainSlots       slots_;
     ClientTransport &wire_;

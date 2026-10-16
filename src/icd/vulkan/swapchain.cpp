@@ -23,10 +23,10 @@ constexpr uint64_t nanoseconds_per_millisecond = 1000000u;
 }  // namespace
 
 Swapchain::Swapchain(WindowSurface &windows, WindowChains &chains, EntryLookup &entries, VkDevice device,
-                     VkPhysicalDevice physical, Kmt &kmt, LogSink &log, Connection &connection,
-                     VkPresentQueue &presents)
+                     uint64_t host_device, VkPhysicalDevice physical, Kmt &kmt, LogSink &log,
+                     Connection &connection, VkPresentQueue &presents)
     : windows_(windows), presents_(presents), device_(entries, device, physical),
-      chained_(entries, device, chains, connection.transport()),
+      chained_(entries, device, host_device, chains, connection.transport()),
       lines_(log, "avvk: "), pacing_(), log_(log), luid_(connection.luid()),
       app_device_(device), window_(nullptr), extent_{0u, 0u}, format_(static_cast<int32_t>(VK_FORMAT_UNDEFINED)),
       holders_{}, slot_images_{}, count_(0u), next_(0u),

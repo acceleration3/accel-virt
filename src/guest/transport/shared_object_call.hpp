@@ -35,21 +35,24 @@ public:
      * contract does not allow; not_supported for an empty one; invalid_state
      * when the call itself failed. */
     [[nodiscard]] Status share(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t wire_handle);
-    /* OPEN_SHARED_OBJECT: the object opened into this context, answered as the
-     * handle the device's executor made of it, which the guest names in its
-     * own API's commands from then on. 0 unless ok. */
-    [[nodiscard]] Status open(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t &wire_handle);
-    /* RELEASE_SHARED_OBJECT: what this context made of the object, destroyed.
-     * A refusal is still ok - the object is gone from this context either way,
-     * and there is nothing a caller could usefully do about it. */
-    [[nodiscard]] Status release(uint64_t object_id, uint32_t kind, uint64_t size);
+    /* OPEN_SHARED_OBJECT: the object opened into this context, made into what
+     * `into` names in its API's commands (0: nothing to choose), answered as
+     * the handle the device's executor made of it, which the guest names in
+     * its own API's commands from then on. 0 unless ok. */
+    [[nodiscard]] Status open(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t into,
+                              uint64_t &wire_handle);
+    /* RELEASE_SHARED_OBJECT: what this context's open answered as `made`,
+     * destroyed. A refusal is still ok - the object is gone from this context
+     * either way, and there is nothing a caller could usefully do about it. */
+    [[nodiscard]] Status release(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t made);
 
     /* The status of the device's last answer; 0 after one it took. */
     uint32_t device_status() const;
 
 private:
     /* One of the three, with `handle_allowed` saying whether the answer may
-     * carry a wire handle - only an open's may. */
+     * carry a wire handle - only an open's may. `sent_handle` is the
+     * request's. */
     [[nodiscard]] Status send(uint32_t command_id, uint64_t object_id, uint32_t kind, uint64_t size,
                               uint64_t sent_handle, bool handle_allowed, uint64_t &wire_handle);
     [[nodiscard]] Status judge(WireReader &answer, bool handle_allowed, uint64_t &wire_handle);

@@ -70,18 +70,19 @@ Status SharedObjectCall::share(uint64_t object_id, uint32_t kind, uint64_t size,
     return send(CommandHeader::share_object_id, object_id, kind, size, wire_handle, false, none);
 }
 
-Status SharedObjectCall::open(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t &wire_handle)
+Status SharedObjectCall::open(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t into,
+                              uint64_t &wire_handle)
 {
     AV_SCOPE("SharedObjectCall::open");
-    return send(CommandHeader::open_shared_object_id, object_id, kind, size, 0u, true, wire_handle);
+    return send(CommandHeader::open_shared_object_id, object_id, kind, size, into, true, wire_handle);
 }
 
-Status SharedObjectCall::release(uint64_t object_id, uint32_t kind, uint64_t size)
+Status SharedObjectCall::release(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t made)
 {
     AV_SCOPE("SharedObjectCall::release");
     uint64_t     none = 0u;
     const Status answered =
-        send(CommandHeader::release_shared_object_id, object_id, kind, size, 0u, false, none);
+        send(CommandHeader::release_shared_object_id, object_id, kind, size, made, false, none);
     /* A device that refused the release has still let go of it, and a caller
      * with nothing left to name can do nothing about the status. */
     return answered == Status::invalid_parameter ? Status::ok : answered;

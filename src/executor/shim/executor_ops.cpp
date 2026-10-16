@@ -211,18 +211,19 @@ uint32_t share_object(void *, AvExecutor *executor, uint64_t object_id, uint32_t
     return library.root().share_object(session_of(executor), object_id, kind, size, wire_handle);
 }
 
-uint32_t open_object(void *, AvExecutor *executor, uint64_t object_id, uint32_t kind, uint64_t size,
+uint32_t open_object(void *, AvExecutor *executor, uint64_t object_id, uint32_t kind, uint64_t size, uint64_t into,
                      uint64_t *wire_handle)
 {
     AV_SCOPE("open_object");
-    return wire_handle != nullptr ? library.root().open_object(session_of(executor), object_id, kind, size, *wire_handle)
-                                  : AV_SHARED_REFUSED;
+    return wire_handle != nullptr
+               ? library.root().open_object(session_of(executor), object_id, kind, size, into, *wire_handle)
+               : AV_SHARED_REFUSED;
 }
 
-void close_object(void *, AvExecutor *executor, uint64_t object_id)
+void close_object(void *, AvExecutor *executor, uint64_t object_id, uint64_t wire_handle)
 {
     AV_SCOPE("close_object");
-    library.root().close_object(session_of(executor), object_id);
+    library.root().close_object(session_of(executor), object_id, wire_handle);
 }
 
 uint32_t read_image(void *, uint32_t domain, uint64_t key, void *pixels, uint32_t stride, uint32_t width,

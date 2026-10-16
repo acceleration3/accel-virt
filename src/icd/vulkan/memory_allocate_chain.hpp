@@ -1,20 +1,18 @@
-/* The chain the host is sent for an allocation that shares memory (feature
- * 047, US3, research.md §10).
+/* The chain the host is sent for an allocation made to be exported (feature
+ * 047, US3, research.md §10; feature 053).
  *
- * A Win32 export or import cannot be passed on as it stands: the host's driver
- * knows no Win32 handle type, so `VkExportMemoryAllocateInfo` naming one would
- * be refused, and `VkImportMemoryWin32HandleInfoKHR` names a handle only this
- * ICD understands. This rebuilds the chain over the host's fd mechanism - the
- * export said as an opaque fd, the import as `VkImportMemoryFdInfoKHR` of a
- * fresh fd of the remembered object - and carries the other nodes an
- * allocation may hold as they are.
+ * A Win32 export cannot be passed on as it stands: the host's driver knows no
+ * Win32 handle type, so `VkExportMemoryAllocateInfo` naming one would be
+ * refused. This rebuilds the chain with the export said as the host's own
+ * type, and carries the other nodes an allocation may hold as they are. An
+ * import never comes this way: it is opened on the device (OpenedObjects), and
+ * a chain naming one is refused here.
  *
- * It is built only for an allocation that shares, and a node it does not know
- * is refused rather than dropped: silently losing a dedicated allocation or an
- * address flag would be memory the application asked for and did not get. The
- * two Win32 structures are dropped on purpose: a security descriptor and a
- * name are what another process would open with, and both devices here are in
- * one. */
+ * A node it does not know is refused rather than dropped: silently losing a
+ * dedicated allocation or an address flag would be memory the application
+ * asked for and did not get. The Win32 export structure is dropped on purpose:
+ * its security descriptor and name are what another process would open the
+ * handle with, and the kernel's NT handle carries neither. */
 #ifndef AV_ICD_MEMORY_ALLOCATE_CHAIN_HPP
 #define AV_ICD_MEMORY_ALLOCATE_CHAIN_HPP
 
@@ -31,31 +29,25 @@ struct MemoryAllocateChainProbe;
 
 class MemoryAllocateChain {
 public:
-    /* The node types it knows: the Win32 export and import, the export
-     * structure it drops, a dedicated allocation and the allocation flags. A
-     * chain may hold each at most once, so a walk ends within this many
-     * whatever the chain does - a cycle repeats a type and is refused. */
-    static constexpr uint32_t carried_kinds = 5u;
+    /* The node types it knows: the export, the Win32 export structure it
+     * drops, a dedicated allocation and the allocation flags. A chain may hold
+     * each at most once, so a walk ends within this many whatever the chain
+     * does - a cycle repeats a type and is refused. */
+    static constexpr uint32_t carried_kinds = 4u;
 
     MemoryAllocateChain();
     MemoryAllocateChain(const MemoryAllocateChain &) = delete;
     MemoryAllocateChain &operator=(const MemoryAllocateChain &) = delete;
 
-    /* The chain of `info`, with `kind`'s Win32 export said as `share_type` and
-     * a Win32 import of `fd` said as the same. `kind` is what recognises the
-     * two Win32 nodes; `share_type` is what the host is asked for, which is a
-     * dma-buf where the host has one and its opaque fd otherwise - the two
-     * nodes must agree, since the fd was exported as whatever the import then
-     * names (feature 053). not_supported for a node this does not carry and
-     * for an export of any other handle type, malformed for the same node
-     * twice, invalid_parameter for an import with no fd to name, and too_large
-     * for a chain past `max_nodes`. Unchanged unless it answers ok. */
-    [[nodiscard]] Status take(const VkMemoryAllocateInfo &info, const Win32HandleKind &kind,
-                              VkFlags share_type, int fd);
+    /* The chain of `info`, with `kind`'s Win32 export said as `share_type`:
+     * a dma-buf where the host has one and its opaque fd otherwise (feature
+     * 053). not_supported for a node this does not carry - an import among
+     * them - and for an export of any other handle type, malformed for the
+     * same node twice. Unchanged unless it answers ok. */
+    [[nodiscard]] Status take(const VkMemoryAllocateInfo &info, const Win32HandleKind &kind, VkFlags share_type);
     /* The allocation the host is sent, valid while this is. */
     const VkMemoryAllocateInfo *forwarded() const;
     bool                        exports() const;
-    bool                        imports() const;
 
     /* Every node in the chain it answers is one of its own, at most once, so
      * the chain ends. */
@@ -70,12 +62,10 @@ private:
 
     VkMemoryAllocateInfo          info_;
     VkExportMemoryAllocateInfo    export_;
-    VkImportMemoryFdInfoKHR       import_;
     VkMemoryDedicatedAllocateInfo dedicated_;
     VkMemoryAllocateFlagsInfo     flags_;
     VkBaseOutStructure           *last_;
     bool                          exports_;
-    bool                          imports_;
 
     friend struct MemoryAllocateChainProbe;
 };

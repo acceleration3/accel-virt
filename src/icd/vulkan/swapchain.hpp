@@ -58,7 +58,8 @@ public:
      * on and the wire a chain's slot is opened through. Its frames are shown
      * by `presents`. */
     Swapchain(WindowSurface &windows, WindowChains &chains, EntryLookup &entries, VkDevice device,
-              VkPhysicalDevice physical, Kmt &kmt, LogSink &log, Connection &connection, VkPresentQueue &presents);
+              uint64_t host_device, VkPhysicalDevice physical, Kmt &kmt, LogSink &log, Connection &connection,
+              VkPresentQueue &presents);
     ~Swapchain();
     Swapchain(const Swapchain &) = delete;
     Swapchain &operator=(const Swapchain &) = delete;

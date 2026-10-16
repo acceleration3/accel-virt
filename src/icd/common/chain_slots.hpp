@@ -31,13 +31,14 @@ public:
 
     /* `window`'s chain of `chains` on the adapter `luid` at `width` x
      * `height`, `count` slots holding frames as `layout` says, each opened
-     * through `wire`. A chain held for another window is closed first; this window's is made
+     * through `wire` into `into` (OpenedObjects: a Vulkan device, 0 for
+     * OpenGL). A chain held for another window is closed first; this window's is made
      * again by the chains. False, with nothing held and no chain left for the
      * window, for a chain that cannot be had or a slot that will not open -
      * what was opened is released - and for a window of no area. Every slot
      * held is released through `wire` before the open. */
     [[nodiscard]] bool open(ClientTransport &wire, WindowChains &chains, void *window, uint64_t luid, uint32_t width,
-                            uint32_t height, SlotLayout layout, uint32_t count);
+                            uint32_t height, SlotLayout layout, uint32_t count, uint64_t into);
     bool               opened() const;
     /* Opened, for `window` at `width` x `height`. */
     bool               fits(void *window, uint32_t width, uint32_t height) const;

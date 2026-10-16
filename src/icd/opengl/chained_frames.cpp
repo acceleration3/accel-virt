@@ -23,7 +23,7 @@ bool ChainedFrames::open(ClientTransport &wire, icd::WindowChains &chains, void 
     AV_SCOPE("ChainedFrames::open");
     delete_textures(wire);
     opened_ = false;
-    if (!slots_.open(wire, chains, window, luid, width, height, icd::SlotLayout::rgba_bottom_up, slot_count))
+    if (!slots_.open(wire, chains, window, luid, width, height, icd::SlotLayout::rgba_bottom_up, slot_count, 0u))
         return false;
     for (uint32_t slot = 0u; slot < slot_count; slot++) {
         if (slots_.memory(slot) <= UINT32_MAX) continue;

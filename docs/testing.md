@@ -706,10 +706,10 @@ What it cannot see, and L5 still must:
   waits on the signal and copies the shared buffer into its own staging, which
   the guest reads back. Only this layer can show it, because a guest device is
   a host device and the sharing is between two host devices - what the host
-  ever saw was `vkGetMemoryFdKHR` of the remembered allocation and
-  `VkImportMemoryFdInfoKHR` naming a fresh fd of it. A host whose driver cannot
-  share by fd makes no such device, and the test names which condition failed
-  and returns
+  sees is the memory published once and opened into the second device
+  (OPEN_SHARED_OBJECT naming it), and the semaphore's payload opened into the
+  second device's semaphore. A host whose driver cannot share by dma-buf makes
+  no such device, and the test names which condition failed and returns
 - one shared object named by two av contexts of one adapter
   (`test_fullstack_shared_objects.cpp`, 053): the miniport mints an identity
   into a carrier's private driver data, the creating context publishes it, an

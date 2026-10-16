@@ -341,8 +341,8 @@ whichever library is loaded, so they behave the same under every executor.
 | `0x00000002` | IMPORT_BLOB | 8 bytes: u32 resource_id, u32 reserved | 16 bytes: u32 status, u32 reserved, u64 device_memory |
 | `0x00000003` | RELEASE_BLOB | 8 bytes: u64 device_memory | empty |
 | `0x00000004` | SHARE_OBJECT | 32 bytes: u64 object_id, u32 kind, u32 reserved, u64 wire_handle, u64 size | 16 bytes: u32 status, u32 reserved, u64 zero |
-| `0x00000005` | OPEN_SHARED_OBJECT | the same 32 bytes, wire_handle 0 | 16 bytes: u32 status, u32 reserved, u64 wire_handle |
-| `0x00000006` | RELEASE_SHARED_OBJECT | the same 32 bytes, wire_handle 0 | 16 bytes: u32 status, u32 reserved, u64 zero |
+| `0x00000005` | OPEN_SHARED_OBJECT | the same 32 bytes, wire_handle what the open is made into (0: nothing to choose) | 16 bytes: u32 status, u32 reserved, u64 wire_handle |
+| `0x00000006` | RELEASE_SHARED_OBJECT | the same 32 bytes, wire_handle the one the open answered | 16 bytes: u32 status, u32 reserved, u64 zero |
 | `0x00000007` | LOSE_HOST_DEVICE | none | 8 bytes: u32 status (0 lost, 1 kept), u32 reserved |
 | `0x00000008` | PIECE | the next bytes of a long command's payload, at least 1 | none: a piece never asks for one |
 | `0x00000009` | ANSWER_PIECE | 8 bytes: u64 offset | u64 the kept answer's length, then its bytes from `offset`, as many as the slot holds |
@@ -542,16 +542,21 @@ publishing the same handle under the same id again answers ok and changes
 nothing; a Direct3D texture the context made shared is described and exported
 by its first SHARE_OBJECT.
 
-**OPEN_SHARED_OBJECT** has the context's session import that descriptor and
-answers the handle it made of it - a `VkDeviceMemory`, a GL memory object name
-- which the guest names in that API's own commands from then on. The context
-holds the object until it releases it or is destroyed. A context opening an id
-it already holds, or one it published, is refused: a second handle for one
-object in one context is one the guest could free twice.
+**OPEN_SHARED_OBJECT** has the context's session import that descriptor into
+what `wire_handle` names in its commands - for Vulkan the `VkDevice` memory is
+imported on, or the `VkSemaphore` whose payload a fence replaces; 0 for OpenGL
+and OpenCL, which have nothing to choose - and answers the handle it made of
+it, a `VkDeviceMemory`, a GL memory object name, which the guest names in that
+API's own commands from then on (a payload imported into a semaphore answers
+the semaphore). The context holds the object until it releases it or is
+destroyed. A context may hold one object once for each thing it is made into,
+its own publication included: a Vulkan process imports the memory one of its
+devices published into another of them this way. A second open of an id into
+the same thing is refused.
 
-**RELEASE_SHARED_OBJECT** destroys what this context made of the object and
-drops its hold. An id this context never held answers ok and does nothing, as
-RELEASE_BLOB does. A context destroyed lets go of everything it still holds.
+**RELEASE_SHARED_OBJECT** destroys what this context made of the object under
+the `wire_handle` its open answered, and drops that hold. An open this context
+does not hold answers ok and does nothing, as RELEASE_BLOB does. A context destroyed lets go of everything it still holds.
 The object lives while the guest holds it (0x02F1, below) or any context does,
 so it outlives the context that published it, which is the whole point.
 
@@ -562,12 +567,12 @@ is answered status 4.
 | status | a shared-object command refused because |
 |--:|---|
 | 0 | not refused: an OPEN answers a non-zero `wire_handle`, the other two answer 0 |
-| 1 | `object_id` is 0, `kind` is not one of the three, a reserved field is not 0, `size` is not what its kind has, or a `wire_handle` travelled with a command that allows none |
+| 1 | `object_id` is 0, `kind` is not one of the three, a reserved field is not 0, `size` is not what its kind has, or a SHARE names no `wire_handle` |
 | 2 | OPEN: an object nothing in this device shares under the id |
 | 3 | the kind or the size disagrees with the object shared under the id |
 | 4 | the context has no executor, or the library refused: a wire handle its session never made, an API that exports or imports nothing of the kind, no memory for one more |
 | 5 | not answered: there is no count of objects past which one is refused |
-| 6 | SHARE: the id is already shared otherwise. OPEN: this context already holds it, or published it |
+| 6 | SHARE: the id is already shared otherwise. OPEN: this context already holds it made into the same thing |
 
 A refused command answers `wire_handle` 0, and a guest that sees one on a
 refusal must not believe it: the answer's own decode refuses that shape.

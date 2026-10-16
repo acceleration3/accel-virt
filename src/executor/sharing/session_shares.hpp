@@ -33,8 +33,8 @@ public:
     HostShares *shares() const;
 
     [[nodiscard]] Status publish(uint64_t id, uint32_t kind, uint64_t size, uint64_t handle);
-    [[nodiscard]] Status open(uint64_t id, uint32_t kind, uint64_t size, uint64_t &handle);
-    void                 close(uint64_t id);
+    [[nodiscard]] Status open(uint64_t id, uint32_t kind, uint64_t size, uint64_t into, uint64_t &handle);
+    void                 close(uint64_t id, uint64_t handle);
     [[nodiscard]] Status publish_resource(uint64_t id, IUnknown *resource, ShareOrigin origin);
     void                 written(uint64_t id);
     /* HostShares::describe_image in this session's domain. */

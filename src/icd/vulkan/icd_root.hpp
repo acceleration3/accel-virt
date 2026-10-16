@@ -211,13 +211,11 @@ public:
     void     destroy_descriptor_update_template(VkDevice device, VkDescriptorUpdateTemplate made,
                                                 const VkAllocationCallbacks *allocator);
     /* The Win32 external objects of VK_KHR_external_memory_win32 and
-     * VK_KHR_external_semaphore_win32 (feature 047, US3, research.md §10). A
-     * handle is this ICD's own and names an object of one device; an import
-     * asks the host for a fresh fd of that object and forwards the host's own
-     * import in the Win32 structure's place, which works because both host
-     * devices are in the one process the device library runs in. Sharing
-     * between two instances is not: the fd is a context's, and each instance
-     * has its own. */
+     * VK_KHR_external_semaphore_win32 (features 047 and 053). A handle is an
+     * NT handle over the identity the object was published under; an import
+     * opens that identity on the device into the importing device - or, for a
+     * semaphore, into the semaphore the payload goes into - whichever
+     * process, this one included, published it. */
     VkResult export_memory_handle(VkDevice device, const MemoryGetWin32HandleRecord *request, void **handle);
     VkResult export_semaphore_handle(VkDevice device, const SemaphoreGetWin32HandleRecord *request,
                                      void **handle);
@@ -251,11 +249,13 @@ public:
      * named it forgotten: a handle outliving what it names is one an import
      * could still follow. */
     void     destroy_semaphore(VkDevice device, VkSemaphore semaphore, const VkAllocationCallbacks *allocator);
-    /* What a swapchain of `device` needs: its physical device, and the
+    /* What a swapchain of `device` needs: its physical device, the host's
+     * handle of it, which its window's chain is opened into, and the
      * connection whose adapter its vertical blank is waited on and whose wire
-     * its window's chain is opened through; false for a device this ICD did
-     * not make. */
-    bool             present_context(VkDevice device, VkPhysicalDevice &physical, Connection *&connection);
+     * that chain is opened through; false for a device this ICD did not
+     * make. */
+    bool             present_context(VkDevice device, VkPhysicalDevice &physical, uint64_t &host_device,
+                                     Connection *&connection);
     /* The entry point of that name, at whatever level it is: what the ICD's own
      * swapchains call, having already found the device they belong to. */
     PFN_vkVoidFunction entry(const char *name) const;
@@ -349,14 +349,6 @@ private:
     uint64_t                idle_waited_;
     Win32HandleKind         memory_handles_;
     Win32HandleKind         semaphore_handles_;
-    /* A fresh fd of an object of `owner`, asked of the host each time an
-     * import names it: a driver takes ownership of an fd it imports, so one fd
-     * could not serve two imports. Asked through the importing device's own
-     * connection, so an owner of another instance is a handle that context
-     * cannot name and the host refuses it - which is what sharing between two
-     * instances is, until feature 053. */
-    VkResult                host_memory_fd(LoaderHandle &made, VkDevice owner, VkDeviceMemory memory, int &fd);
-    VkResult                host_semaphore_fd(LoaderHandle &made, VkDevice owner, VkSemaphore semaphore, int &fd);
     /* The Win32 import node of an allocation's chain, or null. */
     const ImportMemoryWin32HandleRecord *imported_memory_record(const void *chain) const;
     /* Whether an allocation's chain exports or imports a Win32 handle, which
@@ -366,19 +358,6 @@ private:
      * on the host and published so another process can open it. */
     VkResult                shared_allocation(LoaderHandle &made, VkDevice device, const VkMemoryAllocateInfo &info,
                                               const VkAllocationCallbacks *allocator, VkDeviceMemory &memory);
-    /* Memory this process published, imported into another of its devices the
-     * way 047 did it: a fresh fd, and a VkDeviceMemory of that device's own. */
-    VkResult                own_process_allocation(LoaderHandle &made, VkDevice device,
-                                                   const ExternalObjectSlot &holder,
-                                                   const VkMemoryAllocateInfo &info,
-                                                   const VkAllocationCallbacks *allocator,
-                                                   VkDeviceMemory &memory);
-    /* Memory a Win32 handle names, opened into this context. */
-    VkResult                imported_allocation(LoaderHandle &made, VkDevice device,
-                                                const ImportMemoryWin32HandleRecord &importing,
-                                                const VkMemoryAllocateInfo &info,
-                                                const VkAllocationCallbacks *allocator, uint64_t size,
-                                                VkDeviceMemory &memory);
     /* An object of this process given an identity another process can name: a
      * one-page carrier allocation the miniport mints into - the host object
      * itself has no guest allocation, and the carrier's pages are never read -
@@ -388,15 +367,15 @@ private:
      * nothing left behind, for every refusal on the way. */
     VkResult                publish(LoaderHandle &made, VkDevice device, uint32_t kind, uint64_t size,
                                     VkDeviceMemory memory, VkSemaphore semaphore);
-    /* The object id `handle` names: one this process published, or one another
-     * process sent, which is opened here. VK_ERROR_INVALID_EXTERNAL_HANDLE for
-     * a handle from nowhere, VK_ERROR_OUT_OF_HOST_MEMORY when there is no row
-     * to keep it in; `object_id` is 0 unless VK_SUCCESS. `api` names the
-     * entry point in the line a refused handle writes. */
-    VkResult                object_of(LoaderHandle &made, void *handle, const char *api, uint64_t &object_id);
-    /* Everything one row cost, given back: the device's reference to the
-     * object, the NT handle, and the carrier allocation nothing else knows
-     * about. */
+    /* Memory a Win32 handle names, opened into the device `made` - whoever
+     * published it - as `size` bytes. */
+    VkResult                imported_allocation(LoaderHandle &made, const ImportMemoryWin32HandleRecord &importing,
+                                                uint64_t size, VkDeviceMemory &memory);
+    /* An OpenedObjects::open answer as Vulkan answers it, with a handle this
+     * process may not open written to the log against `api`. */
+    VkResult                opened_answer(Status opened, const char *api);
+    /* Everything an exported row cost, given back: the NT handle and the
+     * carrier allocation nothing else knows about. */
     void                    release_shared(LoaderHandle &made, const ExternalObjectSlot &row);
     /* A kernel call this driver made refused: written to the log with its
      * NTSTATUS, and kept for a probe to read afterwards. */

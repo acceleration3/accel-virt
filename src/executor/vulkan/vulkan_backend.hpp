@@ -11,7 +11,8 @@
 #define AV_VULKAN_BACKEND_HPP
 
 #include "core/support/extension_names.hpp"
-#include "executor/vulkan/host_exported_fds.hpp"
+#include "core/support/object_pool.hpp"
+#include "executor/vulkan/guest_device.hpp"
 #include "executor/vulkan/vulkan_object_kind.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
 #include "executor/host_object_registry.hpp"
@@ -19,8 +20,6 @@
 #include "executor/shim/host_heap.hpp"
 #include "executor/vulkan/vulkan_submit_timing.hpp"
 #include "executor/shim/physical_device_list.hpp"
-#include "executor/shim/vulkan_device_table.hpp"
-#include "executor/shim/vulkan_memory_import.hpp"
 #include "proto/generated/vulkan/vk_real_dispatch.h"
 
 #include <stdint.h>
@@ -160,25 +159,27 @@ public:
     void on_vkFreeMemory(VkDevice device, VkDeviceMemory memory,
                          const VkAllocationCallbacks *pAllocator) override;
 
-    /* The fds this context exported, and what an import may name (feature 047,
-     * US3): an fd a guest sends is a claim that this context exported it, and
-     * one it made up names something else in this process (constitution V).
-     * The table owns what it exported, so an export nothing imported is closed
-     * with its device rather than held until the process exits. */
+    /* No descriptor crosses the wire either way (feature 053): a number the
+     * guest sends names whatever this process has open under it
+     * (constitution V), and one this process hands out is one it leaks. A
+     * guest shares by SHARE_OBJECT and OPEN_SHARED_OBJECT, so every fd entry
+     * point is refused, as an allocation importing an fd or a host pointer
+     * is. */
     VkResult on_vkGetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR *pGetFdInfo,
                                  int *pFd) override;
     VkResult on_vkGetSemaphoreFdKHR(VkDevice device, const VkSemaphoreGetFdInfoKHR *pGetFdInfo,
                                     int *pFd) override;
-    /* Of an fd this context exported only, in the guest's types. */
+    VkResult on_vkGetFenceFdKHR(VkDevice device, const VkFenceGetFdInfoKHR *pGetFdInfo, int *pFd) override;
     VkResult on_vkGetMemoryFdPropertiesKHR(VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType, int fd,
                                            VkMemoryFdPropertiesKHR *pMemoryFdProperties) override;
+    VkResult on_vkImportSemaphoreFdKHR(VkDevice device,
+                                       const VkImportSemaphoreFdInfoKHR *pImportSemaphoreFdInfo) override;
+    VkResult on_vkImportFenceFdKHR(VkDevice device, const VkImportFenceFdInfoKHR *pImportFenceFdInfo) override;
     /* Of the host type behind the guest's: VK_ERROR_OUT_OF_DEVICE_MEMORY for
      * a type the guest was never shown, which no driver checks. */
     VkResult on_vkAllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
                                  const VkAllocationCallbacks *pAllocator,
                                  VkDeviceMemory *pMemory) override;
-    VkResult on_vkImportSemaphoreFdKHR(VkDevice device,
-                                       const VkImportSemaphoreFdInfoKHR *pImportSemaphoreFdInfo) override;
 
     /* The physical device of the bound GPU and no other, as a list of one and
      * as a group of one: the host's own lists name every GPU it has, and a
@@ -200,15 +201,17 @@ public:
     void abandon(const SourceMemory &memory, uint64_t handle) override;
 
     /* One host object shared with every other context of this device (feature
-     * 053). Vulkan is the only API here that exports anything, so this is the
-     * only backend that overrides these: memory as the handle type this GPU
-     * imports, a fence as an opaque-fd timeline semaphore. A wire handle the
-     * guest names that this backend never made is refused, since the guest
-     * would otherwise name any number and have the driver read it. */
+     * 053): memory as a dma-buf, a fence as an opaque-fd timeline semaphore,
+     * each exported through the device that made it. An import is made into
+     * what the guest names: memory onto one of its devices, a fence's payload
+     * into one of its semaphores, which stays the guest's to destroy. A wire
+     * handle the guest names that this backend never made is refused, since
+     * the guest would otherwise name any number and have the driver read
+     * it. */
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                      OwnedFd &descriptor) override;
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                     const SharedImageShape &shape,
+                                     const SharedImageShape &shape, uint64_t into,
                                      uint64_t &wire_handle, uint64_t &detail) override;
     void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) override;
 
@@ -278,27 +281,32 @@ private:
     void keep(uint64_t raw, VulkanObjectKind kind, uint64_t bytes);
     /* A device or an instance the guest never destroyed, destroyed. */
     void let_go(uint64_t raw, VulkanObjectKind kind);
-    /* `made`, which an import just made on device_, held as made through it;
+    /* `made`, which an import just made on `device`, held as made through it;
      * false when it cannot be, and the caller lets it go. */
-    [[nodiscard]] bool kept_on_device(uint64_t made);
-    /* `made` forgotten; true when it is device_'s, and so this backend's to
-     * free. */
-    [[nodiscard]] bool forgot_on_device(uint64_t made);
+    [[nodiscard]] bool kept_on(const GuestDevice &device, uint64_t made);
+    /* `made` forgotten, answered with the device it was made on - this
+     * backend's to free it through - or null for one that device's
+     * destruction already took. */
+    GuestDevice       *forgot(uint64_t made);
+    /* The device this context made as `device`, or null. */
+    GuestDevice       *device_of(uint64_t device);
+    /* The device the object `made` was made through, or null. */
+    GuestDevice       *owner_of(uint64_t made);
+    /* `fd`'s memory imported onto `device` as `size` bytes; or its payload
+     * into the semaphore `into`. */
+    [[nodiscard]] bool import_memory(GuestDevice &device, int fd, uint64_t size, uint64_t &wire_handle);
+    [[nodiscard]] bool import_payload(int fd, uint64_t into, uint64_t &wire_handle, uint64_t &detail);
+    /* Whether the chain of an allocation imports nothing a guest could have
+     * named: no fd, no host pointer. */
+    bool               imports_nothing(const void *next) const;
+
+    /* What release_object is handed for a fence's payload imported into a
+     * semaphore the guest made: the semaphore is the guest's to destroy. */
+    static constexpr uint64_t guest_semaphore = 1u;
 
     /* Where the tables below grow from: first, as they are destroyed after it. */
     HostHeap          heap_;
     BlockSource      &blocks_;
-    HostExportedFds   fds_;
-    /* Whether every fd the chain of an allocation names is one this context
-     * exported, answering the last of them in `fd` - -1 for a chain that
-     * imports nothing. False is the one case an allocation is refused here. */
-    [[nodiscard]] bool exported(const void *next, int &fd);
-    /* `answered`, with an fd the driver took forgotten. */
-    VkResult           imported(VkResult answered, int fd);
-    /* An fd the driver answered, kept as this context's;
-     * VK_ERROR_OUT_OF_HOST_MEMORY when the table cannot grow, with the fd
-     * closed since nothing can name it. */
-    VkResult           remembered(VkDevice device, VkResult answered, int *fd);
     /* Whether something made on `device` with the chain at `next` gets
      * `types` added as a structure of type `external`: only on the device
      * imports go to, made able to import, with types the driver allows, and a
@@ -341,13 +349,15 @@ private:
     ExtensionNames     extensions_;
     /* The application an instance being made names, at the host's version. */
     VkApplicationInfo  application_;
-    /* The device the imports belong to. A VkDeviceMemory is a device's, and
-     * an import arrives with no command to name one, so this is the device
-     * the guest made last; every device it made is in handles_, and goes
-     * with the context. */
-    VkDevice         device_;
+    /* Every device the guest made, with the entry points shared objects are
+     * exported and imported through. */
+    ObjectPool<GuestDevice> devices_;
+    /* The device the memory source's blobs are imported onto. A
+     * VkDeviceMemory is a device's, and a blob arrives with no command to
+     * name one, so this is the device the guest made last; null with none. */
+    GuestDevice     *adopting_;
     VkPhysicalDevice physical_;
-    /* The device imports go to was made able to import a dma-buf. */
+    /* The adopting device was made able to import a dma-buf. */
     bool             memory_import_;
     /* Every handle this context made and nothing else, each with what it was
      * made through - the null handle or one never made for nothing - and, a
@@ -360,9 +370,6 @@ private:
     /* The session's imports: a VkDeviceMemory one names is the import's to
      * release, not the guest's free. Null between sessions. */
     ImportTable     *imports_;
-    /* device_'s entry points, which every import onto it goes through. */
-    VulkanDeviceTable  table_;
-    VulkanMemoryImport import_;
     GuestMemoryTypes types_;
     bool             types_learnt_;
     /* AV_VK_SUBMIT_TIMING: the GPU's time in and between submissions. */

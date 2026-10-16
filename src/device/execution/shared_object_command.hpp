@@ -5,8 +5,9 @@
  * Framed exactly as BlobImportCommand frames its two: a body no producer
  * writes is command framing, which faults the context as a NOP with a body
  * does; every other refusal is a status in the answer, and the context runs
- * on. Which of the three may carry a wire handle is this class's rule, because
- * the body alone cannot know which command it is inside. */
+ * on. The wire handle each carries is its own: what a share publishes, which
+ * it must name; what an open is made into, 0 for nothing to choose; and which
+ * of the context's opens a release lets go of. */
 #ifndef AV_SHARED_OBJECT_COMMAND_HPP
 #define AV_SHARED_OBJECT_COMMAND_HPP
 
@@ -38,9 +39,6 @@ private:
     uint32_t             refusal_of(Status answered) const;
     [[nodiscard]] Status answer(uint32_t status, uint64_t wire_handle, uint8_t *reply, size_t capacity,
                                 size_t &produced);
-    /* Whether this command may carry a wire handle: only a share names an
-     * object the guest already holds. */
-    bool                 handle_allowed() const;
     size_t               body_size() const;
 
     ContextExecutor &executor_;

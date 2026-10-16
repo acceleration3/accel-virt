@@ -372,22 +372,27 @@ bool OpenGlBackend::export_object(uint32_t, uint64_t, uint32_t &handle_kind, Own
     return false;
 }
 
+/* Memory as a dma-buf and a fence as the opaque fd of the timeline semaphore
+ * it is published as (VulkanBackend::export_object), which is what
+ * GL_EXT_memory_object_fd and GL_EXT_semaphore_fd each take. A context names
+ * nothing to import into: it makes a new object every time. */
 bool OpenGlBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                  const SharedImageShape &shape,
+                                  const SharedImageShape &shape, uint64_t into,
                                   uint64_t &wire_handle, uint64_t &detail)
 {
     AV_SCOPE("OpenGlBackend::import_object");
     static_cast<void>(shape);   /* memory alone: no image of this API is made over it */
     wire_handle = 0u;
     detail = 0u;
-    if (handle_kind != AV_SHARED_HANDLE_DMA_BUF || fd < 0) return false;
+    if (fd < 0 || into != 0u) return false;
     uint32_t name = 0u;
     if (kind == AV_SHARED_MEMORY) {
-        if (size == 0u || !import_.import_memory(fd, size, name)) return false;
+        if (handle_kind != AV_SHARED_HANDLE_DMA_BUF || size == 0u || !import_.import_memory(fd, size, name))
+            return false;
     } else if (kind == AV_SHARED_MONITORED_FENCE || kind == AV_SHARED_NATIVE_FENCE) {
         /* The size is the memory kind's and is judged where the object is
          * published; a semaphore's payload carries its own. */
-        if (!import_.import_semaphore(fd, name)) return false;
+        if (handle_kind != AV_SHARED_HANDLE_OPAQUE_FD || !import_.import_semaphore(fd, name)) return false;
     } else {
         return false;
     }

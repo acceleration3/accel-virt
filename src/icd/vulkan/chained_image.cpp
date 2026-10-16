@@ -17,8 +17,9 @@ using BindImage = VkResult(VKAPI_PTR *)(VkDevice, VkImage, VkDeviceMemory, VkDev
 
 }  // namespace
 
-ChainedImage::ChainedImage(EntryLookup &entries, VkDevice device, WindowChains &chains, ClientTransport &wire)
-    : entries_(entries), device_(device), chains_(chains), slots_(), wire_(wire), image_(VK_NULL_HANDLE)
+ChainedImage::ChainedImage(EntryLookup &entries, VkDevice device, uint64_t host_device, WindowChains &chains,
+                           ClientTransport &wire)
+    : entries_(entries), device_(device), host_device_(host_device), chains_(chains), slots_(), wire_(wire), image_(VK_NULL_HANDLE)
 {
     AV_SCOPE("ChainedImage::ChainedImage");
 }
@@ -35,7 +36,7 @@ bool ChainedImage::open(void *window, uint64_t luid, VkFormat format, VkExtent2D
     if (slots_.opened() || window == nullptr) return false;
     SlotFormat slot(SlotLayout::bgra_top_down);
     if (!slot.take_vk(static_cast<uint32_t>(format))) return false;
-    if (!slots_.open(wire_, chains_, window, luid, extent.width, extent.height, slot.layout(), 1u)) return false;
+    if (!slots_.open(wire_, chains_, window, luid, extent.width, extent.height, slot.layout(), 1u, host_device_)) return false;
     if (make_image(slot, extent)) return true;
     close();
     return false;

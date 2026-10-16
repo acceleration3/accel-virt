@@ -39,8 +39,11 @@ extern "C" {
  * when the device it runs on is lost rather than at its next command, and
  * gave the device lose_device, which a test's GPU fault is made through. 22
  * made an answer longer than the reply capacity one the library keeps for
- * the device to hand on in parts (answer_part), rather than one it drops. */
-#define AV_EXECUTOR_ABI_VERSION 22u
+ * the device to hand on in parts (answer_part), rather than one it drops. 23
+ * made an open name what it is made into, and a close the handle the open
+ * answered, so one executor may hold one shared object more than once - a
+ * Vulkan context's memory imported into each of its devices. */
+#define AV_EXECUTOR_ABI_VERSION 23u
 #define AV_EXECUTOR_OPS_SYMBOL "av_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -270,15 +273,19 @@ typedef struct AvExecutorOps {
                              uint64_t wire_handle);
     /* The object shared as `object_id` made one of this executor's, answered
      * as the handle the guest names it by from then on: AV_SHARED_DONE with
-     * *wire_handle non-zero, or why not. The executor holds it until
-     * close_object or destroy, whatever the guest releases meanwhile. Runs on
-     * the context's worker. */
+     * *wire_handle non-zero, or why not. `into` is what the guest asks it to
+     * be made into, in this executor's commands: for Vulkan the device memory
+     * is imported on, or the semaphore whose payload a fence replaces; 0 for
+     * an API that has nothing to choose. An executor holds one object once
+     * per `into` (AV_SHARED_CONFLICT for a second), until close_object or
+     * destroy, whatever the guest releases meanwhile. Runs on the context's
+     * worker. */
     uint32_t (*open_object)(void *opaque, AvExecutor *executor, uint64_t object_id, uint32_t kind, uint64_t size,
-                            uint64_t *wire_handle);
-    /* What open_object made of `object_id`, destroyed. A no-op for an id this
-     * executor did not open; destroy closes whatever is left. Runs on the
-     * context's worker. */
-    void (*close_object)(void *opaque, AvExecutor *executor, uint64_t object_id);
+                            uint64_t into, uint64_t *wire_handle);
+    /* What open_object made of `object_id` and answered as `wire_handle`,
+     * destroyed. A no-op for an open this executor does not hold; destroy
+     * closes whatever is left. Runs on the context's worker. */
+    void (*close_object)(void *opaque, AvExecutor *executor, uint64_t object_id, uint64_t wire_handle);
     /* The guest let go of `object_id` everywhere - every process that made or
      * opened the allocation it was minted over has - or, for 0, of every id
      * in `domain`, as a reset does. What an executor opened stays its own.

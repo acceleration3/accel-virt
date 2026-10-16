@@ -87,7 +87,7 @@ Status HostShares::publish(uint32_t domain, uint64_t id, uint32_t kind, uint64_t
 }
 
 Status HostShares::open(uint32_t domain, uint64_t id, uint32_t kind, uint64_t size, SessionBackend &session,
-                        uint64_t &handle)
+                        uint64_t into, uint64_t &handle)
 {
     AV_SCOPE("HostShares::open");
     handle = 0u;
@@ -102,7 +102,7 @@ Status HostShares::open(uint32_t domain, uint64_t id, uint32_t kind, uint64_t si
         shape = share->shape();
         if (share->descriptor() < 0) answer = Status::not_found;
         else if (!share->accepts(kind, size)) answer = Status::invalid_parameter;
-        else if (share->holder_of(session) != nullptr || share->publisher() == &session) answer = Status::conflict;
+        else if (share->holder_into(session, into) != nullptr) answer = Status::conflict;
         handle_kind = share->handle_kind();
         fd = share->descriptor();
     }
@@ -110,12 +110,12 @@ Status HostShares::open(uint32_t domain, uint64_t id, uint32_t kind, uint64_t si
      * keeps a duplicate of its own. */
     uint64_t made = 0u;
     uint64_t detail = 0u;
-    if (answer == Status::ok && !session.import_object(kind, handle_kind, fd, size, shape, made, detail))
+    if (answer == Status::ok && !session.import_object(kind, handle_kind, fd, size, shape, into, made, detail))
         answer = Status::not_supported;
     if (answer == Status::ok) {
         const ThreadLockHold locked(lock_);
         ShareHolder *holder = nullptr;
-        if (holders_.create(holder, session, made, detail) == Status::ok) {
+        if (holders_.create(holder, session, into, made, detail) == Status::ok) {
             share->hold(*holder);
             handle = made;
         } else {
@@ -128,20 +128,18 @@ Status HostShares::open(uint32_t domain, uint64_t id, uint32_t kind, uint64_t si
     return answer;
 }
 
-void HostShares::close(uint32_t domain, uint64_t id, SessionBackend &session)
+void HostShares::close(uint32_t domain, uint64_t id, SessionBackend &session, uint64_t handle)
 {
     AV_SCOPE("HostShares::close");
     Share *const share = pinned(domain, id);
     if (share == nullptr) return;
-    uint64_t handle = 0u;
     uint64_t detail = 0u;
     bool     held = false;
     {
         const ThreadLockHold locked(lock_);
-        ShareHolder *const holder = share->holder_of(session);
+        ShareHolder *const holder = share->holder_answered(session, handle);
         if (holder != nullptr) {
             held = true;
-            handle = holder->handle();
             detail = holder->detail();
             drop(*share, *holder);
         }

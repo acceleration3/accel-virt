@@ -356,8 +356,8 @@ bool D3dBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &ha
     return exported;
 }
 
-bool D3dBackend::import_object(uint32_t, uint32_t, int, uint64_t, const SharedImageShape &, uint64_t &wire_handle,
-                               uint64_t &detail)
+bool D3dBackend::import_object(uint32_t, uint32_t, int, uint64_t, const SharedImageShape &, uint64_t,
+                               uint64_t &wire_handle, uint64_t &detail)
 {
     AV_SCOPE("D3dBackend::import_object");
     wire_handle = 0u;

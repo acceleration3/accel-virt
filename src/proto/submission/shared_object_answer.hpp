@@ -22,7 +22,7 @@ public:
     enum : uint32_t {
         done = 0u,
         /* A field no request may have: no id, an unknown kind, a reserved
-         * word, or a wire handle where that command allows none. */
+         * word, or a share that names no wire handle. */
         refused_request = 1u,
         /* SHARE: a wire handle this context's executor never made. OPEN and
          * RELEASE: an object this device does not hold. */
@@ -36,7 +36,7 @@ public:
          * no memory for one more. */
         no_room = 5u,
         /* SHARE: this id is already published with a different descriptor.
-         * OPEN: this context already holds it. */
+         * OPEN: this context already holds it, made into the same object. */
         conflict = 6u,
     };
 

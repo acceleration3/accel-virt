@@ -69,9 +69,9 @@ Status OpenedObjects::open(ClientTransport &wire, uint32_t device, uint64_t hand
     /* An open that answered no handle is malformed to the call itself - an ok
      * carrying nothing is an answer no guest could use - so there is nothing
      * left here to check for. */
-    if (call.open(object_id, kind, asked, opened) != Status::ok) {
+    if (call.open(object_id, kind, asked, into, opened) != Status::ok) {
         if (call.device_status() == SharedObjectAnswer::conflict) {
-            lines_.write("an object this context already opened");
+            lines_.write("an object this context already opened into the same object");
             return Status::conflict;
         }
         lines_.note("the device would not open a shared object for this context, status", call.device_status());
@@ -90,11 +90,11 @@ Status OpenedObjects::open(ClientTransport &wire, uint32_t device, uint64_t hand
     return Status::ok;
 }
 
-void OpenedObjects::release(ClientTransport &wire, uint32_t kind, uint64_t, const OpenedObjectRow &row) const
+void OpenedObjects::release(ClientTransport &wire, uint32_t kind, uint64_t made, const OpenedObjectRow &row) const
 {
     AV_SCOPE("OpenedObjects::release");
     SharedObjectCall call(wire);
-    static_cast<void>(call.release(row.object_id_, kind, row.size_));
+    static_cast<void>(call.release(row.object_id_, kind, row.size_, made));
 }
 
 bool OpenedObjects::answered(uint32_t kind, uint64_t made) const

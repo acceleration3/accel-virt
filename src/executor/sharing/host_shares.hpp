@@ -76,17 +76,21 @@ public:
      * recorded. */
     [[nodiscard]] Status publish(uint32_t domain, uint64_t id, uint32_t kind, uint64_t size, SessionBackend &session,
                                  uint64_t handle);
-    /* `session` opens `id` as an object of its own, answered as the handle
-     * its API names it by. not_found for an id the domain does not share or
-     * one with no descriptor; invalid_parameter for a kind or a size that
-     * disagrees with it; conflict when the session already holds it or
-     * published it; not_supported when its backend imports nothing of this
-     * kind. Nothing is held unless ok. */
+    /* `session` opens `id` as an object of its own, made into `into` (what
+     * its API names: a Vulkan device or semaphore, 0 for nothing to choose),
+     * answered as the handle its API names it by. A session may hold one
+     * share once per `into`, its own publication included: a Vulkan context
+     * imports what one of its devices published into another. not_found for
+     * an id the domain does not share or one with no descriptor;
+     * invalid_parameter for a kind or a size that disagrees with it; conflict
+     * when the session already holds it made into `into`; not_supported when
+     * its backend imports nothing of this kind into that. Nothing is held
+     * unless ok. */
     [[nodiscard]] Status open(uint32_t domain, uint64_t id, uint32_t kind, uint64_t size, SessionBackend &session,
-                              uint64_t &handle);
-    /* `session` lets go of what it imported as `id`, released through its
-     * backend. Nothing for a share it does not hold. */
-    void close(uint32_t domain, uint64_t id, SessionBackend &session);
+                              uint64_t into, uint64_t &handle);
+    /* `session` lets go of what it imported as `id` and answered as `handle`,
+     * released through its backend. Nothing for a hold it does not have. */
+    void close(uint32_t domain, uint64_t id, SessionBackend &session, uint64_t handle);
 
     /* ------------------------------------------------------- Direct3D */
 

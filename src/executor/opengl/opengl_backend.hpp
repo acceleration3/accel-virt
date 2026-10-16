@@ -80,7 +80,7 @@ public:
      * driver, which glImportMemoryFdEXT would read as one of its own. A host
      * without the matching GL_EXT_*_fd extension imports nothing. */
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                     const SharedImageShape &shape,
+                                     const SharedImageShape &shape, uint64_t into,
                                      uint64_t &wire_handle, uint64_t &detail) override;
     /* What an import made, destroyed; nothing for a name this context did not
      * import, which is what stops a guest deleting an object of another's. */

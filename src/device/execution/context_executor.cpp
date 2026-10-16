@@ -176,20 +176,21 @@ Status ContextExecutor::share_object(uint64_t object_id, uint32_t kind, uint64_t
     return status_of(library_.share_object(executor_, object_id, kind, size, wire_handle));
 }
 
-Status ContextExecutor::open_object(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t &wire_handle)
+Status ContextExecutor::open_object(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t into,
+                                    uint64_t &wire_handle)
 {
     AV_SCOPE("ContextExecutor::open_object");
     host_.require_worker("ContextExecutor::open_object");
     wire_handle = 0u;
     if (executor_ == nullptr) return Status::invalid_state;
-    return status_of(library_.open_object(executor_, object_id, kind, size, wire_handle));
+    return status_of(library_.open_object(executor_, object_id, kind, size, into, wire_handle));
 }
 
-void ContextExecutor::close_object(uint64_t object_id)
+void ContextExecutor::close_object(uint64_t object_id, uint64_t wire_handle)
 {
     AV_SCOPE("ContextExecutor::close_object");
     host_.require_worker("ContextExecutor::close_object");
-    if (executor_ != nullptr) library_.close_object(executor_, object_id);
+    if (executor_ != nullptr) library_.close_object(executor_, object_id, wire_handle);
 }
 
 Status ContextExecutor::status_of(uint32_t answered) const

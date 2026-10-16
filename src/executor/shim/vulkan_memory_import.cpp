@@ -149,6 +149,18 @@ void VulkanMemoryImport::destroy_semaphore(uint64_t semaphore)
     held_--;
 }
 
+bool VulkanMemoryImport::import_semaphore_payload(int fd, uint64_t semaphore)
+{
+    AV_SCOPE("VulkanMemoryImport::import_semaphore_payload");
+    OwnedFd copy;
+    if (semaphore == 0u || !copy.hold_copy(fd)) return false;
+    const auto into = reinterpret_cast<VkSemaphore>(semaphore);
+    if (!table_.import_semaphore_fd(into, VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT, copy.fd())) return false;
+    /* A successful import owns the descriptor. */
+    static_cast<void>(copy.take());
+    return true;
+}
+
 uint32_t VulkanMemoryImport::held() const
 {
     AV_SCOPE("VulkanMemoryImport::held");

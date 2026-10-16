@@ -295,13 +295,13 @@ uint32_t ExecutorRoot::share_object(ContextSession *session, uint64_t object_id,
 }
 
 uint32_t ExecutorRoot::open_object(ContextSession *session, uint64_t object_id, uint32_t kind, uint64_t size,
-                                   uint64_t &wire_handle)
+                                   uint64_t into, uint64_t &wire_handle)
 {
     AV_SCOPE("ExecutorRoot::open_object");
     wire_handle = 0u;
     const uint32_t slot = slot_of(session);
     if (slot == max_sessions || session->faulted()) return AV_SHARED_REFUSED;
-    return shared_answer(shares_[slot].open(object_id, kind, size, wire_handle));
+    return shared_answer(shares_[slot].open(object_id, kind, size, into, wire_handle));
 }
 
 uint32_t ExecutorRoot::shared_answer(Status answered) const
@@ -318,11 +318,11 @@ uint32_t ExecutorRoot::shared_answer(Status answered) const
 
 /* What a close frees is given back when the guest or a session next lets go
  * on the main loop: the session's own worker may hold the Direct3D 11 lock. */
-void ExecutorRoot::close_object(ContextSession *session, uint64_t object_id)
+void ExecutorRoot::close_object(ContextSession *session, uint64_t object_id, uint64_t wire_handle)
 {
     AV_SCOPE("ExecutorRoot::close_object");
     const uint32_t slot = slot_of(session);
-    if (slot != max_sessions) shares_[slot].close(object_id);
+    if (slot != max_sessions) shares_[slot].close(object_id, wire_handle);
 }
 
 void ExecutorRoot::set_signal(ContextSession *session, void (*signal)(void *context), void *context)

@@ -15,7 +15,7 @@ ChainSlots::ChainSlots()
 }
 
 bool ChainSlots::open(ClientTransport &wire, WindowChains &chains, void *window, uint64_t luid, uint32_t width,
-                      uint32_t height, SlotLayout layout, uint32_t count)
+                      uint32_t height, SlotLayout layout, uint32_t count, uint64_t into)
 {
     AV_SCOPE("ChainSlots::open");
     release(wire);
@@ -32,7 +32,7 @@ bool ChainSlots::open(ClientTransport &wire, WindowChains &chains, void *window,
     for (uint32_t slot = 0u; slot < count_; slot++) {
         SharedObjectCall call(wire);
         uint64_t         opened = 0u;
-        if (call.open(ids_[slot], SharedObjectKind::memory, bytes_[slot], opened) == Status::ok && opened != 0u) {
+        if (call.open(ids_[slot], SharedObjectKind::memory, bytes_[slot], into, opened) == Status::ok && opened != 0u) {
             memories_[slot] = opened;
             continue;
         }
@@ -93,7 +93,7 @@ void ChainSlots::release(ClientTransport &wire)
     for (uint32_t slot = 0u; slot < max_slots; slot++) {
         if (memories_[slot] == 0u) continue;
         SharedObjectCall call(wire);
-        static_cast<void>(call.release(ids_[slot], SharedObjectKind::memory, bytes_[slot]));
+        static_cast<void>(call.release(ids_[slot], SharedObjectKind::memory, bytes_[slot], memories_[slot]));
     }
     forget_slots();
 }

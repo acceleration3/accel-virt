@@ -2,10 +2,11 @@
  * Transport commands; feature 053, contracts/wire_additions.md).
  *
  * One shape for SHARE_OBJECT, OPEN_SHARED_OBJECT and RELEASE_SHARED_OBJECT,
- * because all three name one object of one kind and the only difference is
- * whether a wire handle travels with it. Which of them may set `wire_handle`
- * is the command's rule and not the body's, so it is carried here unjudged:
- * a body that judged it would have to know which command it was inside. */
+ * because all three name one object of one kind and a wire handle beside it:
+ * the object a share publishes, what an open is made into, the open a release
+ * lets go of. What the handle means is the command's, so it is carried here
+ * unjudged: a body that judged it would have to know which command it was
+ * inside. */
 #ifndef AV_SHARED_OBJECT_REQUEST_HPP
 #define AV_SHARED_OBJECT_REQUEST_HPP
 

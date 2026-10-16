@@ -103,8 +103,9 @@ VkResult Presentation::create_swapchain(VkDevice device, const VkSwapchainCreate
     AV_SCOPE("Presentation::create_swapchain");
     *swapchain = VK_NULL_HANDLE;
     VkPhysicalDevice physical = VK_NULL_HANDLE;
+    uint64_t         host_device = 0u;
     Connection      *connection = nullptr;
-    if (info == nullptr || !root_.present_context(device, physical, connection)) {
+    if (info == nullptr || !root_.present_context(device, physical, host_device, connection)) {
         log_.write("avvk: a swapchain is refused: its device has no adapter to present on");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
@@ -120,7 +121,8 @@ VkResult Presentation::create_swapchain(VkDevice device, const VkSwapchainCreate
     Swapchain *chain = nullptr;
     /* Room to name it first, so a swapchain made always has a handle. */
     if (swapchains_.reserve(swapchains_.count() + 1u) != Status::ok ||
-        chains_made_.create(chain, windows_, chains_, entries_, device, physical, kmt_, log_, *connection, presents_) !=
+        chains_made_.create(chain, windows_, chains_, entries_, device, host_device, physical, kmt_, log_, *connection,
+                            presents_) !=
             Status::ok)
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     SurfaceProperties properties(windows_, window);

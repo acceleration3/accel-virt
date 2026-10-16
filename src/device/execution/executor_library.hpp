@@ -72,14 +72,15 @@ public:
 
     /* Feature 053, answered as the library answered it (AV_SHARED_*): the
      * object `wire_handle` names in `executor`'s commands shared as
-     * `object_id`, and that object opened as one of `executor`'s, with the
-     * handle the guest names it by. A library that answers done and names
-     * nothing is refused: there would be nothing to give back by. */
+     * `object_id`, and that object opened as one of `executor`'s, made into
+     * `into`, with the handle the guest names it by. A library that answers
+     * done and names nothing is refused: there would be nothing to give back
+     * by. */
     uint32_t    share_object(AvExecutor *executor, uint64_t object_id, uint32_t kind, uint64_t size,
                              uint64_t wire_handle) const;
-    uint32_t    open_object(AvExecutor *executor, uint64_t object_id, uint32_t kind, uint64_t size,
+    uint32_t    open_object(AvExecutor *executor, uint64_t object_id, uint32_t kind, uint64_t size, uint64_t into,
                             uint64_t &wire_handle) const;
-    void        close_object(AvExecutor *executor, uint64_t object_id) const;
+    void        close_object(AvExecutor *executor, uint64_t object_id, uint64_t wire_handle) const;
     /* The guest let go of `object_id` everywhere, or of every id for 0;
      * nothing without a domain. */
     void        release_shared(uint64_t object_id) const;

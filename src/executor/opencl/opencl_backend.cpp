@@ -1013,7 +1013,7 @@ bool OpenClBackend::export_object(uint32_t, uint64_t, uint32_t &handle_kind, Own
 }
 
 bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                  const SharedImageShape &shape,
+                                  const SharedImageShape &shape, uint64_t into,
                                   uint64_t &wire_handle, uint64_t &detail)
 {
     AV_SCOPE("OpenClBackend::import_object");
@@ -1023,7 +1023,7 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
      * OpenCL names through a different extension this host has not got, and an
      * opaque fd is another driver's private handle that OpenGL cannot read
      * (research.md §7). */
-    if (kind != AV_SHARED_MEMORY || handle_kind != AV_SHARED_HANDLE_DMA_BUF || fd < 0 || size == 0u)
+    if (kind != AV_SHARED_MEMORY || handle_kind != AV_SHARED_HANDLE_DMA_BUF || fd < 0 || size == 0u || into != 0u)
         return false;
     if (!imports_ || context_ == nullptr) return false;
     if (acquire_queue() == nullptr) { AV_UNTESTABLE("no host beside a test here refuses a command queue"); return false; }

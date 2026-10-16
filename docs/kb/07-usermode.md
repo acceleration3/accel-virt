@@ -420,25 +420,19 @@ external-object extensions are the ICD's own
 Windows structure layouts. A handle the ICD answers names a row of its own
 table: the memory or the semaphore of one device.
 
-The sharing behind it is the host's. A guest device is a host device, so two
-guest devices sharing an image share it between two host devices - which the
-host's own fd extensions do, because both host devices live in the one process
-the device library runs in. So an export remembers the object and answers a
-handle, and an import asks the host for a **fresh** `vkGetMemoryFdKHR` of that
-object and forwards `VkImportMemoryFdInfoKHR` in the Win32 structure's place.
-Fresh per import, because a host driver takes ownership of an fd it imports.
+The sharing behind it is the host's, and it is one path whoever opens the
+handle. An export publishes the object under the identity the miniport minted
+over a carrier allocation (SHARE_OBJECT), and an import opens that identity on
+the device (OPEN_SHARED_OBJECT) into what it is made into: the importing
+`VkDevice` for memory, the application's `VkSemaphore` for a fence's payload.
+The executor's `HostShares` holds the descriptor the publishing device
+exported, and imports it into the device the open names - another process's,
+or another device of the publishing process, since a context may hold one
+object once per thing it is made into. No fd crosses the wire: the executor
+refuses every fd entry point a guest could send.
 
-The device side owns those fds (`HostExportedFds`): an fd an import names must
-be one that context exported, since an fd a guest made up names something else
-in the QEMU process entirely, and an fd exported and never imported is closed
-with its device rather than held until QEMU exits.
+One consequence to keep in mind:
 
-Two consequences to keep in mind:
-
-- **Sharing is within one instance.** The fd table is a context's, and each
-  guest instance is its own context. DXVK and vkd3d-proton each make one
-  instance, so this is not a limit either of them meets; two processes sharing
-  is feature 053's, which gives objects a device-global identity.
 - **The KMT and Direct3D handle types are absent, and say so.**
   `vkGetPhysicalDeviceExternalBufferProperties` answers the one opaque Win32
   type out of the host's opaque fd and answers every other Win32 type as

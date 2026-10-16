@@ -63,6 +63,9 @@ public:
      * Nothing is left behind unless it answers true. */
     [[nodiscard]] bool import_shared_semaphore(int fd, uint64_t &semaphore);
     void               destroy_semaphore(uint64_t semaphore);
+    /* `fd`'s payload imported into `semaphore`, one the guest made and still
+     * owns. A copy of `fd` is imported, for the same reason. */
+    [[nodiscard]] bool import_semaphore_payload(int fd, uint64_t semaphore);
 
     /* Imports that succeeded and have not been released, which is what a test
      * or a teardown can ask about without a driver. */

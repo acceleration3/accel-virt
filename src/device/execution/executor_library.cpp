@@ -177,25 +177,25 @@ uint32_t ExecutorLibrary::share_object(AvExecutor *executor, uint64_t object_id,
 }
 
 uint32_t ExecutorLibrary::open_object(AvExecutor *executor, uint64_t object_id, uint32_t kind, uint64_t size,
-                                      uint64_t &wire_handle) const
+                                      uint64_t into, uint64_t &wire_handle) const
 {
     AV_SCOPE("ExecutorLibrary::open_object");
     uint64_t       made = 0u;
-    const uint32_t answered = ops_->open_object(ops_->opaque, executor, object_id, kind, size, &made);
+    const uint32_t answered = ops_->open_object(ops_->opaque, executor, object_id, kind, size, into, &made);
     wire_handle = 0u;
     if (answered != AV_SHARED_DONE) return answered;
     if (made == 0u) {
-        ops_->close_object(ops_->opaque, executor, object_id);
+        ops_->close_object(ops_->opaque, executor, object_id, 0u);
         return AV_SHARED_REFUSED;
     }
     wire_handle = made;
     return AV_SHARED_DONE;
 }
 
-void ExecutorLibrary::close_object(AvExecutor *executor, uint64_t object_id) const
+void ExecutorLibrary::close_object(AvExecutor *executor, uint64_t object_id, uint64_t wire_handle) const
 {
     AV_SCOPE("ExecutorLibrary::close_object");
-    ops_->close_object(ops_->opaque, executor, object_id);
+    ops_->close_object(ops_->opaque, executor, object_id, wire_handle);
 }
 
 void ExecutorLibrary::release_shared(uint64_t object_id) const

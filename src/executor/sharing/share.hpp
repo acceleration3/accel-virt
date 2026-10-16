@@ -74,8 +74,12 @@ public:
     void unpin();
 
     ShareHolder *holders() const;
-    /* The hold `session` has, or null. */
+    /* A hold `session` has, or null. */
     ShareHolder *holder_of(const SessionBackend &session) const;
+    /* The hold `session` has made into `into`, or null. */
+    ShareHolder *holder_into(const SessionBackend &session, uint64_t into) const;
+    /* The hold `session`'s import answered as `handle`, or null. */
+    ShareHolder *holder_answered(const SessionBackend &session, uint64_t handle) const;
     void         hold(ShareHolder &holder);
     void         unhold(ShareHolder &holder);
 

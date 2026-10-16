@@ -20,12 +20,6 @@ size_t SharedObjectCommand::body_size() const
     return header_.size() - CommandHeader::encoded_size;
 }
 
-bool SharedObjectCommand::handle_allowed() const
-{
-    AV_SCOPE("SharedObjectCommand::handle_allowed");
-    return header_.id() == CommandHeader::share_object_id;
-}
-
 uint32_t SharedObjectCommand::refusal_of(Status answered) const
 {
     AV_SCOPE("SharedObjectCommand::refusal_of");
@@ -62,11 +56,9 @@ Status SharedObjectCommand::run(uint8_t *reply, size_t capacity, size_t &produce
     SharedObjectRequest request;
     if (request.decode(body_, body_size()) != Status::ok)
         return answer(SharedObjectAnswer::refused_request, 0u, reply, capacity, produced);
-    if (request.wire_handle() != 0u && !handle_allowed())
-        return answer(SharedObjectAnswer::refused_request, 0u, reply, capacity, produced);
 
     if (header_.id() == CommandHeader::release_shared_object_id) {
-        executor_.close_object(request.object_id());
+        executor_.close_object(request.object_id(), request.wire_handle());
         return answer(SharedObjectAnswer::done, 0u, reply, capacity, produced);
     }
     if (header_.id() == CommandHeader::share_object_id) {
@@ -77,7 +69,8 @@ Status SharedObjectCommand::run(uint8_t *reply, size_t capacity, size_t &produce
         return answer(refusal_of(published), 0u, reply, capacity, produced);
     }
     uint64_t     wire_handle = 0u;
-    const Status opened = executor_.open_object(request.object_id(), request.kind().value(), request.size(), wire_handle);
+    const Status opened = executor_.open_object(request.object_id(), request.kind().value(), request.size(),
+                                                request.wire_handle(), wire_handle);
     return answer(refusal_of(opened), wire_handle, reply, capacity, produced);
 }
 

@@ -45,18 +45,18 @@ Status SessionShares::publish(uint64_t id, uint32_t kind, uint64_t size, uint64_
     return shares_->publish(domain_, id, kind, size, *session_, handle);
 }
 
-Status SessionShares::open(uint64_t id, uint32_t kind, uint64_t size, uint64_t &handle)
+Status SessionShares::open(uint64_t id, uint32_t kind, uint64_t size, uint64_t into, uint64_t &handle)
 {
     AV_SCOPE("SessionShares::open");
     handle = 0u;
     if (shares_ == nullptr) return Status::invalid_state;
-    return shares_->open(domain_, id, kind, size, *session_, handle);
+    return shares_->open(domain_, id, kind, size, *session_, into, handle);
 }
 
-void SessionShares::close(uint64_t id)
+void SessionShares::close(uint64_t id, uint64_t handle)
 {
     AV_SCOPE("SessionShares::close");
-    if (shares_ != nullptr) shares_->close(domain_, id, *session_);
+    if (shares_ != nullptr) shares_->close(domain_, id, *session_, handle);
 }
 
 Status SessionShares::publish_resource(uint64_t id, IUnknown *resource, ShareOrigin origin)

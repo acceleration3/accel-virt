@@ -77,16 +77,18 @@ public:
      * host API will not share. */
     [[nodiscard]] Status share_object(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t wire_handle);
     /* Worker. The object shared as `object_id` opened as one of this
-     * context's, with `wire_handle` what the guest names it by. Same answers
-     * as share_object. */
-    [[nodiscard]] Status open_object(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t &wire_handle);
+     * context's, made into `into`, with `wire_handle` what the guest names it
+     * by. Same answers as share_object. */
+    [[nodiscard]] Status open_object(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t into,
+                                     uint64_t &wire_handle);
     /* Worker. The host device this context runs on made lost, for a test
      * (AvExecutorOps::lose_device): invalid_state without an executor,
      * not_supported where the host cannot. */
     [[nodiscard]] Status lose_device();
-    /* Worker. What open_object made of `object_id` let go of. Nothing
-     * without an executor: destroying it closed everything it opened. */
-    void                 close_object(uint64_t object_id);
+    /* Worker. What open_object made of `object_id` and answered as
+     * `wire_handle` let go of. Nothing without an executor: destroying it
+     * closed everything it opened. */
+    void                 close_object(uint64_t object_id, uint64_t wire_handle);
     /* The API half (id >> 16) of the commands this context runs. */
     uint16_t             command_api() const;
     bool                 created() const;

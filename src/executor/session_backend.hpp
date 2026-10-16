@@ -86,13 +86,16 @@ public:
      * with that API's own error rather than with a host object nobody made. */
     [[nodiscard]] virtual bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                              OwnedFd &descriptor) = 0;
-    /* That descriptor made into an object of this API's, with `wire_handle`
-     * what the guest names it by and `detail` whatever else releasing it will
-     * take - HostShares keeps both with the hold, so no backend keeps a table
-     * of what it imported. `fd` stays the caller's whatever the answer: it is
+    /* That descriptor made into an object of this API's, into what `into`
+     * names in its commands - for Vulkan the device memory is imported on, or
+     * the semaphore whose payload a fence replaces; 0 for an API with nothing
+     * to choose, which refuses any other - with `wire_handle` what the guest
+     * names it by and `detail` whatever else releasing it will take.
+     * HostShares keeps both with the hold, so no backend keeps a table of
+     * what it imported. `fd` stays the caller's whatever the answer: it is
      * HostShares', and a backend that keeps one duplicates it. */
     [[nodiscard]] virtual bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
-                                             const SharedImageShape &shape,
+                                             const SharedImageShape &shape, uint64_t into,
                                              uint64_t &wire_handle, uint64_t &detail) = 0;
     /* What import_object made, destroyed: called by HostShares alone, with
      * what that import answered, on this session's thread - as the guest

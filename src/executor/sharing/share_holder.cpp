@@ -4,8 +4,8 @@
 
 namespace av {
 
-ShareHolder::ShareHolder(SessionBackend &session, uint64_t handle, uint64_t detail)
-    : session_(&session), next_(nullptr), handle_(handle), detail_(detail)
+ShareHolder::ShareHolder(SessionBackend &session, uint64_t into, uint64_t handle, uint64_t detail)
+    : session_(&session), next_(nullptr), into_(into), handle_(handle), detail_(detail)
 {
     AV_SCOPE("ShareHolder::ShareHolder");
 }
@@ -14,6 +14,12 @@ SessionBackend &ShareHolder::session() const
 {
     AV_SCOPE("ShareHolder::session");
     return *session_;
+}
+
+uint64_t ShareHolder::into() const
+{
+    AV_SCOPE("ShareHolder::into");
+    return into_;
 }
 
 uint64_t ShareHolder::handle() const

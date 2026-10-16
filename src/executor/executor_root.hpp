@@ -123,9 +123,9 @@ public:
      * the device's pointer is all the ABI gives to tell them apart. */
     uint32_t share_object(ContextSession *session, uint64_t object_id, uint32_t kind, uint64_t size,
                           uint64_t wire_handle);
-    uint32_t open_object(ContextSession *session, uint64_t object_id, uint32_t kind, uint64_t size,
+    uint32_t open_object(ContextSession *session, uint64_t object_id, uint32_t kind, uint64_t size, uint64_t into,
                          uint64_t &wire_handle);
-    void                 close_object(ContextSession *session, uint64_t object_id);
+    void                 close_object(ContextSession *session, uint64_t object_id, uint64_t wire_handle);
     uint32_t        live() const;
     /* The library's state dump (docs/trace.md): the GPUs asked about, the
      * domains, each live session's API and GPU, and each GPU's shares. Takes

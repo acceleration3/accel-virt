@@ -124,6 +124,22 @@ ShareHolder *Share::holder_of(const SessionBackend &session) const
     return nullptr;
 }
 
+ShareHolder *Share::holder_into(const SessionBackend &session, uint64_t into) const
+{
+    AV_SCOPE("Share::holder_into");
+    for (ShareHolder *holder = holders_; holder != nullptr; holder = holder->next())
+        if (&holder->session() == &session && holder->into() == into) return holder;
+    return nullptr;
+}
+
+ShareHolder *Share::holder_answered(const SessionBackend &session, uint64_t handle) const
+{
+    AV_SCOPE("Share::holder_answered");
+    for (ShareHolder *holder = holders_; holder != nullptr; holder = holder->next())
+        if (&holder->session() == &session && holder->handle() == handle) return holder;
+    return nullptr;
+}
+
 void Share::hold(ShareHolder &holder)
 {
     AV_SCOPE("Share::hold");
