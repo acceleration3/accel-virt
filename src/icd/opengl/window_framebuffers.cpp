@@ -131,7 +131,7 @@ int32_t WindowFramebuffers::answer(uint32_t pname, int32_t host_value) const
 }
 
 bool WindowFramebuffers::present(ClientTransport &wire, const ClientArrayState &state, void *dc, void *window,
-                                 icd::WindowSurface &surface, GlPresentLoop *loop, uint64_t luid)
+                                 icd::WindowSurface &surface, GlPresentQueue *loop, uint64_t luid)
 {
     AV_SCOPE("WindowFramebuffers::present");
     BackBufferPresenter *const presenter = find(window);

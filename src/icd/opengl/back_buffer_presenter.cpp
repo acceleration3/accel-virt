@@ -10,7 +10,8 @@
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/common/window_extent.hpp"
 #include "icd/common/window_surface.hpp"
-#include "icd/opengl/gl_present_loop.hpp"
+#include "icd/common/window_present_queue.hpp"
+#include "icd/opengl/batch_ready.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/client/client_transport.hpp"
@@ -109,7 +110,7 @@ bool     BackBufferPresenter::double_buffered() const
 }
 
 bool BackBufferPresenter::present(ClientTransport &wire, const ClientArrayState &state, void *dc,
-                                  icd::WindowSurface &surface, GlPresentLoop *loop, uint64_t luid)
+                                  icd::WindowSurface &surface, GlPresentQueue *loop, uint64_t luid)
 {
     AV_SCOPE("BackBufferPresenter::present");
     if (framebuffers_[draw] == 0u) return false;
@@ -138,21 +139,22 @@ void BackBufferPresenter::hand_over(const BatchMark &mark)
 {
     AV_SCOPE("BackBufferPresenter::hand_over");
     if (pending_ == slot_count || loop_ == nullptr) return;
-    const HandedFrame frame(*this, pending_, pending_chained_ ? nullptr : room_pixels(pending_), width_, height_,
-                            window_, mark);
+    const GlFrame frame(*this, pending_, pending_chained_ ? nullptr : room_pixels(pending_),
+                        GlFrame::Rows::bgra_bottom_up, width_, height_, window_, mark);
     pending_ = slot_count;
     pending_chained_ = false;
     /* A frame the table has no row for is not shown; the next one will be. */
     static_cast<void>(loop_->hand(frame));
 }
 
-void BackBufferPresenter::shown(const uint8_t *pixels, uint32_t width, uint32_t height)
+void BackBufferPresenter::done(const GlFrame &frame, bool drawn)
 {
-    AV_SCOPE("BackBufferPresenter::shown");
-    const size_t bytes = static_cast<size_t>(width) * height * bytes_per_pixel;
+    AV_SCOPE("BackBufferPresenter::done");
+    if (!drawn || frame.chained()) return;
+    const size_t bytes = static_cast<size_t>(frame.width()) * frame.height() * bytes_per_pixel;
     if (pixels_ == nullptr || bytes > capacity_) return;
-    __builtin_memcpy(pixels_, pixels, bytes);
-    front_.presented(pixels_, width, height);
+    __builtin_memcpy(pixels_, frame.pixels(), bytes);
+    front_.presented(pixels_, frame.width(), frame.height());
 }
 
 bool BackBufferPresenter::read_front(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t format,
@@ -331,10 +333,10 @@ void BackBufferPresenter::read_back(ClientTransport &wire)
  * after it changed; refused once, the window's frames are read back until its
  * size changes. The thread holds no frame of this presenter's while its chain
  * is opened. */
-bool BackBufferPresenter::draw_chained(ClientTransport &wire, GlPresentLoop &loop, uint64_t luid)
+bool BackBufferPresenter::draw_chained(ClientTransport &wire, GlPresentQueue &loop, uint64_t luid)
 {
     AV_SCOPE("BackBufferPresenter::draw_chained");
-    if (chain_refused_ || luid == 0u || !loop.ready()) return false;
+    if (chain_refused_ || luid == 0u || !loop.start()) return false;
     loop_ = &loop;
     if (!chained_.fits(window_, width_, height_)) {
         settle();
@@ -358,10 +360,10 @@ bool BackBufferPresenter::draw_chained(ClientTransport &wire, GlPresentLoop &loo
 /* The present thread cannot have a frame of this presenter's before a present
  * reads one into a slot, and one read is always handed over before the next
  * present: so a free slot is one the thread is not holding. */
-bool BackBufferPresenter::queue_read(ClientTransport &wire, const ClientArrayState &state, GlPresentLoop &loop)
+bool BackBufferPresenter::queue_read(ClientTransport &wire, const ClientArrayState &state, GlPresentQueue &loop)
 {
     AV_SCOPE("BackBufferPresenter::queue_read");
-    if (!loop.ready() || !reserve_room(wire, loop)) return false;
+    if (!loop.start() || !reserve_room(wire, loop)) return false;
     const uint32_t slot = loop.free_slot(*this, slot_count, pending_);
     /* Nothing came free: the thread is stuck, and the frame is dropped. */
     if (slot == slot_count) return true;
@@ -376,7 +378,7 @@ bool BackBufferPresenter::queue_read(ClientTransport &wire, const ClientArraySta
     return true;
 }
 
-bool BackBufferPresenter::reserve_room(ClientTransport &wire, GlPresentLoop &loop)
+bool BackBufferPresenter::reserve_room(ClientTransport &wire, GlPresentQueue &loop)
 {
     AV_SCOPE("BackBufferPresenter::reserve_room");
     const size_t wanted = frame_bytes() * slot_count;

@@ -6,7 +6,7 @@
  * disturbed; the pack state that shapes a read-back is set aside for the read
  * and put back after it.
  *
- * With a present thread (GlPresentLoop) and room for two frames set aside in
+ * With a present thread (GlPresentQueue) and room for two frames set aside in
  * the context's blob arena, a swap does not read back and blit: it sends the
  * read one-way into a free slot of that room and, once the swap's batch is
  * sent, hands the frame to the thread, which shows it when the host has
@@ -19,6 +19,7 @@
 #include "core/log/driver_log.hpp"
 #include "core/support/status.hpp"
 #include "guest/transport/batch_mark.hpp"
+#include "icd/common/handed_frame.hpp"
 #include "icd/opengl/chained_frames.hpp"
 #include "icd/opengl/front_buffer.hpp"
 #include "icd/opengl/pixel_format.hpp"
@@ -38,17 +39,21 @@ class StateWriter;
 }  // namespace av
 
 namespace av::icd {
-}
-
-namespace av::icd {
 class WindowSurface;
+template <typename Source, typename Readiness>
+class WindowPresentQueue;
 }  // namespace av::icd
 
 namespace av::glicd {
 
+class BackBufferPresenter;
+class BatchReady;
 class ClientArrayState;
-class GlPresentLoop;
 struct BackBufferPresenterProbe;
+
+/* The process's present thread for OpenGL's swaps. */
+using GlPresentQueue = icd::WindowPresentQueue<BackBufferPresenter, BatchReady>;
+using GlFrame = icd::HandedFrame<BackBufferPresenter, BatchMark>;
 
 class BackBufferPresenter {
 public:
@@ -98,13 +103,13 @@ public:
      * on the window bottom row first. false before a prepare; a DC that
      * refuses the frame is logged once and the swap still happened. */
     bool     present(ClientTransport &wire, const ClientArrayState &state, void *dc, icd::WindowSurface &surface,
-                     GlPresentLoop *loop, uint64_t luid);
+                     GlPresentQueue *loop, uint64_t luid);
     /* The frame the last present read into a slot goes to the present thread,
      * to be shown once the batch `mark` names is done. Nothing without one. */
     void     hand_over(const BatchMark &mark);
-    /* The present thread showed `width` x `height` pixels: they are what
-     * GL_FRONT names now. Called with the thread's lock held. */
-    void     shown(const uint8_t *pixels, uint32_t width, uint32_t height);
+    /* The present thread is done with `frame`: one read back and `drawn` is
+     * what GL_FRONT names now. Called with the thread's lock held. */
+    void     done(const GlFrame &frame, bool drawn);
     /* Deletes the host objects through `wire` when there is one - without one
      * they went with the host's context - and gives the pixels back. */
     void     release(ClientTransport *wire);
@@ -128,13 +133,13 @@ private:
     void                 read_back(ClientTransport &wire);
     /* The frame drawn into a free slot of the window's chain for `loop`, the
      * chain opened first; false when there is no thread or no chain. */
-    bool                 draw_chained(ClientTransport &wire, GlPresentLoop &loop, uint64_t luid);
+    bool                 draw_chained(ClientTransport &wire, GlPresentQueue &loop, uint64_t luid);
     /* The frame read one-way into a free slot for `loop`; false when there is
      * no thread or no room, and the swap shows the frame itself. */
-    bool                 queue_read(ClientTransport &wire, const ClientArrayState &state, GlPresentLoop &loop);
+    bool                 queue_read(ClientTransport &wire, const ClientArrayState &state, GlPresentQueue &loop);
     /* Room for slot_count frames of this size, set aside in the wire's arena
      * once nothing of this presenter's is in the thread's hands. */
-    bool                 reserve_room(ClientTransport &wire, GlPresentLoop &loop);
+    bool                 reserve_room(ClientTransport &wire, GlPresentQueue &loop);
     void                 give_room_back();
     uint8_t             *room_pixels(uint32_t slot) const;
     /* Nothing of this presenter's is in the present thread's hands. */
@@ -156,7 +161,7 @@ private:
     FrontBuffer   front_;
     size_t        capacity_;
     icd::OnceLatch refusal_logged_;
-    GlPresentLoop   *loop_;
+    GlPresentQueue  *loop_;
     ClientBlobArena *arena_;
     ClientBlobLease  room_;
     /* The slot the last present read into, until handed over; slot_count

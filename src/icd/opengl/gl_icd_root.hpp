@@ -49,7 +49,6 @@ class WindowSurface;
 
 namespace av::glicd {
 
-class GlPresentLoop;
 class SystemOpengl;
 class ThreadSlot;
 struct GlIcdRootProbe;
@@ -71,7 +70,7 @@ public:
     static constexpr uint32_t swap_main_plane = 1u;
 
     GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, LogSink &log,
-              icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system, GlPresentLoop &presents,
+              icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system, GlPresentQueue &presents,
               GlIcdBinding &binding);
     ~GlIcdRoot();
     GlIcdRoot(const GlIcdRoot &) = delete;
@@ -187,7 +186,7 @@ private:
     icd::WindowSurface    &surface_;
     ThreadSlot       &slot_;
     SystemOpengl     &system_;
-    GlPresentLoop                &presents_;
+    GlPresentQueue               &presents_;
     GlIcdBinding     &binding_;
     PixelFormatTable  formats_;
     PixelFormatQuery  query_;

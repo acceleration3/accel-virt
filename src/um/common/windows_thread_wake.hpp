@@ -1,18 +1,18 @@
-/* icd::WakeSignal over an auto-reset Windows event. Translation only. */
-#ifndef AV_WINDOWS_WAKE_SIGNAL_HPP
-#define AV_WINDOWS_WAKE_SIGNAL_HPP
+/* icd::ThreadWake over an auto-reset Windows event. Translation only. */
+#ifndef AV_WINDOWS_THREAD_WAKE_HPP
+#define AV_WINDOWS_THREAD_WAKE_HPP
 
 #include "core/support/status.hpp"
-#include "icd/opengl/wake_signal.hpp"
+#include "icd/common/thread_wake.hpp"
 
 #include <windows.h>
 
 namespace av {
 
-class WindowsWakeSignal final : public icd::WakeSignal {
+class WindowsThreadWake final : public icd::ThreadWake {
 public:
-    WindowsWakeSignal();
-    ~WindowsWakeSignal();
+    WindowsThreadWake();
+    ~WindowsThreadWake();
 
     /* no_memory when Windows has no event to give. */
     [[nodiscard]] Status initialize();
@@ -25,4 +25,4 @@ private:
 
 }  // namespace av
 
-#endif  // AV_WINDOWS_WAKE_SIGNAL_HPP
+#endif  // AV_WINDOWS_THREAD_WAKE_HPP

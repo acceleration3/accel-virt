@@ -124,7 +124,7 @@ constexpr uint32_t reported_wgl_count = sizeof reported_wgl_extensions / sizeof 
 
 GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock,
                      LogSink &log, icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
-                     GlPresentLoop &presents, GlIcdBinding &binding)
+                     GlPresentQueue &presents, GlIcdBinding &binding)
     : lock_(lock), log_(log), lines_(memory, log, "avgl: "), refused_(lines_), surface_(surface), slot_(slot), system_(system), presents_(presents),
       binding_(binding), formats_(),
       query_(formats_), windows_(memory), currents_(slot), connection_(memory, kmt, 0u),

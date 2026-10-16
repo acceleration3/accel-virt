@@ -10,7 +10,8 @@
 #define AV_UM_GL_ICD_LIBRARY_HPP
 
 #include "icd/opengl/gl_icd_root.hpp"
-#include "icd/opengl/gl_present_loop.hpp"
+#include "icd/common/window_present_queue.hpp"
+#include "icd/opengl/batch_ready.hpp"
 #include "um/common/driver_seams.hpp"
 #include "um/kmt/gdi_kmt.hpp"
 #include "um/common/dxgi_window_chains.hpp"
@@ -18,7 +19,7 @@
 #include "um/common/srw_lock.hpp"
 #include "um/common/gdi_window_surface.hpp"
 #include "um/common/windows_service_thread.hpp"
-#include "um/common/windows_wake_signal.hpp"
+#include "um/common/windows_thread_wake.hpp"
 #include "um/opengl/loaded_opengl32.hpp"
 #include "um/opengl/tls_thread_slot.hpp"
 #include "um/trace/process_trace.hpp"
@@ -74,9 +75,10 @@ private:
         SrwLock              present_lock;
         GdiKmt               present_kmt;
         WindowsServiceThread present_thread;
-        WindowsWakeSignal    present_handed;
-        WindowsWakeSignal    present_shown;
-        glicd::GlPresentLoop presents;
+        WindowsThreadWake    present_handed;
+        WindowsThreadWake    present_shown;
+        glicd::BatchReady    present_ready;
+        glicd::GlPresentQueue presents;
         glicd::GlIcdRoot  root;
     };
 
