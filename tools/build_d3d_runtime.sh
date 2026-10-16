@@ -43,20 +43,30 @@ build() {
 # already as the series makes them are left alone (a rebuild stays
 # incremental); otherwise they are put back as pinned and the series applied.
 apply_series() {
-    local dir=$1 patches=("${@:2}") scratch files expected current
+    local dir=$1 patches=("${@:2}") scratch files present expected current
     scratch=$(mktemp -d)
     files=$(for patch in "${patches[@]}"; do git -C "$dir" apply --numstat "$patch" | cut -f3; done | sort -u)
     GIT_INDEX_FILE="$scratch/expected" git -C "$dir" read-tree HEAD
     for patch in "${patches[@]}"; do GIT_INDEX_FILE="$scratch/expected" git -C "$dir" apply --cached "$patch"; done
     expected=$(GIT_INDEX_FILE="$scratch/expected" git -C "$dir" write-tree)
     GIT_INDEX_FILE="$scratch/current" git -C "$dir" read-tree HEAD
+    # A file the series creates and has not yet created is no pathspec git
+    # add accepts; left out, it is simply missing from the current tree.
+    present=$(for file in $files; do
+        if [ -e "$dir/$file" ] || git -C "$dir" cat-file -e "HEAD:$file" 2>/dev/null; then echo "$file"; fi
+    done)
     # shellcheck disable=SC2086
-    GIT_INDEX_FILE="$scratch/current" git -C "$dir" add -- $files
+    GIT_INDEX_FILE="$scratch/current" git -C "$dir" add -- $present
     current=$(GIT_INDEX_FILE="$scratch/current" git -C "$dir" write-tree)
     rm -rf "$scratch"
     [ "$expected" = "$current" ] && return
-    # shellcheck disable=SC2086
-    git -C "$dir" checkout HEAD -- $files
+    for file in $files; do
+        if git -C "$dir" cat-file -e "HEAD:$file" 2>/dev/null; then
+            git -C "$dir" checkout HEAD -- "$file"
+        else
+            rm -f "$dir/$file"
+        fi
+    done
     for patch in "${patches[@]}"; do git -C "$dir" apply "$patch"; done
 }
 
