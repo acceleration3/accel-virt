@@ -47,6 +47,9 @@ void ContextSession::release()
         (void)imports_.drop(blob->id());
         source_->release(*blob->give_back());
     }
+    /* After the imports: a backend shut down has nothing left to give them
+     * back to. */
+    if (backend_ != nullptr) backend_->shut_down();
     backend_ = nullptr;
     clocks_ = nullptr;
     source_ = nullptr;

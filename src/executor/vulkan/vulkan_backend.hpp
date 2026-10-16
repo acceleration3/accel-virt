@@ -212,7 +212,7 @@ public:
      * device with it - and forgets every handle. A context's host objects are
      * the context's, and a guest that never destroys them must not be able to
      * leak them by dying (feature 042). */
-    void     shut_down();
+    void     shut_down() override;
 
     /* Commands run since this backend was made, which is what a conformance
      * run counts. */

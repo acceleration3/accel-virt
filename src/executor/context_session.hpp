@@ -46,7 +46,9 @@ public:
     /* Binds this session to a backend and to the block its commands decode
      * into. invalid_state if it is already bound. */
     [[nodiscard]] Status initialize(SessionBackend &backend, uint8_t *block, size_t block_bytes);
-    /* Releases the session for reuse. Safe on one that never ran. */
+    /* Releases the session for reuse: what it imported given back, then its
+     * backend shut down (SessionBackend::shut_down). Safe on one that never
+     * ran. */
     void                 release();
     bool                 live() const;
     /* Whether a command broke it: it then refuses every command, and shares

@@ -266,20 +266,15 @@ void ExecutorRoot::close(ContextSession *session)
 {
     AV_SCOPE("ExecutorRoot::close");
     if (!owns(session)) return;
-    session->release();
-    /* And the host objects the guest never destroyed. A context that dies
-     * owning a VkInstance would otherwise leak it for the life of the process,
-     * which is a guest's to trigger as often as it likes. */
     const uint32_t slot = slot_of(session);
-    /* Its holds go before its backend destroys what it imported. */
+    /* Its holds go before its backend destroys what it imported, and the
+     * backend it ran is shut down with the session: the slot's three others
+     * never ran this context and are not touched. */
     shares_[slot].end();
+    session->release();
     const uint32_t gpu = gpus_of_[slot];
     apis_of_[slot] = 0u;
     gpus_of_[slot] = 0u;
-    vulkan_[slot].shut_down();
-    opencl_[slot].shut_down();
-    opengl_[slot].shut_down();
-    d3d_[slot].shut_down();
     retire(gpu);
 }
 

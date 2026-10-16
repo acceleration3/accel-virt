@@ -712,3 +712,40 @@ TEST(executor_root, the_shared_object_calls_reach_the_domain_as_the_session_that
   probe.shares_at(0u).end();
   reader->release();
   maker->release(); }
+
+/* Closing a session ends what it shares through, then shuts down the backend
+ * the session ran - once, with every share it held already let go - and that
+ * backend alone: the slot keeps a backend of every API, and the others never
+ * ran this context. */
+TEST(executor_root, closing_a_session_shuts_down_the_backend_it_ran_after_its_shares)
+{ Opened opened;
+  ExecutorRoot       &root = opened.root();
+  ExecutorRootProbe   probe(root);
+  const std::uint32_t domain = opened.held().domain_of(intel);
+  static std::uint8_t maker_block[4096], reader_block[4096];
+  MockSessionBackend  maker_backend, reader_backend;
+  ContextSession *const maker = &probe.session_at(0u);
+  ContextSession *const reader = &probe.session_at(1u);
+  CHECK_STATUS(maker->initialize(maker_backend, maker_block, sizeof maker_block), Status::ok);
+  CHECK_STATUS(reader->initialize(reader_backend, reader_block, sizeof reader_block), Status::ok);
+  probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, maker_backend);
+  probe.shares_at(1u).bind(*opened.apis().shares(0u), domain, reader_backend);
+  probe.remember(0u, AV_EXECUTOR_SUB_API_VULKAN, 0u);
+  probe.remember(1u, AV_EXECUTOR_SUB_API_OPENCL, 0u);
+  CHECK_EQ(root.share_object(maker, 0x2Au, AV_SHARED_MEMORY, 4096u, 0x40u), std::uint32_t{AV_SHARED_DONE});
+  std::uint64_t made = 0u;
+  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_DONE});
+
+  root.close(reader);
+  CHECK_EQ(reader_backend.shut_downs(), 1u);
+  CHECK_EQ(reader_backend.released_before_shut_down(), 1u);
+  CHECK(!reader->live());
+  CHECK_EQ(maker_backend.shut_downs(), 0u);
+  CHECK(maker->live());
+  CHECK(root.invariants_hold());
+
+  root.close(reader);   /* the device closing twice shuts down nothing more */
+  CHECK_EQ(reader_backend.shut_downs(), 1u);
+  root.close(maker);
+  CHECK_EQ(maker_backend.shut_downs(), 1u);
+  CHECK(root.invariants_hold()); }

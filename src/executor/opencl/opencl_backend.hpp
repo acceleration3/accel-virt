@@ -300,7 +300,7 @@ public:
 
     /* Releases what the guest never did. A context that dies owning a context
      * or a queue must take it with it. */
-    void     shut_down();
+    void     shut_down() override;
     uint64_t ran() const;
 
 private:

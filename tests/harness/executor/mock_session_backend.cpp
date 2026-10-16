@@ -116,6 +116,17 @@ void MockSessionBackend::abandon(ImportedBlob &blob)
     blob.record(0u, 0u);
 }
 
+void MockSessionBackend::shut_down()
+{
+    shut_downs_++;
+    abandoned_before_shut_down_ = abandoned_;
+    released_before_shut_down_ = released_objects_;
+}
+
+std::uint32_t MockSessionBackend::shut_downs() const { return shut_downs_; }
+std::uint32_t MockSessionBackend::abandoned_before_shut_down() const { return abandoned_before_shut_down_; }
+std::uint32_t MockSessionBackend::released_before_shut_down() const { return released_before_shut_down_; }
+
 void MockSessionBackend::set_shares(bool shares) { shares_ = shares; }
 
 std::uint32_t MockSessionBackend::exported_objects() const { return exported_objects_; }

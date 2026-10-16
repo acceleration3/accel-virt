@@ -78,6 +78,13 @@ public:
     const av::SharedImageShape &imported_shape() const { return imported_shape_; }
     void               release_object(std::uint32_t kind, std::uint64_t wire_handle, std::uint64_t detail) override;
 
+    /* Counted, with what had been abandoned and released by the time of the
+     * last one, so a test can judge the order a session ends in. */
+    void          shut_down() override;
+    std::uint32_t shut_downs() const;
+    std::uint32_t abandoned_before_shut_down() const;
+    std::uint32_t released_before_shut_down() const;
+
     /* Whether this backend shares objects at all, so a test can be both an API
      * that does and one that does not. */
     void          set_shares(bool shares);
@@ -104,6 +111,9 @@ private:
     std::uint32_t imported_objects_;
     std::uint32_t released_objects_;
     std::uint64_t last_released_detail_ = 0u;
+    std::uint32_t shut_downs_ = 0u;
+    std::uint32_t abandoned_before_shut_down_ = 0u;
+    std::uint32_t released_before_shut_down_ = 0u;
     int           descriptor_;
     void        (*signal_)(void *context);
     void         *signal_context_;

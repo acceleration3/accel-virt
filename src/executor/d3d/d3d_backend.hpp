@@ -66,7 +66,7 @@ public:
     [[nodiscard]] bool initialize(SessionShares &shares, D3d11HostDevice *device11,
                                   D3d12HostDevice *device12 = nullptr, SharedSurfaces *surfaces = nullptr,
                                   D3d9HostDevice *device9 = nullptr);
-    void               shut_down();
+    void               shut_down() override;
 
     bool knows(uint32_t command_id) const override;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,

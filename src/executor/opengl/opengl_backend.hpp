@@ -43,7 +43,7 @@ public:
     /* The context whose objects another shares: an OpenGL context's share
      * lists, or an OpenCL context's vehicle under cl_khr_gl_sharing. */
     const GlContext   &context() const;
-    void               shut_down();
+    void               shut_down() override;
 
     bool knows(uint32_t command_id) const override;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,

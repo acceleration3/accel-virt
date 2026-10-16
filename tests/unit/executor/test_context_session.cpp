@@ -361,6 +361,24 @@ TEST(context_session_import, releasing_the_session_gives_back_what_the_guest_did
   CHECK_EQ(drawing.exporter().live(), 0u);
   CHECK(drawing.session().invariants_hold()); }
 
+/* The backend a session ran is shut down as it is released, once, and only
+ * after every import went back to it: a shut down backend has nothing to give
+ * them back to. */
+TEST(context_session_release, shuts_its_backend_down_after_its_imports)
+{ Drawing drawing;
+  for (std::uint64_t id = 1u; id <= 2u; id++)
+      CHECK_EQ(drawing.session().import_blob(id, key), std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(drawing.backend().shut_downs(), 0u);
+  drawing.session().release();
+  CHECK_EQ(drawing.backend().shut_downs(), 1u);
+  CHECK_EQ(drawing.backend().abandoned_before_shut_down(), 2u);
+  CHECK(drawing.session().invariants_hold());
+  /* Released again, as the device may, it has no backend left to shut
+   * down. */
+  drawing.session().release();
+  CHECK_EQ(drawing.backend().shut_downs(), 1u); }
+
+
 /* A session with no backend, or none to draw from, imports nothing. */
 TEST(context_session_import, a_session_with_no_backend_or_source_imports_nothing)
 { ContextSession session;

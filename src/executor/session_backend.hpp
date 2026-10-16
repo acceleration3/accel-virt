@@ -96,6 +96,12 @@ public:
      * closes it, or as the session ends, before the backend shuts down. */
     virtual void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) = 0;
 
+    /* The context is gone: whatever the guest never destroyed is destroyed,
+     * so a guest cannot leak host objects by dying, and the backend is ready
+     * for the next context of its slot. The last call of a session, made by
+     * ContextSession::release on the backend it ran and on no other. */
+    virtual void shut_down() = 0;
+
 protected:
     SessionBackend() = default;
     ~SessionBackend() = default;
