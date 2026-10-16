@@ -15,6 +15,7 @@
 #include "device/replay/recording_tool_request.hpp"
 #include "device/shim/mapped_file.hpp"
 #include "device/shim/posix_executor_module.hpp"
+#include "executor/shim/host_heap.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -24,7 +25,8 @@ namespace {
 int print(av::RecordingReader &reader, const av::RecordingFilter &filter, std::uint32_t payload_bytes)
 {
     AV_SCOPE("print");
-    av::RecordingPrinter printer(reader, filter, payload_bytes);
+    av::HostHeap         memory;
+    av::RecordingPrinter printer(reader, filter, payload_bytes, memory);
     const char          *line = nullptr;
     while (printer.next(line) == av::Status::ok) std::printf("%s\n", line);
     return printer.damaged() ? 1 : 0;
@@ -45,7 +47,8 @@ int replay(av::RecordingReader &reader, const av::RecordingFilter &filter,
                      request.executor());
         return 2;
     }
-    av::RecordingReplay replay_run(library);
+    av::HostHeap        memory;
+    av::RecordingReplay replay_run(library, memory);
     replay_run.use_gpu(request.gpu());
     const av::Status ran = replay_run.run(reader, filter);
     for (std::uint32_t index = 0u; index < replay_run.findings(); index++)

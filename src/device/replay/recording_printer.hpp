@@ -5,12 +5,13 @@
  *
  * It learns each context's sub-API from the setup record that bound it, which
  * is what lets `--api` keep a context's replies, fences and faults and not
- * only the batches whose commands carry an API in their ids. */
+ * only the batches whose commands carry an API in their ids - for every
+ * context the recording names, however many the guest made while it ran. */
 #ifndef AV_RECORDING_PRINTER_HPP
 #define AV_RECORDING_PRINTER_HPP
 
+#include "core/support/keyed_slots.hpp"
 #include "core/support/status.hpp"
-#include "device/replay/context_api.hpp"
 #include "device/recording/record_header.hpp"
 #include "device/replay/recorded_command.hpp"
 
@@ -19,6 +20,7 @@
 
 namespace av {
 
+class BlockSource;
 class RecordingFilter;
 class RecordingReader;
 class TextBuffer;
@@ -30,12 +32,11 @@ public:
     static constexpr size_t   line_bytes = 512u;
     /* Beyond this a line would be mostly hex. */
     static constexpr uint32_t most_payload_bytes = 128u;
-    /* A device's contexts (DeviceContextTable::max_contexts). */
-    static constexpr uint32_t max_contexts = 64u;
-
     /* `payload_bytes` of each command's payload are shown as hex; 0 shows
-     * none, and more than most_payload_bytes shows most_payload_bytes. */
-    RecordingPrinter(RecordingReader &reader, const RecordingFilter &filter, uint32_t payload_bytes);
+     * none, and more than most_payload_bytes shows most_payload_bytes. What
+     * each context speaks is kept in `memory`. */
+    RecordingPrinter(RecordingReader &reader, const RecordingFilter &filter, uint32_t payload_bytes,
+                     BlockSource &memory);
     RecordingPrinter(const RecordingPrinter &) = delete;
     RecordingPrinter &operator=(const RecordingPrinter &) = delete;
 
@@ -57,7 +58,8 @@ private:
     bool shown(const RecordHeader &record, const uint8_t *payload);
     /* The API half of the ids the context of `record` sends, or any_api. */
     uint16_t api_of(uint32_t context) const;
-    /* Remembers what a setup record bound its context to. */
+    /* Remembers what a setup record bound its context to; a context there is
+     * no memory to remember is shown whatever its API. */
     void     learn(const RecordHeader &record, const uint8_t *payload);
     /* The next command line of the batch being shown, or false when it ends. */
     bool     next_command(TextBuffer &text);
@@ -83,7 +85,8 @@ private:
     uint32_t               command_offset_;
     uint64_t               lines_;
     bool                   damage_printed_;
-    ContextApi             contexts_[max_contexts];
+    /* The API half of the command ids each context sends, by its id. */
+    KeyedSlots<uint32_t, uint16_t> apis_;
     char                   line_[line_bytes];
 
     friend struct RecordingPrinterProbe;

@@ -38,7 +38,7 @@ void append_time(TextBuffer &text, uint64_t nanoseconds)
 }  // namespace
 
 RecordingPrinter::RecordingPrinter(RecordingReader &reader, const RecordingFilter &filter,
-                                   uint32_t payload_bytes)
+                                   uint32_t payload_bytes, BlockSource &memory)
     : reader_(reader),
       filter_(filter),
       payload_bytes_(payload_bytes < most_payload_bytes ? payload_bytes : most_payload_bytes),
@@ -50,7 +50,7 @@ RecordingPrinter::RecordingPrinter(RecordingReader &reader, const RecordingFilte
       command_offset_(0u),
       lines_(0u),
       damage_printed_(false),
-      contexts_{},
+      apis_(memory, Pool::paged),
       line_{}
 {
     AV_SCOPE("RecordingPrinter::RecordingPrinter");
@@ -110,20 +110,18 @@ void RecordingPrinter::learn(const RecordHeader &record, const uint8_t *payload)
     if (record.kind() != RecordKind::context_setup) return;
     ContextSetup setup;
     if (setup.decode(payload, record.length()) != Status::ok) return;
-    const uint16_t api = CommandApi(setup.sub_api()).api();
-    for (ContextApi &known : contexts_) {
-        if (known.known() && !known.names(record.context())) continue;
-        known.learn(record.context(), api);
-        return;
-    }
+    const uint16_t  api = CommandApi(setup.sub_api()).api();
+    uint16_t *const known = apis_.find(record.context());
+    uint32_t        slot = 0u;
+    if (known != nullptr) *known = api;
+    else static_cast<void>(apis_.insert(record.context(), api, slot));
 }
 
 uint16_t RecordingPrinter::api_of(uint32_t context) const
 {
     AV_SCOPE("RecordingPrinter::api_of");
-    for (const ContextApi &known : contexts_)
-        if (known.names(context)) return known.api();
-    return RecordingFilter::any_api;
+    const uint16_t *const known = apis_.find(context);
+    return known != nullptr ? *known : RecordingFilter::any_api;
 }
 
 /* A batch is shown when one of its commands passes the filter; every other
@@ -366,7 +364,7 @@ bool RecordingPrinter::invariants_hold() const
     AV_SCOPE("RecordingPrinter::invariants_hold");
     if (payload_bytes_ > most_payload_bytes) return false;
     if (stage_ == Stage::commands && payload_ == nullptr) return false;
-    return command_offset_ <= record_.length() && filter_.invariants_hold();
+    return command_offset_ <= record_.length() && filter_.invariants_hold() && apis_.invariants_hold();
 }
 
 }  // namespace av

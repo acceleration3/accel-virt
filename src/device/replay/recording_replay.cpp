@@ -20,7 +20,7 @@ constexpr uint32_t blob_imported = 1u;
 
 }  // namespace
 
-RecordingReplay::RecordingReplay(ExecutorLibrary &library)
+RecordingReplay::RecordingReplay(ExecutorLibrary &library, BlockSource &memory)
     : library_(library),
       gpu_(),
       gpu_chosen_(false),
@@ -29,8 +29,9 @@ RecordingReplay::RecordingReplay(ExecutorLibrary &library)
       commands_(0u),
       replies_(0u),
       findings_(0u),
-      slots_(),
-      findings_text_{}
+      replays_(memory),
+      by_context_(memory, Pool::paged),
+      findings_text_(memory, Pool::paged)
 {
     AV_SCOPE("RecordingReplay::RecordingReplay");
 }
@@ -38,7 +39,7 @@ RecordingReplay::RecordingReplay(ExecutorLibrary &library)
 RecordingReplay::~RecordingReplay()
 {
     AV_SCOPE("RecordingReplay::~RecordingReplay");
-    for (ReplayContext &slot : slots_) slot.destroy(library_);
+    by_context_.for_each([this](uint32_t, ReplayContext *replay) { replay->destroy(library_); });
     library_.close_domain();
 }
 
@@ -81,9 +82,8 @@ Status RecordingReplay::run(RecordingReader &reader, const RecordingFilter &filt
 ReplayContext *RecordingReplay::context_of(uint32_t context)
 {
     AV_SCOPE("RecordingReplay::context_of");
-    for (ReplayContext &slot : slots_)
-        if (slot.created() && slot.context() == context) return &slot;
-    return nullptr;
+    ReplayContext *const *const replay = by_context_.find(context);
+    return replay != nullptr ? *replay : nullptr;
 }
 
 void RecordingReplay::replay_setup(const RecordHeader &record, const uint8_t *payload)
@@ -94,18 +94,24 @@ void RecordingReplay::replay_setup(const RecordHeader &record, const uint8_t *pa
         finding_about(record, "its setup does not decode");
         return;
     }
-    ReplayContext *const known = context_of(record.context());
-    if (known != nullptr) known->destroy(library_);
-    for (ReplayContext &slot : slots_) {
-        if (slot.created()) continue;
-        if (slot.create(library_, record.context(), setup.sub_api()) != Status::ok) {
-            finding_about(record, "the library made no executor for it");
+    ReplayContext *replay = context_of(record.context());
+    if (replay != nullptr) {
+        replay->destroy(library_);
+    } else {
+        uint32_t slot = 0u;
+        if (by_context_.reserve(by_context_.count() + 1u) != Status::ok || replays_.create(replay) != Status::ok) {
+            finding_about(record, "there was no memory to replay it in");
             return;
         }
-        contexts_++;
+        static_cast<void>(by_context_.insert(record.context(), replay, slot));
+    }
+    if (replay->create(library_, record.context(), setup.sub_api()) != Status::ok) {
+        finding_about(record, "the library made no executor for it");
+        static_cast<void>(by_context_.erase(record.context()));
+        static_cast<void>(replays_.destroy(replay));
         return;
     }
-    finding_about(record, "more contexts than this replay holds");
+    contexts_++;
 }
 
 /* A transport command is the device's own answer, never the library's, so it
@@ -217,11 +223,11 @@ void RecordingReplay::open_finding(TextBuffer &text, const RecordHeader &record)
 void RecordingReplay::keep_finding(const TextBuffer &text)
 {
     AV_SCOPE("RecordingReplay::keep_finding");
-    if (findings_ < max_findings) {
-        for (size_t offset = 0u; offset <= text.length(); offset++)
-            findings_text_[findings_][offset] = text.text()[offset];
-    }
     findings_++;
+    Finding kept = {};
+    for (size_t offset = 0u; offset < text.length() && offset + 1u < finding_bytes; offset++)
+        kept.text_[offset] = text.text()[offset];
+    static_cast<void>(findings_text_.append(kept));
 }
 
 void RecordingReplay::finding_about(const RecordHeader &record, const char *what)
@@ -261,23 +267,22 @@ uint32_t RecordingReplay::findings() const
 const char *RecordingReplay::finding(uint32_t index) const
 {
     AV_SCOPE("RecordingReplay::finding");
-    if (index >= findings_ || index >= max_findings) return "";
-    return findings_text_[index];
+    if (index >= findings_text_.size()) return "";
+    return findings_text_.at(index).text_;
 }
 
 bool RecordingReplay::invariants_hold() const
 {
     AV_SCOPE("RecordingReplay::invariants_hold");
-    uint32_t live = 0u;
-    for (const ReplayContext &slot : slots_) {
-        if (!slot.invariants_hold()) return false;
-        live += slot.created() ? 1u : 0u;
-    }
-    /* Every finding kept is a whole string, and no more contexts are live than
-     * were ever made. */
-    for (uint32_t index = 0u; index < findings_ && index < max_findings; index++)
-        if (findings_text_[index][finding_bytes - 1u] != '\0') return false;
-    return live <= contexts_;
+    /* Every replay is found by its context and made an executor, every
+     * finding kept is a whole string, and no more are kept than were found or
+     * live than were ever made. */
+    if (!replays_.all_of([](const ReplayContext &replay) { return replay.invariants_hold() && replay.created(); }))
+        return false;
+    for (const Finding &kept : findings_text_)
+        if (kept.text_[finding_bytes - 1u] != '\0') return false;
+    return by_context_.count() == replays_.live() && by_context_.count() <= contexts_ &&
+           findings_text_.size() <= findings_;
 }
 
 }  // namespace av
