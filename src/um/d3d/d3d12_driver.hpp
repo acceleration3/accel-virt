@@ -56,6 +56,7 @@ private:
     /* The slot's session (AdapterSessions) and the heap arena over it. */
     d3d::D3dSession &session(uint32_t slot);
 
+    BlockSource               &memory_;
     LogSink                   &log_;
     DriverLog                      lines_;
     ObjectPool<D3d12Device>         devices_;

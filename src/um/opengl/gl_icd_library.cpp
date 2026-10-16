@@ -8,7 +8,7 @@ namespace av {
 
 GlIcdLibrary::Seams::Seams()
     : heap(), lock(), send_lock(), log(L"avgl"), kmt(), surface(), slot(), opengl32(), chains_lock(),
-      chains(kmt, chains_lock, log), present_lock(), present_kmt(), present_thread(), present_handed(),
+      chains(heap, kmt, chains_lock, log), present_lock(), present_kmt(), present_thread(), present_handed(),
       present_shown(),
       presents(present_thread, present_handed, present_shown, present_lock, present_kmt, surface, chains, log),
       root(heap, kmt, lock, send_lock, log, surface, slot, opengl32, presents, glicd::gl_icd_binding), trace()

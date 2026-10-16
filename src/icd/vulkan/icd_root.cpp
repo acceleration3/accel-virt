@@ -306,7 +306,7 @@ constexpr uint32_t max_allocated_at_once = 1024u;
 
 IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &memory_lock,
                  LogSink &log, IcdBinding &binding, WindowSurface &windows, WindowChains &chains)
-    : memory_(memory), kmt_(kmt), lock_(lock), send_lock_(send_lock), memory_lock_(memory_lock), log_(log), lines_(log, "avvk: "),
+    : memory_(memory), kmt_(kmt), lock_(lock), send_lock_(send_lock), memory_lock_(memory_lock), log_(log), lines_(memory, log, "avvk: "),
       binding_(binding),
       api_version_(vulkan_1_3), before_instance_(local_rows, before_instance_rows),
       entry_points_(local_rows, local_row_count),

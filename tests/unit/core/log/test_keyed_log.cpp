@@ -1,24 +1,17 @@
-/* KeyedLog: a key written once per code and never again, and past the
- * bound nothing written at all - the lines a driver would otherwise write on
- * every call of an application that keeps calling. */
+/* KeyedLog: a key written once per code and never again, however many keys
+ * there are - the lines a driver would otherwise write on every call of an
+ * application that keeps calling. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "core/log/keyed_log.hpp"
 
 #include <cstdint>
 #include <cstring>
 
-using av::RecordingLog;
 using av::KeyedLog;
-
-namespace av {
-
-/* A row another thread has taken and not yet written. */
-struct KeyedLogProbe {
-    static void take_a_row(KeyedLog &log) { log.count_++; }
-};
-
-}  // namespace av
+using av::MockPlatform;
+using av::RecordingLog;
 
 namespace {
 
@@ -30,8 +23,9 @@ const char other[] = "vkQueuePresentKHR";
 /* A key is its pointer and its code: one key failing two ways is two lines,
  * and the same failure again is none. */
 TEST(keyed_log, a_key_is_first_once_for_each_code)
-{ RecordingLog log;
-  KeyedLog     lines(log, "avumd: ");
+{ MockPlatform platform;
+  RecordingLog log;
+  KeyedLog     lines(platform, log, "avumd: ");
   CHECK(lines.first(entry, -5));
   CHECK(!lines.first(entry, -5));
   CHECK(lines.first(entry, -6));
@@ -41,8 +35,9 @@ TEST(keyed_log, a_key_is_first_once_for_each_code)
   CHECK_EQ(log.lines(), 0u); }
 
 TEST(keyed_log, once_writes_a_line_the_first_time_only)
-{ RecordingLog log;
-  KeyedLog     lines(log, "avcl: ");
+{ MockPlatform platform;
+  RecordingLog log;
+  KeyedLog     lines(platform, log, "avcl: ");
   lines.once("a buffer could not be mapped");
   lines.once("a buffer could not be mapped");
   lines.once_name("slot not implemented:", entry);
@@ -53,28 +48,31 @@ TEST(keyed_log, once_writes_a_line_the_first_time_only)
   CHECK(std::strcmp(log.line(1u), "avcl: slot not implemented: vkQueueSubmit") == 0);
   CHECK(std::strcmp(log.line(2u), "avcl: slot not implemented: vkQueuePresentKHR") == 0); }
 
-/* Past max_keys a new key is not first: a line per call is what the bound is
- * there to prevent, and the table never grows past it. */
-TEST(keyed_log, past_the_bound_nothing_is_first)
-{ RecordingLog log;
-  KeyedLog     lines(log, "avgl: ");
-  static char keys[KeyedLog::max_keys + 2u][2] = {};
-  for (std::uint32_t index = 0u; index < KeyedLog::max_keys; ++index) CHECK(lines.first(keys[index], 0));
-  CHECK_EQ(lines.keys(), KeyedLog::max_keys);
-  CHECK(!lines.first(keys[KeyedLog::max_keys], 0));
-  CHECK(!lines.first(keys[KeyedLog::max_keys + 1u], 0));
-  CHECK_EQ(lines.keys(), KeyedLog::max_keys);
-  /* What was remembered still is. */
-  CHECK(!lines.first(keys[0], 0)); }
+/* Every key is remembered, well past the 256 the table once held: a key
+ * met again is not first, however many came between. */
+TEST(keyed_log, remembers_every_key_past_the_old_bound)
+{ MockPlatform platform;
+  RecordingLog log;
+  KeyedLog     lines(platform, log, "avgl: ");
+  constexpr std::uint32_t many = 5000u;
+  static char keys[many][2] = {};
+  for (std::uint32_t index = 0u; index < many; ++index) CHECK(lines.first(keys[index], 0));
+  CHECK_EQ(lines.keys(), many);
+  for (std::uint32_t index = 0u; index < many; ++index) CHECK(!lines.first(keys[index], 0));
+  CHECK_EQ(lines.keys(), many); }
 
-/* A row another thread is still writing is passed over, not read: its key may
- * be half there. The key after it is first, in the next row. */
-TEST(keyed_log, a_row_still_being_written_is_passed_over)
-{ RecordingLog log;
-  KeyedLog     lines(log, "avvk: ");
-  CHECK(lines.first(entry, 1));
-  av::KeyedLogProbe::take_a_row(lines);
-  CHECK(lines.first(other, 1));
-  CHECK_EQ(lines.keys(), 3u);
-  CHECK(!lines.first(other, 1));
-  CHECK(!lines.first(entry, 1)); }
+/* A key that cannot be remembered for want of memory is not first: no line,
+ * rather than a line on every call while memory is short. Once memory is
+ * back it is first again. */
+TEST(keyed_log, a_key_that_cannot_be_remembered_writes_nothing)
+{ MockPlatform platform;
+  RecordingLog log;
+  KeyedLog     lines(platform, log, "avvk: ");
+  static const char lost[] = "the host lost the device";
+  platform.fail_allocation_at(1u);
+  lines.once(lost);
+  CHECK_EQ(log.lines(), 0u);
+  lines.once(lost);
+  lines.once(lost);
+  CHECK_EQ(log.lines(), 1u);
+  CHECK(std::strcmp(log.line(0u), "avvk: the host lost the device") == 0); }

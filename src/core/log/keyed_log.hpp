@@ -3,33 +3,35 @@
  *
  * A key is a string literal - an entry point's name, a slot's, a message -
  * so one key is one pointer, with a code beside it (an error, an HRESULT) for
- * a key that may fail more than one way. The table is append-only and takes
- * no lock, because a driver logs from inside its own locks: two threads
- * meeting the same new key at the same moment may both write its line, which
- * a log can afford. Past max_keys a line is not written at all rather than
- * flooding the log. The table is 4 KiB, so a class that only writes lines
- * holds a DriverLog. */
+ * a key that may fail more than one way. The keys are ClaimedRows - appended
+ * and read without a lock, because a driver logs from inside its own locks -
+ * and grow with the keys met: a log line per distinct key and code is what
+ * the application asked for, however many there are. Two threads meeting the
+ * same new key at the same moment may both write its line, which a log can
+ * afford; a key that cannot be remembered for want of memory is not written,
+ * so a driver out of memory does not log on every call. A class that only
+ * writes lines holds a DriverLog. */
 #ifndef AV_KEYED_LOG_HPP
 #define AV_KEYED_LOG_HPP
 
 #include "core/log/driver_log.hpp"
+#include "core/support/claimed_rows.hpp"
 
 #include <stdint.h>
 
 namespace av {
 
+class BlockSource;
 class LogSink;
-struct KeyedLogProbe;
 
 class KeyedLog : public DriverLog {
 public:
-    static constexpr uint32_t max_keys = 256u;
-
-    KeyedLog(LogSink &sink, const char *prefix);
+    KeyedLog(BlockSource &blocks, LogSink &sink, const char *prefix);
     KeyedLog(const KeyedLog &) = delete;
     KeyedLog &operator=(const KeyedLog &) = delete;
 
-    /* True the first time `key` is met with `code`, and from then on false. */
+    /* True the first time `key` is met with `code`, and from then on false;
+     * false too when it cannot be remembered. */
     [[nodiscard]] bool first(const char *key, int64_t code);
     /* write(what), the first time `what` is met. */
     void               once(const char *what);
@@ -38,14 +40,12 @@ public:
     uint32_t           keys() const;
 
 private:
-    friend struct KeyedLogProbe;
+    struct Key {
+        const char *key_;
+        int64_t     code_;
+    };
 
-    const char *keys_[max_keys];
-    int64_t     codes_[max_keys];
-    /* Whether a row's key and code are written: a reader passes a row it is
-     * still being written into. */
-    uint8_t     ready_[max_keys];
-    uint32_t    count_;
+    ClaimedRows<Key> keys_;
 };
 
 }  // namespace av

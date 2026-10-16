@@ -40,10 +40,10 @@ uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 
 }  // namespace
 
-D3d12Device::D3d12Device(d3d::D3dSession &session, LogSink &log,
+D3d12Device::D3d12Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log,
                          const D3d12HostCaps &caps,
                          void *const &list_table)
-    : session_(session), log_(log), lines_(log, "avumd: "), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), follower_(), residency_(), channel_(), addresses_(),
+    : session_(session), log_(log), lines_(memory, log, "avumd: "), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), follower_(), residency_(), channel_(), addresses_(),
       recorder_(*this), null_resource_{}, removal_(), library_blob_()
 {
     AV_SCOPE("D3d12Device::D3d12Device");

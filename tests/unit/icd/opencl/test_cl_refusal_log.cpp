@@ -1,8 +1,8 @@
 /* ClRefusalLog: an entry point this ICD does not serve is named in the log the
- * first time it is called and never again (DriverLog), and a refusal past the
- * bound is dropped rather than written. */
+ * first time it is called and never again (KeyedLog), however many there are. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "icd/opencl/cl_refusal_log.hpp"
 
 #include <cstdint>
@@ -18,8 +18,9 @@ const char mem_info[] = "clGetMemObjectInfo";
 }  // namespace
 
 TEST(cl_refusal_log, each_refused_entry_point_is_named_once_and_in_the_order_called)
-{ av::RecordingLog        log;
-  ClRefusalLog            refusals(log);
+{ av::MockPlatform        platform;
+  av::RecordingLog        log;
+  ClRefusalLog            refusals(platform, log);
   refusals.note(image_2d);
   refusals.note(mem_info);
   refusals.note(image_2d);
@@ -30,25 +31,23 @@ TEST(cl_refusal_log, each_refused_entry_point_is_named_once_and_in_the_order_cal
   CHECK(std::strcmp(log.line(1u), "avcl: an entry point this ICD does not serve was called: clGetMemObjectInfo") == 0);
   }
 
-TEST(cl_refusal_log, nothing_is_named_for_no_entry_point_or_past_the_bound)
-{ av::RecordingLog        log;
-  ClRefusalLog            refusals(log);
+TEST(cl_refusal_log, nothing_is_named_for_no_entry_point_and_every_one_past_the_old_bound_is)
+{ av::MockPlatform        platform;
+  av::RecordingLog        log;
+  ClRefusalLog            refusals(platform, log);
   refusals.note(nullptr);
   CHECK_EQ(log.lines(), 0u);
-  static char names[ClRefusalLog::max_named + 1u][4] = {};
-  for (std::uint32_t index = 0u; index < ClRefusalLog::max_named; ++index) refusals.note(names[index]);
-  CHECK_EQ(log.lines(), ClRefusalLog::max_named);
-  CHECK_EQ(refusals.named(), ClRefusalLog::max_named);
-  /* One more than it can remember is not written: a line per call is what
-   * the bound is there to prevent. */
-  refusals.note(names[ClRefusalLog::max_named]);
-  refusals.note(names[ClRefusalLog::max_named]);
-  CHECK_EQ(log.lines(), ClRefusalLog::max_named);
-  CHECK_EQ(refusals.named(), ClRefusalLog::max_named); }
+  constexpr std::uint32_t many = 1000u;
+  static char names[many][4] = {};
+  for (std::uint32_t index = 0u; index < many; ++index) refusals.note(names[index]);
+  for (std::uint32_t index = 0u; index < many; ++index) refusals.note(names[index]);
+  CHECK_EQ(log.lines(), many);
+  CHECK_EQ(refusals.named(), many); }
 
 TEST(cl_refusal_log, each_error_an_entry_point_answers_is_named_once_and_success_never)
-{ av::RecordingLog        log;
-  ClRefusalLog            refusals(log);
+{ av::MockPlatform        platform;
+  av::RecordingLog        log;
+  ClRefusalLog            refusals(platform, log);
   refusals.note_failure(image_2d, -38);
   refusals.note_failure(image_2d, -38);
   refusals.note_failure(image_2d, -30);
@@ -68,8 +67,9 @@ TEST(cl_refusal_log, each_error_an_entry_point_answers_is_named_once_and_success
 /* A refused query is named with the query, once per query, so the log says
  * which of an application's questions the device could not answer. */
 TEST(cl_refusal_log, each_query_an_entry_point_refuses_is_named_with_it_once)
-{ av::RecordingLog        log;
-  ClRefusalLog            refusals(log);
+{ av::MockPlatform        platform;
+  av::RecordingLog        log;
+  ClRefusalLog            refusals(platform, log);
   refusals.note_query(mem_info, 0x4039u, -30);
   refusals.note_query(mem_info, 0x4039u, -30);
   refusals.note_query(mem_info, 0x1002u, -30);
@@ -83,8 +83,9 @@ TEST(cl_refusal_log, each_query_an_entry_point_refuses_is_named_with_it_once)
  * held - once for each reason - and a buffer released while mapped is named
  * the first time with how many went with it, never for one that held none. */
 TEST(cl_refusal_log, a_refused_map_and_a_buffer_released_mapped_say_how_many_were_held)
-{ av::RecordingLog log;
-  ClRefusalLog     refusals(log);
+{ av::MockPlatform platform;
+  av::RecordingLog log;
+  ClRefusalLog     refusals(platform, log);
   static const char slot[] = "clEnqueueMapBuffer: no slot";
   refusals.note_map(slot, 4096u, 64u);
   refusals.note_map(slot, 8u, 65u);
@@ -99,8 +100,9 @@ TEST(cl_refusal_log, a_refused_map_and_a_buffer_released_mapped_say_how_many_wer
   CHECK(std::strcmp(log.line(1u), "avcl: clReleaseMemObject: a buffer released while still mapped 3 mappings went with it") == 0); }
 
 TEST(cl_refusal_log, a_transfer_that_ran_ahead_of_a_user_event_is_said_once)
-{ av::RecordingLog log;
-  ClRefusalLog     refusals(log);
+{ av::MockPlatform platform;
+  av::RecordingLog log;
+  ClRefusalLog     refusals(platform, log);
   refusals.note_ran_ahead_of_user_event();
   refusals.note_ran_ahead_of_user_event();
   CHECK_EQ(log.lines(), 1u);

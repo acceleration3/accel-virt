@@ -44,6 +44,7 @@
 #include <stdint.h>
 
 namespace av {
+class BlockSource;
 class LogSink;
 }  // namespace av
 
@@ -62,7 +63,7 @@ public:
     static constexpr UINT descriptor_bytes = 32u;
 
     /* `list_table` is the driver's, and is filled after the device is made. */
-    D3d12Device(d3d::D3dSession &session, LogSink &log, const D3d12HostCaps &caps,
+    D3d12Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d12HostCaps &caps,
                 void *const &list_table);
     ~D3d12Device();
     D3d12Device(const D3d12Device &) = delete;

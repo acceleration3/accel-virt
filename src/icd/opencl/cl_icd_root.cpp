@@ -77,7 +77,7 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
     : lock_(lock), log_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), d3d11_(d3d11), binding_(binding), dispatch_(), platform_(),
       objects_(memory, dispatch_.table(), objects_lock), kmt_(kmt), devices_(kmt),
       shared_handles_(kmt, lock, memory), contexts_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock),
-      watcher_(watcher_thread, log, lock, *this), waits_(kmt, watcher_), device_answers_(), reads_(), refusals_(log),
+      watcher_(watcher_thread, log, lock, *this), waits_(kmt, watcher_), device_answers_(), reads_(), refusals_(memory, log),
       destructor_callbacks_()
 {
     AV_SCOPE("ClIcdRoot::ClIcdRoot");

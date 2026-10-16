@@ -7,7 +7,7 @@ namespace av {
 
 IcdLibrary::Seams::Seams()
     : heap(), lock(), send_lock(), memory_lock(), log(L"avvk"), kmt(), windows(), chains_lock(),
-      chains(kmt, chains_lock, log), root(heap, kmt, lock, send_lock, memory_lock, log, icd::icd_binding, windows, chains),
+      chains(heap, kmt, chains_lock, log), root(heap, kmt, lock, send_lock, memory_lock, log, icd::icd_binding, windows, chains),
       trace()
 {
     AV_SCOPE("IcdLibrary::Seams::Seams");

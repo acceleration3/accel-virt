@@ -38,6 +38,7 @@ struct IDXGIFactory2;
 struct IDXGISwapChain1;
 
 namespace av {
+class BlockSource;
 class LogSink;
 }  // namespace av
 
@@ -57,7 +58,7 @@ public:
      * finishes nothing in two seconds is given before the slot is let go. */
     static constexpr uint32_t copy_looks = 2000u;
 
-    DxgiWindowChains(Kmt &kmt, icd::ThreadLock &lock, LogSink &log);
+    DxgiWindowChains(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, LogSink &log);
     ~DxgiWindowChains();
     DxgiWindowChains(const DxgiWindowChains &) = delete;
     DxgiWindowChains &operator=(const DxgiWindowChains &) = delete;

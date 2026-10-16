@@ -60,7 +60,7 @@ src/km/         src/device/qemu, src/*/shim/      src/um/
 
 | Directory | Holds |
 |---|---|
-| `support/` | `Status`, `NtStatus`, `ObjectPool`/`ObjectStorage`, `ScopeExit`, `Alignment`, `ByteRange`, `TextBuffer`, `RuntimeCall`, `AV_UNTESTABLE` |
+| `support/` | `Status`, `NtStatus`, `ObjectPool`/`ObjectStorage`, `GrowableArray`, `KeyedSlots` and `ClaimedRows` (storage for counts an application controls, see "Counts with no fixed bound"), `ScopeExit`, `Alignment`, `ByteRange`, `TextBuffer`, `RuntimeCall`, `AV_UNTESTABLE` |
 | `trace/` | `AV_SCOPE`, trace tables, event rings, crash and state dumps |
 | `log/` | `DriverLog`, `KeyedLog`, `LogLine`, `LogSink`, `LogQueue`: the logging the host, the guest drivers and the kernel's debug port share |
 | `platform/` | the `Platform` contract the miniport runs on (implemented by `src/km` and `MockPlatform`), locks and their guards, lock ranks, `LogBudget`, `InvariantScope`; also `BlockSource` and `LockMarks`, which every binary uses |
@@ -175,6 +175,46 @@ One `ContextSession` per guest context runs its API's commands on the host GPU.
   `tests/conformance/`: the layers in `docs/testing.md`.
 - `tools/`: gates at the root (`check_*.py`, `scope_marks.py`, `gate.sh`),
   `codegen/`, `guest/` (the VM runner), `host/`, `etw/`, `mcp/`, `re/`.
+
+## Counts with no fixed bound
+
+A count the application or the guest workload decides - objects, handles,
+syncs, fences, queries, mapped ranges, imports, shared objects, descriptors -
+has no fixed maximum anywhere in the stack. Its storage grows:
+
+- `GrowableArray<T>` (`src/core/support/growable_array.hpp`): a contiguous run
+  of trivially copyable values, doubled when it fills - handle lists, sorted
+  range tables.
+- `KeyedSlots<Key, Entry>` (`src/core/support/keyed_slots.hpp`): the storage
+  under every keyed table, host and guest. Each entry has a slot in a chunk
+  that never moves, so its address and slot number hold until it is erased
+  and a side table can be kept by slot; erased slots are reused. A key - any
+  value, 0 and all-ones included - finds its slot through an open-addressed
+  index at most half full, doubling as it fills, whose erase shifts the probe
+  back rather than leaving a tombstone, so a guest that makes and erases keys
+  for ever never lengthens a probe.
+- `ClaimedRows<Row>` (`src/core/support/claimed_rows.hpp`): rows appended and
+  read without a lock - what a driver remembers from inside its own locks,
+  `KeyedLog`'s keys - in chunks that never move, since a lock-free reader
+  cannot follow a realloc.
+
+All three allocate through a `BlockSource` with an explicit `Pool`. A growth that
+fails is `Status::no_memory`, which each boundary answers as its own
+out-of-memory error - `E_OUTOFMEMORY`, `VK_ERROR_OUT_OF_HOST_MEMORY`,
+`GL_OUT_OF_MEMORY`, `CL_OUT_OF_HOST_MEMORY`, `STATUS_NO_MEMORY` - never a
+silent refusal, a context fault or a lost device.
+
+What stays fixed is a bound set by a specification, the hardware or the wire
+(eight render targets, fifteen GL context attributes, the 64 doorbell pages of
+BAR 0 and so the 64 contexts a device runs, a field's width), and what the
+kernel driver must have in hand before DISPATCH, where it cannot allocate.
+
+Host safety against a hostile guest is a byte budget, not a count per table.
+No accounting exists yet. Where it goes: every container a session grows
+allocates through that session's `HostHeap` (`ContextSession::heap_`), so a
+budget charged there - bytes handed out against a per-session or per-VM
+ceiling, a refusal past it answered as the API's out-of-memory error - bounds
+everything a guest can make the host hold for it, whatever the counts.
 
 ## Where new code goes
 

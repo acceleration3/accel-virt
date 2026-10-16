@@ -12,6 +12,7 @@
 #include <stdint.h>
 
 namespace av {
+class BlockSource;
 class LogSink;
 }  // namespace av
 
@@ -19,11 +20,7 @@ namespace av::clicd {
 
 class ClRefusalLog {
 public:
-    /* Room for every slot of cl_icd_dispatch this ICD leaves to the generated
-     * refusals and a few errors from each entry point it serves. */
-    static constexpr uint32_t max_named = KeyedLog::max_keys;
-
-    explicit ClRefusalLog(LogSink &log);
+    ClRefusalLog(BlockSource &memory, LogSink &log);
     ClRefusalLog(const ClRefusalLog &) = delete;
     ClRefusalLog &operator=(const ClRefusalLog &) = delete;
 

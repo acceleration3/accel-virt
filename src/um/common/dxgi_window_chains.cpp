@@ -45,8 +45,8 @@ constexpr uint32_t private_bytes = AllocationDescriptor::encoded_size + SharedOb
 
 }  // namespace
 
-DxgiWindowChains::DxgiWindowChains(Kmt &kmt, icd::ThreadLock &lock, LogSink &log)
-    : kmt_(kmt), lock_(lock), lines_(log, "av: "), d3d11_(nullptr), dxgi_(nullptr), create_device_(nullptr),
+DxgiWindowChains::DxgiWindowChains(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, LogSink &log)
+    : kmt_(kmt), lock_(lock), lines_(memory, log, "av: "), d3d11_(nullptr), dxgi_(nullptr), create_device_(nullptr),
       create_factory_(nullptr), compiler_(nullptr), compile_(nullptr), load_refused_(false),
       devices_(), chains_()
 {

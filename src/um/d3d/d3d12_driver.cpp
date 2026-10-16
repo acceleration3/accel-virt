@@ -19,7 +19,7 @@ constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
 }  // namespace
 
 D3d12Driver::D3d12Driver(BlockSource &memory, Kmt &kmt, LogSink &log)
-    : log_(log), lines_(log, "avumd: "), devices_(memory),
+    : memory_(memory), log_(log), lines_(log, "avumd: "), devices_(memory),
       adapters_(kmt, memory, log, "the host answers no Direct3D 12 on this adapter", session_arena_bytes, 0u,
                 d3dproto::kCmd_SelectDevice11, d3dproto::kCmd_Flush11),
       list_table_(nullptr)
@@ -56,7 +56,7 @@ d3d::Hresult D3d12Driver::build(d3d::D3d12ddiargCreateDeviceRecord &create, uint
     const auto  &arguments = *reinterpret_cast<const D3D12DDIARG_CREATEDEVICE_0109 *>(&create);
     D3d12Device *device = nullptr;
     d3d::D3dSession &joined = session(slot);
-    if (devices_.create(device, joined, log_, adapters_.caps(slot), list_table_) != Status::ok)
+    if (devices_.create(device, joined, memory_, log_, adapters_.caps(slot), list_table_) != Status::ok)
         return d3d::hr_out_of_memory;
     const HRESULT opened = device->initialize(kmt_adapter, arguments);
     if (FAILED(opened)) {
