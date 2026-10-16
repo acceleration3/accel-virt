@@ -492,7 +492,8 @@ bool D3d11Device::open_guest_surface(ResourceRecord &resource, const D3D10DDIARG
             Status::ok)
         return false;
     const SurfaceLayout &layout = descriptor.layout();
-    if (layout.width() == 0u || layout.height() == 0u || guest_surface_count_ == max_guest_surfaces) return false;
+    if (layout.width() == 0u || layout.height() == 0u) return false;
+    if (guest_surfaces_.reserve(guest_surfaces_.size() + 1u) != Status::ok) return false;
     resource.dimension = D3D10DDIRESOURCE_TEXTURE2D;
     resource.width = layout.width();
     resource.height = layout.height();
@@ -519,7 +520,8 @@ bool D3d11Device::open_guest_surface(ResourceRecord &resource, const D3D10DDIARG
     resource.shadow_watched = 0u;
     resource.shadow_bytes = resource.shadow == nullptr ? 0u : bytes;
     if (resource.shadow != nullptr) __builtin_memset(resource.shadow, 0, bytes);
-    guest_surfaces_[guest_surface_count_++] = &resource;
+    /* Room was made above, so the append cannot fail. */
+    static_cast<void>(guest_surfaces_.append(&resource));
     refresh_guest_surface(resource);
     return true;
 }
@@ -527,10 +529,9 @@ bool D3d11Device::open_guest_surface(ResourceRecord &resource, const D3D10DDIARG
 void D3d11Device::forget_guest_surface(const ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::forget_guest_surface");
-    for (uint32_t index = 0u; index < guest_surface_count_; index++) {
-        if (guest_surfaces_[index] != &resource) continue;
-        guest_surfaces_[index] = guest_surfaces_[--guest_surface_count_];
-        guest_surfaces_[guest_surface_count_] = nullptr;
+    for (uint32_t index = 0u; index < guest_surfaces_.size(); index++) {
+        if (guest_surfaces_.at(index) != &resource) continue;
+        guest_surfaces_.remove_swap(index);
         return;
     }
 }
@@ -546,12 +547,12 @@ void D3d11Device::refresh_guest_surfaces()
 void D3d11Device::refresh_bound_guest_surfaces(const D3D10DDI_HSHADERRESOURCEVIEW *views, UINT count)
 {
     AV_SCOPE("D3d11Device::refresh_bound_guest_surfaces");
-    if (guest_surface_count_ == 0u || views == nullptr) return;
+    if (guest_surfaces_.size() == 0u || views == nullptr) return;
     for (UINT slot = 0u; slot < count; slot++) {
         const auto *const view = static_cast<const ObjectRecord *>(views[slot].pDrvPrivate);
         if (view == nullptr) continue;
-        for (uint32_t index = 0u; index < guest_surface_count_; index++) {
-            ResourceRecord &surface = *guest_surfaces_[index];
+        for (uint32_t index = 0u; index < guest_surfaces_.size(); index++) {
+            ResourceRecord &surface = *guest_surfaces_.at(index);
             if (surface.id != view->resource || surface.refreshed == frame_) continue;
             surface.refreshed = frame_;
             refresh_guest_surface(surface);

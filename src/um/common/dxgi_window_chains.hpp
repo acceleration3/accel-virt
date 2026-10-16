@@ -14,13 +14,17 @@
  * copied, and a bottom-up one, as OpenGL stores a frame, is drawn upside down
  * with two shaders compiled at the device's making through d3dcompiler_47.dll.
  * The chain is then presented and the copy or draw waited for, so the slot may
- * be written again. The chains and their devices are used under `lock`: an
- * application's thread opens a window's chain while the present thread
- * presents another's. */
+ * be written again. There are as many chains as windows an application shows
+ * this way, and a device per avgpu adapter. The chains and their devices are
+ * used under `lock`: an application's thread opens a window's chain while the
+ * present thread presents another's. */
 #ifndef AV_UM_DXGI_WINDOW_CHAINS_HPP
 #define AV_UM_DXGI_WINDOW_CHAINS_HPP
 
 #include "core/log/keyed_log.hpp"
+#include "core/support/keyed_slots.hpp"
+#include "core/support/object_pool.hpp"
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "icd/common/window_chains.hpp"
 #include "um/common/com_reference.hpp"
 
@@ -52,8 +56,7 @@ class ThreadLock;
 
 class DxgiWindowChains final : public icd::WindowChains {
 public:
-    static constexpr uint32_t max_windows = 16u;
-    static constexpr uint32_t max_devices = 4u;
+    static constexpr uint32_t max_devices = AvgpuAdapters::max_adapters;
     /* Looks for a finished copy this often, this many times: what a GPU that
      * finishes nothing in two seconds is given before the slot is let go. */
     static constexpr uint32_t copy_looks = 2000u;
@@ -111,7 +114,11 @@ private:
     /* Slot `slot` of a bottom-up `chain` drawn into `back` upside down. */
     void               draw_flipped(Chain &chain, Device &device, ID3D11Texture2D *back, uint32_t slot);
     Chain             *chain_of(void *window);
-    Chain             *free_chain();
+    /* A new, empty chain for `window`; null, said once, when there is no
+     * memory for one. */
+    Chain             *new_chain(void *window);
+    /* `window`'s chain dropped and given back. */
+    void               forget_chain(void *window);
     [[nodiscard]] bool make_chain(Chain &chain, Device &device, uint32_t width, uint32_t height);
     [[nodiscard]] bool make_slots(Chain &chain, Device &device, uint32_t count);
     /* `texture`'s object id and bytes, from the private data its NT handle
@@ -135,7 +142,9 @@ private:
     void            *compile_;
     bool             load_refused_;
     Device           devices_[max_devices];
-    Chain            chains_[max_windows];
+    ObjectPool<Chain> chains_;
+    /* Each chain by its window's address. */
+    KeyedSlots<uint64_t, Chain *> windows_;
 };
 
 }  // namespace av

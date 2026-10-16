@@ -19,6 +19,7 @@
 #ifndef AV_UM_D3D11_DEVICE_HPP
 #define AV_UM_D3D11_DEVICE_HPP
 
+#include "core/support/growable_array.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
@@ -296,9 +297,8 @@ private:
      * present (KmtTransport::hold): the kernel context's queue. */
     ObjectStorage<d3d::KernelContextGate> gate_;
     uint32_t  feature_level_;
-    static constexpr uint32_t max_guest_surfaces = 256u;
-    ResourceRecord *guest_surfaces_[max_guest_surfaces];
-    uint32_t        guest_surface_count_;
+    /* Every window surface DWM opened on this device. */
+    GrowableArray<ResourceRecord *> guest_surfaces_;
     icd::OnceLatch  guest_lock_refused_;
     icd::OnceLatch  present_refused_;
     /* The flags of the last present, ~0 before any: a fullscreen change shows

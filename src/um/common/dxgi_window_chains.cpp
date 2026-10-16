@@ -48,7 +48,7 @@ constexpr uint32_t private_bytes = AllocationDescriptor::encoded_size + SharedOb
 DxgiWindowChains::DxgiWindowChains(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, LogSink &log)
     : kmt_(kmt), lock_(lock), lines_(memory, log, "av: "), d3d11_(nullptr), dxgi_(nullptr), create_device_(nullptr),
       create_factory_(nullptr), compiler_(nullptr), compile_(nullptr), load_refused_(false),
-      devices_(), chains_()
+      devices_(), chains_(memory), windows_(memory, Pool::paged)
 {
     AV_SCOPE("DxgiWindowChains::DxgiWindowChains");
 }
@@ -56,7 +56,9 @@ DxgiWindowChains::DxgiWindowChains(BlockSource &memory, Kmt &kmt, icd::ThreadLoc
 DxgiWindowChains::~DxgiWindowChains()
 {
     AV_SCOPE("DxgiWindowChains::~DxgiWindowChains");
-    for (Chain &chain : chains_) drop_chain(chain);
+    windows_.for_each([this](uint64_t, Chain *&chain) { drop_chain(*chain); });
+    windows_.clear();
+    chains_.destroy_all();
     for (Device &device : devices_) drop_device(device);
     if (d3d11_ != nullptr) FreeLibrary(static_cast<HMODULE>(d3d11_));
     if (dxgi_ != nullptr) FreeLibrary(static_cast<HMODULE>(dxgi_));
@@ -73,10 +75,10 @@ bool DxgiWindowChains::open(void *window, uint64_t luid, uint32_t width, uint32_
     Chain *chain = chain_of(window);
     const uint32_t device = device_for(luid);
     if (chain != nullptr && chain->device != device) {
-        drop_chain(*chain);
+        forget_chain(window);
         chain = nullptr;
     }
-    if (chain == nullptr) chain = free_chain();
+    if (chain == nullptr && device != max_devices) chain = new_chain(window);
     bool made = device != max_devices && chain != nullptr;
     if (made && (chain->chain.get() == nullptr || chain->width != width || chain->height != height ||
                  chain->count != slots || chain->layout != layout)) {
@@ -86,7 +88,7 @@ bool DxgiWindowChains::open(void *window, uint64_t luid, uint32_t width, uint32_
         chain->format = layout == icd::SlotLayout::bgra_top_down ? DXGI_FORMAT_B8G8R8A8_UNORM
                                                                  : DXGI_FORMAT_R8G8B8A8_UNORM;
         made = make_chain(*chain, devices_[device], width, height) && make_slots(*chain, devices_[device], slots);
-        if (!made) drop_chain(*chain);
+        if (!made) forget_chain(window);
     }
     if (made) {
         for (uint32_t slot = 0u; slot < slots; slot++) {
@@ -142,8 +144,7 @@ void DxgiWindowChains::close(void *window)
 {
     AV_SCOPE("DxgiWindowChains::close");
     lock_.acquire();
-    Chain *const chain = chain_of(window);
-    if (chain != nullptr) drop_chain(*chain);
+    forget_chain(window);
     lock_.release();
 }
 
@@ -283,17 +284,31 @@ void DxgiWindowChains::draw_flipped(Chain &chain, Device &device, ID3D11Texture2
 DxgiWindowChains::Chain *DxgiWindowChains::chain_of(void *window)
 {
     AV_SCOPE("DxgiWindowChains::chain_of");
-    for (Chain &chain : chains_)
-        if (chain.window == window && chain.chain.get() != nullptr) return &chain;
-    return nullptr;
+    Chain *const *const chain = windows_.find(reinterpret_cast<uintptr_t>(window));
+    return chain != nullptr ? *chain : nullptr;
 }
 
-DxgiWindowChains::Chain *DxgiWindowChains::free_chain()
+DxgiWindowChains::Chain *DxgiWindowChains::new_chain(void *window)
 {
-    AV_SCOPE("DxgiWindowChains::free_chain");
-    for (Chain &chain : chains_)
-        if (chain.chain.get() == nullptr) return &chain;
-    return nullptr;
+    AV_SCOPE("DxgiWindowChains::new_chain");
+    Chain   *chain = nullptr;
+    uint32_t slot = 0u;
+    if (windows_.reserve(windows_.count() + 1u) != Status::ok || chains_.create(chain) != Status::ok) {
+        refuse("no memory for another window's chain");
+        return nullptr;
+    }
+    /* Room was made above, so the insert cannot fail. */
+    static_cast<void>(windows_.insert(reinterpret_cast<uintptr_t>(window), chain, slot));
+    return chain;
+}
+
+void DxgiWindowChains::forget_chain(void *window)
+{
+    AV_SCOPE("DxgiWindowChains::forget_chain");
+    Chain *chain = nullptr;
+    if (!windows_.take(reinterpret_cast<uintptr_t>(window), chain)) return;
+    drop_chain(*chain);
+    static_cast<void>(chains_.destroy(chain));
 }
 
 /* A chain of this window is made again at a new size: its slots go first, so
