@@ -1,5 +1,6 @@
 #include "device/shim/posix_renderer_host.hpp"
 
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/renderer/doorbell_offers.hpp"
 #include "device/renderer/forwarded_request.hpp"
@@ -63,7 +64,7 @@ void post(int descriptor)
 
 PosixRendererHost::PosixRendererHost(GuestMemoryTable &memory, DoorbellOffers &doorbells)
     : memory_(memory), doorbells_(doorbells), executor_(), main_loop_{}, main_loop_known_(false), wakeup_(-1),
-      posted_lock_(PTHREAD_MUTEX_INITIALIZER), posted_first_(nullptr), posted_last_(nullptr),
+      posted_lock_(), posted_first_(nullptr), posted_last_(nullptr), locks_(*this),
       interrupt_lines_{}, interrupts_connected_(false)
 {
     AV_SCOPE("PosixRendererHost::PosixRendererHost");
@@ -105,11 +106,13 @@ void PosixRendererHost::run_main_loop_work()
     AV_SCOPE("PosixRendererHost::run_main_loop_work");
     require_main_loop("PosixRendererHost::run_main_loop_work");
     if (wakeup_ >= 0) drain(wakeup_);
-    pthread_mutex_lock(&posted_lock_);
-    Posted *taken = posted_first_;
-    posted_first_ = nullptr;
-    posted_last_ = nullptr;
-    pthread_mutex_unlock(&posted_lock_);
+    Posted *taken = nullptr;
+    {
+        const ThreadLockHold locked(posted_lock_);
+        taken = posted_first_;
+        posted_first_ = nullptr;
+        posted_last_ = nullptr;
+    }
     while (taken != nullptr) {
         Posted *const next = taken->next_;
         taken->routine_(taken->context_);
@@ -287,40 +290,34 @@ bool PosixRendererHost::wait_event_until(void *event, uint64_t deadline)
 Status PosixRendererHost::create_mutex(void *&mutex)
 {
     AV_SCOPE("PosixRendererHost::create_mutex");
-    mutex = nullptr;
-    pthread_mutex_t *const made = static_cast<pthread_mutex_t *>(calloc(1u, sizeof(pthread_mutex_t)));
-    if (made == nullptr) return Status::no_memory;
-    if (pthread_mutex_init(made, nullptr) != 0) {
-        free(made);
-        return Status::no_memory;
-    }
+    PosixLock   *made = nullptr;
+    const Status created = locks_.create(made);
     mutex = made;
-    return Status::ok;
+    return created;
 }
 
 void PosixRendererHost::destroy_mutex(void *mutex)
 {
     AV_SCOPE("PosixRendererHost::destroy_mutex");
-    pthread_mutex_destroy(static_cast<pthread_mutex_t *>(mutex));
-    free(mutex);
+    static_cast<void>(locks_.destroy(static_cast<PosixLock *>(mutex)));
 }
 
 void PosixRendererHost::lock_mutex(void *mutex)
 {
     AV_SCOPE("PosixRendererHost::lock_mutex");
-    pthread_mutex_lock(static_cast<pthread_mutex_t *>(mutex));
+    static_cast<PosixLock *>(mutex)->acquire();
 }
 
 void PosixRendererHost::unlock_mutex(void *mutex)
 {
     AV_SCOPE("PosixRendererHost::unlock_mutex");
-    pthread_mutex_unlock(static_cast<pthread_mutex_t *>(mutex));
+    static_cast<PosixLock *>(mutex)->release();
 }
 
 bool PosixRendererHost::try_lock_mutex(void *mutex)
 {
     AV_SCOPE("PosixRendererHost::try_lock_mutex");
-    return pthread_mutex_trylock(static_cast<pthread_mutex_t *>(mutex)) == 0;
+    return static_cast<PosixLock *>(mutex)->try_acquire();
 }
 
 /* A routine that cannot be queued is lost, as one QEMU could not schedule
@@ -335,11 +332,12 @@ void PosixRendererHost::run_on_main_loop(HostRoutine routine, void *context)
     }
     posted->routine_ = routine;
     posted->context_ = context;
-    pthread_mutex_lock(&posted_lock_);
-    if (posted_last_ != nullptr) posted_last_->next_ = posted;
-    else posted_first_ = posted;
-    posted_last_ = posted;
-    pthread_mutex_unlock(&posted_lock_);
+    {
+        const ThreadLockHold locked(posted_lock_);
+        if (posted_last_ != nullptr) posted_last_->next_ = posted;
+        else posted_first_ = posted;
+        posted_last_ = posted;
+    }
     if (wakeup_ >= 0) post(wakeup_);
 }
 

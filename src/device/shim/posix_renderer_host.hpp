@@ -10,9 +10,11 @@
 #ifndef AV_POSIX_RENDERER_HOST_HPP
 #define AV_POSIX_RENDERER_HOST_HPP
 
+#include "core/support/object_pool.hpp"
 #include "device/host/host.hpp"
 #include "device/renderer/renderer_resources.hpp"
 #include "device/shim/posix_executor_module.hpp"
+#include "device/shim/posix_lock.hpp"
 
 #include <pthread.h>
 #include <stdint.h>
@@ -158,9 +160,12 @@ private:
     pthread_t         main_loop_;
     bool              main_loop_known_;
     int               wakeup_;
-    pthread_mutex_t   posted_lock_;
+    PosixLock         posted_lock_;
     Posted           *posted_first_;
     Posted           *posted_last_;
+    /* The device core's mutexes (create_mutex): each one's address is its
+     * handle. */
+    ObjectPool<PosixLock> locks_;
     int               interrupt_lines_[max_interrupt_lines];
     bool              interrupts_connected_;
 };

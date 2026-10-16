@@ -11,11 +11,12 @@
 #include "core/support/object_storage.hpp"
 #include "device/abi/av_device.h"
 #include "device/shim/host_trace.hpp"
+#include "device/shim/posix_condition.hpp"
+#include "device/shim/posix_lock.hpp"
 #include "device/shim/posix_module_resolver.hpp"
 #include "device/shim/state_socket.hpp"
 #include "device/shim/state_source.hpp"
 
-#include <pthread.h>
 #include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -65,8 +66,8 @@ private:
     struct sigaction     previous_[fatal_count];
     uint64_t             crash_written_;
     StateSocket          socket_;
-    pthread_mutex_t      lock_;
-    pthread_cond_t       answered_;
+    PosixLock            lock_;
+    PosixCondition       answered_;
     Request              request_;
     size_t               length_;
     char                 dump_[dump_bytes];

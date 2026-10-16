@@ -1,5 +1,6 @@
 #include "device/shim/device_trace.hpp"
 
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/crash_event.hpp"
 #include "core/trace/crash_report.hpp"
@@ -48,8 +49,8 @@ void answer_routine(void *trace)
 
 DeviceTrace::DeviceTrace()
     : trace_(), modules_(), root_(nullptr), schedule_(nullptr), previous_{},
-      crash_written_(0u), socket_(), lock_(PTHREAD_MUTEX_INITIALIZER),
-      answered_(PTHREAD_COND_INITIALIZER), request_(Request::idle), length_(0u), dump_{}
+      crash_written_(0u), socket_(), lock_(), answered_(lock_),
+      request_(Request::idle), length_(0u), dump_{}
 {
     AV_SCOPE("DeviceTrace::DeviceTrace");
 }
@@ -92,24 +93,25 @@ void DeviceTrace::crashed(int signal, siginfo_t *info, void *context)
 void DeviceTrace::answer_on_main_loop()
 {
     AV_SCOPE("DeviceTrace::answer_on_main_loop");
-    static_cast<void>(pthread_mutex_lock(&lock_));
-    const bool asked = request_ == Request::pending;
-    if (!asked) request_ = Request::idle;
-    static_cast<void>(pthread_mutex_unlock(&lock_));
+    bool asked = false;
+    {
+        const ThreadLockHold locked(lock_);
+        asked = request_ == Request::pending;
+        if (!asked) request_ = Request::idle;
+    }
     if (!asked) return;
     /* The socket thread does not touch the dump while a request is pending or
      * abandoned, so it is written outside the lock. */
     StateWriter writer(dump_, sizeof dump_);
     root_->report(writer);
-    static_cast<void>(pthread_mutex_lock(&lock_));
+    const ThreadLockHold locked(lock_);
     if (request_ == Request::pending) {
         request_ = Request::answered;
         length_ = writer.length();
-        static_cast<void>(pthread_cond_signal(&answered_));
+        answered_.signal();
     } else {
         request_ = Request::idle;
     }
-    static_cast<void>(pthread_mutex_unlock(&lock_));
 }
 
 void DeviceTrace::install(CrashHandler handler)
@@ -179,10 +181,12 @@ size_t DeviceTrace::dump(char *buffer, size_t capacity, const char *&error)
 {
     AV_SCOPE("DeviceTrace::dump");
     error = nullptr;
-    static_cast<void>(pthread_mutex_lock(&lock_));
-    const bool ready = request_ == Request::idle;
-    if (ready) request_ = Request::pending;
-    static_cast<void>(pthread_mutex_unlock(&lock_));
+    bool ready = false;
+    {
+        const ThreadLockHold locked(lock_);
+        ready = request_ == Request::idle;
+        if (ready) request_ = Request::pending;
+    }
     if (!ready) {
         error = still_answering;
         return 0u;
@@ -202,16 +206,15 @@ bool DeviceTrace::await_dump(size_t &length)
 {
     AV_SCOPE("DeviceTrace::await_dump");
     timespec deadline = {};
-    static_cast<void>(clock_gettime(CLOCK_REALTIME, &deadline));
+    static_cast<void>(clock_gettime(CLOCK_MONOTONIC, &deadline));
     deadline.tv_sec += static_cast<time_t>(answer_seconds);
-    static_cast<void>(pthread_mutex_lock(&lock_));
-    int waited = 0;
-    while (request_ == Request::pending && waited == 0) waited = pthread_cond_timedwait(&answered_, &lock_, &deadline);
+    const ThreadLockHold locked(lock_);
+    bool                 in_time = true;
+    while (request_ == Request::pending && in_time) in_time = answered_.wait_until(deadline);
     const bool answered = request_ == Request::answered;
     /* A routine still to run finds the request abandoned and only resets it. */
     request_ = answered ? Request::idle : Request::abandoned;
     length = length_;
-    static_cast<void>(pthread_mutex_unlock(&lock_));
     return answered;
 }
 

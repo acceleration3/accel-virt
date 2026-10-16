@@ -63,7 +63,7 @@ src/km/         src/device/qemu, src/*/shim/      src/um/
 | `support/` | `Status`, `NtStatus`, `ObjectPool`/`ObjectStorage`, `GrowableArray`, `KeyedSlots` and `ClaimedRows` (storage for counts an application controls, see "Counts with no fixed bound"), `ScopeExit`, `Alignment`, `ByteRange`, `TextBuffer`, `RuntimeCall`, `SettingText` (how every knob's text is judged), `Fnv1aDigest`, `AV_UNTESTABLE` |
 | `trace/` | `AV_SCOPE`, trace tables, event rings, crash and state dumps; `ReportGate`, how a state dump takes its root's `ThreadLock` without ever waiting on it |
 | `log/` | `DriverLog`, `KeyedLog`, `LogLine`, `LogSink`, `LogQueue`: the logging the host, the guest drivers and the kernel's debug port share |
-| `platform/` | the `Platform` contract the miniport runs on (implemented by `src/km` and `MockPlatform`), locks and their guards, lock ranks, `LogBudget`, `InvariantScope`; also `BlockSource` and `LockMarks`, which every binary uses, and `ThreadLock` with `ThreadLockHold`, the one lock contract for a binary's threads (the guest drivers' is `SrwLock`), in core so the device and the executor take the same one |
+| `platform/` | the `Platform` contract the miniport runs on (implemented by `src/km` and `MockPlatform`), locks and their guards, lock ranks, `LogBudget`, `InvariantScope`; also `BlockSource` and `LockMarks`, which every binary uses, and `ThreadLock` with `ThreadLockHold`, the one lock contract for a binary's threads (the guest drivers' is `SrwLock`, the host binaries' `PosixLock`), in core so the device and the executor take the same one |
 
 ## src/miniport - avgpu.sys's logic
 
@@ -123,7 +123,7 @@ Portable and freestanding; `src/km` is its Windows kernel shim.
 | `recording/` | the wire recorder and the recording file format |
 | `replay/` | avrecord: reading, filtering, printing and replaying recordings |
 | `feasibility/` | the capset's feature mask as realize decides it, and the interrupt stress probe |
-| `shim/` | the POSIX edge of the host binaries: trace and state services, the renderer channel, module loading, the avrecord and av-renderer entry points |
+| `shim/` | the POSIX edge of the host binaries: trace and state services, the renderer channel, module loading, the avrecord and av-renderer entry points; `PosixLock`, the `ThreadLock` every lock of the device module, av-renderer and the executor library is, and `PosixCondition` over it |
 | `qemu/` | the C glue and build patch installed into QEMU's tree, translation only |
 
 ## src/executor - libav_executor.so
