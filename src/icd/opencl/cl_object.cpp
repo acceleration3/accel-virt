@@ -6,7 +6,7 @@ namespace av::clicd {
 
 ClObject::ClObject(const cl_icd_dispatch &table, BlockSource &memory, Kind kind, uint64_t wire,
                    GuestClContext *context, ClObject *parent)
-    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), sliced_from_(nullptr), references_(1u), children_(0u), kind_(kind), idle_(true), ordinal_(0u), fixed_(memory)
+    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), lent_(nullptr), sliced_from_(nullptr), references_(1u), children_(0u), kind_(kind), idle_(true), ordinal_(0u), fixed_(memory)
 {
     AV_SCOPE("ClObject::ClObject");
 }
@@ -46,6 +46,18 @@ void ClObject::use_application_memory(void *memory)
 {
     AV_SCOPE("ClObject::use_application_memory");
     application_memory_ = static_cast<uint8_t *>(memory);
+}
+
+void ClObject::lend(HostAllocation &lent)
+{
+    AV_SCOPE("ClObject::lend");
+    lent_ = &lent;
+}
+
+HostAllocation *ClObject::lent() const
+{
+    AV_SCOPE("ClObject::lent");
+    return lent_;
 }
 
 uint8_t *ClObject::application_memory() const

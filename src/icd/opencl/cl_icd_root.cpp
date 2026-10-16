@@ -12,6 +12,7 @@
 
 #include "icd/opencl/cl_info_request.hpp"
 
+#include "guest/transport/host_allocation.hpp"
 #include "proto/resources/cl_blob_backing.hpp"
 
 #include "icd/common/report_gate.hpp"
@@ -748,6 +749,10 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
                  * those bytes until it does. */
                 if (held->backed() && held->sliced_from() == nullptr)
                     context->blocks().give_back(held->backing_offset());
+                /* Lent pages likewise, which become the application's
+                 * own RAM again holding what the buffer last held. */
+                if (held->lent() != nullptr && held->sliced_from() == nullptr)
+                    context->give_back_lent(*held->lent());
                 break;
             default:
                 give_back_to_host(*wire, kind, wire_handle);
@@ -952,6 +957,10 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
         report_error(error, host_pointer == nullptr ? CL_INVALID_HOST_PTR : CL_INVALID_VALUE);
         return nullptr;
     }
+    if (uses_application && bytes >= lent_minimum) {
+        cl_mem const over = create_over_application(*held, *wire, flags, bytes, host_pointer, error);
+        if (over != nullptr) return over;
+    }
     if (uses_application)
         flags = (flags & ~static_cast<cl_mem_flags>(CL_MEM_USE_HOST_PTR)) |
                 static_cast<cl_mem_flags>(CL_MEM_COPY_HOST_PTR);
@@ -1016,6 +1025,42 @@ cl_mem ClIcdRoot::create_buffer(cl_context context, cl_mem_flags flags, size_t b
     }
     if (backed) static_cast<ClObject *>(made)->back_with(block, bytes);
     if (uses_application) static_cast<ClObject *>(made)->use_application_memory(host_pointer);
+    return static_cast<cl_mem>(made);
+}
+
+/* The whole pages under the application's bytes are lent; the buffer is at
+ * its bytes' offset in them. The host's buffer is made over the import with
+ * CL_MEM_USE_HOST_PTR, so the application's writes are the kernel's reads
+ * and a kernel's writes are in its memory, as the flag promises. */
+cl_mem ClIcdRoot::create_over_application(ClObject &context, ClientTransport &wire, cl_mem_flags flags,
+                                          size_t bytes, void *host_pointer, cl_int *error)
+{
+    AV_SCOPE("ClIcdRoot::create_over_application");
+    constexpr uintptr_t page = 4096u;
+    const uintptr_t     first = reinterpret_cast<uintptr_t>(host_pointer) & ~(page - 1u);
+    const uintptr_t     end = (reinterpret_cast<uintptr_t>(host_pointer) + bytes + page - 1u) & ~(page - 1u);
+    GuestClContext *const on = context.context();
+    HostAllocation       *lent = nullptr;
+    if (on->lend(reinterpret_cast<void *>(first), end - first, lent) != Status::ok) return nullptr;
+    ClBlobBacking backing;
+    backing.set_in(lent->handle(), reinterpret_cast<uintptr_t>(host_pointer) - first);
+    uint64_t named[ClBlobBacking::list_words] = {};
+    static_cast<void>(backing.write(named));
+    cl_int         host_error = CL_SUCCESS;
+    const uint64_t buffer = av::clproto::av_clCreateBufferWithProperties(
+        wire, context.wire(), named, flags & ~static_cast<cl_mem_flags>(CL_MEM_USE_HOST_PTR), bytes, nullptr,
+        &host_error);
+    if (buffer == 0u) {
+        on->give_back_lent(*lent);
+        return nullptr;
+    }
+    void *const made = wrap(wire, ClObject::Kind::mem, buffer, on, &context, error);
+    if (made == nullptr) {
+        on->give_back_lent(*lent);
+        return nullptr;
+    }
+    static_cast<ClObject *>(made)->use_application_memory(host_pointer);
+    static_cast<ClObject *>(made)->lend(*lent);
     return static_cast<cl_mem>(made);
 }
 
@@ -1350,19 +1395,37 @@ void *ClIcdRoot::map_buffer(cl_command_queue queue, cl_mem buffer, cl_bool block
      *
      * Bounds are re-checked here rather than trusted from the create: the
      * offset in the row is this ICD's, but the length is the application's. */
-    if (named->backed() && offset <= named->backing_bytes() &&
-        bytes <= named->backing_bytes() - offset) {
-        /* The row names the block this buffer was given, so the arena
-         * answers it: the two are written and forgotten together. A
-         * sub-buffer's memory is part of its buffer's block, which is the one
-         * the arena knows. */
-        const ClObject *const owner = named->sliced_from() != nullptr ? named->sliced_from() : named;
-        uint8_t *const        block = context->blocks().at(owner->backing_offset(), owner->backing_bytes());
-        if (block == nullptr) {
-            report_error(error, CL_INVALID_MEM_OBJECT);
+    /* The same holds of a buffer over pages the application lent: they are
+     * the host's memory where they are, and the map hands back the
+     * application's own pointer. */
+    if (named->lent() != nullptr) {
+        /* Bounds in numbers, not pointers: the offset and length are the
+         * application's. */
+        const uintptr_t own = reinterpret_cast<uintptr_t>(named->application_memory());
+        const uintptr_t lent_end =
+            reinterpret_cast<uintptr_t>(named->lent()->view()) + static_cast<uintptr_t>(named->lent()->bytes());
+        if (offset > lent_end - own || bytes > lent_end - own - offset) {
+            report_error(error, CL_INVALID_VALUE);
             return nullptr;
         }
-        uint8_t *const shared = block + (named->backing_offset() - owner->backing_offset());
+    }
+    const bool zero_copy = named->lent() != nullptr || (named->backed() && offset <= named->backing_bytes() &&
+                                                         bytes <= named->backing_bytes() - offset);
+    if (zero_copy) {
+        uint8_t *shared = named->application_memory();
+        if (named->lent() == nullptr) {
+            /* The row names the block this buffer was given, so the arena
+             * answers it: the two are written and forgotten together. A
+             * sub-buffer's memory is part of its buffer's block, which is the
+             * one the arena knows. */
+            const ClObject *const owner = named->sliced_from() != nullptr ? named->sliced_from() : named;
+            uint8_t *const        block = context->blocks().at(owner->backing_offset(), owner->backing_bytes());
+            if (block == nullptr) {
+                report_error(error, CL_INVALID_MEM_OBJECT);
+                return nullptr;
+            }
+            shared = block + (named->backing_offset() - owner->backing_offset());
+        }
         {
             uint64_t       settled = 0u;
             cl_int         settle_error = CL_SUCCESS;

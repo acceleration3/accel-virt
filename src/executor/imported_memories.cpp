@@ -46,6 +46,16 @@ const SourceMemory *ImportedMemories::find(uint64_t handle) const
     return nullptr;
 }
 
+uint8_t *ImportedMemories::at(uint64_t handle, uint64_t offset, uint64_t bytes) const
+{
+    AV_SCOPE("ImportedMemories::at");
+    const SourceMemory *const memory = find(handle);
+    if (memory == nullptr || memory->pointer() == nullptr || offset > memory->size() ||
+        bytes > memory->size() - offset)
+        return nullptr;
+    return memory->pointer() + offset;
+}
+
 void ImportedMemories::forget_all()
 {
     AV_SCOPE("ImportedMemories::forget_all");

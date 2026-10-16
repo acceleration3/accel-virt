@@ -83,6 +83,11 @@ struct ClIcdRootProbe;
 
 class ClIcdRoot final : public StateReporter, public ClEventOwner {
 public:
+    /* The least a CL_MEM_USE_HOST_PTR buffer lends the device of the
+     * application's memory: smaller ones copy, which costs less than a
+     * lending and its host blob, and keeps neighbouring small buffers, which
+     * share pages, from refusing each other. */
+    static constexpr size_t lent_minimum = 64u * 1024u;
     /* Room for the host's CL_DEVICE_EXTENSIONS while it is intersected with
      * the policy. It lives on the asking thread's stack, so it is bounded
      * here rather than allocated; the longest list any host driver answers is
@@ -174,6 +179,13 @@ public:
                                   const uint64_t *properties, cl_int *error);
     cl_mem           create_buffer(cl_context context, cl_mem_flags flags, size_t bytes,
                                    void *host_pointer, const uint64_t *properties, cl_int *error);
+    /* A CL_MEM_USE_HOST_PTR buffer made over the application's own pages,
+     * which the device takes as host memory where they are
+     * (docs/host-memory.md, "Application memory"): null, with nothing held,
+     * for one under lent_minimum bytes, or that the context, the device or
+     * the host would not take - the caller then copies instead. */
+    cl_mem           create_over_application(ClObject &context, ClientTransport &wire, cl_mem_flags flags,
+                                             size_t bytes, void *host_pointer, cl_int *error);
     cl_program       create_program(cl_context context, cl_uint count, const char **sources,
                                     const size_t *lengths, cl_int *error);
     cl_kernel        create_kernel(cl_program program, const char *name, cl_int *error);

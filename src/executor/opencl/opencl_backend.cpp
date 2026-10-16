@@ -383,17 +383,22 @@ bool OpenClBackend::lost() const
 bool OpenClBackend::adopt(ImportedBlob &blob)
 {
     AV_SCOPE("OpenClBackend::adopt");
-    /* One at a time: this is the context's arena, and a second would leave
-     * the first unreachable with its buffers pointing into memory nothing
-     * owns. Its buffers are made over the source's own mapping of it with
-     * CL_MEM_USE_HOST_PTR, which needs no extension on any platform. */
-    return arena_.adopt(blob);
+    /* The context's arena is its first import, and every one after is pages
+     * the application lent. Buffers over either are made over the source's
+     * own mapping with CL_MEM_USE_HOST_PTR, which needs no extension on any
+     * platform. */
+    if (arena_.memory() == nullptr) return arena_.adopt(blob);
+    return application_memory_.adopt(blob);
 }
 
 void OpenClBackend::abandon(ImportedBlob &blob)
 {
     AV_SCOPE("OpenClBackend::abandon");
-    arena_.abandon(blob);
+    if (&blob.memory() == arena_.memory()) {
+        arena_.abandon(blob);
+        return;
+    }
+    application_memory_.abandon(blob);
 }
 
 void *OpenClBackend::lent_for(uint64_t offset, uint64_t bytes) const
@@ -413,10 +418,12 @@ cl_mem OpenClBackend::on_clCreateBufferWithProperties(cl_context context,
         return ::clCreateBufferWithProperties(context, properties, flags, size, host_ptr,
                                               errcode_ret);
     }
-    /* The offset is the guest's, so the arena judges it before it is a
-     * pointer. A buffer made over memory that is not the arena's would let
-     * the guest choose what the host writes into. */
-    uint8_t *const at = arena_.at(backing.offset(), static_cast<uint64_t>(size));
+    /* The offset is the guest's, so the arena - or the import it names -
+     * judges it before it is a pointer. A buffer made over memory that is not
+     * the guest's would let the guest choose what the host writes into. */
+    uint8_t *const at = backing.memory() == 0u
+                            ? arena_.at(backing.offset(), static_cast<uint64_t>(size))
+                            : application_memory_.at(backing.memory(), backing.offset(), static_cast<uint64_t>(size));
     if (at == nullptr) {
         if (errcode_ret != nullptr) *errcode_ret = CL_INVALID_VALUE;
         return nullptr;

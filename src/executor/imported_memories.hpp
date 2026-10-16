@@ -31,6 +31,10 @@ public:
     void               abandon(ImportedBlob &blob);
     /* The memory named `handle`, or null. */
     const SourceMemory *find(uint64_t handle) const;
+    /* `bytes` at `offset` of the memory named `handle`, through the source's
+     * own mapping, or null: for a handle no import answers, and a range
+     * past its end or wrapping - every number in it came off the wire. */
+    uint8_t            *at(uint64_t handle, uint64_t offset, uint64_t bytes) const;
     void                forget_all();
     uint32_t            count() const;
 

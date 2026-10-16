@@ -254,6 +254,7 @@ cl_mem ClIcdRoot::create_sub_buffer(cl_mem buffer, cl_mem_flags flags, cl_buffer
     /* The host accepted the region, so it lies inside the buffer. */
     if (held->backed()) sub->back_with(held->backing_offset() + region.origin, region.size);
     if (held->application_memory() != nullptr) sub->use_application_memory(held->application_memory() + region.origin);
+    if (held->lent() != nullptr) sub->lend(*held->lent());
     return static_cast<cl_mem>(wrapped);
 }
 

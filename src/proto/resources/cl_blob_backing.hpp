@@ -15,9 +15,16 @@
  * application's - OpenCL 3.0 defines no buffer property, so one from the
  * application is still refused before anything is sent.
  *
+ * A buffer over the application's own memory (CL_MEM_USE_HOST_PTR) is
+ * another import: the pages the application lent the device, which became
+ * host memory where they are (docs/host-memory.md, "Application memory").
+ * A second property names that import's handle, and the offset is then into
+ * it rather than into the arena.
+ *
  * The offset is a number from the guest, so the device resolves it through
- * the adopted blob's GuestRegion and refuses what does not lie inside it.
- * Nothing here is trusted on either side; this only says where to look. */
+ * the arena's GuestRegion, or the import it names, and refuses what does not
+ * lie inside it. Nothing here is trusted on either side; this only says
+ * where to look. */
 #ifndef AV_PROTO_CL_BLOB_BACKING_HPP
 #define AV_PROTO_CL_BLOB_BACKING_HPP
 
@@ -33,32 +40,45 @@ public:
      * free to define others; this one is "AV" and an index, so a list that
      * reaches the wrong decoder names nothing it knows. */
     static constexpr uint64_t property = 0x4156000000000001ull;
+    /* The import the offset is into; absent, it is the arena. */
+    static constexpr uint64_t import_property = 0x4156000000000002ull;
+    /* The most words a list this writes takes: two pairs and the zero. */
+    static constexpr uint32_t list_words = 5u;
 
     ClBlobBacking();
 
-    /* Holds `offset`, so a list can be written for it. */
+    /* Holds `offset` into the arena, so a list can be written for it. */
     void set(uint64_t offset);
+    /* Holds `offset` into the import the host named `memory`. */
+    void set_in(uint64_t memory, uint64_t offset);
     /* Reads the backing out of a property list, leaving this holding nothing
      * when the list is null, empty or names something else. A list naming it
      * twice is not read: the device would have to choose between them. */
     bool read(const uint64_t *properties);
-    /* Writes `{property, offset, 0}` into `list`, which must have room for
-     * three. False unless one is held. */
+    /* Writes `{property, offset, 0}` into `list`, or `{property, offset,
+     * import_property, memory, 0}` for an import, which must have room for
+     * list_words. False unless one is held. */
     bool write(uint64_t *list) const;
 
     bool     held() const;
     uint64_t offset() const;
+    /* The import named, 0 for the arena. */
+    uint64_t memory() const;
 
     bool invariants_hold() const;
 
 private:
     friend struct ClBlobBackingProbe;
 
-    /* A property list is key/value pairs and a zero key; this one's is the
-     * only pair, so four words is every list this writes or reads. */
-    static constexpr uint32_t max_words = 4u;
+    /* A property list is key/value pairs and a zero key; these two are the
+     * only pairs, so six words is every list this writes or reads. */
+    static constexpr uint32_t max_words = 6u;
+
+    /* Clears everything and answers false: a list this cannot read. */
+    bool refuse();
 
     uint64_t offset_;
+    uint64_t memory_;
     bool     held_;
 };
 

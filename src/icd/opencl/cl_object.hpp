@@ -19,6 +19,10 @@
 
 #include <stdint.h>
 
+namespace av {
+class HostAllocation;
+}  // namespace av
+
 namespace av::clicd {
 
 class GuestClContext;
@@ -58,6 +62,12 @@ public:
      * host's buffer was filled from. Null for every other object. */
     void     use_application_memory(void *memory);
     uint8_t *application_memory() const;
+    /* For a buffer whose application memory the device took as its own
+     * (GuestClContext::lend): what was lent, which the buffer's release
+     * gives back, and which makes its maps cost no copy. Null otherwise; a
+     * sub-buffer names its buffer's. */
+    void            lend(HostAllocation &lent);
+    HostAllocation *lent() const;
 
     /* For a sub-buffer: the buffer it is a region of, on which the ICD holds
      * one of the application's references for as long as the sub-buffer
@@ -123,6 +133,7 @@ private:
     uint64_t               backing_offset_;
     uint64_t               backing_bytes_;
     uint8_t               *application_memory_;
+    HostAllocation        *lent_;
     ClObject              *sliced_from_;
     uint32_t               references_;
     uint32_t               children_;

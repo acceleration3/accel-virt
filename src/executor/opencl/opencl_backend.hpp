@@ -20,6 +20,7 @@
 #include "executor/opencl/copied_gl_sharing.hpp"
 #include "executor/opencl/direct_gl_sharing.hpp"
 #include "executor/guest_region.hpp"
+#include "executor/imported_memories.hpp"
 #include "executor/opencl/host_svm_ranges.hpp"
 #include "executor/opencl/kernel_pacer.hpp"
 #include "executor/opencl/staging_bytes.hpp"
@@ -390,8 +391,12 @@ private:
     ClHandleRegistry handles_;
     HostSvmRanges    svm_;
     HostSvmRanges    mapped_;
-    /* The one import a context has: its blob arena. */
+    /* A context's first import: its blob arena. */
     GuestRegion      arena_;
+    /* Every import after it: pages the application lent the device, which
+     * its CL_MEM_USE_HOST_PTR buffers are made over (docs/host-memory.md,
+     * "Application memory"). */
+    ImportedMemories application_memory_;
     ClEventSignals   events_;
     ClReadAhead      read_ahead_;
     /* Rectangles read into the arena where the host will not read into it. */

@@ -41,6 +41,7 @@ class LogSink;
 namespace av {
 class BlockSource;
 class ClientTransport;
+class HostAllocation;
 class StateWriter;
 }  // namespace av
 
@@ -127,6 +128,15 @@ public:
      * transport makes the context lost here, which is why every call goes
      * through this and not around it. */
     ClientTransport *wire();
+    /* The `bytes` (whole pages) of the application's memory at `address`
+     * lent to the device and imported on this context, for a buffer over the
+     * application's own memory (docs/host-memory.md, "Application memory"):
+     * invalid_state without a made context and an arena - the device takes
+     * the arena as a context's first import - otherwise the channel's
+     * answer. */
+    [[nodiscard]] Status lend(void *address, uint64_t bytes, HostAllocation *&made);
+    /* What lend made, given back once the host's buffer over it is gone. */
+    void                 give_back_lent(HostAllocation &lent);
     /* The blocks this context's buffers are carved out of its blob arena.
      * Empty of blocks, and not ready, where the capset offered no
      * host-visible memory - which is what makes a buffer staged instead. */
