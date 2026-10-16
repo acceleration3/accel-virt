@@ -88,8 +88,7 @@ HRESULT D3dSession::open(uint32_t adapter)
     static_cast<void>(stream_.construct(channel_.transport()));
     stream_.object().speak_with(select_command_, flush_command_);
     if (channel_.arena_view() != nullptr)
-        query_results_.reserve(channel_.transport().blobs(), channel_.arena_view(), channel_.arena_bytes(),
-                               channel_.arena_bytes());
+        query_results_.reserve(channel_.transport().blobs(), channel_.arena_view(), channel_.arena_bytes());
     if (host_has_slices()) open_slices();
     return S_OK;
 }

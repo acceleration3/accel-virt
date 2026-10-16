@@ -380,6 +380,32 @@ a CPU-visible Direct3D 12 heap, the slice store, an OpenCL buffer's lent
 pages - is named by its memory's address. Every backend finds the import a
 command names in its session's `ImportTable` (`ImportTable::named`).
 
+#### Error word and published slots
+
+The tail of a context's arena is what the host publishes for the guest to
+read without asking, and the guest never lends it (`PublishedSlotLayout`):
+
+- The **error word** is the arena's last eight bytes, aligned. An OpenGL
+  context's host counts the GL errors each batch raised into it
+  (`GlErrorWord`: byte *k* counts `GL_INVALID_ENUM + k` modulo 256, byte 7 is
+  the marker that the host publishes it) and stores it whole, behind a store
+  fence, before the device publishes the batch's head. The guest clears it when
+  it opens the arena; a word without the marker is a host that answers
+  `glGetError` only when asked.
+- **Slots** a context binds end before the error word: whole 128-byte slots,
+  aligned to their size, as close to the word as that lets them. Direct3D 11
+  binds 512 for its query results (`BindQueryResults(offset, slots)`); the
+  host refuses a bind whose slots are not whole, aligned and clear of the
+  word. A slot is a u64 sequence at 0, the payload's size as a u32 at 8, and
+  up to 112 bytes of payload at 16. The host writes the sequence 0, a store
+  fence, the payload and size, a store fence, then the sequence
+  (`PublishedSlots`); the guest takes a payload only when the slot holds the
+  sequence it expects both before and after its copy
+  (`PublishedSlotReader`), so a slot the host rewrites while the guest copies
+  it - another query wrapping onto it, the same one ended again - is never
+  read torn. A query's sequence is its end's count, from 1, in the order the
+  stream carries the ends; 0 is never a sequence.
+
 A body of any length but its command's is command framing, fault 5, as for a
 NOP with a body. Every other refusal is an answer, and the context runs on:
 

@@ -9,7 +9,6 @@
 #include "executor/opengl/gl_context_attributes.hpp"
 #include "proto/generated/opengl/gl_command_names.h"
 #include "proto/generated/opengl/gl_dispatch_server.h"
-#include "proto/submission/published_slot_layout.hpp"
 
 #include <stdio.h>
 #include <string.h>
@@ -78,7 +77,7 @@ OpenGlBackend::OpenGlBackend() : OpenGlBackend(heap_)
 /* heap_ is constructed before blocks are bound to it, whichever constructor
  * runs: it is declared first. */
 OpenGlBackend::OpenGlBackend(BlockSource &blocks)
-    : heap_(), context_(), gl_(), import_(), buffers_(), pack_(gl_, buffers_), fences_(blocks), guest_(), region_(guest_), errors_(),
+    : heap_(), context_(), gl_(), import_(), buffers_(), pack_(gl_, buffers_), fences_(blocks), guest_(), region_(guest_), published_(guest_), errors_(),
       resolved_(0u), ran_(0u),
       lost_(false), current_(false), sink_(stderr), lines_(sink_, "virtio-gpu-av: opengl: ")
 {
@@ -216,8 +215,9 @@ void OpenGlBackend::end_batch()
  * render thread's time in the driver. The host is the only side that sees an
  * error and reading one clears it, so the batch's errors are read here and
  * counted into the word the guest reads without asking (docs/protocol.md,
- * "Error word"). It is stored before the device publishes the batch's head,
- * so a guest that sees the batch done sees its errors. */
+ * "Error word and published slots"). It is stored before the device
+ * publishes the batch's head, so a guest that sees the batch done sees its
+ * errors. */
 void OpenGlBackend::publish_errors()
 {
     AV_SCOPE("OpenGlBackend::publish_errors");
@@ -231,8 +231,7 @@ void OpenGlBackend::publish_errors()
         errors_.record(error);
     }
     /* A region without the word has nobody reading it. */
-    const PublishedSlotLayout tail(guest_.length());
-    if (tail.holds_tail()) static_cast<void>(region_.publish(tail.error_word(), errors_.word()));
+    static_cast<void>(published_.publish_error_word(errors_.word()));
 }
 
 bool OpenGlBackend::lose_device()

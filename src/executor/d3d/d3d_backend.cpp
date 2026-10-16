@@ -117,7 +117,7 @@ D3dBackend::D3dBackend()
       lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(blocks_), guest_(),
       region_(guest_), imports_(nullptr), d3d12_(guest_, objects_, wake_, fence_wake_, blocks_),
       d3d9_(guest_, objects_, blocks_),
-      published_(blocks_), progress11_(fence_wake_), constants_(blocks_), slice_storage_(), slice_memory_(nullptr),
+      published_(blocks_, guest_), progress11_(fence_wake_), constants_(blocks_), slice_storage_(), slice_memory_(nullptr),
       slice_storage_refused_(false),
       missed_key_(0u), mark_refused_(false), show_refused_(false), lost_(false)
 {
@@ -1958,11 +1958,8 @@ bool D3dBackend::on_BindQueryResults(uint64_t offset, uint32_t slots)
 {
     AV_SCOPE("D3dBackend::on_BindQueryResults");
     constexpr uint32_t most_slots = 4096u;
-    if (slots == 0u || slots > most_slots) return false;
-    uint8_t *const results = guest_.at(offset, static_cast<uint64_t>(slots) * QueryResultPublisher::slot_bytes);
-    if (results == nullptr) return false;
-    published_.bind(results, slots);
-    return true;
+    if (slots > most_slots) return false;
+    return published_.bind(offset, slots);
 }
 
 bool D3dBackend::on_GetQueryData(uint32_t query, uint32_t flags, uint32_t &ready_out, uint8_t *data,

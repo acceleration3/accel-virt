@@ -12,6 +12,7 @@
 #include "device/abi/av_executor.h"
 #include "executor/guest_region.hpp"
 #include "proto/wire/guest_bytes.hpp"
+#include "executor/published_slots.hpp"
 #include "proto/submission/gl_error_word.hpp"
 #include "executor/session_backend.hpp"
 #include "executor/shim/host_heap.hpp"
@@ -132,6 +133,7 @@ private:
      * offsets in. */
     GuestBytes  guest_;
     GuestRegion region_;
+    PublishedSlots published_;
     GlErrorWord  errors_;
     uint32_t    resolved_;
     uint64_t    ran_;

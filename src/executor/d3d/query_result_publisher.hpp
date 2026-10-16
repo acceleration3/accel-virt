@@ -1,8 +1,9 @@
 /* Query results written where the guest reads them: the slots the guest named
- * with BindQueryResults, in its blob arena. Every query ended is counted in the
- * order the guest sent the ends, and a result DXVK has is written to the
- * query's slot with that count last, so the guest's GetData reads memory
- * instead of asking the host and waiting for the answer to come back. A
+ * with BindQueryResults, in its blob arena's published tail (PublishedSlots).
+ * Every query ended is counted in the order the guest sent the ends, and a
+ * result DXVK has is written to the query's slot with that count as its
+ * sequence, so the guest's GetData reads memory instead of asking the host
+ * and waiting for the answer to come back. A
  * pending query is referenced until its result is written or it is dropped;
  * any number may be pending, by the guest's id. */
 #ifndef AV_QUERY_RESULT_PUBLISHER_HPP
@@ -10,6 +11,7 @@
 
 #include "core/support/keyed_slots.hpp"
 #include "core/support/status.hpp"
+#include "executor/published_slots.hpp"
 
 #include <stdint.h>
 
@@ -19,18 +21,19 @@ struct ID3D11Query;
 namespace av {
 
 class BlockSource;
+class GuestBytes;
 
 class QueryResultPublisher {
 public:
-    static constexpr uint32_t slot_bytes = 128u;
-    static constexpr uint32_t data_at = 16u;
-    explicit QueryResultPublisher(BlockSource &blocks);
+    /* The slots are in `bytes`, the context's arena. */
+    QueryResultPublisher(BlockSource &blocks, GuestBytes &bytes);
     ~QueryResultPublisher();
     QueryResultPublisher(const QueryResultPublisher &) = delete;
     QueryResultPublisher &operator=(const QueryResultPublisher &) = delete;
 
-    /* `slots` slots at `results`, which stays the guest's memory until unbind. */
-    void bind(uint8_t *results, uint32_t slots);
+    /* `slots` slots at `offset` of the region, as the guest bound them. False,
+     * with none bound, for slots PublishedSlots refuses. */
+    [[nodiscard]] bool bind(uint64_t offset, uint32_t slots);
     void unbind();
     /* Every pending query's reference given back, the list emptied. */
     void release_all();
@@ -52,11 +55,8 @@ private:
         ID3D11Query *query_;
         uint64_t     end_;
     };
-    void write(uint32_t id, const uint8_t *data, uint32_t size, uint64_t end) const;
-
-    uint8_t *results_;
-    uint32_t slots_;
-    uint64_t ends_;
+    PublishedSlots slots_;
+    uint64_t       ends_;
     bool     unflushed_;
     KeyedSlots<uint32_t, Pending> pending_;
 };

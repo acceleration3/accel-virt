@@ -53,7 +53,8 @@ public:
      * (feature 052, T033). */
     uint8_t             *view() const;
     /* The host's error word, the chunk's last eight bytes, which the arena
-     * never lends (docs/protocol.md, "Error word"); 0 unless lending. */
+     * never lends (docs/protocol.md, "Error word and published slots"); 0
+     * unless lending. */
     uint64_t             host_errors() const;
 
     bool invariants_hold() const;

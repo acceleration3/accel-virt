@@ -38,20 +38,6 @@ bool GuestRegion::held() const
     return bytes_.length() != 0u;
 }
 
-bool GuestRegion::publish(uint64_t offset, uint64_t value)
-{
-    AV_SCOPE("GuestRegion::publish");
-    uint8_t *const word = bytes_.at(offset, sizeof(uint64_t));
-    if (word == nullptr || reinterpret_cast<uintptr_t>(word) % sizeof(uint64_t) != 0u) return false;
-    __atomic_store_n(reinterpret_cast<uint64_t *>(word), value, __ATOMIC_RELEASE);
-    /* The region is the memory source's mapping, which a driver may have made
-     * write-combined (docs/host-memory.md): x86 orders such a store with the
-     * device's own - the batch head the guest reads before the word - only
-     * at a store fence. */
-    __builtin_ia32_sfence();
-    return true;
-}
-
 bool GuestRegion::invariants_hold() const
 {
     AV_SCOPE("GuestRegion::invariants_hold");

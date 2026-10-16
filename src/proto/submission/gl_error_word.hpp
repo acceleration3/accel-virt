@@ -1,7 +1,8 @@
 /* The OpenGL errors one context's commands raised on the host, counted by
  * kind in the one word the host publishes at the end of the context's blob
- * arena (docs/protocol.md, "Error word"): byte k counts GL_INVALID_ENUM + k
- * for the seven kinds up to GL_INVALID_FRAMEBUFFER_OPERATION, modulo 256, and
+ * arena (docs/protocol.md, "Error word and published slots"): byte k counts
+ * GL_INVALID_ENUM + k for the seven kinds up to
+ * GL_INVALID_FRAMEBUFFER_OPERATION, modulo 256, and
  * byte 7 is the marker saying the host publishes the word at all. Only the
  * host writes it and nothing clears it: the guest reports a kind whenever its
  * count moved since it last looked. */

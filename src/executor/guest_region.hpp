@@ -36,11 +36,6 @@ public:
     /* Whether there is one: the backend's next import is not its region. */
     bool               held() const;
 
-    /* `value` stored at `offset` as one aligned eight-byte store, which the
-     * guest reads whole and never half: an error word, a fence value. False
-     * for a word outside the region or off its alignment. */
-    [[nodiscard]] bool publish(uint64_t offset, uint64_t value);
-
     bool invariants_hold() const;
 
 private:
