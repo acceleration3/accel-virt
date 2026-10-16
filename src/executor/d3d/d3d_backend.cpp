@@ -4,9 +4,7 @@
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
 
-#include <sched.h>
 #include <stdio.h>
-#include <time.h>
 #include <unistd.h>
 
 #include "core/log/log_line.hpp"
@@ -18,6 +16,7 @@
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/d3d/resource_misc.hpp"
 #include "executor/imported_blob.hpp"
+#include "executor/poll_budget.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
@@ -80,11 +79,11 @@ D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 }
 
 D3dBackend::D3dBackend()
-    : device11_(nullptr), surfaces_(nullptr), shares_(nullptr), wake_(), admitted_(false), held_(false), heap_(),
+    : device11_(nullptr), surfaces_(nullptr), shares_(nullptr), wake_(), fence_wake_(), clock_(), admitted_(false), held_(false), heap_(),
       blocks_(heap_), remade_(blocks_, Pool::paged), states_(blocks_), sink_(stderr),
       lines_(sink_, "virtio-gpu-av: d3d11: "), refusal_(lines_), arena_(nullptr), objects_(blocks_), region_(),
-      imported_(), d3d12_(region_, imported_, objects_, wake_, blocks_), d3d9_(region_, objects_, blocks_),
-      published_(blocks_), progress11_(), constants_(blocks_), slice_storage_(), slice_memory_(nullptr),
+      imported_(), d3d12_(region_, imported_, objects_, wake_, fence_wake_, blocks_), d3d9_(region_, objects_, blocks_),
+      published_(blocks_), progress11_(fence_wake_), constants_(blocks_), slice_storage_(), slice_memory_(nullptr),
       slice_storage_refused_(false),
       missed_key_(0u), mark_refused_(false), show_refused_(false), lost_(false)
 {
@@ -133,6 +132,7 @@ void D3dBackend::shut_down()
     if (admitted_) device11_->dismiss(wake_);
     admitted_ = false;
     wake_.clear();
+    fence_wake_.unbind();
     device11_ = nullptr;
     shares_ = nullptr;
     slice_storage_refused_ = false;
@@ -205,7 +205,7 @@ void D3dBackend::end_batch()
 bool D3dBackend::poll()
 {
     AV_SCOPE("D3dBackend::poll");
-    const bool fences_pending = d3d12_.poll() || progress11_.pending();
+    const bool fences_pending = d3d12_.poll() || progress11_.polled();
     if (device11_ == nullptr || held_ || !published_.pending()) return fences_pending;
     /* GetData reads no pipeline state, so no device's state is selected. */
     device11_->lock(nullptr);
@@ -220,7 +220,7 @@ void D3dBackend::bind_signal(void (*signal)(void *context), void *context)
 {
     AV_SCOPE("D3dBackend::bind_signal");
     wake_.bind(signal, context);
-    d3d12_.bind_signal(signal, context);
+    fence_wake_.bind(signal, context);
 }
 
 /* A session is one runtime's (avumd makes one per runtime a process uses), so
@@ -1814,16 +1814,16 @@ void D3dBackend::release_slice_storage()
 void D3dBackend::await_gpu_unlocked()
 {
     AV_SCOPE("D3dBackend::await_gpu_unlocked");
-    constexpr long     pause_nanoseconds = 20000;
-    constexpr uint32_t most_pauses = 100000u; /* 2 s, past which the Map waits */
+    constexpr uint64_t pause_nanoseconds = 20000u;
+    constexpr uint64_t deadline_nanoseconds = 2000000000u; /* past which the Map waits */
     if (progress11_.fence() == nullptr) progress11_.adopt(device11_->make_fence(progress11_.marked()));
     if (!device11_->signal(progress11_.fence(), progress11_.next())) return;
     progress11_.signalled();
     published_.flushed();
     device11_->unlock();
-    const timespec pause = {0, pause_nanoseconds};
-    for (uint32_t pauses = 0u; pauses < most_pauses && progress11_.pending() && !device11_->lost(); pauses++)
-        nanosleep(&pause, nullptr);
+    PollBudget polls(clock_, 0u, pause_nanoseconds, deadline_nanoseconds);
+    while (polls.next())
+        if (!progress11_.pending() || device11_->lost()) break;
     device11_->lock(states_.selected());
 }
 
@@ -1964,18 +1964,15 @@ bool D3dBackend::on_GetQueryData(uint32_t query, uint32_t flags, uint32_t &ready
      * it a round trip through the kernel and back: a flushing poll waits here
      * for a result that is a millisecond away, and still answers "not yet"
      * after that, as GetData must. */
-    constexpr int64_t patience_ns = 1000000;
-    const UINT        donotflush = flags & D3D11_ASYNC_GETDATA_DONOTFLUSH;
-    timespec          started = {};
-    clock_gettime(CLOCK_MONOTONIC, &started);
-    HRESULT result = device11_->context()->GetData(found, size == 0u ? nullptr : data, size, donotflush);
-    while (result == S_FALSE && donotflush == 0u) {
-        timespec now = {};
-        clock_gettime(CLOCK_MONOTONIC, &now);
-        const int64_t waited = (now.tv_sec - started.tv_sec) * 1000000000 + (now.tv_nsec - started.tv_nsec);
-        if (waited >= patience_ns) break;
-        sched_yield();
-        result = device11_->context()->GetData(found, size == 0u ? nullptr : data, size, D3D11_ASYNC_GETDATA_DONOTFLUSH);
+    constexpr uint64_t patience_ns = 1000000u;
+    const UINT         donotflush = flags & D3D11_ASYNC_GETDATA_DONOTFLUSH;
+    PollBudget         polls(clock_, 0u, 0u, patience_ns);
+    UINT               asked = donotflush;
+    HRESULT            result = S_FALSE;
+    while (polls.next()) {
+        result = device11_->context()->GetData(found, size == 0u ? nullptr : data, size, asked);
+        if (result != S_FALSE || donotflush != 0u) break;
+        asked = D3D11_ASYNC_GETDATA_DONOTFLUSH;
     }
     if (result == S_OK) {
         ready_out = 1u;

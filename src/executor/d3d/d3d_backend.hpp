@@ -28,6 +28,8 @@
 #include "executor/d3d/constant_ring.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
 #include "executor/session_backend.hpp"
+#include "executor/eventfd_wake.hpp"
+#include "executor/monotonic_clock.hpp"
 #include "executor/wake_signal.hpp"
 #include "device/host/stdio_log.hpp"
 #include "proto/generated/d3d/d3d_dispatch_server.h"
@@ -259,6 +261,11 @@ private:
      * (DeviceTenants): bound with the session's signal, and named by its
      * Direct3D 12 half too, before which it is made. */
     WakeSignal              wake_;
+    /* What wakes this session's worker when the GPU reaches a mark its
+     * Direct3D 11 batches or Direct3D 12 queues left. */
+    EventfdWake             fence_wake_;
+    /* What a wait on the GPU measures its deadline on. */
+    MonotonicClock          clock_;
     /* Whether it joined its Direct3D 11 device's tenants. */
     bool                    admitted_;
     /* The device lock, taken at a batch's first command and held to its end. */

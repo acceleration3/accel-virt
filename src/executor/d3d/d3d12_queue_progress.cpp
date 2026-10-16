@@ -3,14 +3,14 @@
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 
-#include "executor/d3d/d3d12_fence_wake.hpp"
+#include "executor/eventfd_wake.hpp"
 #include "executor/shim/d3d_headers.hpp"
 
 #include <stdio.h>
 
 namespace av {
 
-D3d12QueueProgress::D3d12QueueProgress(D3d12FenceWake &wake, BlockSource &blocks)
+D3d12QueueProgress::D3d12QueueProgress(EventfdWake &wake, BlockSource &blocks)
     : wake_(wake), queues_(blocks, Pool::paged), marked_(0u)
 {
     AV_SCOPE("D3d12QueueProgress::D3d12QueueProgress");
@@ -43,7 +43,7 @@ bool D3d12QueueProgress::executed(uint32_t id, ID3D12CommandQueue *queue, ID3D12
     kept.queue_ = queue;
     if (FAILED(queue->Signal(kept.fence_, marked_ + 1u))) return false;
     kept.signalled_ = ++marked_;
-    return wake_.watch(kept.fence_, marked_);
+    return wake_.watch(*kept.fence_, marked_);
 }
 
 bool D3d12QueueProgress::after_siblings(uint32_t id, ID3D12CommandQueue *queue) const

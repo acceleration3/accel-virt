@@ -4,19 +4,17 @@
 #include "executor/poll_budget.hpp"
 #include "executor/d3d/staged_frame.hpp"
 
-#include <time.h>
-
 namespace av {
 
 namespace {
 
 /* How often a present waiting for its frame looks again. */
-constexpr uint32_t poll_nanoseconds = 100000u;
-constexpr uint32_t polls_per_ms = 10u;
+constexpr uint64_t poll_nanoseconds = 100000u;
+constexpr uint64_t nanoseconds_per_ms = 1000000u;
 
 }  // namespace
 
-SharedSurfaces::SharedSurfaces(BlockSource &blocks) : mutex_(), surfaces_(blocks, Pool::paged), slots_{}, clock_(0u)
+SharedSurfaces::SharedSurfaces(BlockSource &blocks) : mutex_(), surfaces_(blocks, Pool::paged), slots_{}, clock_(0u), time_()
 {
     AV_SCOPE("SharedSurfaces::SharedSurfaces");
     pthread_mutex_init(&mutex_, nullptr);
@@ -86,7 +84,7 @@ bool SharedSurfaces::map(const SurfacePoint &frame, uint32_t wait_ms, AvFrameVie
 {
     AV_SCOPE("SharedSurfaces::map");
     if (!frame.names()) return false;
-    PollBudget polls(poll_nanoseconds, wait_ms * polls_per_ms + 1u);
+    PollBudget polls(time_, 0u, poll_nanoseconds, wait_ms * nanoseconds_per_ms);
     while (polls.next()) {
         const Look found = look(frame, view);
         if (found != Look::wait) return found == Look::mapped;

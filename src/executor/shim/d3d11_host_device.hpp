@@ -33,6 +33,7 @@
 #include "device/host/stdio_log.hpp"
 #include "core/support/object_pool.hpp"
 #include "executor/device_tenants.hpp"
+#include "executor/monotonic_clock.hpp"
 #include "executor/shim/carried_share.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "executor/shim/d3d11_capabilities.hpp"
@@ -300,6 +301,8 @@ private:
     /* QEMU's stderr, where a surface the host would not share is seen. */
     StdioLog                sink_;
     DriverLog               lines_;
+    /* What a wait on the GPU measures its deadline on. */
+    MonotonicClock          clock_;
     /* The shared resources a renewal carries from the lost device to the
      * next, held only while it runs. */
     HostHeap                carry_heap_;

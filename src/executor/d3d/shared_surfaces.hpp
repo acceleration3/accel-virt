@@ -31,6 +31,7 @@
 
 #include "core/support/keyed_slots.hpp"
 #include "device/abi/av_executor.h"
+#include "executor/monotonic_clock.hpp"
 #include "proto/resources/surface_point.hpp"
 
 #include <pthread.h>
@@ -125,6 +126,8 @@ private:
     KeyedSlots<uint64_t, Surface> surfaces_;
     Slot                    slots_[max_frames];
     uint64_t                clock_;
+    /* What a map's wait for its frame measures its deadline on. */
+    MonotonicClock          time_;
 };
 
 }  // namespace av

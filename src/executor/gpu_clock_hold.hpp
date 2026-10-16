@@ -19,6 +19,8 @@
 #ifndef AV_GPU_CLOCK_HOLD_HPP
 #define AV_GPU_CLOCK_HOLD_HPP
 
+#include "executor/monotonic_clock.hpp"
+
 #include <pthread.h>
 #include <stdint.h>
 
@@ -69,8 +71,8 @@ private:
     bool     slow() const;
     void     take();
     void     let_go();
-    uint64_t now() const;
 
+    MonotonicClock  clock_;
     int             fd_;
     uint32_t        context_;
     pthread_t       thread_;

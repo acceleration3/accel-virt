@@ -14,7 +14,9 @@
  * mark, flushed, and the ring's worker completes the batch only once the fence
  * passes that mark - as UTM's driver completes a virtio-gpu submit only when
  * the host's fence for it retires. The signal itself is the host device's to
- * make (D3d11HostDevice::signal); this counts. */
+ * make (D3d11HostDevice::signal); this counts, and has the session's
+ * EventfdWake watch each mark, so the worker sleeps until the GPU reaches it
+ * rather than polling. */
 #ifndef AV_D3D11_BATCH_PROGRESS_HPP
 #define AV_D3D11_BATCH_PROGRESS_HPP
 
@@ -24,9 +26,11 @@ struct ID3D11Fence;
 
 namespace av {
 
+class EventfdWake;
+
 class D3d11BatchProgress {
 public:
-    D3d11BatchProgress();
+    explicit D3d11BatchProgress(EventfdWake &wake);
     ~D3d11BatchProgress();
     D3d11BatchProgress(const D3d11BatchProgress &) = delete;
     D3d11BatchProgress &operator=(const D3d11BatchProgress &) = delete;
@@ -38,7 +42,8 @@ public:
     ID3D11Fence *fence() const;
     /* The mark the next signal sets. */
     uint64_t     next() const;
-    /* The fence was signalled with next(): that batch is marked. */
+    /* The fence was signalled with next(): that batch is marked, and the
+     * wake watches for the GPU to reach it. */
     void         signalled();
     /* The fence goes, with nothing waiting on it; marks keep rising. */
     void         release();
@@ -50,15 +55,21 @@ public:
     uint64_t reached() const;
     /* Whether the GPU has a marked batch still to finish. */
     bool     pending() const;
+    /* Whether the worker must poll for it: a marked batch still to finish
+     * that no wake watches for, the runtime having refused the watch. */
+    bool     polled() const;
 
     bool invariants_hold() const;
 
 private:
+    EventfdWake &wake_;
     ID3D11Fence *fence_;
     uint64_t     marked_;
     /* What reached() answers without a fence: every mark made before the
      * fence went was waited out, or went with the session. */
     uint64_t     released_at_;
+    /* Whether the wake watches for the latest mark. */
+    bool         watched_;
 };
 
 }  // namespace av

@@ -6,7 +6,6 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <sys/ioctl.h>
-#include <time.h>
 #include <unistd.h>
 
 namespace av {
@@ -23,7 +22,7 @@ void *run_clock_hold(void *hold)
 }  // namespace
 
 GpuClockHold::GpuClockHold()
-    : fd_(-1), context_(0u), thread_{}, lock_(PTHREAD_MUTEX_INITIALIZER), wake_(PTHREAD_COND_INITIALIZER),
+    : clock_(), fd_(-1), context_(0u), thread_{}, lock_(PTHREAD_MUTEX_INITIALIZER), wake_(PTHREAD_COND_INITIALIZER),
       last_busy_(0u), held_since_(0u), hold_for_(0u), peak_mhz_(0u), slow_(0u), held_(false), wanted_(false), stopping_(false), open_(false)
 {
     AV_SCOPE("GpuClockHold::GpuClockHold");
@@ -87,7 +86,7 @@ void GpuClockHold::busy()
 {
     AV_SCOPE("GpuClockHold::busy");
     if (!__atomic_load_n(&open_, __ATOMIC_ACQUIRE)) return;
-    __atomic_store_n(&last_busy_, now(), __ATOMIC_SEQ_CST);
+    __atomic_store_n(&last_busy_, clock_.now_nanoseconds(), __ATOMIC_SEQ_CST);
     if (__atomic_load_n(&wanted_, __ATOMIC_RELAXED) || __atomic_exchange_n(&wanted_, true, __ATOMIC_SEQ_CST)) return;
     pthread_mutex_lock(&lock_);
     pthread_cond_signal(&wake_);
@@ -99,25 +98,21 @@ void GpuClockHold::watch()
     AV_SCOPE("GpuClockHold::watch");
     pthread_mutex_lock(&lock_);
     while (!stopping_) {
-        if (now() - __atomic_load_n(&last_busy_, __ATOMIC_RELAXED) >= release_after_ns) {
+        if (clock_.now_nanoseconds() - __atomic_load_n(&last_busy_, __ATOMIC_RELAXED) >= release_after_ns) {
             if (held_) let_go();
             slow_ = 0u;
             __atomic_store_n(&wanted_, false, __ATOMIC_SEQ_CST);
             /* A batch after the store above either sees wanted_ clear and
              * signals, or was counted before the idle test: no wake is lost. */
-            if (now() - __atomic_load_n(&last_busy_, __ATOMIC_SEQ_CST) >= release_after_ns)
+            if (clock_.now_nanoseconds() - __atomic_load_n(&last_busy_, __ATOMIC_SEQ_CST) >= release_after_ns)
                 pthread_cond_wait(&wake_, &lock_);
             continue;
         }
-        timespec until = {};
-        clock_gettime(CLOCK_MONOTONIC, &until);
-        until.tv_nsec += static_cast<long>(look_every_ns);
-        until.tv_sec += until.tv_nsec / 1000000000L;
-        until.tv_nsec %= 1000000000L;
+        const timespec until = clock_.ahead(look_every_ns);
         pthread_cond_timedwait(&wake_, &lock_, &until);
         if (stopping_) break;
         if (held_) {
-            if (now() - held_since_ >= hold_for_) let_go();
+            if (clock_.now_nanoseconds() - held_since_ >= hold_for_) let_go();
             continue;
         }
         slow_ = slow() ? slow_ + 1u : 0u;
@@ -145,7 +140,7 @@ void GpuClockHold::take()
     __atomic_store_n(&held_, true, __ATOMIC_RELEASE);
     /* A hold that follows a look soon after the last one let go is one the
      * driver's own clock did not beat: it may stay longer. */
-    const uint64_t taken = now();
+    const uint64_t taken = clock_.now_nanoseconds();
     hold_for_ = taken - held_since_ < probe_every_ns + first_probe_ns ? probe_every_ns : first_probe_ns;
     held_since_ = taken;
 }
@@ -198,12 +193,5 @@ bool GpuClockHold::request(uint32_t pstate)
     return ioctl(fd_, DRM_IOCTL_AMDGPU_CTX, &asked) == 0;
 }
 
-uint64_t GpuClockHold::now() const
-{
-    AV_SCOPE("GpuClockHold::now");
-    timespec clock = {};
-    clock_gettime(CLOCK_MONOTONIC, &clock);
-    return static_cast<uint64_t>(clock.tv_sec) * 1000000000u + static_cast<uint64_t>(clock.tv_nsec);
-}
 
 }  // namespace av

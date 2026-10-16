@@ -20,13 +20,13 @@
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/d3d12_address_map.hpp"
 #include "executor/d3d/d3d12_fence_publisher.hpp"
-#include "executor/d3d/d3d12_fence_wake.hpp"
 #include "executor/d3d/d3d12_pipeline_builder.hpp"
 #include "executor/d3d/d3d12_queue_progress.hpp"
 #include "executor/d3d/d3d12_tile_update.hpp"
 #include "executor/d3d/d3d12_view_writer.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
 #include "device/host/stdio_log.hpp"
+#include "executor/monotonic_clock.hpp"
 #include "executor/shim/d3d12_presentation.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_server.h"
 
@@ -47,6 +47,7 @@ class SessionShares;
 class SharedSurfaces;
 class WatchedBlocks;
 class D3d12HostDevice;
+class EventfdWake;
 class WakeSignal;
 class GuestRegion;
 class ImportedMemories;
@@ -60,10 +61,11 @@ public:
     /* `imported` is the memory the session imported besides its region: a
      * CPU-visible heap is one of them (docs/host-memory.md). */
     /* `tenant` is what wakes the session's worker should the GPU's Direct3D
-     * 12 device, which it joins as it opens it, be lost (DeviceTenants). */
+     * 12 device, which it joins as it opens it, be lost (DeviceTenants);
+     * `fence_wake` what wakes it when the GPU reaches a mark a queue left. */
     /* `blocks` is what the session's tables grow in. */
     D3d12Session(GuestRegion &region, ImportedMemories &imported, D3dObjectTable &objects, WakeSignal &tenant,
-                 WatchedBlocks &blocks);
+                 EventfdWake &fence_wake, WatchedBlocks &blocks);
 
     /* Binds the session to its GPU's device, which must outlive it; null is a
      * GPU with none, on which every command is refused. Swap chain buffers are
@@ -83,8 +85,6 @@ public:
     /* The mark the latest execute left, and the highest mark everything up to
      * which the GPU has finished (D3d12QueueProgress). */
     void               gpu_progress(uint64_t &marked, uint64_t &reached) const;
-    /* What the host GPU reaching a mark raises, so a held batch completes. */
-    void               bind_signal(void (*signal)(void *context), void *context);
     /* The reason the guest is told its device was removed; 0 while it is not. */
     uint32_t           removed_reason() const;
     /* Whether the device this session opened is lost; false for a session
@@ -213,7 +213,6 @@ private:
     WatchedBlocks         &blocks_;
     D3d12AddressMap        addresses_;
     D3d12FencePublisher    fences_;
-    D3d12FenceWake         wake_;
     D3d12QueueProgress     progress_;
     D3d12ViewWriter        views_;
     D3d12PipelineBuilder   pipelines_;
@@ -227,6 +226,8 @@ private:
     StdioLog               sink_;
     DriverLog              lines_;
     CommandRefusal         refusal_;
+    /* What a drain's wait for the GPU measures its deadline on. */
+    MonotonicClock         clock_;
 };
 
 }  // namespace av

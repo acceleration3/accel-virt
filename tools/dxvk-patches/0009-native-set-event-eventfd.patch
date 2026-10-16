@@ -1,0 +1,41 @@
+From: accel-virt
+Subject: [PATCH] util: a native SetEvent writes the eventfd it is handed
+
+A native build had no SetEvent: the stub logged and answered FALSE, so
+ID3D11Fence::SetEventOnCompletion and Flush1's event never told anyone the
+GPU got there. accel-virt's executor runs every guest Direct3D 11 session of
+a GPU on one DXVK device and holds each batch's ring fence until the GPU has
+run it; without an event its worker could only spin on the fence's value.
+vkd3d-proton already takes an eventfd where Windows takes an event HANDLE,
+and DXVK now does too: setting the event writes 1 to the descriptor, which
+is what an eventfd counts and what poll() wakes on.
+---
+diff --git a/src/util/util_win32_compat.h b/src/util/util_win32_compat.h
+index b706dca6..ea430a6e 100644
+--- a/src/util/util_win32_compat.h
++++ b/src/util/util_win32_compat.h
+@@ -4,6 +4,8 @@
+ 
+ #include <windows.h>
+ #include <dlfcn.h>
++#include <stdint.h>
++#include <unistd.h>
+ 
+ #include "log/log.h"
+ 
+@@ -40,9 +42,13 @@ inline BOOL ReleaseSemaphore(
+   return FALSE;
+ }
+ 
++// A native build has no event objects: the embedder hands an eventfd where
++// Windows takes an event HANDLE, as vkd3d-proton takes one, and setting the
++// event writes it.
+ inline BOOL SetEvent(HANDLE hEvent) {
+-  dxvk::Logger::warn("SetEvent not implemented.");
+-  return FALSE;
++  const uint64_t one = 1;
++  const int fd = static_cast<int>(reinterpret_cast<intptr_t>(hEvent));
++  return write(fd, &one, sizeof(one)) == static_cast<ssize_t>(sizeof(one));
+ }
+ 
+ inline BOOL DuplicateHandle(

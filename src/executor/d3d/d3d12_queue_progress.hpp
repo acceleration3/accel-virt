@@ -25,12 +25,12 @@ namespace av {
 class BlockSource;
 class DriverLog;
 
-class D3d12FenceWake;
+class EventfdWake;
 struct D3d12QueueProgressProbe;
 
 class D3d12QueueProgress {
 public:
-    D3d12QueueProgress(D3d12FenceWake &wake, BlockSource &blocks);
+    D3d12QueueProgress(EventfdWake &wake, BlockSource &blocks);
     D3d12QueueProgress(const D3d12QueueProgress &) = delete;
     D3d12QueueProgress &operator=(const D3d12QueueProgress &) = delete;
 
@@ -80,7 +80,7 @@ private:
     /* The index of `id`'s queue; size() for none. */
     uint32_t index_of(uint32_t id) const;
 
-    D3d12FenceWake      &wake_;
+    EventfdWake         &wake_;
     GrowableArray<Queue> queues_;
     uint64_t             marked_;
 

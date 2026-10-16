@@ -8,7 +8,7 @@
 namespace av {
 
 DeviceTenants::DeviceTenants(BlockSource &blocks)
-    : mutex_(), left_(), tenants_(blocks, Pool::paged), lost_(false)
+    : mutex_(), left_(), tenants_(blocks, Pool::paged), lost_(false), clock_()
 {
     AV_SCOPE("DeviceTenants::DeviceTenants");
     pthread_mutex_init(&mutex_, nullptr);
@@ -81,15 +81,8 @@ uint32_t DeviceTenants::count() const
 bool DeviceTenants::vacate(uint32_t wait_ms)
 {
     AV_SCOPE("DeviceTenants::vacate");
-    constexpr long nanoseconds_per_second = 1000000000;
-    timespec       deadline = {};
-    clock_gettime(CLOCK_MONOTONIC, &deadline);
-    deadline.tv_sec += static_cast<time_t>(wait_ms / 1000u);
-    deadline.tv_nsec += static_cast<long>(wait_ms % 1000u) * 1000000;
-    if (deadline.tv_nsec >= nanoseconds_per_second) {
-        deadline.tv_sec++;
-        deadline.tv_nsec -= nanoseconds_per_second;
-    }
+    constexpr uint64_t nanoseconds_per_ms = 1000000u;
+    const timespec     deadline = clock_.ahead(static_cast<uint64_t>(wait_ms) * nanoseconds_per_ms);
     pthread_mutex_lock(&mutex_);
     int waited = 0;
     while (tenants_.size() != 0u && waited == 0) waited = pthread_cond_timedwait(&left_, &mutex_, &deadline);

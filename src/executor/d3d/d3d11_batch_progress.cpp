@@ -2,11 +2,13 @@
 
 #include "core/trace/function_scope.hpp"
 
+#include "executor/eventfd_wake.hpp"
 #include "executor/shim/d3d_headers.hpp"
 
 namespace av {
 
-D3d11BatchProgress::D3d11BatchProgress() : fence_(nullptr), marked_(0u), released_at_(0u)
+D3d11BatchProgress::D3d11BatchProgress(EventfdWake &wake)
+    : wake_(wake), fence_(nullptr), marked_(0u), released_at_(0u), watched_(false)
 {
     AV_SCOPE("D3d11BatchProgress::D3d11BatchProgress");
 }
@@ -43,7 +45,9 @@ uint64_t D3d11BatchProgress::next() const
 void D3d11BatchProgress::signalled()
 {
     AV_SCOPE("D3d11BatchProgress::signalled");
-    if (fence_ != nullptr) marked_++;
+    if (fence_ == nullptr) return;
+    marked_++;
+    watched_ = wake_.watch(*fence_, marked_);
 }
 
 void D3d11BatchProgress::release()
@@ -53,6 +57,7 @@ void D3d11BatchProgress::release()
     fence_->Release();
     fence_ = nullptr;
     released_at_ = marked_;
+    watched_ = false;
 }
 
 uint64_t D3d11BatchProgress::marked() const
@@ -77,10 +82,16 @@ bool D3d11BatchProgress::pending() const
     return reached() < marked_;
 }
 
+bool D3d11BatchProgress::polled() const
+{
+    AV_SCOPE("D3d11BatchProgress::polled");
+    return !watched_ && pending();
+}
+
 bool D3d11BatchProgress::invariants_hold() const
 {
     AV_SCOPE("D3d11BatchProgress::invariants_hold");
-    return released_at_ <= marked_ && (fence_ != nullptr || released_at_ == marked_);
+    return released_at_ <= marked_ && (fence_ != nullptr || (released_at_ == marked_ && !watched_));
 }
 
 }  // namespace av

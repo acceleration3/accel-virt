@@ -81,6 +81,21 @@ struct Pad {
 
 void raise_pad(void *context) { static_cast<Pad *>(context)->raised++; }
 
+/* The wakes a drawing session's batches raised as the GPU reached them,
+ * once they have all come: what a wake for anything else is counted past. */
+std::uint32_t settled(Pad &pad)
+{
+    std::uint32_t seen = pad.raised.load();
+    for (std::uint32_t quiet = 0u; quiet < 20u;) {
+        const timespec pause = {0, 1000000};
+        nanosleep(&pause, nullptr);
+        const std::uint32_t now = pad.raised.load();
+        quiet = now == seen ? quiet + 1u : 0u;
+        seen = now;
+    }
+    return seen;
+}
+
 /* The render target (1) and its view (2) of a device (id `device`) of the
  * session, cleared to `colour`. */
 void make_cleared_target(av::D3dLoopback &wire, std::uint32_t device, const Float4 &colour)
@@ -179,6 +194,8 @@ TEST(d3d_device_loss_device, a_lost_device_wakes_every_session_answers_at_once_a
     CHECK_EQ(texel, 0xff0000ffu);
     CHECK(!drawing.lost());
     CHECK(!idle.lost());
+    const std::uint32_t drawn = settled(drawing_pad);
+    CHECK(drawn >= 1u);   /* the batches the GPU finished woke their worker */
 
     if (!drawing.lose_device()) {
         std::fprintf(stderr, "the device-loss layer is not loaded: nothing judged\n");
@@ -187,7 +204,7 @@ TEST(d3d_device_loss_device, a_lost_device_wakes_every_session_answers_at_once_a
         return;
     }
     /* Both woken once, the one that sent nothing as much as the one that did. */
-    CHECK_EQ(drawing_pad.raised.load(), 1u);
+    CHECK_EQ(drawing_pad.raised.load(), drawn + 1u);
     CHECK_EQ(idle_pad.raised.load(), 1u);
     CHECK(drawing.lost());
     CHECK(idle.lost());

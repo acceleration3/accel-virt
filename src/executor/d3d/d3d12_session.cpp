@@ -11,6 +11,7 @@
 #include "executor/d3d/d3d12_indirect_signature.hpp"
 #include "executor/d3d/d3d12_root_layout.hpp"
 #include "executor/guest_region.hpp"
+#include "executor/poll_budget.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/surface_identity.hpp"
@@ -23,7 +24,6 @@
 #include "proto/wire/wire_arena.hpp"
 
 #include <stdio.h>
-#include <time.h>
 
 #include <unistd.h>
 
@@ -112,11 +112,11 @@ const D3D12_CLEAR_VALUE *host_clear(const d3d12proto::ClearValue &clear, D3D12_C
 }  // namespace
 
 D3d12Session::D3d12Session(GuestRegion &region, ImportedMemories &imported, D3dObjectTable &objects,
-                           WakeSignal &tenant, WatchedBlocks &blocks)
+                           WakeSignal &tenant, EventfdWake &fence_wake, WatchedBlocks &blocks)
     : region_(region), imported_(imported), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
       joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks), fences_(region),
-      wake_(), progress_(wake_, blocks), views_(objects_, addresses_),
-      pipelines_(objects_), presentation_(), tile_update_(), arena_(nullptr), removed_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "), refusal_(lines_)
+      progress_(fence_wake, blocks), views_(objects_, addresses_),
+      pipelines_(objects_), presentation_(), tile_update_(), arena_(nullptr), removed_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d12: "), refusal_(lines_), clock_()
 {
     AV_SCOPE("D3d12Session::D3d12Session");
 }
@@ -143,7 +143,6 @@ void D3d12Session::shut_down()
     presentation_.bind(nullptr, nullptr, nullptr);
     fences_.clear();
     progress_.clear();
-    wake_.unbind();
     addresses_.clear();
     objects_.remove_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12);
     views_.bind(nullptr);
@@ -190,12 +189,6 @@ void D3d12Session::gpu_progress(uint64_t &marked, uint64_t &reached) const
     AV_SCOPE("D3d12Session::gpu_progress");
     marked = progress_.marked();
     reached = progress_.reached();
-}
-
-void D3d12Session::bind_signal(void (*signal)(void *context), void *context)
-{
-    AV_SCOPE("D3d12Session::bind_signal");
-    wake_.bind(signal, context);
 }
 
 uint32_t D3d12Session::removed_reason() const
@@ -306,31 +299,16 @@ void D3d12Session::drain()
      * while, then naps. A GPU that never finishes is a hung device, not a
      * worker parked for good - every other D3D stream waits on this one. */
     constexpr uint64_t spin_ns = 2000000u;
+    constexpr uint64_t nap_ns = 50000u;
     constexpr uint64_t hung_ns = 5000000000u;
-    constexpr long     nap_ns = 50000;
-    timespec           began;
-    clock_gettime(CLOCK_MONOTONIC, &began);
-    for (;;) {
+    PollBudget         polls(clock_, spin_ns, nap_ns, hung_ns);
+    while (polls.next())
         if (progress_.reached() >= progress_.marked()) return;
-        timespec now;
-        clock_gettime(CLOCK_MONOTONIC, &now);
-        const uint64_t spent = static_cast<uint64_t>(now.tv_sec - began.tv_sec) * 1000000000u +
-                               static_cast<uint64_t>(now.tv_nsec) - static_cast<uint64_t>(began.tv_nsec);
-        if (spent >= hung_ns) {
-            if (removed_ == 0u) {
-                lines_.write("the GPU did not finish in 5 s; the device is removed");
-                progress_.log_stuck(lines_);
-            }
-            removed_ = static_cast<uint32_t>(DXGI_ERROR_DEVICE_HUNG);
-            return;
-        }
-        if (spent < spin_ns) {
-            __builtin_ia32_pause();
-            continue;
-        }
-        const timespec nap = {0, nap_ns};
-        nanosleep(&nap, nullptr);
+    if (removed_ == 0u) {
+        lines_.write("the GPU did not finish in 5 s; the device is removed");
+        progress_.log_stuck(lines_);
     }
+    removed_ = static_cast<uint32_t>(DXGI_ERROR_DEVICE_HUNG);
 }
 
 // ---------------------------------------------------------------- device

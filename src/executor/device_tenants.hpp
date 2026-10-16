@@ -18,6 +18,7 @@
 
 #include "core/support/growable_array.hpp"
 #include "core/support/status.hpp"
+#include "executor/monotonic_clock.hpp"
 
 #include <pthread.h>
 #include <stdint.h>
@@ -58,6 +59,8 @@ private:
     pthread_cond_t          left_;
     GrowableArray<WakeSignal *> tenants_;
     bool                        lost_;
+    /* What vacate's wait measures its deadline on; `left_` waits on it. */
+    MonotonicClock              clock_;
 
     friend struct DeviceTenantsProbe;
 };

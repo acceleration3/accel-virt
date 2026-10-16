@@ -23,7 +23,7 @@ namespace av {
 
 
 D3d11HostDevice::D3d11HostDevice()
-    : runtime_(nullptr), uuid_(), tenant_heap_(), tenants_(tenant_heap_), device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), carry_heap_(), carried_(carry_heap_)
+    : runtime_(nullptr), uuid_(), tenant_heap_(), tenants_(tenant_heap_), device_(nullptr), device12_(nullptr), compositor_(nullptr), context_(nullptr), active_(nullptr), feature_level_(0u), capabilities_(), shares_(nullptr), vulkan_(), slices_(nullptr), exports_(vulkan_), composer_(), images_(vulkan_), frames_(*this), staging_(nullptr), mutex_(), waiting_(0u), taken_(0u), sink_(stderr), lines_(sink_, "virtio-gpu-av: d3d11: "), clock_(), carry_heap_(), carried_(carry_heap_)
 {
     AV_SCOPE("D3d11HostDevice::D3d11HostDevice");
     pthread_mutex_init(&mutex_, nullptr);
@@ -157,9 +157,9 @@ bool D3d11HostDevice::export_image(uint32_t domain, uint64_t id, AvExportedImage
 bool D3d11HostDevice::exported(uint32_t slot)
 {
     AV_SCOPE("D3d11HostDevice::exported");
-    constexpr uint32_t poll_nanoseconds = 50000u;
-    constexpr uint32_t most_polls = 5000u;   /* 250 ms */
-    PollBudget         polls(poll_nanoseconds, most_polls);
+    constexpr uint64_t poll_nanoseconds = 50000u;
+    constexpr uint64_t deadline_nanoseconds = 250000000u;
+    PollBudget         polls(clock_, 0u, poll_nanoseconds, deadline_nanoseconds);
     while (polls.next()) {
         lock(nullptr);
         const bool live = usable();
@@ -286,10 +286,10 @@ bool D3d11HostDevice::drain(const D3D11_TEXTURE2D_DESC &wanted, uint8_t *pixels,
     AV_SCOPE("D3d11HostDevice::drain");
     /* Five seconds still drawing is a hung GPU, as Direct3D 12's drain
      * judges one: the scanout's reader gives up rather than hang. */
-    constexpr uint32_t       poll_nanoseconds = 200000u;
-    constexpr uint32_t       most_polls = 25000u;
+    constexpr uint64_t       poll_nanoseconds = 200000u;
+    constexpr uint64_t       hung_nanoseconds = 5000000000u;
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    PollBudget               polls(poll_nanoseconds, most_polls);
+    PollBudget               polls(clock_, 0u, poll_nanoseconds, hung_nanoseconds);
     bool                     mapped_now = false;
     while (polls.next()) {
         lock(nullptr);

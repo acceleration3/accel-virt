@@ -1,6 +1,6 @@
 /* The signal that wakes a context's worker, raised from a host thread: an
- * OpenCL event's callback on the host driver's thread, a Direct3D 12 fence's
- * eventfd on its own (ClEventSignals, D3d12FenceWake). Bound by the worker
+ * OpenCL event's callback on the host driver's thread, a Direct3D fence's
+ * eventfd on its own (ClEventSignals, EventfdWake). Bound by the worker
  * when its session begins, cleared when it ends, so a host thread still
  * running for an old session raises nothing rather than another context's
  * pad - the session after it in the same slot binds its own. Read and written
