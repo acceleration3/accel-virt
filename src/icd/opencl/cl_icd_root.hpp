@@ -658,7 +658,7 @@ private:
     cl_int           c_features(ClDevice &device, size_t value_bytes, void *value, size_t *size_ret);
     /* CL_PLATFORM_EXTENSIONS_WITH_VERSION: the platform-wide rows. */
     cl_int           platform_extension_versions(size_t value_bytes, void *value, size_t *size_ret) const;
-    /* CL_DEVICE_GLOBAL_FREE_MEMORY_AMD, from D3DKMTQueryVideoMemoryInfo. */
+    /* CL_DEVICE_GLOBAL_FREE_MEMORY_AMD, what AdapterMemory leaves of the local budget. */
     cl_int           free_memory(ClDevice &device, size_t value_bytes, void *value, size_t *size_ret);
     /* CL_SUCCESS for a list this ICD can honour: terminated inside the bound,
      * no property named twice, and every name one of `allowed`. */

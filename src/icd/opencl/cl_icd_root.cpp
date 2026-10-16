@@ -11,6 +11,7 @@
 #include "guest/kmt/memory_segment_group.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "icd/common/adapter_facts.hpp"
+#include "icd/common/adapter_memory.hpp"
 
 #include "icd/opencl/cl_info_request.hpp"
 
@@ -380,14 +381,11 @@ cl_int ClIcdRoot::device_info(cl_device_id device, cl_device_info name, size_t v
 cl_int ClIcdRoot::free_memory(ClDevice &device, size_t value_bytes, void *value, size_t *size_ret)
 {
     AV_SCOPE("ClIcdRoot::free_memory");
-    uint64_t budget = 0u;
-    uint64_t usage = 0u;
-    if (kmt_.query_video_memory(device.connection().adapter(), MemorySegmentGroup::local, budget, usage) !=
-        Status::ok)
-        return CL_OUT_OF_RESOURCES;
+    icd::AdapterMemory memory(kmt_, device.connection().adapter());
+    if (memory.read() != Status::ok) return CL_OUT_OF_RESOURCES;
     /* Nothing says how the free memory is broken up, so the largest block is
      * all of it, as AMD's own driver answers on an idle GPU. */
-    const size_t free_kib = static_cast<size_t>((budget > usage ? budget - usage : 0u) / kib);
+    const size_t free_kib = static_cast<size_t>(memory.available(MemorySegmentGroup::local) / kib);
     const size_t answer[2] = {free_kib, free_kib};
     /* Room for less than both is the total alone, as AMD's driver answers
      * (and a size asked with no room is one value's): Affinity asks with one

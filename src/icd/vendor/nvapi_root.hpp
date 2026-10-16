@@ -67,8 +67,9 @@ public:
     int bus_slot_id(const void *gpu, uint32_t *slot);
     int gpu_type(const void *gpu, int *type);
     /* Version 1, 2 or 3 of the memory record, as its version field says, in
-     * KiB. Nothing is evicted and nothing is held back, so the available
-     * figures are the whole and the eviction figures zero. */
+     * KiB. Nothing is held back, so the available figure is the whole; the
+     * current one is what the adapter's local budget leaves this process now,
+     * as every API reads it (icd::AdapterMemory), and nothing is evicted. */
     int memory_info(const void *gpu, NvDisplayDriverMemoryInfoRecord *memory);
     /* NvAPI_GPU_GetAdapterIdFromPhysicalGpu: the adapter's LUID, eight bytes. */
     int adapter_id(const void *gpu, void *luid);

@@ -37,6 +37,10 @@ public:
      * the `index`th in AvgpuAdapters' order - null past them. */
     uint32_t             count_of(uint32_t vendor) const;
     const VendorAdapter *nth_of(uint32_t vendor, uint32_t index) const;
+    /* What `adapter`'s local budget leaves this process now
+     * (icd::AdapterMemory), the adapter opened again by its LUID: the
+     * kernel's refusal to find or read it is the answer. */
+    [[nodiscard]] Status local_memory_left(const VendorAdapter &adapter, uint64_t &bytes);
 
 private:
     /* The facts of `avgpu`'s `index`th adapter in `out`; false where one

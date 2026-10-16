@@ -58,6 +58,7 @@ nothing more:
 | name | `KMTQAITYPE_ADAPTERREGISTRYINFO` (`AdapterString`) |
 | driver version | `KMTQAITYPE_KMD_DRIVER_VERSION`, the version the INF states |
 | memory | `KMTQAITYPE_GETSEGMENTSIZE` |
+| memory available now | `D3DKMTQueryVideoMemoryInfo`'s local budget less its usage (`icd::AdapterMemory`, as Vulkan's `VK_EXT_memory_budget` and OpenCL's free memory read it) |
 | integrated or discrete | avgpu's UMDRIVERPRIVATE features, `UmdAdapterInfo::feature_integrated_gpu` |
 | primary display | the adapter the primary display's device context opens (`D3DKMTOpenAdapterFromHdc`) |
 

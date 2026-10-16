@@ -1,30 +1,19 @@
 #include "icd/vulkan/memory_type_table.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "guest/kmt/kmt.hpp"
-#include "guest/kmt/memory_segment_group.hpp"
 
 namespace av::icd {
 
-namespace {
-
-constexpr uint32_t local_group = static_cast<uint32_t>(MemorySegmentGroup::local);
-constexpr uint32_t non_local_group = static_cast<uint32_t>(MemorySegmentGroup::non_local);
-
-}  // namespace
-
-MemoryTypeTable::MemoryTypeTable(Kmt &kmt, uint32_t adapter)
-    : kmt_(kmt), adapter_(adapter), properties_(), shared_budget_(0u), usages_()
-    {
-        AV_SCOPE("MemoryTypeTable::MemoryTypeTable");
-    }
+MemoryTypeTable::MemoryTypeTable(Kmt &kmt, uint32_t adapter) : memory_(kmt, adapter), properties_(), shared_budget_(0u)
+{
+    AV_SCOPE("MemoryTypeTable::MemoryTypeTable");
+}
 
 void MemoryTypeTable::clear()
 {
     AV_SCOPE("MemoryTypeTable::clear");
     properties_ = VkPhysicalDeviceMemoryProperties();
     shared_budget_ = 0u;
-    for (uint32_t group = 0u; group < groups; group++) usages_[group] = 0u;
 }
 
 bool MemoryTypeTable::acceptable(const VkPhysicalDeviceMemoryProperties &host) const
@@ -37,24 +26,19 @@ bool MemoryTypeTable::acceptable(const VkPhysicalDeviceMemoryProperties &host) c
     return true;
 }
 
-uint32_t MemoryTypeTable::group_of(const VkMemoryHeap &heap) const
+MemorySegmentGroup MemoryTypeTable::group_of(const VkMemoryHeap &heap) const
 {
     AV_SCOPE("MemoryTypeTable::group_of");
-    return (heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0u ? local_group : non_local_group;
+    return (heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0u ? MemorySegmentGroup::local
+                                                                : MemorySegmentGroup::non_local;
 }
 
 Status MemoryTypeTable::build(const VkPhysicalDeviceMemoryProperties &host)
 {
     AV_SCOPE("MemoryTypeTable::build");
     clear();
-    uint64_t     budgets[groups] = {};
-    uint64_t     usages[groups] = {};
-    const Status local = kmt_.query_video_memory(adapter_, MemorySegmentGroup::local, budgets[local_group],
-                                                 usages[local_group]);
-    if (local != Status::ok) return local;
-    const Status shared = kmt_.query_video_memory(adapter_, MemorySegmentGroup::non_local, budgets[non_local_group],
-                                                  usages[non_local_group]);
-    if (shared != Status::ok) return shared;
+    const Status read = memory_.read();
+    if (read != Status::ok) return read;
     if (!acceptable(host)) return Status::malformed;
 
     properties_.memoryTypeCount = host.memoryTypeCount;
@@ -62,17 +46,17 @@ Status MemoryTypeTable::build(const VkPhysicalDeviceMemoryProperties &host)
     /* An adapter with a local segment is given no non-local budget by VidMm,
      * and a heap of none is one VMA will not place a mapped buffer in: the
      * host's own size stands in for it. */
-    uint64_t system_heap = budgets[non_local_group];
+    uint64_t system_heap = memory_.budget(MemorySegmentGroup::non_local);
     for (uint32_t heap = 0u; heap < host.memoryHeapCount && system_heap == 0u; heap++)
-        if (group_of(host.memoryHeaps[heap]) == non_local_group) system_heap = host.memoryHeaps[heap].size;
+        if (group_of(host.memoryHeaps[heap]) == MemorySegmentGroup::non_local)
+            system_heap = host.memoryHeaps[heap].size;
     properties_.memoryHeapCount = host.memoryHeapCount;
     for (uint32_t heap = 0u; heap < host.memoryHeapCount; heap++) {
         properties_.memoryHeaps[heap].flags = host.memoryHeaps[heap].flags;
-        const bool device_local = group_of(host.memoryHeaps[heap]) == local_group;
+        const bool device_local = group_of(host.memoryHeaps[heap]) == MemorySegmentGroup::local;
         properties_.memoryHeaps[heap].size = device_local ? host.memoryHeaps[heap].size : system_heap;
     }
     shared_budget_ = system_heap;
-    for (uint32_t group = 0u; group < groups; group++) usages_[group] = usages[group];
     return Status::ok;
 }
 
@@ -86,10 +70,9 @@ void MemoryTypeTable::budget(VkPhysicalDeviceMemoryBudgetPropertiesEXT &answer) 
 {
     AV_SCOPE("MemoryTypeTable::budget");
     for (uint32_t heap = 0u; heap < VK_MAX_MEMORY_HEAPS; heap++) {
-        const bool     listed = heap < properties_.memoryHeapCount;
-        const uint32_t group = group_of(properties_.memoryHeaps[heap]);
+        const bool listed = heap < properties_.memoryHeapCount;
         answer.heapBudget[heap] = listed ? properties_.memoryHeaps[heap].size : 0u;
-        answer.heapUsage[heap] = listed ? usages_[group] : 0u;
+        answer.heapUsage[heap] = listed ? memory_.usage(group_of(properties_.memoryHeaps[heap])) : 0u;
     }
 }
 
@@ -114,13 +97,14 @@ uint32_t MemoryTypeTable::lendable_types() const
 bool MemoryTypeTable::invariants_hold() const
 {
     AV_SCOPE("MemoryTypeTable::invariants_hold");
+    if (!memory_.invariants_hold()) return false;
     if (properties_.memoryTypeCount > VK_MAX_MEMORY_TYPES || properties_.memoryHeapCount > VK_MAX_MEMORY_HEAPS)
         return false;
     if (properties_.memoryHeapCount == 0u) return properties_.memoryTypeCount == 0u;
     for (uint32_t type = 0u; type < properties_.memoryTypeCount; type++)
         if (properties_.memoryTypes[type].heapIndex >= properties_.memoryHeapCount) return false;
     for (uint32_t heap = 0u; heap < properties_.memoryHeapCount; heap++)
-        if (group_of(properties_.memoryHeaps[heap]) == non_local_group &&
+        if (group_of(properties_.memoryHeaps[heap]) == MemorySegmentGroup::non_local &&
             properties_.memoryHeaps[heap].size != shared_budget_)
             return false;
     return true;

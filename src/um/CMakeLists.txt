@@ -275,6 +275,7 @@ file(GLOB AV_VENDOR_SOURCES CONFIGURE_DEPENDS
 list(APPEND AV_VENDOR_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/thread_lock_hold.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/adapter_facts.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/adapter_memory.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/adapter_string.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/escape/umd_adapter_info.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/wire/wire_reader.cpp

@@ -1,7 +1,9 @@
 #include "icd/vendor/vendor_adapters.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "guest/kmt/adapter_search.hpp"
 #include "guest/kmt/avgpu_adapters.hpp"
+#include "icd/common/adapter_memory.hpp"
 
 namespace av::vendor {
 
@@ -53,6 +55,20 @@ const VendorAdapter *VendorAdapters::nth_of(uint32_t vendor, uint32_t index) con
         if (seen++ == index) return &adapters_[at];
     }
     return nullptr;
+}
+
+Status VendorAdapters::local_memory_left(const VendorAdapter &adapter, uint64_t &bytes)
+{
+    AV_SCOPE("VendorAdapters::local_memory_left");
+    bytes = 0u;
+    AdapterSearch search(kmt_);
+    const Status  found = search.find_avgpu(adapter.facts().luid());
+    if (found != Status::ok) return found;
+    icd::AdapterMemory memory(kmt_, search.adapter());
+    const Status       read = memory.read();
+    if (read != Status::ok) return read;
+    bytes = memory.available(MemorySegmentGroup::local);
+    return Status::ok;
 }
 
 }  // namespace av::vendor

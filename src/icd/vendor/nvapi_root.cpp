@@ -130,13 +130,15 @@ int NvapiRoot::memory_info(const void *gpu, NvDisplayDriverMemoryInfoRecord *mem
     const ThreadLockHold       held(lock_);
     const VendorAdapter *const asked = adapter(gpu);
     if (asked == nullptr) return opened_ == 0u ? not_initialized : expected_physical_gpu_handle;
+    uint64_t left = 0u;
+    if (version != memory_info_v1 && adapters_.local_memory_left(*asked, left) != Status::ok) return error;
     const auto dedicated = static_cast<uint32_t>(asked->facts().dedicated_video_bytes() / kib);
     memory->dedicatedVideoMemory = dedicated;
     memory->availableDedicatedVideoMemory = dedicated;
     memory->systemVideoMemory = static_cast<uint32_t>(asked->facts().dedicated_system_bytes() / kib);
     memory->sharedSystemMemory = static_cast<uint32_t>(asked->facts().shared_system_bytes() / kib);
     if (version == memory_info_v1) return ok;
-    memory->curAvailableDedicatedVideoMemory = dedicated;
+    memory->curAvailableDedicatedVideoMemory = static_cast<uint32_t>(left / kib);
     if (version == memory_info_v2) return ok;
     memory->dedicatedVideoMemoryEvictionsSize = 0u;
     memory->dedicatedVideoMemoryEvictionCount = 0u;

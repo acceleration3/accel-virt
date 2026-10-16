@@ -9,8 +9,7 @@
  * which is what the type's HOST_CACHED promises (docs/host-memory.md). A device-local heap is the host's own size:
  * what lives there is host GPU memory the guest never maps, which the
  * adapter's local segment only names to VidMm. Any other heap is the
- * adapter's non-local budget, as D3DKMTQueryVideoMemoryInfo answers it for
- * this process.
+ * adapter's non-local budget, as AdapterMemory reads it for this process.
  *
  * The host's answer is its word, so a count past the arrays, a device with
  * types and no heap, or a type on a heap past the heaps is refused and the
@@ -19,6 +18,8 @@
 #define AV_ICD_MEMORY_TYPE_TABLE_HPP
 
 #include "core/support/status.hpp"
+#include "guest/kmt/memory_segment_group.hpp"
+#include "icd/common/adapter_memory.hpp"
 
 #include <stdint.h>
 
@@ -59,17 +60,13 @@ public:
     bool invariants_hold() const;
 
 private:
-    static constexpr uint32_t groups = 2u;
-
     [[nodiscard]] bool acceptable(const VkPhysicalDeviceMemoryProperties &host) const;
-    uint32_t           group_of(const VkMemoryHeap &heap) const;
+    MemorySegmentGroup group_of(const VkMemoryHeap &heap) const;
     void               clear();
 
-    Kmt                             &kmt_;
-    uint32_t                         adapter_;
+    AdapterMemory                    memory_;
     VkPhysicalDeviceMemoryProperties properties_;
     uint64_t                         shared_budget_;
-    uint64_t                         usages_[groups];
 
     friend struct MemoryTypeTableProbe;
 };
