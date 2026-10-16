@@ -9,7 +9,7 @@ namespace av {
 
 GuestProgram::GuestProgram(uint32_t stress_seconds, Run run, ObjectStorage<ProcessTrace> &trace,
                            ProcessTrace::Filter crashed)
-    : kmt_(), report_(), suite_(kmt_, report_, stress_seconds), run_(run), trace_(trace), crashed_(crashed)
+    : kmt_(), heap_(), report_(heap_), suite_(kmt_, report_, stress_seconds), run_(run), trace_(trace), crashed_(crashed)
 {
     AV_SCOPE("GuestProgram::GuestProgram");
 }

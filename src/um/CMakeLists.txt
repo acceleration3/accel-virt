@@ -34,7 +34,9 @@ list(APPEND AVTEST_SOURCES
   ${AVTEST_GENERATED_DIR}/vulkan/vk_host_image_default.cpp
   ${AVTEST_GENERATED_DIR}/vulkan/vk_descriptor_template_default.cpp
   ${AVTEST_GENERATED_DIR}/opencl/cl_dispatch_client.cpp
-  ${AVTEST_GENERATED_DIR}/d3d/d3d_dispatch_client.cpp)
+  ${AVTEST_GENERATED_DIR}/d3d/d3d_dispatch_client.cpp
+  # Where every program's report grows into (GuestReport).
+  ${CMAKE_CURRENT_SOURCE_DIR}/common/process_heap.cpp)
 
 # The tree is built once per guest architecture (AV_GUEST_ARCH, from the
 # toolchain): x64, and x86 for the drivers a 32-bit process loads.

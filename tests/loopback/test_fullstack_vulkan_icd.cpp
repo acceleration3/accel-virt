@@ -117,7 +117,8 @@ TEST(fullstack_vulkan_icd, the_probe_passes_every_step_through_the_icd)
   if (library.ops() == nullptr) return;
   FullStackRig rig(*library.ops(), gpu.uuid());
   CHECK_EQ(rig.started(), 0);
-  GuestReport report("avvkprobe");
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory, "avvkprobe");
   { IcdProcess process(rig.kmt());
     LoaderVulkan vulkan(&av::bound_icd_instance_proc_addr);
     av::DirectoryImageSink images(AV_IMAGE_DIR);

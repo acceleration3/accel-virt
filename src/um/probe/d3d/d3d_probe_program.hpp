@@ -17,6 +17,7 @@
 
 #include "guest/probe/host_loss_request.hpp"
 #include "guest/suite/guest_report.hpp"
+#include "um/common/process_heap.hpp"
 #include "um/kmt/gdi_kmt.hpp"
 #include "um/probe/gdi_window_frame.hpp"
 #include "um/probe/d3d/windows_d3d11_deferred_entry.hpp"
@@ -44,6 +45,7 @@ public:
 
 private:
     GdiKmt             kmt_;
+    ProcessHeap        heap_;
     GuestReport        report_;
     WindowsImageSink   images_;
     ProbeWindow        window_;
@@ -62,6 +64,7 @@ public:
 
 private:
     GdiKmt            kmt_;
+    ProcessHeap       heap_;
     GuestReport       report_;
     WindowsImageSink  images_;
     ProbeWindow               window_;
@@ -85,6 +88,7 @@ public:
 
 private:
     GdiKmt            kmt_;
+    ProcessHeap       heap_;
     GuestReport       report_;
     WindowsImageSink  images_;
     WindowsD3d12Entry d3d12_;

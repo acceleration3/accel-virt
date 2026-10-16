@@ -4,6 +4,7 @@
 #define AV_GUEST_PROGRAM_HPP
 
 #include "guest/suite/guest_report.hpp"
+#include "um/common/process_heap.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/trace/state_reporter.hpp"
 #include "guest/suite/guest_suite.hpp"
@@ -39,6 +40,7 @@ private:
     void write_report() const;
 
     GdiKmt      kmt_;
+    ProcessHeap heap_;
     GuestReport report_;
     GuestSuite  suite_;
     Run         run_;

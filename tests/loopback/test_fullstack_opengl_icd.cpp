@@ -446,7 +446,8 @@ TEST(fullstack_opengl_icd, the_gl_probe_passes_every_step_on_the_host_gpu)
   { GlProcess process(rig.kmt());
     CHECK(process.opengl32().load(GlIcdRoot::icd_version, 1u) == FakeOpengl32::Load::loaded);
     av::Opengl32GlEntry gl(process.opengl32(), process.threads(), process.dc(), window_side, window_side);
-    av::GuestReport     report("avglprobe");
+    av::MockPlatform report_memory;
+    av::GuestReport     report(report_memory, "avglprobe");
     av::DirectoryImageSink images(AV_IMAGE_DIR);
     av::GlProbe         probe(rig.kmt(), report, gl, images);
     probe.run();

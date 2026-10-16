@@ -16,6 +16,7 @@
 #include "guest/probe/shaders/solid_spv.hpp"
 #include "guest/probe/shaders/triangle_spv.hpp"
 #include "guest/probe/vulkan_probe.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/guest/scripted_image_sink.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
@@ -50,7 +51,7 @@ void *const module_handle = reinterpret_cast<void *>(0x7771u);
 
 class ProbeRig {
 public:
-    ProbeRig() : report_("avvkprobe")
+    ProbeRig() : report_(report_memory_, "avvkprobe")
     {
         kmt_.add_adapter(av, AdapterScenario::wddm_3_2);
         kmt_.set_adapter_luid(0u, adapter_luid);
@@ -109,6 +110,7 @@ private:
     ScriptedVulkan          vulkan_;
     av::ScriptedImageSink   images_;
     av::ScriptedWindowFrame frames_;
+    av::MockPlatform report_memory_;
     GuestReport             report_;
     std::uint32_t           adapter_ = 0u;
     std::uint32_t           device_ = 0u;
@@ -216,7 +218,8 @@ TEST(vulkan_probe, a_device_listed_past_the_room_is_not_seen)
 TEST(vulkan_probe, no_adapter_ends_the_run)
 { MockKmt kmt;
   ScriptedVulkan vulkan;
-  GuestReport report("avvkprobe");
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory, "avvkprobe");
   av::ScriptedImageSink images;
   av::ScriptedWindowFrame frames;
   { VulkanProbe probe(kmt, report, vulkan, images, frames, nullptr, nullptr);

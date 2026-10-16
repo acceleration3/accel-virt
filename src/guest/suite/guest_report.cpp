@@ -1,5 +1,6 @@
 #include "guest/suite/guest_report.hpp"
 
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 
@@ -11,17 +12,30 @@ constexpr uint32_t code_digits = 8u;
 
 }  // namespace
 
-GuestReport::GuestReport() : GuestReport("avtest")
+GuestReport::GuestReport(BlockSource &memory) : GuestReport(memory, "avtest")
 {
     AV_SCOPE("GuestReport::GuestReport");
 }
 
-GuestReport::GuestReport(const char *program)
-    : program_(program), text_{}, buffer_(text_, capacity), passed_(0u), failed_(0u), last_scenario_(""),
-      last_step_(""), finished_(false)
-    {
-        AV_SCOPE("GuestReport::GuestReport");
-    }
+GuestReport::GuestReport(BlockSource &memory, const char *program)
+    : program_(program), text_(memory, Pool::paged), passed_(0u), failed_(0u), last_scenario_(""), last_step_(""),
+      finished_(false)
+{
+    AV_SCOPE("GuestReport::GuestReport");
+}
+
+/* Room for the whole line and the terminator first, so a line is kept whole
+ * or not at all. */
+void GuestReport::keep(const TextBuffer &written)
+{
+    AV_SCOPE("GuestReport::keep");
+    const auto kept = static_cast<uint32_t>(length());
+    const auto bytes = static_cast<uint32_t>(written.length());
+    if (text_.reserve(kept + bytes + 1u) != Status::ok) return;
+    text_.truncate(kept);
+    for (uint32_t index = 0u; index < bytes; index++) static_cast<void>(text_.append(written.text()[index]));
+    static_cast<void>(text_.append('\0'));
+}
 
 void GuestReport::check(const char *scenario, const char *step, Status status, uint32_t code)
 {
@@ -41,17 +55,20 @@ void GuestReport::measure(const char *scenario, const char *step, Status status,
     const bool passed = status == Status::ok;
     last_scenario_ = scenario;
     last_step_ = step;
-    buffer_.append(passed ? "ok " : "FAIL ");
-    buffer_.append(scenario);
-    buffer_.append(".");
-    buffer_.append(step);
+    char       bytes[line_bytes];
+    TextBuffer written(bytes, sizeof bytes);
+    written.append(passed ? "ok " : "FAIL ");
+    written.append(scenario);
+    written.append(".");
+    written.append(step);
     if (!passed) {
-        buffer_.append(" status=");
-        buffer_.append_decimal(static_cast<uint64_t>(status));
+        written.append(" status=");
+        written.append_decimal(static_cast<uint64_t>(status));
     }
-    buffer_.append(" ");
-    buffer_.append_decimal(measurement);
-    buffer_.append("\n");
+    written.append(" ");
+    written.append_decimal(measurement);
+    written.append("\n");
+    keep(written);
     if (passed) passed_++;
     else failed_++;
 }
@@ -61,17 +78,20 @@ void GuestReport::line(const char *scenario, const char *step, bool passed, Stat
     AV_SCOPE("GuestReport::line");
     last_scenario_ = scenario;
     last_step_ = step;
-    buffer_.append(passed ? "ok " : "FAIL ");
-    buffer_.append(scenario);
-    buffer_.append(".");
-    buffer_.append(step);
+    char       bytes[line_bytes];
+    TextBuffer written(bytes, sizeof bytes);
+    written.append(passed ? "ok " : "FAIL ");
+    written.append(scenario);
+    written.append(".");
+    written.append(step);
     if (!passed) {
-        buffer_.append(" status=");
-        buffer_.append_decimal(static_cast<uint64_t>(status));
-        buffer_.append(" code=0x");
-        buffer_.append_hex(code, code_digits);
+        written.append(" status=");
+        written.append_decimal(static_cast<uint64_t>(status));
+        written.append(" code=0x");
+        written.append_hex(code, code_digits);
     }
-    buffer_.append("\n");
+    written.append("\n");
+    keep(written);
     if (passed) passed_++;
     else failed_++;
 }
@@ -79,11 +99,13 @@ void GuestReport::line(const char *scenario, const char *step, bool passed, Stat
 void GuestReport::note(const char *scenario, const char *key, const char *text)
 {
     AV_SCOPE("GuestReport::note");
-    buffer_.append("note ");
-    buffer_.append(scenario);
-    buffer_.append(".");
-    buffer_.append(key);
-    buffer_.append(" ");
+    char       bytes[line_bytes];
+    TextBuffer written(bytes, sizeof bytes);
+    written.append("note ");
+    written.append(scenario);
+    written.append(".");
+    written.append(key);
+    written.append(" ");
     if (text == nullptr) text = "(none)";
     char   kept[note_bytes + 1u];
     size_t length = 0u;
@@ -92,31 +114,35 @@ void GuestReport::note(const char *scenario, const char *key, const char *text)
         length++;
     }
     kept[length] = '\0';
-    buffer_.append(kept);
-    buffer_.append("\n");
+    written.append(kept);
+    written.append("\n");
+    keep(written);
 }
 
 void GuestReport::finish()
 {
     AV_SCOPE("GuestReport::finish");
     finished_ = true;
-    buffer_.append(program_);
-    buffer_.append(": ");
-    buffer_.append_decimal(passed_);
-    buffer_.append(" passed, ");
-    buffer_.append_decimal(failed_);
-    buffer_.append(" failed\n");
+    char       bytes[line_bytes];
+    TextBuffer written(bytes, sizeof bytes);
+    written.append(program_);
+    written.append(": ");
+    written.append_decimal(passed_);
+    written.append(" passed, ");
+    written.append_decimal(failed_);
+    written.append(" failed\n");
+    keep(written);
 }
 
 const char *GuestReport::text() const
 {
     AV_SCOPE("GuestReport::text");
-    return buffer_.text();
+    return length() != 0u ? text_.begin() : "";
 }
 size_t      GuestReport::length() const
 {
     AV_SCOPE("GuestReport::length");
-    return buffer_.length();
+    return text_.size() != 0u ? text_.size() - 1u : 0u;
 }
 uint32_t    GuestReport::passed() const
 {
@@ -129,7 +155,6 @@ uint32_t    GuestReport::failed() const
     return failed_;
 }
 
-/* The terminator always fits inside the storage. */
 void GuestReport::report(StateWriter &writer) const
 {
     AV_SCOPE("GuestReport::report");
@@ -146,7 +171,11 @@ void GuestReport::report(StateWriter &writer) const
 bool GuestReport::invariants_hold() const
 {
     AV_SCOPE("GuestReport::invariants_hold");
-    return buffer_.length() < capacity;
+    if (!text_.invariants_hold()) return false;
+    if (text_.size() == 0u) return true;
+    for (uint32_t index = 0u; index + 1u < text_.size(); index++)
+        if (text_.at(index) == '\0') return false;
+    return text_.at(text_.size() - 1u) == '\0';
 }
 
 }  // namespace av

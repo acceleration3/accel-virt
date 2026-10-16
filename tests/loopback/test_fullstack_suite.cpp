@@ -4,6 +4,7 @@
  * line by line where a line carries a measurement. */
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/guest_suite.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/fullstack/full_stack_rig.hpp"
 
@@ -53,7 +54,8 @@ void print(const GuestReport &report)
 TEST(fullstack_suite, the_in_guest_suite_passes_over_the_real_driver)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   std::uint32_t failed = 0u;
   { GuestSuite suite(rig.kmt(), report, 0u);
     failed = suite.run(); }
@@ -86,7 +88,8 @@ TEST(fullstack_suite, the_in_guest_suite_passes_over_the_real_driver)
 TEST(fullstack_suite, the_fence_stress_run_completes_every_fence_it_submits)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   std::uint32_t failed = 0u;
   { GuestSuite suite(rig.kmt(), report, 1u);
     failed = suite.run(); }
@@ -113,7 +116,8 @@ TEST(fullstack_suite, the_fence_stress_run_completes_every_fence_it_submits)
 TEST(fullstack_suite, the_timeout_run_fails_only_where_the_rig_has_no_tdr)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   std::uint32_t failed = 0u;
   { GuestSuite suite(rig.kmt(), report, 0u);
     failed = suite.run_timeout(); }

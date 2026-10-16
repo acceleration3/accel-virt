@@ -7,6 +7,7 @@
  * run, and leaves no context or object behind. */
 #include "guest/probe/gl_probe.hpp"
 #include "guest/suite/guest_report.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/guest/scripted_image_sink.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
@@ -32,7 +33,7 @@ namespace {
 
 class ProbeRig {
 public:
-    explicit ProbeRig(std::uint32_t width = 8u, std::uint32_t height = 4u) : gl_(width, height), report_("avglprobe")
+    explicit ProbeRig(std::uint32_t width = 8u, std::uint32_t height = 4u) : gl_(width, height), report_(report_memory_, "avglprobe")
     {
         /* The avgpu the probe's own steps find, and the adapter a paced swap
          * waits on, as the ICD's does (feature 051). */
@@ -76,6 +77,7 @@ private:
     std::uint32_t adapter_ = 0u;
     std::uint32_t device_ = 0u;
     ScriptedGl  gl_;
+    av::MockPlatform report_memory_;
     GuestReport report_;
 };
 

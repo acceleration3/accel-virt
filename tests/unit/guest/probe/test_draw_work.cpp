@@ -9,6 +9,7 @@
 #include "guest/suite/scenario_steps.hpp"
 #include "guest/probe/shaders/solid_spv.hpp"
 #include "guest/probe/shaders/triangle_spv.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/guest/scripted_image_sink.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
@@ -87,7 +88,8 @@ private:
     ScriptedVulkan         vulkan_;
     av::ScriptedImageSink images_;
     MockKmt        kmt_;
-    GuestReport    report_;
+    av::MockPlatform report_memory_;
+    GuestReport    report_{report_memory_};
     ScenarioSteps  steps_;
 };
 

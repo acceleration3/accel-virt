@@ -8,7 +8,7 @@
 
 namespace av {
 
-GlProbeProgram::GlProbeProgram() : kmt_(), report_("avglprobe"), window_(), gl_(window_), images_()
+GlProbeProgram::GlProbeProgram() : kmt_(), heap_(), report_(heap_, "avglprobe"), window_(), gl_(window_), images_()
 {
     AV_SCOPE("GlProbeProgram::GlProbeProgram");
 }

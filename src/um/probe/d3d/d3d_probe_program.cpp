@@ -29,7 +29,7 @@ void write_report(const GuestReport &report)
 }  // namespace
 
 D3d9ProbeProgram::D3d9ProbeProgram()
-    : kmt_(), report_("avd3d9probe"), images_(), window_(), windows_(), d3d9_(), d3d9ex_()
+    : kmt_(), heap_(), report_(heap_, "avd3d9probe"), images_(), window_(), windows_(), d3d9_(), d3d9ex_()
 {
     AV_SCOPE("D3d9ProbeProgram::D3d9ProbeProgram");
 }
@@ -54,7 +54,7 @@ uint32_t D3d9ProbeProgram::run()
 }
 
 D3d11ProbeProgram::D3d11ProbeProgram()
-    : kmt_(), report_("avd3d11probe"), images_(), window_(), d3d11_(), deferred_(), shared_(), tir_(), lost_(),
+    : kmt_(), heap_(), report_(heap_, "avd3d11probe"), images_(), window_(), d3d11_(), deferred_(), shared_(), tir_(), lost_(),
       remade_(), loss_(kmt_)
 {
     AV_SCOPE("D3d11ProbeProgram::D3d11ProbeProgram");
@@ -98,7 +98,7 @@ uint32_t D3d11ProbeProgram::run()
     return report_.failed();
 }
 
-D3d12ProbeProgram::D3d12ProbeProgram() : kmt_(), report_("avd3d12probe"), images_(), d3d12_()
+D3d12ProbeProgram::D3d12ProbeProgram() : kmt_(), heap_(), report_(heap_, "avd3d12probe"), images_(), d3d12_()
 {
     AV_SCOPE("D3d12ProbeProgram::D3d12ProbeProgram");
 }

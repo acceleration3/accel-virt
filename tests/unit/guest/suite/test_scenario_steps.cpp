@@ -3,6 +3,7 @@
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/guest_session.hpp"
 #include "guest/suite/scenario_steps.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 
@@ -17,7 +18,8 @@ using av::Status;
 
 TEST(scenario_steps, report_each_step_with_the_last_call_s_ntstatus)
 { MockKmt kmt;
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   ScenarioSteps steps(kmt, report, "probe");
   std::uint32_t device = 0u;
   kmt.fail_at(MockKmt::Call::create_device, 1u, 0xC0000017u);
@@ -35,7 +37,8 @@ TEST(scenario_steps, a_teardown_is_recorded_with_its_first_failure_s_ntstatus)
   std::uint32_t adapter = 0u;
   std::uint32_t count = 0u;
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   ScenarioSteps steps(kmt, report, "probe");
   GuestSession session(kmt, adapter);
   CHECK_STATUS(session.open_device(), Status::ok);
@@ -51,7 +54,8 @@ TEST(scenario_steps, a_teardown_is_recorded_with_its_first_failure_s_ntstatus)
  * the number is what the step was for and the runner reads it back. */
 TEST(scenario_steps_check_measured, puts_the_measurement_on_the_line_passed_or_not)
 { MockKmt kmt;
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   ScenarioSteps steps(kmt, report, "vsync");
   CHECK_STATUS(steps.check_measured("rate", Status::conflict, 3098u), Status::conflict);
   CHECK(std::strstr(report.text(), "FAIL vsync.rate status=4 3098") != nullptr);
@@ -63,7 +67,8 @@ TEST(scenario_steps_check_measured, puts_the_measurement_on_the_line_passed_or_n
  * its bits, VK_INCOMPLETE (5) as itself - with the status a failed step has. */
 TEST(scenario_steps_check_result, zero_passes_and_anything_else_fails_with_the_code_on_the_line)
 { MockKmt kmt;
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   ScenarioSteps steps(kmt, report, "vulkan");
   CHECK_STATUS(steps.check_result("instance", 0), Status::ok);
   CHECK_STATUS(steps.check_result("memory", -2), Status::invalid_state);
@@ -81,7 +86,8 @@ TEST(scenario_steps_check_result, zero_passes_and_anything_else_fails_with_the_c
  * call was involved - the opposite of the truth. */
 TEST(scenario_steps, check_kernel_reports_a_status_this_kmt_never_answered)
 { MockKmt       kmt;
-  GuestReport   report("probe");
+  av::MockPlatform report_memory;
+  GuestReport   report(report_memory, "probe");
   ScenarioSteps steps(kmt, report, "shared");
   CHECK_EQ(kmt.last_code(), 0u);
   CHECK_STATUS(steps.check_kernel("refused", av::Status::invalid_state, 0xC000000Du),

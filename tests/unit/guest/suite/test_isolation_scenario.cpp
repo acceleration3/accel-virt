@@ -12,6 +12,7 @@
 #include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/isolation_scenario.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
@@ -82,7 +83,8 @@ TEST(isolation_scenario, a_faulted_context_changes_no_other)
   rig.kmt().withhold_answer_at(fault_wait);
   rig.host().healthy_context();
   rig.host().nop();
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   IsolationScenario scenario(rig.kmt(), report, rig.search());
   scenario.run();
   CHECK(std::strcmp(report.text(),
@@ -122,7 +124,8 @@ TEST(isolation_scenario, a_healthy_context_that_fails_first_stops_the_run)
       if (failure.answers == 2u) rig.host().vk_handle(0, ScriptedHost::vk_instance);
       rig.kmt().fail_at(MockKmt::Call::wait_for_context, failure.refuse_instance ? 99u : failure.answers + 1u,
                         device_removed);
-      GuestReport report;
+      av::MockPlatform report_memory;
+      GuestReport report(report_memory);
       IsolationScenario scenario(rig.kmt(), report, rig.search());
       scenario.run();
       CHECK(has_line(report, "FAIL isolation.healthy_before"));
@@ -138,7 +141,8 @@ TEST(isolation_scenario, a_fault_that_never_happens_fails_fault)
 { { Rig rig;
     rig.host().healthy_context();
     rig.host().vk_handle(0, ScriptedHost::vk_instance);
-    GuestReport report;
+    av::MockPlatform report_memory;
+    GuestReport report(report_memory);
     IsolationScenario scenario(rig.kmt(), report, rig.search());
     scenario.run();
     CHECK(has_line(report, "FAIL isolation.fault status=4"));
@@ -147,7 +151,8 @@ TEST(isolation_scenario, a_fault_that_never_happens_fails_fault)
   { Rig rig;
     rig.host().healthy_context();
     rig.kmt().fail_at(MockKmt::Call::create_context_virtual, 2u, 0xC0000001u);
-    GuestReport report;
+    av::MockPlatform report_memory;
+    GuestReport report(report_memory);
     IsolationScenario scenario(rig.kmt(), report, rig.search());
     scenario.run();
     CHECK(has_line(report, "FAIL isolation.fault status=7"));
@@ -162,7 +167,8 @@ TEST(isolation_scenario, a_failure_after_the_fault_is_reported_where_it_happened
     rig.kmt().withhold_answer_at(fault_wait);
     rig.host().nop();
     rig.host().vk_handle(-3, 0u);
-    GuestReport report;
+    av::MockPlatform report_memory;
+    GuestReport report(report_memory);
     IsolationScenario scenario(rig.kmt(), report, rig.search());
     scenario.run();
     CHECK(has_line(report, "ok isolation.faulted_send\n"));
@@ -174,7 +180,8 @@ TEST(isolation_scenario, a_failure_after_the_fault_is_reported_where_it_happened
     rig.kmt().withhold_answer_at(fault_wait);
     rig.host().healthy_context();
     rig.kmt().fail_at(MockKmt::Call::create_context_virtual, 3u, 0xC0000001u);
-    GuestReport report;
+    av::MockPlatform report_memory;
+    GuestReport report(report_memory);
     IsolationScenario scenario(rig.kmt(), report, rig.search());
     scenario.run();
     CHECK(has_line(report, "ok isolation.healthy_after\n"));
@@ -185,7 +192,8 @@ TEST(isolation_scenario, a_failure_after_the_fault_is_reported_where_it_happened
     rig.kmt().withhold_answer_at(fault_wait);
     rig.host().healthy_context();
     rig.host().vk_result(0);   /* bytes where the relinked context's no-op answers none */
-    GuestReport report;
+    av::MockPlatform report_memory;
+    GuestReport report(report_memory);
     IsolationScenario scenario(rig.kmt(), report, rig.search());
     scenario.run();
     CHECK(has_line(report, "FAIL isolation.relink status=9"));
@@ -195,7 +203,8 @@ TEST(isolation_scenario, a_failure_after_the_fault_is_reported_where_it_happened
 TEST(isolation_scenario, without_the_adapter_it_asks_the_driver_for_nothing)
 { MockKmt kmt;
   AdapterSearch search(kmt);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   IsolationScenario scenario(kmt, report, search);
   scenario.run();
   CHECK(has_line(report, "FAIL isolation.adapter status=3"));

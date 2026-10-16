@@ -14,6 +14,7 @@
 #include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/probe/shared_object_probe.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_cl.hpp"
@@ -44,7 +45,7 @@ void *const             minted_handle = reinterpret_cast<void *>(0x8000000000000
 
 class Rig {
 public:
-    Rig() : report_("avvkprobe")
+    Rig() : report_(report_memory_, "avvkprobe")
     {
         kmt_.add_adapter(av, AdapterScenario::wddm_3_2);
         kmt_.set_adapter_luid(0u, adapter_luid);
@@ -89,7 +90,8 @@ private:
     av::ScriptedCl cl_;
     MockKmt        kmt_;
     ScriptedVulkan vulkan_;
-    GuestReport    report_;
+    av::MockPlatform report_memory_;
+    GuestReport    report_{report_memory_};
 };
 
 }  // namespace
@@ -391,7 +393,8 @@ TEST(shared_object_probe, a_refused_allocation_carries_the_kernels_code_and_stop
 TEST(shared_object_probe, no_adapter_is_the_first_step_and_the_last)
 { MockKmt        kmt;
   ScriptedVulkan vulkan;
-  GuestReport    report("avvkprobe");
+  av::MockPlatform report_memory;
+  GuestReport    report(report_memory, "avvkprobe");
   SharedObjectProbe probe(kmt, report, vulkan, nullptr);
   probe.run();
   report.finish();

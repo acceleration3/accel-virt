@@ -15,6 +15,7 @@
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
 #include "guest/suite/scenario_transport.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/guarded_buffer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
@@ -83,7 +84,8 @@ private:
     MockKmt           kmt_;
     AdapterSearch     search_;
     ScriptedHost      host_;
-    GuestReport       report_;
+    av::MockPlatform report_memory_;
+    GuestReport       report_{report_memory_};
     ScenarioSteps     steps_;
     ScenarioTransport link_;
 };

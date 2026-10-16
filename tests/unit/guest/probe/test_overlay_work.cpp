@@ -7,6 +7,7 @@
 #include "guest/probe/overlay_work.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_overlay.hpp"
@@ -26,7 +27,7 @@ namespace {
 
 class OverlayRig {
 public:
-    explicit OverlayRig(std::uint32_t hold = 0u) : report_("avoverlayprobe"), steps_(kmt_, report_, "overlay"), hold_(hold) {}
+    explicit OverlayRig(std::uint32_t hold = 0u) : report_(report_memory_, "avoverlayprobe"), steps_(kmt_, report_, "overlay"), hold_(hold) {}
     OverlayRig(const OverlayRig &) = delete;
     OverlayRig &operator=(const OverlayRig &) = delete;
 
@@ -47,7 +48,8 @@ public:
 
 private:
     MockKmt         kmt_;
-    GuestReport     report_;
+    av::MockPlatform report_memory_;
+    GuestReport     report_{report_memory_};
     ScenarioSteps   steps_;
     ScriptedOverlay dxgi_;
     std::uint32_t   hold_;

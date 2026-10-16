@@ -7,6 +7,7 @@
 #include "guest/probe/probe_device.hpp"
 #include "guest/probe/probe_outcome.hpp"
 #include "guest/suite/scenario_steps.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_vulkan.hpp"
@@ -104,7 +105,8 @@ TEST(probe_commands, an_unsignalled_fence_times_out)
 { ScriptedVulkan vulkan;
   vulkan.hold_fences();
   MockKmt kmt;
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   ScenarioSteps steps(kmt, report, "vulkan");
   { ProbeDevice device(vulkan);
     make(device);

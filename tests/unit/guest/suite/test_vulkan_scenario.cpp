@@ -10,6 +10,7 @@
 #include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/vulkan_scenario.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
@@ -112,7 +113,8 @@ bool same_ids(const std::uint32_t *sent, std::uint32_t count, const std::uint32_
 TEST(vulkan_scenario, the_chain_passes_on_the_host_and_is_destroyed_in_reverse)
 { Rig rig;
   rig.host().vulkan_run();
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   VulkanScenario scenario(rig.kmt(), report, rig.search());
   scenario.run();
   CHECK(std::strcmp(report.text(),
@@ -148,7 +150,8 @@ TEST(vulkan_scenario, the_chain_passes_on_the_host_and_is_destroyed_in_reverse)
 TEST(vulkan_scenario, allocates_the_lowest_memory_type_for_the_size_the_buffer_needs)
 { Rig rig;
   rig.host().vulkan_run();
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   VulkanScenario scenario(rig.kmt(), report, rig.search());
   scenario.run();
   CHECK_EQ(rig.kmt().command_id(4u), static_cast<std::uint32_t>(kCmd_vkCreateBuffer));
@@ -205,7 +208,8 @@ TEST(vulkan_scenario, a_failure_at_each_step_destroys_only_what_was_made)
           default: rig.host().vk_result(vk_error_initialization_failed); break;
       }
       rig.host().nop();
-      GuestReport report;
+      av::MockPlatform report_memory;
+      GuestReport report(report_memory);
       VulkanScenario scenario(rig.kmt(), report, rig.search());
       scenario.run();
       CHECK(has_line(report, failure.line));
@@ -238,7 +242,8 @@ TEST(vulkan_scenario, zero_physical_devices_fails_the_step_with_its_count)
   rig.host().vk_handle(0, ScriptedHost::vk_instance);
   rig.host().vk_count(0, 0u);
   rig.host().nop();
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   VulkanScenario scenario(rig.kmt(), report, rig.search());
   scenario.run();
   CHECK(has_line(report, "ok vulkan.instance\n"));
@@ -257,7 +262,8 @@ TEST(vulkan_scenario, a_no_op_after_the_destroys_answered_wrong_fails_destroy)
   answer_until(rig.host(), 7u);
   rig.host().vk_result(0);
   rig.host().vk_result(0);   /* four bytes where the no-op answers none */
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   VulkanScenario scenario(rig.kmt(), report, rig.search());
   scenario.run();
   CHECK(has_line(report, "ok vulkan.bind\n"));
@@ -272,7 +278,8 @@ TEST(vulkan_scenario, a_lost_context_reports_device_lost_and_still_tears_down)
 { Rig rig;
   rig.host().vk_handle(0, ScriptedHost::vk_instance);
   rig.kmt().fail_at(MockKmt::Call::wait_for_context, 2u, device_removed);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   VulkanScenario scenario(rig.kmt(), report, rig.search());
   scenario.run();
   char line[64] = {};
@@ -288,7 +295,8 @@ TEST(vulkan_scenario, a_lost_context_reports_device_lost_and_still_tears_down)
 TEST(vulkan_scenario, a_context_that_cannot_be_set_up_is_reported_and_nothing_is_sent)
 { Rig rig;
   rig.kmt().fail_at(MockKmt::Call::create_context_virtual, 1u, 0xC0000001u);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   VulkanScenario scenario(rig.kmt(), report, rig.search());
   scenario.run();
   CHECK(has_line(report, "ok vulkan.connection\n"));

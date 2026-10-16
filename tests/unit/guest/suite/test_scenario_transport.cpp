@@ -10,6 +10,7 @@
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
 #include "guest/suite/scenario_transport.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "proto/escape/av_context_record.hpp"
@@ -46,7 +47,8 @@ TEST(scenario_transport, opens_a_context_of_its_sub_api_on_the_adapter_found)
   kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport   report;
+  av::MockPlatform report_memory;
+  GuestReport   report(report_memory);
   ScenarioSteps steps(kmt, report, "probe");
   ScenarioTransport link(kmt, search, steps, SubApi::opencl);
   CHECK_STATUS(link.open(), Status::ok);
@@ -75,7 +77,8 @@ TEST(scenario_transport, opens_a_context_of_its_sub_api_on_the_adapter_found)
 TEST(scenario_transport, stops_at_the_first_step_that_fails_and_leaves_nothing_open)
 { { MockKmt kmt;   /* no adapter: nothing asked of D3DKMT */
     AdapterSearch search(kmt);
-    GuestReport   report;
+    av::MockPlatform report_memory;
+    GuestReport   report(report_memory);
     ScenarioSteps steps(kmt, report, "probe");
     ScenarioTransport link(kmt, search, steps, SubApi::vulkan);
     CHECK_STATUS(link.open(), Status::not_found);
@@ -86,7 +89,8 @@ TEST(scenario_transport, stops_at_the_first_step_that_fails_and_leaves_nothing_o
     AdapterSearch search(kmt);
     CHECK_STATUS(search.find_avgpu(0u), Status::ok);
     kmt.fail_at(MockKmt::Call::create_device, 1u, 0xC0000017u);
-    GuestReport   report;
+    av::MockPlatform report_memory;
+    GuestReport   report(report_memory);
     ScenarioSteps steps(kmt, report, "probe");
     { ScenarioTransport link(kmt, search, steps, SubApi::vulkan);
       CHECK_STATUS(link.open(), Status::no_memory); }
@@ -98,7 +102,8 @@ TEST(scenario_transport, stops_at_the_first_step_that_fails_and_leaves_nothing_o
     AdapterSearch search(kmt);
     CHECK_STATUS(search.find_avgpu(0u), Status::ok);
     kmt.fail_at(MockKmt::Call::create_context_virtual, 1u, 0xC0000017u);
-    GuestReport   report;
+    av::MockPlatform report_memory;
+    GuestReport   report(report_memory);
     ScenarioSteps steps(kmt, report, "probe");
     { ScenarioTransport link(kmt, search, steps, SubApi::vulkan);
       CHECK(link.open() != Status::ok); }   /* the destructor closes what opened */

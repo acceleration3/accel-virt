@@ -13,6 +13,7 @@
  * asserted to release. */
 #include "guest/probe/cl_probe.hpp"
 #include "guest/suite/guest_report.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_cl.hpp"
@@ -65,7 +66,7 @@ public:
      * its deadline in forty reads rather than in real time. */
     static constexpr std::uint64_t clock_step = MockKmt::ticks_per_second / 8u;
 
-    ProbeRig() : report_("avclprobe") { kmt_.reads_clock(nullptr, clock_step); }
+    ProbeRig() : report_(report_memory_, "avclprobe") { kmt_.reads_clock(nullptr, clock_step); }
     ~ProbeRig()
     {
         /* Nothing was released twice, and nothing the run made up. */
@@ -87,6 +88,7 @@ public:
 private:
     MockKmt     kmt_;
     ScriptedCl  cl_;
+    av::MockPlatform report_memory_;
     GuestReport report_;
 };
 
@@ -430,7 +432,8 @@ TEST(cl_probe, a_failure_at_any_call_of_the_run_is_reported_where_it_happened)
 TEST(cl_probe, what_the_icds_thread_calls_counts_deliveries_rather_than_the_last_one)
 { MockKmt     kmt;
   ScriptedCl  cl;
-  GuestReport report("avclprobe");
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory, "avclprobe");
   ClProbe     probe(kmt, report, cl);
   /* The entry the ICD's own thread reaches, which is why it is public and why
    * what it writes into is a member: it may be called after the step that

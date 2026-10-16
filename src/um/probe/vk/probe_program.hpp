@@ -11,6 +11,7 @@
 #include "um/probe/probe_window.hpp"
 #include "um/probe/windows_image_sink.hpp"
 #include "guest/suite/guest_report.hpp"
+#include "um/common/process_heap.hpp"
 #include "guest/probe/loader_vulkan.hpp"
 #include "um/kmt/gdi_kmt.hpp"
 
@@ -31,6 +32,7 @@ private:
     void write_report() const;
 
     GdiKmt          kmt_;
+    ProcessHeap     heap_;
     GuestReport     report_;
     LoaderVulkan    vulkan_;
     /* The OpenCL beside this process, for the half of the interop matrix only

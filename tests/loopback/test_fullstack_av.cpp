@@ -19,6 +19,7 @@
 #include "guest/suite/isolation_scenario.hpp"
 #include "guest/suite/opencl_scenario.hpp"
 #include "guest/suite/vulkan_scenario.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/executor/widest_host_gpu.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/fullstack/full_stack_rig.hpp"
@@ -143,7 +144,8 @@ TEST(fullstack_av, the_vulkan_chain_runs_on_the_host_gpu)
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_VULKAN) == 0u) return;
   FullStackRig rig(*av_executor_ops(), gpu.uuid());
   CHECK_EQ(rig.started(), 0);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   run_alone<av::VulkanScenario>(rig, report);
   CHECK_EQ(report.failed(), 0u);
   /* One, whatever this host has: the guest is shown the GPU the device is
@@ -158,7 +160,8 @@ TEST(fullstack_av, vector_add_runs_on_the_host_gpu)
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
   FullStackRig rig(*av_executor_ops(), gpu.uuid());
   CHECK_EQ(rig.started(), 0);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   run_alone<av::OpenClScenario>(rig, report);
   CHECK_EQ(report.failed(), 0u);
   /* The bound GPU's platform alone, where this host has three (T034). */
@@ -177,7 +180,8 @@ TEST(fullstack_av, the_host_gpu_copies_between_two_imported_guest_chunks)
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_VULKAN) == 0u) return;
   FullStackRig rig(*av_executor_ops(), gpu.uuid());
   CHECK_EQ(rig.started(), 0);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   run_alone<av::HostVisibleImportScenario>(rig, report);
   CHECK_EQ(report.failed(), 0u);
   CHECK(reported(report, "ok import.wait 1"));
@@ -196,7 +200,8 @@ TEST(fullstack_av, a_malformed_stream_faults_only_its_own_context)
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_VULKAN) == 0u) return;
   FullStackRig rig(*av_executor_ops(), gpu.uuid());
   CHECK_EQ(rig.started(), 0);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   run_alone<av::IsolationScenario>(rig, report);
   CHECK_EQ(report.failed(), 0u);
   CHECK(reported(report, "ok isolation.fault"));
@@ -213,7 +218,8 @@ TEST(fullstack_av, the_av_run_passes_every_step_on_the_host_gpu)
    * doorbell wherever it can, which is what the guest does on a machine that
    * has it (feature 049). */
   rig.kmt().allow_hardware_scheduling();
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   std::uint32_t failed = 0u;
   { GuestSuite suite(rig.kmt(), report, 0u);
     failed = suite.run_av(); }

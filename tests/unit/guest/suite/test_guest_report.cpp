@@ -1,15 +1,26 @@
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/suite/guest_report.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 
+#include <cstdint>
 #include <cstring>
 
 using av::GuestReport;
 using av::Status;
 
+namespace av {
+
+struct GuestReportProbe {
+    static void set(GuestReport &report, std::uint32_t index, char value) { report.text_.at(index) = value; }
+};
+
+}  // namespace av
+
 TEST(guest_report, writes_a_line_per_step_and_a_summary)
-{ GuestReport report;
+{ av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   CHECK_EQ(report.length(), 0u);
   CHECK(report.invariants_hold());
   report.check("adapter", "find", Status::ok, 0u);
@@ -29,26 +40,69 @@ TEST(guest_report, writes_a_line_per_step_and_a_summary)
   CHECK_EQ(report.length(), std::strlen(report.text()));
   CHECK(report.invariants_hold()); }
 
-TEST(guest_report, text_past_the_capacity_is_cut_but_every_step_is_counted)
-{ GuestReport report;
+/* The 16 KiB the report once held are no bound: thousands of steps - what a
+ * suite replaying an application's trace runs - are each a line, and the
+ * summary that judges the run is never cut off. */
+TEST(guest_report, keeps_every_line_and_the_summary_past_the_old_capacity)
+{ av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   for (unsigned step = 0u; step < 2000u; step++) report.check("scenario", "a_step_with_a_long_name", Status::ok, 0u);
   report.finish();
-  CHECK_EQ(report.length(), GuestReport::capacity - 1u);
+  const std::size_t line = std::strlen("ok scenario.a_step_with_a_long_name\n");
+  CHECK_EQ(report.length(), 2000u * line + std::strlen("avtest: 2000 passed, 0 failed\n"));
+  CHECK_EQ(report.length(), std::strlen(report.text()));
+  CHECK(report.length() > 16384u);
   CHECK_EQ(report.passed(), 2000u);
-  CHECK(std::strstr(report.text(), "avtest:") == nullptr);
+  CHECK(std::strstr(report.text(), "avtest: 2000 passed, 0 failed\n") != nullptr);
+  CHECK(report.invariants_hold()); }
+
+/* A line there is no memory to keep is lost whole - never half a line - and
+ * still counted; the next line is kept. */
+TEST(guest_report, a_line_with_no_memory_to_keep_it_is_lost_whole_and_still_counted)
+{ av::MockPlatform report_memory;
+  GuestReport report(report_memory);
+  report.check("adapter", "find", Status::ok, 0u);
+  for (unsigned step = 0u; step < 3u; step++) report.check("adapter", "pad", Status::ok, 0u);
+  report_memory.fail_allocation_at(1u);
+  report.check("submission", "lost", Status::invalid_state, 1u);
+  CHECK(report.invariants_hold());
+  report.finish();
+  CHECK(std::strcmp(report.text(), "ok adapter.find\nok adapter.pad\nok adapter.pad\nok adapter.pad\n"
+                                   "avtest: 4 passed, 1 failed\n") == 0);
+  CHECK_EQ(report.failed(), 1u);
+  CHECK(report.invariants_hold()); }
+
+/* Text the report never wrote is the empty string, and a terminator inside
+ * the text, or none at its end, is a broken report. */
+TEST(guest_report_invariants, fail_for_a_terminator_inside_the_text_or_none_at_its_end)
+{ av::MockPlatform report_memory;
+  GuestReport report(report_memory);
+  CHECK(std::strcmp(report.text(), "") == 0);
+  CHECK_EQ(report.length(), 0u);
+  report.check("adapter", "find", Status::ok, 0u);
+  CHECK(report.invariants_hold());
+  av::GuestReportProbe::set(report, 2u, '\0');
+  CHECK(!report.invariants_hold());
+  av::GuestReportProbe::set(report, 2u, 'a');
+  CHECK(report.invariants_hold());
+  av::GuestReportProbe::set(report, 16u, 'x');
+  CHECK(!report.invariants_hold());
+  av::GuestReportProbe::set(report, 16u, '\0');
   CHECK(report.invariants_hold()); }
 
 /* The summary names the program that ran the steps: avvkprobe.exe's report
  * is judged by its own line (feature 045). */
 TEST(guest_report, the_summary_names_its_program)
-{ GuestReport report("avvkprobe");
+{ av::MockPlatform report_memory;
+  GuestReport report(report_memory, "avvkprobe");
   report.measure("vulkan", "compute", Status::ok, 256u);
   report.finish();
   CHECK(std::strcmp(report.text(), "ok vulkan.compute 256\navvkprobe: 1 passed, 0 failed\n") == 0);
   CHECK(report.invariants_hold()); }
 
 TEST(guest_report_report, names_the_counts_and_the_step_checked_last)
-{ GuestReport report("avvkprobe");
+{ av::MockPlatform report_memory;
+  GuestReport report(report_memory, "avvkprobe");
   char bytes[256];
   av::StateWriter fresh(bytes, sizeof bytes);
   report.report(fresh);
@@ -72,7 +126,8 @@ TEST(guest_report_report, names_the_counts_and_the_step_checked_last)
 /* A note carries text a step learned, cut at its first line break or at
  * note_bytes, and counts as neither a pass nor a failure. */
 TEST(guest_report, a_note_is_one_line_of_text_and_no_verdict)
-{ GuestReport report("avglprobe");
+{ av::MockPlatform report_memory;
+  GuestReport report(report_memory, "avglprobe");
   report.note("opengl", "renderer", "Mesa\r\nsecond");
   report.note("opengl", "version", nullptr);
   report.note("opengl", "lines", "one\ntwo");

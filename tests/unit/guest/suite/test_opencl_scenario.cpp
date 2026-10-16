@@ -12,6 +12,7 @@
 #include "guest/suite/opencl_scenario.hpp"
 #include "guest/suite/scenario_transport.hpp"
 #include "guest/transport/kmt_transport.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
@@ -128,7 +129,8 @@ void answer_until(ScriptedHost &host, std::uint32_t answers)
 TEST(opencl_scenario, vector_add_runs_on_the_host_and_everything_is_released_in_reverse)
 { Rig rig;
   rig.host().opencl_run();
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   OpenClScenario scenario(rig.kmt(), report, rig.search());
   scenario.run();
   CHECK(std::strcmp(report.text(),
@@ -178,7 +180,8 @@ TEST(opencl_scenario, vector_add_runs_on_the_host_and_everything_is_released_in_
 TEST(opencl_scenario, sends_the_handles_and_inputs_the_host_needs)
 { Rig rig;
   rig.host().opencl_run();
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   OpenClScenario scenario(rig.kmt(), report, rig.search());
   scenario.run();
   { WireReader body = rig.body(1u);
@@ -246,7 +249,8 @@ TEST(opencl_scenario, a_wrong_sum_fails_with_how_many_elements_matched)
   sum[63] = 0.0f;
   rig.host().opencl_run_to_read(sum);
   rig.host().opencl_releases();
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   OpenClScenario scenario(rig.kmt(), report, rig.search());
   scenario.run();
   CHECK(has_line(report, "ok opencl.read\n"));
@@ -266,7 +270,8 @@ TEST(opencl_scenario, a_short_read_matches_only_what_came_back)
   answer_until(rig.host(), 16u);
   rig.host().cl_read(0, sum, 10u);
   rig.host().opencl_releases();
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   OpenClScenario scenario(rig.kmt(), report, rig.search());
   scenario.run();
   scenario.run();
@@ -315,7 +320,8 @@ TEST(opencl_scenario, a_failure_at_each_step_releases_only_what_was_made)
           default: rig.host().cl_read(failure.error, nullptr, 0u); break;
       }
       for (std::uint32_t release = 0u; release < failure.releases; release++) rig.host().cl_result(0);
-      GuestReport report;
+      av::MockPlatform report_memory;
+      GuestReport report(report_memory);
       OpenClScenario scenario(rig.kmt(), report, rig.search());
       scenario.run();
       CHECK(has_line(report, failure.line));
@@ -337,7 +343,8 @@ TEST(opencl_scenario, a_refused_release_fails_release_with_the_first_error)
   rig.host().cl_result(-44);   /* the program */
   for (std::uint32_t release = 0u; release < 4u; release++) rig.host().cl_result(0);
   rig.host().cl_result(-34);   /* the context */
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   OpenClScenario scenario(rig.kmt(), report, rig.search());
   scenario.run();
   CHECK(has_line(report, "ok opencl.sum 64\n"));
@@ -368,7 +375,8 @@ TEST(opencl_scenario, more_platforms_than_the_room_reports_the_host_s_count)
   }
   rig.host().cl_read(0, sum, elements);
   rig.host().opencl_releases();
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   OpenClScenario scenario(rig.kmt(), report, rig.search());
   scenario.run();
   CHECK(has_line(report, "ok opencl.platform 20\n"));
@@ -382,7 +390,8 @@ TEST(opencl_scenario, a_lost_context_fails_the_step_it_was_lost_at)
 { Rig rig;
   answer_until(rig.host(), 3u);
   rig.kmt().fail_at(MockKmt::Call::wait_for_context, 4u, device_removed);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   OpenClScenario scenario(rig.kmt(), report, rig.search());
   scenario.run();
   CHECK(has_line(report, "FAIL opencl.context status=7 4294967291\n"));
@@ -393,7 +402,8 @@ TEST(opencl_scenario, a_lost_context_fails_the_step_it_was_lost_at)
 TEST(opencl_scenario, without_the_adapter_it_asks_the_driver_for_nothing)
 { MockKmt kmt;
   AdapterSearch search(kmt);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   OpenClScenario scenario(kmt, report, search);
   scenario.run();
   CHECK(std::strcmp(report.text(), "FAIL opencl.adapter status=3 code=0x00000000\n") == 0);

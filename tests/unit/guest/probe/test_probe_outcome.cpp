@@ -4,6 +4,7 @@
 #include "guest/suite/guest_report.hpp"
 #include "guest/probe/probe_outcome.hpp"
 #include "guest/suite/scenario_steps.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 
@@ -38,7 +39,8 @@ public:
 
 private:
     MockKmt       kmt_;
-    GuestReport   report_;
+    av::MockPlatform report_memory_;
+    GuestReport   report_{report_memory_};
     ScenarioSteps steps_;
 };
 

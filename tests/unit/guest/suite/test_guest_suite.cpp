@@ -17,6 +17,7 @@
 #include "guest/suite/transport_scenario.hpp"
 #include "guest/suite/fence_stress_scenario.hpp"
 #include "guest/suite/vsync_scenario.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
@@ -61,7 +62,8 @@ TEST(guest_suite, a_driver_that_does_everything_right_passes_every_step)
   kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   /* The device answering the transport's no-op with nothing. */
   kmt.answer_waits(nullptr, 0u);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   GuestSuite suite(kmt, report, 0u);
   CHECK_EQ(suite.run(), 0u);
   CHECK(std::strcmp(report.text(),
@@ -115,7 +117,8 @@ TEST(guest_suite, the_host_loss_run_stops_at_a_host_that_draws_nothing)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.answer_waits(nullptr, 0u);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   GuestSuite suite(kmt, report, 0u);
   CHECK_EQ(suite.run_host_loss(), 1u);
   CHECK(has_line(report, "ok host_loss.initialize\n"));
@@ -128,7 +131,8 @@ TEST(guest_suite, the_host_loss_run_stops_at_a_host_that_draws_nothing)
 TEST(guest_suite, without_the_adapter_every_scenario_fails_without_calling_d3dkmt)
 { MockKmt kmt;
   kmt.add_adapter(PciIdentity(0x1AF4u, 0x1050u, 0x1AF4u, 0x1100u), 1300u);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   GuestSuite suite(kmt, report, 0u);
   CHECK_EQ(suite.run(), 6u);
   CHECK(has_line(report, "FAIL adapter.find status=3"));
@@ -144,7 +148,8 @@ TEST(guest_suite, without_the_adapter_every_scenario_fails_without_calling_d3dkm
 TEST(guest_suite, an_adapter_of_another_wddm_version_or_that_will_not_say_fails_that_step)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, 3100u);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   AdapterSearch search(kmt);
   AdapterScenario scenario(kmt, report, search);
   scenario.run();
@@ -167,7 +172,8 @@ TEST(guest_suite, a_refusal_at_any_call_is_reported_and_leaves_nothing_open)
       MockKmt kmt;
       kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
       kmt.fail_at(call, 1u, 0xC0000001u);
-      GuestReport report;
+      av::MockPlatform report_memory;
+      GuestReport report(report_memory);
       { GuestSuite suite(kmt, report, 0u);
         CHECK(suite.run() != 0u);
         CHECK(has_line(report, "code=0xC0000001")); }
@@ -179,7 +185,8 @@ TEST(guest_suite, each_scenario_stops_at_its_first_failure_and_still_tears_down)
   kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   AllocationScenario allocation(kmt, report, search);
   GpuMappingScenario mapping(kmt, report, search);
   SubmissionScenario submission(kmt, report, search);
@@ -222,7 +229,8 @@ TEST(vsync_scenario, counts_the_blanks_of_a_window_and_judges_the_rate)
   kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   VsyncScenario vsync(kmt, report, search);
   CHECK_EQ(vsync.rate_centihertz(), 0u);
   CHECK(!vsync.paced());
@@ -252,7 +260,8 @@ TEST(vsync_scenario, an_interval_outside_one_frame_to_two_fails_the_step)
       kmt.set_blank_period(MockKmt::ticks_per_second / hertz);
       AdapterSearch search(kmt);
       CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-      GuestReport report;
+      av::MockPlatform report_memory;
+      GuestReport report(report_memory);
       VsyncScenario vsync(kmt, report, search);
       vsync.run();
       const bool within = hertz == 50u || hertz == 63u;
@@ -269,7 +278,8 @@ TEST(vsync_scenario, a_refused_or_timed_out_wait_stops_the_count)
       kmt.fail_at(MockKmt::Call::wait_for_vertical_blank, 5u, code);
       AdapterSearch search(kmt);
       CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-      GuestReport report;
+      av::MockPlatform report_memory;
+      GuestReport report(report_memory);
       VsyncScenario vsync(kmt, report, search);
       vsync.run();
       CHECK(has_line(report, "FAIL vsync.blanks"));
@@ -285,7 +295,8 @@ TEST(vsync_scenario, without_a_device_it_counts_nothing)
   kmt.fail_at(MockKmt::Call::create_device, 1u, 0xC0000001u);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   VsyncScenario vsync(kmt, report, search);
   vsync.run();
   CHECK(has_line(report, "FAIL vsync.device"));
@@ -297,7 +308,8 @@ TEST(vsync_scenario, without_a_device_it_counts_nothing)
 /* A guest without the adapter never waits on its vertical blanks. */
 TEST(vsync_scenario, without_the_adapter_it_calls_nothing)
 { MockKmt kmt;
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   AdapterSearch search(kmt);
   VsyncScenario vsync(kmt, report, search);
   vsync.run();
@@ -311,7 +323,8 @@ TEST(vsync_scenario, a_clock_that_stood_still_is_no_rate)
   kmt.set_blank_period(0u);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   VsyncScenario vsync(kmt, report, search);
   vsync.run();
   CHECK_EQ(vsync.rate_centihertz(), 0u);
@@ -327,7 +340,8 @@ TEST(vsync_scenario, judges_the_shortest_interval_not_the_average)
   kmt.slip_every(4u, MockKmt::ticks_per_second / VsyncScenario::expected_hz);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   VsyncScenario vsync(kmt, report, search);
   vsync.run();
   CHECK_EQ(vsync.rate_centihertz(), VsyncScenario::expected_hz * 100u);
@@ -343,7 +357,8 @@ TEST(vsync_scenario, a_refusal_at_the_first_blank_counts_none)
   kmt.fail_at(MockKmt::Call::wait_for_vertical_blank, 1u, 0xC0000001u);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   VsyncScenario vsync(kmt, report, search);
   vsync.run();
   CHECK(has_line(report, "FAIL vsync.blanks"));
@@ -360,7 +375,8 @@ TEST(vsync_scenario, a_later_interval_shorter_than_the_first_is_the_one_judged)
   kmt.slip_every(2u, MockKmt::ticks_per_second / VsyncScenario::expected_hz);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   VsyncScenario vsync(kmt, report, search);
   vsync.run();
   CHECK_EQ(vsync.rate_centihertz(), VsyncScenario::expected_hz * 100u);
@@ -376,7 +392,8 @@ TEST(fence_stress_scenario, runs_until_its_seconds_are_spent_and_reports_what_it
   kmt.set_blank_period(0u);                              /* only the fences spend the run's time */
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   FenceStressScenario stress(kmt, report, search, 2u);
   stress.run();
   CHECK(has_line(report, "ok stress.context"));
@@ -401,7 +418,8 @@ TEST(fence_stress_scenario, no_seconds_is_no_run)
   kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   FenceStressScenario stress(kmt, report, search, 0u);
   stress.run();
   CHECK_EQ(report.length(), 0u);
@@ -413,7 +431,8 @@ TEST(fence_stress_scenario, no_seconds_is_no_run)
 TEST(fence_stress_scenario, without_an_adapter_it_asks_the_driver_for_nothing)
 { MockKmt kmt;
   AdapterSearch search(kmt);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   FenceStressScenario stress(kmt, report, search, 2u);
   stress.run();
   CHECK(has_line(report, "FAIL stress.adapter"));
@@ -428,7 +447,8 @@ TEST(fence_stress_scenario, a_device_that_will_not_open_stops_the_run_at_once)
   kmt.fail_at(MockKmt::Call::create_device, 1u, 0xC0000017u);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   FenceStressScenario stress(kmt, report, search, 2u);
   stress.run();
   CHECK(has_line(report, "FAIL stress.device"));
@@ -445,7 +465,8 @@ TEST(fence_stress_scenario, a_setup_that_fails_never_reaches_the_fences)
   kmt.fail_at(MockKmt::Call::create_context, 1u, 0xC0000017u);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   FenceStressScenario stress(kmt, report, search, 2u);
   stress.run();
   CHECK(has_line(report, "FAIL stress.context"));
@@ -465,7 +486,8 @@ TEST(fence_stress_scenario, a_submission_that_fails_stops_the_run)
   kmt.fail_at(MockKmt::Call::submit, 3u, 0xC0000001u);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   FenceStressScenario stress(kmt, report, search, 2u);
   stress.run();
   CHECK(has_line(report, "FAIL stress.fences"));
@@ -484,7 +506,8 @@ TEST(fence_stress_scenario, a_blank_that_never_comes_ends_the_run)
   kmt.fail_at(MockKmt::Call::wait_for_vertical_blank, 1u, 0xC0000001u);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   FenceStressScenario stress(kmt, report, search, 2u);
   stress.run();
   CHECK(has_line(report, "FAIL stress.fences"));
@@ -500,7 +523,8 @@ TEST(fence_stress_scenario, a_wait_that_fails_stops_the_run_and_is_reported)
   kmt.fail_at(MockKmt::Call::wait_for_context, 4u, 0xC0000001u);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   FenceStressScenario stress(kmt, report, search, 2u);
   stress.run();
   CHECK(has_line(report, "FAIL stress.fences"));
@@ -518,7 +542,8 @@ TEST(timeout_scenario, the_held_context_is_lost_and_the_other_completes)
   kmt.fail_at(MockKmt::Call::wait_for_context, 1u, device_removed);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   TimeoutScenario timeout(kmt, report, search);
   timeout.run();
   CHECK(has_line(report, "ok timeout.held_lost"));
@@ -537,7 +562,8 @@ TEST(timeout_scenario, a_held_context_that_completes_fails_the_run)
   kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   TimeoutScenario timeout(kmt, report, search);
   timeout.run();
   CHECK(has_line(report, "FAIL timeout.held_lost"));
@@ -553,7 +579,8 @@ TEST(timeout_scenario, the_other_context_being_lost_fails_the_run)
   kmt.fail_at(MockKmt::Call::wait_for_context, 2u, device_removed);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   TimeoutScenario timeout(kmt, report, search);
   timeout.run();
   CHECK(has_line(report, "FAIL timeout.other_completed"));
@@ -566,7 +593,8 @@ TEST(guest_suite, the_timeout_run_is_the_timeout_scenario_and_the_adapter)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.fail_at(MockKmt::Call::wait_for_context, 1u, device_removed);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   GuestSuite suite(kmt, report, 0u);
   CHECK_EQ(suite.run_timeout(), 0u);
   CHECK(has_line(report, "ok adapter.find"));
@@ -580,7 +608,8 @@ TEST(guest_suite, the_timeout_run_is_the_timeout_scenario_and_the_adapter)
 TEST(timeout_scenario, without_the_adapter_it_reports_and_stops)
 { MockKmt kmt;
   AdapterSearch search(kmt);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   TimeoutScenario timeout(kmt, report, search);
   timeout.run();
   CHECK(has_line(report, "FAIL timeout.adapter"));
@@ -601,7 +630,8 @@ TEST(timeout_scenario, a_setup_that_fails_stops_the_run_where_it_failed)
       kmt.fail_at(one.call, one.nth, 0xC0000001u);
       AdapterSearch search(kmt);
       CHECK_STATUS(search.find_avgpu(0u), Status::ok);
-      GuestReport report;
+      av::MockPlatform report_memory;
+      GuestReport report(report_memory);
       TimeoutScenario timeout(kmt, report, search);
       timeout.run();
       CHECK(has_line(report, one.line));
@@ -645,7 +675,8 @@ TEST(guest_suite_run_av, runs_only_the_av_scenarios_in_order_and_closes_the_adap
   kmt.withhold_answer_at(before_fault + 1u);
   host.healthy_context();
   host.nop();
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   GuestSuite suite(kmt, report, 0u);
   const std::uint32_t failed = suite.run_av();
   CHECK_EQ(failed, 0u);
@@ -669,7 +700,8 @@ TEST(guest_suite_run_av, runs_only_the_av_scenarios_in_order_and_closes_the_adap
  * D3DKMT for nothing. */
 TEST(guest_suite_run_av, without_the_adapter_every_av_scenario_fails_at_its_first_step)
 { MockKmt kmt;
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   GuestSuite suite(kmt, report, 0u);
   CHECK_EQ(suite.run_av(), 8u);
   const char *const lines[] = {"FAIL adapter.find", "FAIL transport.adapter status=3",
@@ -687,7 +719,8 @@ TEST(guest_suite_run_round_trip, measures_answered_no_ops_on_the_adapter_it_name
   kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.set_adapter_luid(0u, 0x1234u);
   kmt.answer_waits(nullptr, 0u);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   GuestSuite suite(kmt, report, 0u);
   CHECK_EQ(suite.run_round_trip(), 0u);
   CHECK(has_line(report, "ok adapter.find\n"));
@@ -704,7 +737,8 @@ TEST(guest_suite_run_round_trip, a_failed_no_op_is_counted_among_the_failures)
   kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
   kmt.answer_waits(nullptr, 0u);
   kmt.fail_at(MockKmt::Call::wait_for_context, 1u, 0xC0000001u);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   GuestSuite suite(kmt, report, 0u);
   CHECK_EQ(suite.run_round_trip(), 1u);
   CHECK(has_line(report, "FAIL submit.warm"));

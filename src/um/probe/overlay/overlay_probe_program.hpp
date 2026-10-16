@@ -5,6 +5,7 @@
 #define AV_OVERLAY_PROBE_PROGRAM_HPP
 
 #include "guest/suite/guest_report.hpp"
+#include "um/common/process_heap.hpp"
 #include "um/kmt/gdi_kmt.hpp"
 #include "um/probe/overlay/windows_overlay_entry.hpp"
 
@@ -24,6 +25,7 @@ public:
 
 private:
     GdiKmt              kmt_;
+    ProcessHeap         heap_;
     GuestReport         report_;
     WindowsOverlayEntry dxgi_;
     uint32_t            hold_;

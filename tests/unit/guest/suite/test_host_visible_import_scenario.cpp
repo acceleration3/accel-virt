@@ -12,6 +12,7 @@
 #include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/host_visible_import_scenario.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
@@ -190,7 +191,8 @@ TEST(host_visible_import_scenario, the_host_gpu_copies_guest_written_pages_into_
 { Rig rig;
   rig.host().host_visible_import_run();
   rig.gpu().copy_at_wait(ScriptedHost::host_visible_import_copy_wait);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   rig.run(report);
   char expected[2048] = {};
   static_cast<void>(std::snprintf(
@@ -237,7 +239,8 @@ TEST(host_visible_import_scenario, every_import_is_released_before_its_chunk_is_
       Seen &at_release = *static_cast<Seen *>(context);
       at_release.escapes = at_release.kmt->calls(MockKmt::Call::escape);
   }, &seen);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   rig.run(report);
   CHECK_EQ(seen.escapes, 4u);   /* the views, the tail's publishing and the opens only */
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 6u);
@@ -257,7 +260,8 @@ TEST(host_visible_import_scenario, what_crosses_names_the_chunk_the_range_and_th
 { Rig rig;
   rig.host().host_visible_import_run();
   rig.gpu().copy_at_wait(ScriptedHost::host_visible_import_copy_wait);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   rig.run(report);
   CHECK_EQ(report.failed(), 0u);
   std::uint8_t  block[512] = {};
@@ -343,7 +347,8 @@ TEST(host_visible_import_scenario, an_import_no_type_takes_fails_the_step)
           rig.host().blob_import(0u, ScriptedHost::vk_memory);
       }
       rig.host().nop();
-      GuestReport report;
+      av::MockPlatform report_memory;
+      GuestReport report(report_memory);
       rig.run(report);
       CHECK(has_line(report, one.line));
       CHECK(!has_line(report, "import.src_bind_buffer"));
@@ -384,7 +389,8 @@ TEST(host_visible_import_scenario, a_host_refusal_at_each_step_is_reported_and_e
       for (std::uint32_t index = 0u; index < one.index; index++) answer(rig.host(), index);
       refuse(rig.host(), one.index);
       rig.kmt().answer_waits(nullptr, 0u);
-      GuestReport report;
+      av::MockPlatform report_memory;
+      GuestReport report(report_memory);
       rig.run(report);
       CHECK(has_line(report, one.line));
       CHECK(!has_line(report, one.skipped));
@@ -434,7 +440,8 @@ TEST(host_visible_import_scenario, a_driver_or_transport_failure_at_each_step_is
        * then publishing its ring tail. */
       if (one.fault == Fault::zero_escape) rig.kmt().zero_at(MockKmt::Call::escape, 3u);
       if (one.fault == Fault::short_pages) rig.kmt().answer_next_chunk_bytes((chunk_pages - 1u) * MockKmt::page_bytes);
-      GuestReport report;
+      av::MockPlatform report_memory;
+      GuestReport report(report_memory);
       rig.run(report);
       CHECK(has_line(report, one.line));
       CHECK(!has_line(report, one.skipped));
@@ -451,7 +458,8 @@ TEST(host_visible_import_scenario, a_recording_lost_at_its_begin_or_its_end_is_t
       Rig rig;
       answer_until(rig, 15u);
       rig.kmt().fail_at(MockKmt::Call::submit, nth, refused);
-      GuestReport report;
+      av::MockPlatform report_memory;
+      GuestReport report(report_memory);
       rig.run(report);
       CHECK_EQ(rig.sent(kCmd_vkBeginCommandBuffer), nth == 16u ? 0u : 1u);
       CHECK_EQ(rig.sent(kCmd_vkCmdCopyBuffer), nth == 16u ? 0u : 1u);
@@ -463,7 +471,8 @@ TEST(host_visible_import_scenario, a_recording_lost_at_its_begin_or_its_end_is_t
 TEST(host_visible_import_scenario, a_context_that_cannot_be_set_up_sends_nothing)
 { Rig rig;
   rig.kmt().fail_at(MockKmt::Call::create_context_virtual, 1u, refused);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   rig.run(report);
   CHECK(has_line(report, "FAIL import.initialize status=7"));
   CHECK(!has_line(report, "import.instance"));
@@ -477,7 +486,8 @@ TEST(host_visible_import_scenario, a_copy_that_leaves_bytes_wrong_reports_how_ma
   HostGpu spoiling(rig.kmt(), 5u);
   rig.host().host_visible_import_run();
   spoiling.copy_at_wait(ScriptedHost::host_visible_import_copy_wait);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   rig.run(report);
   CHECK(has_line(report, "ok import.wait 1\n"));
   CHECK(has_line(report, "FAIL import.copied status=9 1048571\n"));
@@ -492,7 +502,8 @@ TEST(host_visible_import_scenario, a_copy_that_leaves_bytes_wrong_reports_how_ma
 TEST(host_visible_import_scenario, a_host_that_never_copies_matches_nothing)
 { Rig rig;
   rig.host().host_visible_import_run();
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   rig.run(report);
   CHECK(has_line(report, "FAIL import.copied status=9 0\n"));
   CHECK_EQ(report.failed(), 2u);
@@ -504,7 +515,8 @@ TEST(host_visible_import_scenario, a_destination_written_before_the_submit_fails
 { Rig rig;
   rig.host().host_visible_import_run();
   rig.gpu().copy_at_wait(command_buffer_wait);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   rig.run(report);
   CHECK(has_line(report, "ok import.copied 1048576\n"));
   CHECK(has_line(report, "FAIL import.guest_saw_host_write status=9 1048576\n"));
@@ -520,7 +532,8 @@ TEST(host_visible_import_scenario, a_fence_that_comes_on_a_later_slice_passes)
   rig.host().vk_result(vk_timeout);
   rig.host().vk_result(0);
   rig.gpu().copy_at_wait(ScriptedHost::host_visible_import_copy_wait + 2u);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   rig.run(report);
   CHECK(has_line(report, "ok import.wait 3\n"));
   CHECK(has_line(report, "ok import.copied 1048576\n"));
@@ -537,7 +550,8 @@ TEST(host_visible_import_scenario, a_fence_wait_that_times_out_ten_times_fails_c
   for (std::uint32_t slice = 0u; slice < HostVisibleImportScenario::fence_slices; slice++)
       rig.host().vk_result(vk_timeout);
   rig.gpu().copy_at_wait(ScriptedHost::host_visible_import_copy_wait);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   rig.run(report);
   CHECK(has_line(report, "FAIL import.wait status=7 10\n"));
   CHECK(has_line(report, "FAIL import.copied status=7 1048576\n"));
@@ -551,7 +565,8 @@ TEST(host_visible_import_scenario, a_lost_device_fails_the_wait_on_its_first_sli
 { Rig rig;
   answer_until(rig, 17u);
   rig.host().vk_result(vk_error_device_lost);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   rig.run(report);
   CHECK(has_line(report, "FAIL import.wait status=7 1\n"));
   CHECK(has_line(report, "FAIL import.copied status=7 0\n"));
@@ -581,7 +596,8 @@ TEST(host_visible_import_scenario, a_release_that_fails_is_reported_and_everythi
       else rig.host().nop();
       if (one.fault == 1u) rig.kmt().fail_at(MockKmt::Call::escape, 5u, refused);
       rig.gpu().copy_at_wait(ScriptedHost::host_visible_import_copy_wait);
-      GuestReport report;
+      av::MockPlatform report_memory;
+      GuestReport report(report_memory);
       rig.run(report);
       CHECK(has_line(report, "ok import.guest_saw_host_write 0\n"));
       CHECK(has_line(report, one.line));

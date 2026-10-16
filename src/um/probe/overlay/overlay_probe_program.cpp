@@ -8,7 +8,7 @@
 
 namespace av {
 
-OverlayProbeProgram::OverlayProbeProgram(uint32_t hold) : kmt_(), report_("avoverlayprobe"), dxgi_(), hold_(hold)
+OverlayProbeProgram::OverlayProbeProgram(uint32_t hold) : kmt_(), heap_(), report_(heap_, "avoverlayprobe"), dxgi_(), hold_(hold)
 {
     AV_SCOPE("OverlayProbeProgram::OverlayProbeProgram");
 }

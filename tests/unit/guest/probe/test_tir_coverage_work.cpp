@@ -7,6 +7,7 @@
 #include "guest/probe/tir_coverage_work.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_d3d11_tir.hpp"
@@ -45,7 +46,7 @@ constexpr std::int32_t invalid_argument = static_cast<std::int32_t>(0x80070057u)
 
 class TirRig {
 public:
-    TirRig() : report_("avd3d11probe"), steps_(kmt_, report_, "d3d11") {}
+    TirRig() : report_(report_memory_, "avd3d11probe"), steps_(kmt_, report_, "d3d11") {}
     TirRig(const TirRig &) = delete;
     TirRig &operator=(const TirRig &) = delete;
 
@@ -65,7 +66,8 @@ public:
 private:
     ScriptedD3d11Tir d3d11_;
     MockKmt          kmt_;
-    GuestReport      report_;
+    av::MockPlatform report_memory_;
+    GuestReport      report_{report_memory_};
     ScenarioSteps    steps_;
 };
 

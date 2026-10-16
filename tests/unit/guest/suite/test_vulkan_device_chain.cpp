@@ -11,6 +11,7 @@
 #include "guest/suite/scenario_steps.hpp"
 #include "guest/suite/scenario_transport.hpp"
 #include "guest/suite/vulkan_device_chain.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
@@ -82,7 +83,8 @@ private:
     MockKmt           kmt_;
     AdapterSearch     search_;
     ScriptedHost      host_;
-    GuestReport       report_;
+    av::MockPlatform report_memory_;
+    GuestReport       report_{report_memory_};
     ScenarioSteps     steps_;
     ScenarioTransport link_;
     VulkanDeviceChain chain_;

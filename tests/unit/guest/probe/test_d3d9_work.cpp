@@ -4,6 +4,7 @@
 #include "guest/probe/d3d9_work.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_d3d9.hpp"
@@ -38,7 +39,7 @@ void *const window = reinterpret_cast<void *>(0x9002u);
 
 class D3d9Rig {
 public:
-    D3d9Rig() : report_("avd3d9probe"), steps_(kmt_, report_, "d3d9") {}
+    D3d9Rig() : report_(report_memory_, "avd3d9probe"), steps_(kmt_, report_, "d3d9") {}
     D3d9Rig(const D3d9Rig &) = delete;
     D3d9Rig &operator=(const D3d9Rig &) = delete;
 
@@ -64,7 +65,8 @@ private:
     ScriptedD3d9      d3d9_;
     ScriptedImageSink images_;
     MockKmt           kmt_;
-    GuestReport       report_;
+    av::MockPlatform report_memory_;
+    GuestReport       report_{report_memory_};
     ScenarioSteps     steps_;
     std::uint64_t     adapter_ = 0u;
 };
@@ -135,7 +137,8 @@ TEST(d3d9_work, rounding_is_within_a_step_and_an_impossible_state_is_named)
 { { ScriptedD3d9      d3d9;
     ScriptedImageSink images;
     MockKmt           kmt;
-    GuestReport       report("avd3d9probe");
+    av::MockPlatform report_memory;
+    GuestReport       report(report_memory, "avd3d9probe");
     ScenarioSteps     steps(kmt, report, "d3d9");
     D3d9Work          work(d3d9, images);
     work.run(steps, window);

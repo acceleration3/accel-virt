@@ -8,6 +8,7 @@
 #include "guest/probe/deferred_map_work.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_d3d11_deferred.hpp"
@@ -46,7 +47,7 @@ constexpr std::uint32_t first_measured = DeferredMapWork::warm_frames + 1u;
 
 class DeferredRig {
 public:
-    DeferredRig() : report_("avd3d11probe"), steps_(kmt_, report_, "d3d11") {}
+    DeferredRig() : report_(report_memory_, "avd3d11probe"), steps_(kmt_, report_, "d3d11") {}
     DeferredRig(const DeferredRig &) = delete;
     DeferredRig &operator=(const DeferredRig &) = delete;
 
@@ -67,7 +68,8 @@ public:
 private:
     ScriptedD3d11Deferred d3d11_;
     MockKmt               kmt_;
-    GuestReport           report_;
+    av::MockPlatform report_memory_;
+    GuestReport           report_{report_memory_};
     ScenarioSteps         steps_;
 };
 

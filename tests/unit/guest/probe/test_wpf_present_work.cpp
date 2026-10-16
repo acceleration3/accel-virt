@@ -7,6 +7,7 @@
 #include "guest/probe/wpf_present_work.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_d3d9ex.hpp"
@@ -41,7 +42,7 @@ void *const window = reinterpret_cast<void *>(0x9003u);
 
 class WpfRig {
 public:
-    WpfRig() : d3d9_(windows_), report_("avd3d9probe"), steps_(kmt_, report_, "d3d9")
+    WpfRig() : d3d9_(windows_), report_(report_memory_, "avd3d9probe"), steps_(kmt_, report_, "d3d9")
     {
         windows_.set_window(window, WpfPresentWork::extent, WpfPresentWork::extent);
     }
@@ -69,7 +70,8 @@ private:
     ScriptedD3d9Ex      d3d9_;
     ScriptedImageSink   images_;
     MockKmt             kmt_;
-    GuestReport         report_;
+    av::MockPlatform report_memory_;
+    GuestReport         report_{report_memory_};
     ScenarioSteps       steps_;
 };
 

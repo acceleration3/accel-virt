@@ -8,7 +8,7 @@
 
 namespace av {
 
-ClProbeProgram::ClProbeProgram() : kmt_(), report_("avclprobe"), cl_()
+ClProbeProgram::ClProbeProgram() : kmt_(), heap_(), report_(heap_, "avclprobe"), cl_()
 {
     AV_SCOPE("ClProbeProgram::ClProbeProgram");
 }

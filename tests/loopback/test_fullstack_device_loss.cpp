@@ -14,6 +14,7 @@
 #include "guest/kmt/adapter_search.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/host_loss_scenario.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/executor/widest_host_gpu.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/fullstack/full_stack_rig.hpp"
@@ -69,7 +70,8 @@ TEST(fullstack_device_loss, every_direct3d_context_is_removed_others_run_on_and_
   }
   av::FullStackRig rig(*av_executor_ops(), gpu.uuid());
   CHECK_EQ(rig.started(), 0);
-  av::GuestReport report;
+  av::MockPlatform report_memory;
+  av::GuestReport report(report_memory);
   { av::AdapterSearch search(rig.kmt());
     CHECK_STATUS(search.find_avgpu(0u), av::Status::ok);
     { av::HostLossScenario scenario(rig.kmt(), report, search);

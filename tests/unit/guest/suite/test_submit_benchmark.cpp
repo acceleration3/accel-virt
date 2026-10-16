@@ -15,6 +15,7 @@
 #include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/submit_benchmark.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 
@@ -73,7 +74,8 @@ private:
 TEST(submit_benchmark, measures_both_paths_on_one_run_and_answers_their_ratio)
 { Rig rig;
   rig.kmt().allow_hardware_scheduling();
-  GuestReport     report;
+  av::MockPlatform report_memory;
+  GuestReport     report(report_memory);
   SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
   benchmark.run();
   CHECK_EQ(report.failed(), 0u);
@@ -106,7 +108,8 @@ TEST(submit_benchmark, measures_both_paths_on_one_run_and_answers_their_ratio)
  * has, and reports no gain at all rather than one it did not have. */
 TEST(submit_benchmark, a_machine_without_hardware_queues_reports_no_gain)
 { Rig rig;
-  GuestReport     report;
+  av::MockPlatform report_memory;
+  GuestReport     report(report_memory);
   SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
   benchmark.run();
   CHECK_EQ(report.failed(), 0u);
@@ -122,7 +125,8 @@ TEST(submit_benchmark, a_machine_without_hardware_queues_reports_no_gain)
 TEST(submit_benchmark, a_run_that_cannot_be_measured_fails_rather_than_reporting_a_number)
 { { Rig rig;
     rig.kmt().set_frequency(0u);
-    GuestReport     report;
+    av::MockPlatform report_memory;
+    GuestReport     report(report_memory);
     SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
     benchmark.run();
     CHECK(has_line(report, "FAIL submit.kernel status=6"));
@@ -133,7 +137,8 @@ TEST(submit_benchmark, a_run_that_cannot_be_measured_fails_rather_than_reporting
   Rig rig;
   /* The second submission of the first block: the warm no-op's is the first. */
   rig.kmt().fail_at(MockKmt::Call::submit, 2u, 0xC0000001u);
-  GuestReport     report;
+  av::MockPlatform report_memory;
+  GuestReport     report(report_memory);
   SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
   benchmark.run();
   CHECK(has_line(report, "FAIL submit.kernel status=7"));
@@ -146,7 +151,8 @@ TEST(submit_benchmark, a_run_that_cannot_be_measured_fails_rather_than_reporting
 TEST(submit_benchmark, a_step_that_fails_stops_the_run_where_it_failed)
 { { Rig rig;
     rig.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
-    GuestReport     report;
+    av::MockPlatform report_memory;
+    GuestReport     report(report_memory);
     SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
     benchmark.run();
     CHECK(has_line(report, "FAIL submit.warm status=7"));
@@ -159,7 +165,8 @@ TEST(submit_benchmark, a_step_that_fails_stops_the_run_where_it_failed)
   Rig rig;
   rig.kmt().allow_hardware_scheduling();
   rig.kmt().fail_at(MockKmt::Call::wait_for_hw_queue, 2u, 0xC0000001u);
-  GuestReport     report;
+  av::MockPlatform report_memory;
+  GuestReport     report(report_memory);
   SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
   benchmark.run();
   CHECK(has_line(report, "FAIL submit.doorbell status=7"));
@@ -173,7 +180,8 @@ TEST(submit_benchmark, a_step_that_fails_stops_the_run_where_it_failed)
 TEST(submit_benchmark, round_trips_report_their_spread_in_order)
 { Rig rig;
   rig.kmt().spend_on_wait(10u);   /* a microsecond a trip, after the reply-slot watch */
-  GuestReport     report;
+  av::MockPlatform report_memory;
+  GuestReport     report(report_memory);
   SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
   benchmark.round_trips();
   CHECK_EQ(report.failed(), 0u);
@@ -189,7 +197,8 @@ TEST(submit_benchmark, round_trips_report_their_spread_in_order)
 TEST(submit_benchmark, round_trips_stop_at_the_first_no_op_that_fails)
 { Rig rig;
   rig.kmt().fail_at(MockKmt::Call::wait_for_context, 3u, 0xC0000001u);
-  GuestReport     report;
+  av::MockPlatform report_memory;
+  GuestReport     report(report_memory);
   SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
   benchmark.round_trips();
   CHECK(has_line(report, "ok submit.warm\n"));
@@ -200,7 +209,8 @@ TEST(submit_benchmark, round_trips_stop_at_the_first_no_op_that_fails)
 
   Rig cold;
   cold.kmt().fail_at(MockKmt::Call::wait_for_context, 1u, 0xC0000001u);
-  GuestReport     refused;
+  av::MockPlatform refused_memory;
+  GuestReport     refused(refused_memory);
   SubmitBenchmark again(cold.kmt(), refused, cold.search());
   again.round_trips();
   CHECK(has_line(refused, "FAIL submit.warm"));

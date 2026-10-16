@@ -12,6 +12,7 @@
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_d3d11_shared.hpp"
@@ -57,7 +58,7 @@ private:
 class LossRig {
 public:
     explicit LossRig(std::uint32_t answer)
-        : report_("avd3d11probe"), steps_(kmt_, report_, "d3d11"), request_(kmt_), loser_(before_)
+        : report_(report_memory_, "avd3d11probe"), steps_(kmt_, report_, "d3d11"), request_(kmt_), loser_(before_)
     {
         kmt_.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
         for (std::uint32_t at = 0u; at < 4u; at++) answer_[at] = static_cast<std::uint8_t>(answer >> (8u * at));
@@ -86,7 +87,8 @@ public:
 
 private:
     MockKmt             kmt_;
-    GuestReport         report_;
+    av::MockPlatform report_memory_;
+    GuestReport         report_{report_memory_};
     ScenarioSteps       steps_;
     ScriptedD3d11Shared before_;
     ScriptedD3d11Shared after_;

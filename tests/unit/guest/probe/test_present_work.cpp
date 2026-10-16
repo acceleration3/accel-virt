@@ -9,6 +9,7 @@
 #include "guest/probe/probe_outcome.hpp"
 #include "guest/suite/scenario_steps.hpp"
 #include "guest/probe/window_frame.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_image_sink.hpp"
@@ -52,7 +53,7 @@ void *const             module_handle = reinterpret_cast<void *>(0x7771u);
 /* A device on the scripted GPU, a window it presents into, and the work. */
 class PresentRig {
 public:
-    PresentRig() : device_(vulkan_), report_("avvkprobe"), steps_(kmt_, report_, "vulkan")
+    PresentRig() : device_(vulkan_), report_(report_memory_, "avvkprobe"), steps_(kmt_, report_, "vulkan")
     {
         frames_.set_window(window_handle, side, side);
         vulkan_.present_into(frames_);
@@ -84,7 +85,8 @@ private:
     av::ScriptedImageSink pictures_;
     ProbeDevice           device_;
     av::MockKmt           kmt_;
-    av::GuestReport       report_;
+    av::MockPlatform report_memory_;
+    av::GuestReport       report_{report_memory_};
     av::ScenarioSteps     steps_;
 };
 

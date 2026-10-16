@@ -10,6 +10,7 @@
 #include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/transport_scenario.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "proto/escape/av_context_record.hpp"
@@ -77,7 +78,8 @@ TEST(transport_scenario, a_no_op_the_device_answers_empty_passes_and_reports_its
    * millisecond the transport watches the reply slot for before it asks the
    * kernel to wait: this device answers only at the wait. */
   rig.kmt().spend_on_wait(2500u);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
   scenario.run();
   CHECK(std::strcmp(report.text(),
@@ -106,7 +108,8 @@ TEST(transport_scenario, an_answer_with_bytes_in_it_is_not_a_no_op)
       Rig rig;
       std::uint8_t answer[64] = {};
       rig.kmt().answer_waits(answer, size);
-      GuestReport report;
+      av::MockPlatform report_memory;
+      GuestReport report(report_memory);
       TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
       scenario.run();
       char line[64];
@@ -133,7 +136,8 @@ TEST(transport_scenario, a_failure_at_each_step_is_reported_and_later_steps_skip
       Rig rig;
       rig.kmt().answer_waits(nullptr, 0u);
       rig.kmt().fail_at(refusal.call, 1u, unsuccessful);
-      GuestReport report;
+      av::MockPlatform report_memory;
+      GuestReport report(report_memory);
       TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
       scenario.run();
       CHECK(has_line(report, refusal.line));
@@ -162,7 +166,8 @@ TEST(transport_scenario, the_warm_no_ops_report_their_median_and_fastest)
       rig.kmt().answer_waits(nullptr, 0u);
       rig.kmt().spend_on_wait(10000u);
       rig.kmt().slow_every(one.slow_nth, 50000u);
-      GuestReport report;
+      av::MockPlatform report_memory;
+      GuestReport report(report_memory);
       TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
       scenario.run();
       CHECK(has_line(report, one.first));
@@ -181,7 +186,8 @@ TEST(transport_scenario, a_warm_no_op_that_fails_stops_the_warm_rounds)
   const std::uint8_t warm_answer[4] = {};
   rig.kmt().queue_answer(warm_answer, sizeof warm_answer);
   rig.kmt().spend_on_wait(50000u);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
   scenario.run();
   CHECK(has_line(report, "ok transport.latency 6000\n"));
@@ -194,7 +200,8 @@ TEST(transport_scenario, a_warm_no_op_that_fails_stops_the_warm_rounds)
   Rig second;
   second.kmt().answer_waits(nullptr, 0u);
   second.kmt().fail_at(MockKmt::Call::wait_for_context, 7u, unsuccessful);
-  GuestReport lost;
+  av::MockPlatform lost_memory;
+  GuestReport lost(lost_memory);
   TransportScenario again(second.kmt(), lost, second.search(), av::SubApi::vulkan, "transport");
   again.run();
   CHECK(has_line(lost, "ok transport.latency 1000\n"));
@@ -210,7 +217,8 @@ TEST(transport_scenario, a_clock_without_a_frequency_reports_no_latency)
   rig.kmt().answer_waits(nullptr, 0u);
   rig.kmt().spend_on_wait(2500u);
   rig.kmt().set_frequency(0u);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
   scenario.run();
   CHECK(has_line(report, "ok transport.nop 0\n"));
@@ -222,7 +230,8 @@ TEST(transport_scenario, a_clock_without_a_frequency_reports_no_latency)
 /* A device that never writes the answer loses the call, not the guest. */
 TEST(transport_scenario, a_device_that_never_answers_fails_the_send)
 { Rig rig;
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
   scenario.run();
   CHECK(has_line(report, "ok transport.initialize\n"));
@@ -235,7 +244,8 @@ TEST(transport_scenario, without_the_adapter_it_asks_the_driver_for_nothing)
   kmt.add_adapter(basic_render, 3100u);
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find_avgpu(0u), Status::not_found);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   TransportScenario scenario(kmt, report, search, av::SubApi::vulkan, "transport");
   scenario.run();
   CHECK(has_line(report, "FAIL transport.adapter status=3"));
@@ -249,7 +259,8 @@ TEST(transport_scenario, without_the_adapter_it_asks_the_driver_for_nothing)
 TEST(transport_scenario, an_opengl_context_is_asked_for_by_its_record_and_named_in_the_report)
 { Rig rig;
   rig.kmt().answer_waits(nullptr, 0u);
-  GuestReport report;
+  av::MockPlatform report_memory;
+  GuestReport report(report_memory);
   TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::opengl, "opengl");
   scenario.run();
   CHECK(has_line(report, "ok opengl.initialize\n"));
