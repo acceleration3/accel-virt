@@ -53,6 +53,7 @@ namespace av {
 class BlockSource;
 class ClientTransport;
 class Kmt;
+class ThreadLock;
 }  // namespace av
 
 namespace av::icd {
@@ -60,7 +61,6 @@ namespace av::icd {
 class WindowChains;
 class WindowSurface;
 class MemoryTypeTable;
-class ThreadLock;
 struct IcdRootProbe;
 
 class IcdRoot final : public StateReporter {

@@ -35,11 +35,11 @@ class BlockSource;
 class ClientTransport;
 class Kmt;
 class StateWriter;
+class ThreadLock;
 }  // namespace av
 
 namespace av::icd {
 
-class ThreadLock;
 struct ConnectionProbe;
 
 class Connection {

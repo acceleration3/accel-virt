@@ -1,15 +1,15 @@
 #include "icd/opengl/gl_icd_root.hpp"
 
 #include "core/log/log_line.hpp"
-#include "icd/common/report_gate.hpp"
-#include "icd/common/thread_lock_hold.hpp"
+#include "core/platform/thread_lock_hold.hpp"
+#include "core/trace/report_gate.hpp"
 #include "icd/opengl/granted_profile.hpp"
 
+#include "core/platform/thread_lock.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "core/log/log_sink.hpp"
 #include "guest/transport/context_fault.hpp"
-#include "icd/common/thread_lock.hpp"
 #include "icd/opengl/context_attributes.hpp"
 #include "icd/opengl/gl_entry_points.hpp"
 #include "icd/opengl/gl_icd_binding.hpp"
@@ -122,7 +122,7 @@ constexpr uint32_t reported_wgl_count = sizeof reported_wgl_extensions / sizeof 
 
 }  // namespace
 
-GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
+GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock,
                      LogSink &log, icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
                      GlPresentLoop &presents, GlIcdBinding &binding)
     : lock_(lock), log_(log), lines_(memory, log, "avgl: "), refused_(lines_), surface_(surface), slot_(slot), system_(system), presents_(presents),
@@ -176,7 +176,7 @@ bool GlIcdRoot::set_pixel_format(void *dc, int32_t index)
         fail(error_invalid_pixel_format);
         return false;
     }
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     /* Rows of windows gone first: a handle Windows reuses starts with no format. */
     windows_.drop_gone(surface_);
     const Status set = windows_.set_format(window, index);
@@ -198,7 +198,7 @@ uint64_t GlIcdRoot::create_layer_context(void *dc, int32_t layer)
         fail(error_invalid_parameter);
         return 0u;
     }
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     const uint64_t pending = take_pending(slot_.thread_id());
     if (pending != 0u) return pending;
     const int32_t format = windows_.format_of(surface_.window_of(dc));
@@ -214,7 +214,7 @@ uint64_t GlIcdRoot::create_layer_context(void *dc, int32_t layer)
 bool GlIcdRoot::delete_context(uint64_t handle)
 {
     AV_SCOPE("GlIcdRoot::delete_context");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     GuestGlContext *const context = contexts_.resolve(handle);
     if (context == nullptr) {
         fail(error_invalid_handle);
@@ -233,7 +233,7 @@ bool GlIcdRoot::delete_context(uint64_t handle)
 void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
 {
     AV_SCOPE("GlIcdRoot::set_context");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     GuestGlContext *const context = contexts_.resolve(handle);
     if (context == nullptr) {
         fail(error_invalid_handle);
@@ -279,7 +279,7 @@ void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
 bool GlIcdRoot::release_context(uint64_t handle)
 {
     AV_SCOPE("GlIcdRoot::release_context");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     GuestGlContext *const context = contexts_.resolve(handle);
     if (context == nullptr || currents_.current() != context) return false;
     context->flush();
@@ -300,7 +300,7 @@ bool GlIcdRoot::copy_context(uint64_t, uint64_t, uint32_t)
 bool GlIcdRoot::share_lists(uint64_t first, uint64_t second)
 {
     AV_SCOPE("GlIcdRoot::share_lists");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     GuestGlContext *const target = contexts_.resolve(first);
     GuestGlContext *const sharer = contexts_.resolve(second);
     if (target == nullptr || sharer == nullptr) {
@@ -487,7 +487,7 @@ void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *at
     const Status pended = made == Status::ok ? put_pending(thread, handle) : made;
     lock_.release();
     void *const hglrc = pended == Status::ok ? system_.create_context(dc) : nullptr;
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     const uint64_t unclaimed = take_pending(thread);
     if (hglrc != nullptr && unclaimed == 0u) return hglrc;
     static_cast<void>(contexts_.destroy(handle));
@@ -655,7 +655,7 @@ void GlIcdRoot::note_dropped(const char *api, const char *command, size_t writte
 void GlIcdRoot::report(StateWriter &writer)
 {
     AV_SCOPE("GlIcdRoot::report");
-    const icd::ReportGate gate(lock_, writer, "avgl");
+    const ReportGate gate(lock_, writer, "avgl");
     if (!gate.held()) return;
     writer.number("callbacks", callback_count_);
     writer.number("current_anywhere", currents_.anywhere());
@@ -777,7 +777,7 @@ GuestGlContext *GlIcdRoot::shared_context(void *share)
     if (callback_count_ <= callback_get_dhglrc) return nullptr;
     using GetDhglrc = uintptr_t (APIENTRY *)(void *);
     const uintptr_t handle = reinterpret_cast<GetDhglrc>(callbacks_[callback_get_dhglrc])(share);
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     GuestGlContext *const target = contexts_.resolve(handle);
     if (target == nullptr) return nullptr;
     if (target->state() == GuestGlContext::State::created && make_chain(*target) != Status::ok) return nullptr;

@@ -1,9 +1,9 @@
 #include "icd/vendor/nvapi_root.hpp"
 
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/pci_identity.hpp"
-#include "icd/common/thread_lock_hold.hpp"
 #include "icd/vendor/ddi/nv_display_driver_memory_info_record.hpp"
 
 namespace av::vendor {
@@ -19,7 +19,7 @@ constexpr uint64_t kib = 1024u;
 
 }  // namespace
 
-NvapiRoot::NvapiRoot(Kmt &kmt, icd::ThreadLock &lock) : lock_(lock), adapters_(kmt), opened_(0u), displays_{}
+NvapiRoot::NvapiRoot(Kmt &kmt, ThreadLock &lock) : lock_(lock), adapters_(kmt), opened_(0u), displays_{}
 {
     AV_SCOPE("NvapiRoot::NvapiRoot");
 }
@@ -27,7 +27,7 @@ NvapiRoot::NvapiRoot(Kmt &kmt, icd::ThreadLock &lock) : lock_(lock), adapters_(k
 int NvapiRoot::initialize()
 {
     AV_SCOPE("NvapiRoot::initialize");
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (adapters_.learn() != Status::ok) return error;
     if (adapters_.count_of(PciIdentity::nvidia_vendor) == 0u) return device_not_found;
     ++opened_;
@@ -37,7 +37,7 @@ int NvapiRoot::initialize()
 int NvapiRoot::unload()
 {
     AV_SCOPE("NvapiRoot::unload");
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (opened_ == 0u) return not_initialized;
     --opened_;
     return ok;
@@ -47,7 +47,7 @@ int NvapiRoot::enum_physical_gpus(void **gpus, uint32_t *count)
 {
     AV_SCOPE("NvapiRoot::enum_physical_gpus");
     if (gpus == nullptr || count == nullptr) return invalid_argument;
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (opened_ == 0u) return not_initialized;
     /* Every adapter fits: VendorAdapters holds fewer than NVAPI's array. */
     static_assert(VendorAdapters::max_adapters <= max_physical_gpus);
@@ -62,7 +62,7 @@ int NvapiRoot::full_name(const void *gpu, char *name)
 {
     AV_SCOPE("NvapiRoot::full_name");
     if (name == nullptr) return invalid_argument;
-    const icd::ThreadLockHold  held(lock_);
+    const ThreadLockHold       held(lock_);
     const VendorAdapter *const asked = adapter(gpu);
     if (asked == nullptr) return opened_ == 0u ? not_initialized : expected_physical_gpu_handle;
     TextBuffer text(name, short_string);
@@ -76,7 +76,7 @@ int NvapiRoot::pci_identifiers(const void *gpu, uint32_t *device_id, uint32_t *s
     AV_SCOPE("NvapiRoot::pci_identifiers");
     if (device_id == nullptr || subsystem_id == nullptr || revision == nullptr || external_device_id == nullptr)
         return invalid_argument;
-    const icd::ThreadLockHold  held(lock_);
+    const ThreadLockHold       held(lock_);
     const VendorAdapter *const asked = adapter(gpu);
     if (asked == nullptr) return opened_ == 0u ? not_initialized : expected_physical_gpu_handle;
     const PciIdentity &identity = asked->facts().identity();
@@ -91,7 +91,7 @@ int NvapiRoot::bus_id(const void *gpu, uint32_t *bus)
 {
     AV_SCOPE("NvapiRoot::bus_id");
     if (bus == nullptr) return invalid_argument;
-    const icd::ThreadLockHold  held(lock_);
+    const ThreadLockHold       held(lock_);
     const VendorAdapter *const asked = adapter(gpu);
     if (asked == nullptr) return opened_ == 0u ? not_initialized : expected_physical_gpu_handle;
     *bus = asked->facts().location().bus();
@@ -102,7 +102,7 @@ int NvapiRoot::bus_slot_id(const void *gpu, uint32_t *slot)
 {
     AV_SCOPE("NvapiRoot::bus_slot_id");
     if (slot == nullptr) return invalid_argument;
-    const icd::ThreadLockHold  held(lock_);
+    const ThreadLockHold       held(lock_);
     const VendorAdapter *const asked = adapter(gpu);
     if (asked == nullptr) return opened_ == 0u ? not_initialized : expected_physical_gpu_handle;
     *slot = asked->facts().location().device();
@@ -113,7 +113,7 @@ int NvapiRoot::gpu_type(const void *gpu, int *type)
 {
     AV_SCOPE("NvapiRoot::gpu_type");
     if (type == nullptr) return invalid_argument;
-    const icd::ThreadLockHold  held(lock_);
+    const ThreadLockHold       held(lock_);
     const VendorAdapter *const asked = adapter(gpu);
     if (asked == nullptr) return opened_ == 0u ? not_initialized : expected_physical_gpu_handle;
     *type = asked->facts().integrated() ? gpu_integrated : gpu_discrete;
@@ -127,7 +127,7 @@ int NvapiRoot::memory_info(const void *gpu, NvDisplayDriverMemoryInfoRecord *mem
     const uint32_t version = memory->version;
     if (version != memory_info_v1 && version != memory_info_v2 && version != memory_info_v3)
         return incompatible_struct_version;
-    const icd::ThreadLockHold  held(lock_);
+    const ThreadLockHold       held(lock_);
     const VendorAdapter *const asked = adapter(gpu);
     if (asked == nullptr) return opened_ == 0u ? not_initialized : expected_physical_gpu_handle;
     const auto dedicated = static_cast<uint32_t>(asked->facts().dedicated_video_bytes() / kib);
@@ -147,7 +147,7 @@ int NvapiRoot::adapter_id(const void *gpu, void *luid)
 {
     AV_SCOPE("NvapiRoot::adapter_id");
     if (luid == nullptr) return invalid_argument;
-    const icd::ThreadLockHold  held(lock_);
+    const ThreadLockHold       held(lock_);
     const VendorAdapter *const asked = adapter(gpu);
     if (asked == nullptr) return opened_ == 0u ? not_initialized : expected_physical_gpu_handle;
     auto *const bytes = static_cast<uint8_t *>(luid);
@@ -160,7 +160,7 @@ int NvapiRoot::driver_and_branch_version(uint32_t *version, char *branch)
 {
     AV_SCOPE("NvapiRoot::driver_and_branch_version");
     if (version == nullptr || branch == nullptr) return invalid_argument;
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (opened_ == 0u) return not_initialized;
     /* A second initialise that found no NVIDIA GPU leaves the first's open
      * over none, which NVAPI answers as a machine without one. */
@@ -178,7 +178,7 @@ int NvapiRoot::enum_display(uint32_t index, void **display)
 {
     AV_SCOPE("NvapiRoot::enum_display");
     if (display == nullptr) return invalid_argument;
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (opened_ == 0u) return not_initialized;
     const uint32_t count = adapters_.count_of(PciIdentity::nvidia_vendor);
     uint32_t       seen = 0u;
@@ -194,7 +194,7 @@ int NvapiRoot::gpus_from_display(const void *display, void **gpus, uint32_t *cou
 {
     AV_SCOPE("NvapiRoot::gpus_from_display");
     if (gpus == nullptr || count == nullptr) return invalid_argument;
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (opened_ == 0u) return not_initialized;
     const uint32_t found = adapters_.count_of(PciIdentity::nvidia_vendor);
     for (uint32_t at = 0u; at < found; ++at) {

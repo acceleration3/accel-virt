@@ -1,8 +1,8 @@
 #include "icd/common/shared_handles.hpp"
 
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "icd/common/thread_lock_hold.hpp"
 #include "proto/resources/shared_allocation_data.hpp"
 
 namespace av::icd {

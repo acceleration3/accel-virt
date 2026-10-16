@@ -43,12 +43,12 @@ class BlockSource;
 class ClientTransport;
 class HostAllocation;
 class StateWriter;
+class ThreadLock;
 }  // namespace av
 
 namespace av::icd {
 class IcdConnection;
 class SharedHandles;
-class ThreadLock;
 }  // namespace av::icd
 
 namespace av::clicd {
@@ -85,8 +85,8 @@ public:
     static constexpr uint64_t staging_reserve = uint64_t{8} << 20u;
 
     /* `blocks_lock` is the arena blocks' own (ClArenaBlocks). */
-    GuestClContext(icd::IcdConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock,
-                   icd::ThreadLock &blocks_lock, LogSink &log, icd::SharedHandles &handles);
+    GuestClContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock,
+                   ThreadLock &blocks_lock, LogSink &log, icd::SharedHandles &handles);
     ~GuestClContext();
     GuestClContext(const GuestClContext &) = delete;
     GuestClContext &operator=(const GuestClContext &) = delete;

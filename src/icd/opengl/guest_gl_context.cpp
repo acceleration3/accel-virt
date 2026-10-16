@@ -3,12 +3,12 @@
 #include "icd/common/version_text.hpp"
 
 #include "core/platform/block_source.hpp"
+#include "core/platform/thread_lock.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "core/log/log_sink.hpp"
-#include "icd/common/thread_lock.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
@@ -32,7 +32,7 @@ constexpr uint32_t no_error = 0u;
 
 }  // namespace
 
-GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock,
+GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock,
                                LogSink &log, const GlExtensionPolicy &extensions,
                                icd::SharedHandles &handles, int32_t pixel_format,
                                const GlContextOptions &options)

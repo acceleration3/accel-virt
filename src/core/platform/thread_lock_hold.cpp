@@ -1,9 +1,9 @@
-#include "icd/common/thread_lock_hold.hpp"
+#include "core/platform/thread_lock_hold.hpp"
 
+#include "core/platform/thread_lock.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/thread_lock.hpp"
 
-namespace av::icd {
+namespace av {
 
 ThreadLockHold::ThreadLockHold(ThreadLock &lock) : lock_(lock)
 {
@@ -17,4 +17,4 @@ ThreadLockHold::~ThreadLockHold()
     lock_.release();
 }
 
-}  // namespace av::icd
+}  // namespace av

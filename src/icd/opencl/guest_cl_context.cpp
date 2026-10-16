@@ -15,7 +15,7 @@
 namespace av::clicd {
 
 GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memory,
-                               icd::ThreadLock &send_lock, icd::ThreadLock &blocks_lock, LogSink &log,
+                               ThreadLock &send_lock, ThreadLock &blocks_lock, LogSink &log,
                                icd::SharedHandles &handles)
     : memory_(memory), log_(log),
       link_(connection), gl_share_(0u), wakes_(false),

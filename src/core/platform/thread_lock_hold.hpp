@@ -1,9 +1,9 @@
 /* A ThreadLock held for the life of a scope: taken at construction, let go at
  * destruction, so no return path can leave it held. */
-#ifndef AV_ICD_THREAD_LOCK_HOLD_HPP
-#define AV_ICD_THREAD_LOCK_HOLD_HPP
+#ifndef AV_THREAD_LOCK_HOLD_HPP
+#define AV_THREAD_LOCK_HOLD_HPP
 
-namespace av::icd {
+namespace av {
 
 class ThreadLock;
 
@@ -18,6 +18,6 @@ private:
     ThreadLock &lock_;
 };
 
-}  // namespace av::icd
+}  // namespace av
 
-#endif  // AV_ICD_THREAD_LOCK_HOLD_HPP
+#endif  // AV_THREAD_LOCK_HOLD_HPP

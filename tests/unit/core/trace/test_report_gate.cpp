@@ -1,15 +1,15 @@
 /* A state dump's hold on its root's lock (ReportGate): the section opened,
  * busy=false and the lock held until the gate goes when the lock is free;
  * busy=true and the section closed at once, never waiting, when it is not. */
+#include "core/trace/report_gate.hpp"
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
-#include "icd/common/report_gate.hpp"
 
 #include <cstring>
 
-using av::icd::ReportGate;
+using av::ReportGate;
 
 TEST(report_gate, a_free_lock_is_held_until_the_gate_goes)
 { av::LockTrace           trace;

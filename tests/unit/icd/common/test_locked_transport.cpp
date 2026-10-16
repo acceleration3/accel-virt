@@ -169,7 +169,7 @@ TEST(locked_transport, invariants_refuse_a_held_lock_with_no_call_or_a_call_with
 namespace {
 
 /* A real mutex, so two threads contend for it. */
-class MutexLock final : public av::icd::ThreadLock {
+class MutexLock final : public av::ThreadLock {
 public:
     MutexLock() { pthread_mutex_init(&mutex_, nullptr); }
     ~MutexLock() { pthread_mutex_destroy(&mutex_); }

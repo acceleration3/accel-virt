@@ -35,11 +35,8 @@ namespace av {
 class BlockSource;
 class ClientTransport;
 class StateWriter;
-}  // namespace av
-
-namespace av::icd {
 class ThreadLock;
-}
+}  // namespace av
 
 namespace av::clicd {
 
@@ -68,7 +65,7 @@ public:
     /* `lock` is the ICD's: the table is written by application threads and
      * read by the watcher's own, so both hold it while they touch a row -
      * and never while a callback runs or the host is asked. */
-    ClEventWatcher(BlockSource &memory, icd::ServiceThread &thread, LogSink &log, icd::ThreadLock &lock,
+    ClEventWatcher(BlockSource &memory, icd::ServiceThread &thread, LogSink &log, ThreadLock &lock,
                    ClEventOwner &owner);
     ~ClEventWatcher();
     ClEventWatcher(const ClEventWatcher &) = delete;
@@ -142,7 +139,7 @@ private:
 
     icd::ServiceThread &thread_;
     LogSink       &log_;
-    icd::ThreadLock    &lock_;
+    ThreadLock         &lock_;
     ClEventOwner       &owner_;
     struct Row {
         ClWatchedEvent registration_;

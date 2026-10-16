@@ -34,10 +34,10 @@ namespace av {
 class BlockSource;
 class Kmt;
 class StateWriter;
+class ThreadLock;
 }  // namespace av
 
 namespace av::icd {
-class ThreadLock;
 class WakeSignal;
 class WindowChains;
 class WindowSurface;
@@ -59,7 +59,7 @@ public:
     static constexpr uint32_t slot_looks = 500u;
 
     GlPresentLoop(BlockSource &memory, icd::ServiceThread &thread, icd::WakeSignal &handed, icd::WakeSignal &shown,
-                  icd::ThreadLock &lock, Kmt &kmt, icd::WindowSurface &surface, icd::WindowChains &chains,
+                  ThreadLock &lock, Kmt &kmt, icd::WindowSurface &surface, icd::WindowChains &chains,
                   LogSink &log);
     ~GlPresentLoop();
     GlPresentLoop(const GlPresentLoop &) = delete;
@@ -131,7 +131,7 @@ private:
     icd::ServiceThread &thread_;
     icd::WakeSignal    &handed_;
     icd::WakeSignal    &shown_;
-    icd::ThreadLock    &lock_;
+    ThreadLock         &lock_;
     Kmt                &kmt_;
     icd::WindowSurface &surface_;
     icd::WindowChains  &chains_;

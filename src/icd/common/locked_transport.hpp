@@ -19,9 +19,12 @@
 
 #include <stdint.h>
 
+namespace av {
+class ThreadLock;
+}  // namespace av
+
 namespace av::icd {
 
-class ThreadLock;
 struct LockedTransportProbe;
 
 class LockedTransport final : public ClientTransport {

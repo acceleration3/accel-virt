@@ -2,13 +2,13 @@
  by, so their own rules are tested: a recursive acquire
  * and a stray release are violations a test must claim, a lock left held fails
  * the test, the trace keeps the order, the log keeps and counts lines. */
+#include "core/platform/thread_lock.hpp"
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "core/log/log_sink.hpp"
-#include "icd/common/thread_lock.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -22,7 +22,7 @@ TEST(recording_thread_lock, traces_acquire_and_release_of_each_lock_in_order)
 { LockTrace trace;
   RecordingThreadLock outer(trace, 'S');
   RecordingThreadLock inner(trace, 'H');
-  av::icd::ThreadLock &seam = outer;
+  av::ThreadLock &seam = outer;
   seam.acquire();
   CHECK(outer.held());
   CHECK(!inner.held());

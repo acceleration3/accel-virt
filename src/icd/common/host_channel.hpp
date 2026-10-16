@@ -48,11 +48,11 @@ namespace av {
 class BlockSource;
 class GuestConnection;
 class StateWriter;
+class ThreadLock;
 }  // namespace av
 
 namespace av::icd {
 
-class ThreadLock;
 struct HostChannelProbe;
 
 /* The sizes one driver's channels are opened at. */

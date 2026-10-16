@@ -1,15 +1,15 @@
 #include "icd/opencl/cl_event_watcher.hpp"
 
+#include "core/platform/thread_lock.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "core/log/log_sink.hpp"
-#include "icd/common/thread_lock.hpp"
 #include "icd/opencl/cl_object.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
 namespace av::clicd {
 
-ClEventWatcher::ClEventWatcher(BlockSource &memory, icd::ServiceThread &thread, LogSink &log, icd::ThreadLock &lock,
+ClEventWatcher::ClEventWatcher(BlockSource &memory, icd::ServiceThread &thread, LogSink &log, ThreadLock &lock,
                                ClEventOwner &owner)
     : thread_(thread), log_(log), lock_(lock), owner_(owner), rows_(memory, Pool::paged), queues_(memory, Pool::paged),
       held_(0u), delivered_(0u), next_(0u)

@@ -1,8 +1,8 @@
 #include "icd/vulkan/icd_root.hpp"
 
+#include "core/platform/thread_lock_hold.hpp"
+#include "core/trace/report_gate.hpp"
 #include "guest/transport/shared_object_call.hpp"
-#include "icd/common/report_gate.hpp"
-#include "icd/common/thread_lock_hold.hpp"
 #include "icd/vulkan/handle_bits.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
@@ -13,6 +13,7 @@
 #include "proto/resources/shared_object_record.hpp"
 #include "proto/resources/surface_layout.hpp"
 
+#include "core/platform/thread_lock.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
@@ -31,7 +32,6 @@
 #include "icd/vulkan/query_wait_probe.hpp"
 #include "icd/vulkan/semaphore_wait_probe.hpp"
 #include "icd/common/sliced_wait.hpp"
-#include "icd/common/thread_lock.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 #include "proto/generated/vulkan/vk_serialize.h"
 #include "proto/generated/vulkan/vk_icd_entries.h"
@@ -402,7 +402,7 @@ VkResult IcdRoot::enumerate_instance_version(uint32_t *version)
 Status IcdRoot::open_connection(Connection *&opened, uint64_t luid)
 {
     AV_SCOPE("IcdRoot::open_connection");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     const Status made = connections_.create(opened, kmt_, memory_, send_lock_, log_);
     if (made != Status::ok) return made;
     const Status status = opened->open(luid);
@@ -458,7 +458,7 @@ void IcdRoot::span_adapters(const VkInstanceCreateInfo &forwarded, const VkAlloc
     AV_SCOPE("IcdRoot::span_adapters");
     InstanceSpan *span = nullptr;
     {
-        const icd::ThreadLockHold release(lock_);
+        const ThreadLockHold release(lock_);
         if (spans_.create(span, own) != Status::ok) {
             log_.write("avvk: no room to span the other adapters; the instance has the primary display's alone");
             return;
@@ -510,7 +510,7 @@ VkResult IcdRoot::enumerate_physical_devices(VkInstance instance, uint32_t *coun
     AV_SCOPE("IcdRoot::enumerate_physical_devices");
     InstanceSpan *span = nullptr;
     {
-        const icd::ThreadLockHold release(lock_);
+        const ThreadLockHold release(lock_);
         span = span_of(instance);
     }
     /* An instance spanning no other asks its host as it always has. */
@@ -552,7 +552,7 @@ VkResult IcdRoot::enumerate_physical_device_groups(GroupEnumerator enumerate, Vk
     AV_SCOPE("IcdRoot::enumerate_physical_device_groups");
     InstanceSpan *span = nullptr;
     {
-        const icd::ThreadLockHold release(lock_);
+        const ThreadLockHold release(lock_);
         span = span_of(instance);
     }
     if (span == nullptr || span->count() == 1u) return enumerate(instance, count, groups);
@@ -598,7 +598,7 @@ VkResult IcdRoot::enumerate_adapter_physical_devices(VkInstance instance, uint64
     VkInstance        spanned[InstanceSpan::max_instances] = {};
     uint32_t          spans = 0u;
     {
-        const icd::ThreadLockHold release(lock_);
+        const ThreadLockHold release(lock_);
         const InstanceSpan *const span = span_of(instance);
         for (uint32_t index = 1u; span != nullptr && index < span->count(); ++index) spanned[spans++] = span->at(index);
     }
@@ -739,7 +739,7 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
 void IcdRoot::release_device_memory(LoaderHandle &device)
 {
     AV_SCOPE("IcdRoot::release_device_memory");
-    const icd::ThreadLockHold release(memory_lock_);
+    const ThreadLockHold release(memory_lock_);
     DeviceMemory *const memory = device.device_memory();
     if (memory == nullptr) return;
     const Status released = memory->release_all();
@@ -1282,12 +1282,12 @@ void IcdRoot::destroy_instance(VkInstance instance, const VkAllocationCallbacks 
     AV_SCOPE("IcdRoot::destroy_instance");
     InstanceSpan *span = nullptr;
     {
-        const icd::ThreadLockHold release(lock_);
+        const ThreadLockHold release(lock_);
         span = span_of(instance);
     }
     if (span != nullptr) {
         for (uint32_t index = 1u; index < span->count(); ++index) destroy_one_instance(span->at(index), allocator);
-        const icd::ThreadLockHold release(lock_);
+        const ThreadLockHold release(lock_);
         /* Found in the pool just now, so the pool cannot refuse it. */
         static_cast<void>(spans_.destroy(span));
     }
@@ -1364,7 +1364,7 @@ LoaderHandle *IcdRoot::allocating_device(VkDevice device)
 DeviceMemory *IcdRoot::memory_of(LoaderHandle &device)
 {
     AV_SCOPE("IcdRoot::memory_of");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     if (device.device_memory() != nullptr) return device.device_memory();
     DeviceMemory *made = nullptr;
     if (memories_.create(made, kmt_, *device.connection(), log_) != Status::ok) {
@@ -1382,7 +1382,7 @@ VkResult IcdRoot::allocate_memory(VkDevice device, const VkMemoryAllocateInfo *i
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return VK_ERROR_DEVICE_LOST;
     if (lost(*made->connection(), "vkAllocateMemory")) return VK_ERROR_DEVICE_LOST;
-    const icd::ThreadLockHold release(memory_lock_);
+    const ThreadLockHold release(memory_lock_);
     /* An allocation that shares memory is the host's whole and never a chunk
      * of this process's RAM: its chain is rebuilt over the host's own fd
      * mechanism (feature 047, US3). */
@@ -1401,7 +1401,7 @@ VkResult IcdRoot::memory_host_pointer_properties(VkDevice device, VkExternalMemo
     properties->memoryTypeBits = 0u;
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return VK_ERROR_DEVICE_LOST;
-    const icd::ThreadLockHold release(memory_lock_);
+    const ThreadLockHold release(memory_lock_);
     DeviceMemory *const owned = memory_of(*made);
     if (owned == nullptr) return VK_ERROR_OUT_OF_HOST_MEMORY;
     const auto physical = static_cast<VkPhysicalDevice>(static_cast<void *>(made->parent()));
@@ -1413,7 +1413,7 @@ void IcdRoot::free_memory(VkDevice device, VkDeviceMemory memory, const VkAlloca
     AV_SCOPE("IcdRoot::free_memory");
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return;
-    const icd::ThreadLockHold release(memory_lock_);
+    const ThreadLockHold release(memory_lock_);
     ExternalObjectSlot row = {};
     if (externals_.take_memory(memory, row)) {
         release_shared(*made, row);
@@ -1433,7 +1433,7 @@ VkResult IcdRoot::map_memory(VkDevice device, VkDeviceMemory memory, VkDeviceSiz
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return VK_ERROR_MEMORY_MAP_FAILED;
     if (lost(*made->connection(), "vkMapMemory")) return VK_ERROR_DEVICE_LOST;
-    const icd::ThreadLockHold release(memory_lock_);
+    const ThreadLockHold release(memory_lock_);
     const DeviceMemory *const owned = made->device_memory();
     if (owned == nullptr) return VK_ERROR_MEMORY_MAP_FAILED;
     return owned->map(memory, offset, size, flags, *data);
@@ -1495,14 +1495,14 @@ Connection *IcdRoot::acquire_connection()
 void IcdRoot::release_connection(Connection *connection)
 {
     AV_SCOPE("IcdRoot::release_connection");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     if (connections_.destroy(connection) != Status::ok) log_.write("avvk: release of a connection never opened");
 }
 
 void *IcdRoot::wrap(LoaderHandle::Kind kind, uint64_t host, Connection *connection)
 {
     AV_SCOPE("IcdRoot::wrap");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     LoaderHandle *const parent = kind == LoaderHandle::Kind::instance ? nullptr : handles_.instance_of(connection);
     return wrap_under(kind, host, connection, parent);
 }
@@ -1535,28 +1535,28 @@ LoaderHandle *IcdRoot::wrap_under(LoaderHandle::Kind kind, uint64_t host, Connec
 void *IcdRoot::wrap_child(LoaderHandle::Kind kind, uint64_t host, LoaderHandle &parent)
 {
     AV_SCOPE("IcdRoot::wrap_child");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     return wrap_under(kind, host, parent.connection(), &parent);
 }
 
 LoaderHandle *IcdRoot::handle_of(void *handle, LoaderHandle::Kind kind)
 {
     AV_SCOPE("IcdRoot::handle_of");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     return handles_.made(handle, kind);
 }
 
 LoaderHandle *IcdRoot::child_of(const LoaderHandle &parent, LoaderHandle::Kind kind, uint32_t index)
 {
     AV_SCOPE("IcdRoot::child_of");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     return handles_.child(parent, kind, index);
 }
 
 Connection *IcdRoot::connection_of(void *handle, LoaderHandle::Kind kind)
 {
     AV_SCOPE("IcdRoot::connection_of");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     const LoaderHandle *const made = handles_.made(handle, kind);
     return made != nullptr ? made->connection() : nullptr;
 }
@@ -1564,7 +1564,7 @@ Connection *IcdRoot::connection_of(void *handle, LoaderHandle::Kind kind)
 uint64_t IcdRoot::wire(void *handle, LoaderHandle::Kind kind)
 {
     AV_SCOPE("IcdRoot::wire");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     const LoaderHandle *const made = handles_.made(handle, kind);
     return made != nullptr ? made->host() : 0u;
 }
@@ -1572,7 +1572,7 @@ uint64_t IcdRoot::wire(void *handle, LoaderHandle::Kind kind)
 void IcdRoot::destroy_wrapper(void *handle, LoaderHandle::Kind kind)
 {
     AV_SCOPE("IcdRoot::destroy_wrapper");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     if (handles_.destroy(handles_.made(handle, kind)) != Status::ok)
         log_.write("avvk: destroy of a handle this driver did not make");
 }
@@ -1580,7 +1580,7 @@ void IcdRoot::destroy_wrapper(void *handle, LoaderHandle::Kind kind)
 CommandBatch &IcdRoot::record_target(VkCommandBuffer command_buffer)
 {
     AV_SCOPE("IcdRoot::record_target");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     return *handles_.made(command_buffer, LoaderHandle::Kind::command_buffer)->batch();
 }
 

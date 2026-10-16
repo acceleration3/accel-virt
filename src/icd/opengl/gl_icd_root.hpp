@@ -40,11 +40,8 @@ class BlockSource;
 class ClientTransport;
 class Kmt;
 class StateWriter;
-}  // namespace av
-
-namespace av::icd {
 class ThreadLock;
-}  // namespace av::icd
+}  // namespace av
 
 namespace av::icd {
 class WindowSurface;
@@ -73,7 +70,7 @@ public:
     enum : uint32_t { gl_invalid_operation = 0x0502u, gl_invalid_enum = 0x0500u, gl_invalid_value = 0x0501u };
     static constexpr uint32_t swap_main_plane = 1u;
 
-    GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock, LogSink &log,
+    GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, LogSink &log,
               icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system, GlPresentLoop &presents,
               GlIcdBinding &binding);
     ~GlIcdRoot();
@@ -183,7 +180,7 @@ private:
     /* What profile the host granted, named once per process. */
     void                 note_profile(const GuestGlContext &context);
 
-    icd::ThreadLock  &lock_;
+    ThreadLock       &lock_;
     LogSink     &log_;
     KeyedLog    lines_;
     icd::RefusedCalls refused_;

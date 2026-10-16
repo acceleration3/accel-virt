@@ -141,6 +141,7 @@ file(GLOB_RECURSE AVVK_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/log/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/thread_lock_hold.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/common/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/vulkan/*.cpp)
@@ -198,6 +199,7 @@ file(GLOB_RECURSE AVGL_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/log/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/thread_lock_hold.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/common/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/opengl/*.cpp)
@@ -231,6 +233,7 @@ file(GLOB_RECURSE AVCL_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/log/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/thread_lock_hold.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/common/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/opencl/*.cpp)
@@ -270,7 +273,7 @@ file(GLOB AV_VENDOR_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/log/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp)
 list(APPEND AV_VENDOR_SOURCES
-  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/thread_lock_hold.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/thread_lock_hold.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/adapter_facts.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/adapter_string.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/escape/umd_adapter_info.cpp
@@ -494,6 +497,7 @@ file(GLOB_RECURSE AVUMD_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/log/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/thread_lock_hold.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/common/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/d3d/*.cpp)

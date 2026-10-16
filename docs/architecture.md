@@ -61,9 +61,9 @@ src/km/         src/device/qemu, src/*/shim/      src/um/
 | Directory | Holds |
 |---|---|
 | `support/` | `Status`, `NtStatus`, `ObjectPool`/`ObjectStorage`, `GrowableArray`, `KeyedSlots` and `ClaimedRows` (storage for counts an application controls, see "Counts with no fixed bound"), `ScopeExit`, `Alignment`, `ByteRange`, `TextBuffer`, `RuntimeCall`, `SettingText` (how every knob's text is judged), `Fnv1aDigest`, `AV_UNTESTABLE` |
-| `trace/` | `AV_SCOPE`, trace tables, event rings, crash and state dumps |
+| `trace/` | `AV_SCOPE`, trace tables, event rings, crash and state dumps; `ReportGate`, how a state dump takes its root's `ThreadLock` without ever waiting on it |
 | `log/` | `DriverLog`, `KeyedLog`, `LogLine`, `LogSink`, `LogQueue`: the logging the host, the guest drivers and the kernel's debug port share |
-| `platform/` | the `Platform` contract the miniport runs on (implemented by `src/km` and `MockPlatform`), locks and their guards, lock ranks, `LogBudget`, `InvariantScope`; also `BlockSource` and `LockMarks`, which every binary uses |
+| `platform/` | the `Platform` contract the miniport runs on (implemented by `src/km` and `MockPlatform`), locks and their guards, lock ranks, `LogBudget`, `InvariantScope`; also `BlockSource` and `LockMarks`, which every binary uses, and `ThreadLock` with `ThreadLockHold`, the one lock contract for a binary's threads (the guest drivers' is `SrwLock`), in core so the device and the executor take the same one |
 
 ## src/miniport - avgpu.sys's logic
 

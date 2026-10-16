@@ -1,13 +1,13 @@
 #include "icd/d3d/buffer_slices.hpp"
 
+#include "core/platform/thread_lock.hpp"
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/thread_lock.hpp"
-#include "icd/common/thread_lock_hold.hpp"
 #include "icd/d3d/gpu_timeline.hpp"
 
 namespace av::d3d {
 
-BufferSlices::BufferSlices(BlockSource &memory, GpuTimeline &timeline, icd::ThreadLock &lock)
+BufferSlices::BufferSlices(BlockSource &memory, GpuTimeline &timeline, ThreadLock &lock)
     : timeline_(timeline), lock_(lock), ranges_(memory, large_alignment),
       free_{{memory, Pool::paged}, {memory, Pool::paged}, {memory, Pool::paged},
             {memory, Pool::paged}, {memory, Pool::paged}, {memory, Pool::paged},
@@ -20,7 +20,7 @@ BufferSlices::BufferSlices(BlockSource &memory, GpuTimeline &timeline, icd::Thre
 void BufferSlices::take(uint64_t bytes)
 {
     AV_SCOPE("BufferSlices::take");
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     ranges_.reset(0u, bytes & ~(large_alignment - 1u));
     for (uint32_t which = 0u; which < small_classes; which++) {
         free_[which].clear();
@@ -37,7 +37,7 @@ Status BufferSlices::take_slice(uint64_t bytes, Slice &slice)
     AV_SCOPE("BufferSlices::take_slice");
     slice = Slice{0u, 0u};
     if (bytes == 0u || bytes > ranges_.end() - ranges_.begin()) return Status::invalid_parameter;
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     if (lost_) return Status::invalid_state;
     reclaim();
     const Status room = make_retired_room();
@@ -55,7 +55,7 @@ void BufferSlices::retire(const Slice &slice)
 {
     AV_SCOPE("BufferSlices::retire");
     if (slice.bytes_ == 0u || ranges_.end() == 0u) return;
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     reclaim();
     if (outstanding_ != 0u) outstanding_--;
     /* Room was made when the slice was handed out; one from before the store
@@ -67,7 +67,7 @@ void BufferSlices::give_back(const Slice &slice)
 {
     AV_SCOPE("BufferSlices::give_back");
     if (slice.bytes_ == 0u || ranges_.end() == 0u) return;
-    const icd::ThreadLockHold release(lock_);
+    const ThreadLockHold release(lock_);
     if (outstanding_ != 0u) outstanding_--;
     free_slice(slice.offset_, slice.bytes_);
 }

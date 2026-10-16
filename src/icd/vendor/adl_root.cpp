@@ -1,16 +1,16 @@
 #include "icd/vendor/adl_root.hpp"
 
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/pci_identity.hpp"
-#include "icd/common/thread_lock_hold.hpp"
 #include "icd/vendor/ddi/adl_adapter_info_record.hpp"
 #include "icd/vendor/ddi/adl_versions_info_record.hpp"
 #include "icd/vendor/ddi/adl_versions_info_x2_record.hpp"
 
 namespace av::vendor {
 
-AdlRoot::AdlRoot(Kmt &kmt, icd::ThreadLock &lock) : lock_(lock), adapters_(kmt), opened_(0u)
+AdlRoot::AdlRoot(Kmt &kmt, ThreadLock &lock) : lock_(lock), adapters_(kmt), opened_(0u)
 {
     AV_SCOPE("AdlRoot::AdlRoot");
 }
@@ -19,7 +19,7 @@ int AdlRoot::create(bool has_callback)
 {
     AV_SCOPE("AdlRoot::create");
     if (!has_callback) return invalid_callback;
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (adapters_.learn() != Status::ok || adapters_.count_of(PciIdentity::amd_vendor) == 0u) return error;
     ++opened_;
     return ok;
@@ -28,7 +28,7 @@ int AdlRoot::create(bool has_callback)
 int AdlRoot::destroy()
 {
     AV_SCOPE("AdlRoot::destroy");
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (opened_ != 0u) --opened_;
     return ok;
 }
@@ -36,7 +36,7 @@ int AdlRoot::destroy()
 int AdlRoot::refresh()
 {
     AV_SCOPE("AdlRoot::refresh");
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (opened_ == 0u) return not_initialized;
     return adapters_.learn() == Status::ok ? ok : error;
 }
@@ -57,7 +57,7 @@ int AdlRoot::number_of_adapters(int *count)
 {
     AV_SCOPE("AdlRoot::number_of_adapters");
     if (count == nullptr) return null_pointer;
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (opened_ == 0u) return not_initialized;
     *count = static_cast<int>(adapters_.count_of(PciIdentity::amd_vendor));
     return ok;
@@ -67,7 +67,7 @@ int AdlRoot::adapter_info(AdlAdapterInfoRecord *infos, int bytes)
 {
     AV_SCOPE("AdlRoot::adapter_info");
     if (infos == nullptr) return null_pointer;
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (opened_ == 0u) return not_initialized;
     const uint32_t count = adapters_.count_of(PciIdentity::amd_vendor);
     if (bytes < 0 || static_cast<uint64_t>(bytes) < uint64_t{count} * sizeof(AdlAdapterInfoRecord))
@@ -80,7 +80,7 @@ int AdlRoot::active(int index, int *status)
 {
     AV_SCOPE("AdlRoot::active");
     if (status == nullptr) return null_pointer;
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (opened_ == 0u) return not_initialized;
     if (adapter(index) == nullptr) return invalid_adapter_index;
     *status = 1;
@@ -91,7 +91,7 @@ int AdlRoot::asic_family_type(int index, int *types, int *valids)
 {
     AV_SCOPE("AdlRoot::asic_family_type");
     if (types == nullptr || valids == nullptr) return null_pointer;
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (opened_ == 0u) return not_initialized;
     const VendorAdapter *const asked = adapter(index);
     if (asked == nullptr) return invalid_adapter_index;
@@ -104,7 +104,7 @@ int AdlRoot::primary(int *index)
 {
     AV_SCOPE("AdlRoot::primary");
     if (index == nullptr) return null_pointer;
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (opened_ == 0u) return not_initialized;
     const uint32_t count = adapters_.count_of(PciIdentity::amd_vendor);
     for (uint32_t at = 0u; at < count; ++at) {
@@ -119,7 +119,7 @@ int AdlRoot::versions(AdlVersionsInfoRecord *versions)
 {
     AV_SCOPE("AdlRoot::versions");
     if (versions == nullptr) return null_pointer;
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (opened_ == 0u) return not_initialized;
     *versions = AdlVersionsInfoRecord{};
     driver_version(versions->strDriverVer, sizeof versions->strDriverVer);
@@ -130,7 +130,7 @@ int AdlRoot::versions_x2(AdlVersionsInfoX2Record *versions)
 {
     AV_SCOPE("AdlRoot::versions_x2");
     if (versions == nullptr) return null_pointer;
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (opened_ == 0u) return not_initialized;
     *versions = AdlVersionsInfoX2Record{};
     driver_version(versions->strDriverVer, sizeof versions->strDriverVer);

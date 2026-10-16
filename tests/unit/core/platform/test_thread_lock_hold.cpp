@@ -1,15 +1,15 @@
 /* ThreadLockHold: the lock taken when the hold is made and let go when it
  * goes out of scope. */
+#include "core/platform/thread_lock_hold.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
-#include "icd/common/thread_lock_hold.hpp"
 
 namespace {
 
 bool held_inside(av::RecordingThreadLock &lock)
 {
-    const av::icd::ThreadLockHold hold(lock);
+    const av::ThreadLockHold hold(lock);
     return lock.held();
 }
 

@@ -20,11 +20,11 @@
 
 namespace av {
 class BlockSource;
+class ThreadLock;
 }  // namespace av
 
 namespace av::icd {
 
-class ThreadLock;
 struct DescriptorTemplateTableProbe;
 
 /* One template: the device it belongs to, its handle, and the bytes one update

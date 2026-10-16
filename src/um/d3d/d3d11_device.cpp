@@ -2,9 +2,9 @@
 
 #include "core/platform/block_source.hpp"
 #include "core/log/log_line.hpp"
+#include "core/platform/thread_lock.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/log_sink.hpp"
-#include "icd/common/thread_lock.hpp"
 #include "icd/d3d/device_table.hpp"
 #include "icd/d3d/texture_upload.hpp"
 #include "proto/client/client_blob_arena.hpp"
@@ -189,7 +189,7 @@ void D3d11Device::retire()
 {
     AV_SCOPE("D3d11Device::retire");
     if (parent_ == nullptr) return;
-    icd::ThreadLock &lock = session_.lock();
+    ThreadLock &lock = session_.lock();
     lock.acquire();
     static_cast<void>(session_.contexts().destroy(this));
     lock.release();

@@ -37,11 +37,8 @@
 
 namespace av {
 class BlockSource;
-}  // namespace av
-
-namespace av::icd {
 class ThreadLock;
-}  // namespace av::icd
+}  // namespace av
 
 namespace av::d3d {
 
@@ -63,7 +60,7 @@ public:
     static constexpr uint64_t block_bytes = uint64_t{256} * 1024u;
     /* A large slice is whole 64 KiB pages, which the host imports. */
     static constexpr uint64_t large_alignment = uint64_t{64} * 1024u;
-    BufferSlices(BlockSource &memory, GpuTimeline &timeline, icd::ThreadLock &lock);
+    BufferSlices(BlockSource &memory, GpuTimeline &timeline, ThreadLock &lock);
     BufferSlices(const BufferSlices &) = delete;
     BufferSlices &operator=(const BufferSlices &) = delete;
 
@@ -123,7 +120,7 @@ private:
     bool               wait_oldest();
 
     GpuTimeline             &timeline_;
-    icd::ThreadLock         &lock_;
+    ThreadLock              &lock_;
     icd::RangeTable          ranges_;
     GrowableArray<uint64_t>  free_[small_classes];
     uint32_t                 carved_[small_classes];

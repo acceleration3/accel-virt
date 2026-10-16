@@ -28,11 +28,8 @@
 namespace av {
 class BlockSource;
 class StateWriter;
-}  // namespace av
-
-namespace av::icd {
 class ThreadLock;
-}  // namespace av::icd
+}  // namespace av
 
 namespace av::clicd {
 
@@ -40,7 +37,7 @@ struct ClObjectTableProbe;
 
 class ClObjectTable {
 public:
-    ClObjectTable(BlockSource &memory, const cl_icd_dispatch &table, icd::ThreadLock &lock);
+    ClObjectTable(BlockSource &memory, const cl_icd_dispatch &table, ThreadLock &lock);
     ClObjectTable(const ClObjectTable &) = delete;
     ClObjectTable &operator=(const ClObjectTable &) = delete;
 
@@ -91,7 +88,7 @@ private:
     BlockSource              &memory_;
     icd::HandleTree<ClObject> tree_;
     const cl_icd_dispatch    &table_;
-    icd::ThreadLock          &lock_;
+    ThreadLock               &lock_;
 };
 
 }  // namespace av::clicd

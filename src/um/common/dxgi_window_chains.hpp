@@ -49,10 +49,7 @@ class LogSink;
 namespace av {
 
 class Kmt;
-
-namespace icd {
 class ThreadLock;
-}  // namespace icd
 
 class DxgiWindowChains final : public icd::WindowChains {
 public:
@@ -61,7 +58,7 @@ public:
      * finishes nothing in two seconds is given before the slot is let go. */
     static constexpr uint32_t copy_looks = 2000u;
 
-    DxgiWindowChains(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, LogSink &log);
+    DxgiWindowChains(BlockSource &memory, Kmt &kmt, ThreadLock &lock, LogSink &log);
     ~DxgiWindowChains();
     DxgiWindowChains(const DxgiWindowChains &) = delete;
     DxgiWindowChains &operator=(const DxgiWindowChains &) = delete;
@@ -132,7 +129,7 @@ private:
      * whether a window is shown this way at all is otherwise invisible. */ 
 
     Kmt             &kmt_;
-    icd::ThreadLock &lock_;
+    ThreadLock      &lock_;
     KeyedLog   lines_;
     void            *d3d11_;
     void            *dxgi_;

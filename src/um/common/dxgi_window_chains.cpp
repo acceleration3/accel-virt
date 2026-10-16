@@ -1,13 +1,13 @@
 #include "um/common/dxgi_window_chains.hpp"
 
 #include "core/log/log_line.hpp"
+#include "core/platform/thread_lock.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "core/log/log_sink.hpp"
 #include "icd/common/slot_format.hpp"
-#include "icd/common/thread_lock.hpp"
 #include "proto/resources/shared_allocation_data.hpp"
 #include "um/common/shared_rows_scope.hpp"
 
@@ -44,7 +44,7 @@ constexpr uint32_t buffer_count = 2u;
 
 }  // namespace
 
-DxgiWindowChains::DxgiWindowChains(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, LogSink &log)
+DxgiWindowChains::DxgiWindowChains(BlockSource &memory, Kmt &kmt, ThreadLock &lock, LogSink &log)
     : kmt_(kmt), lock_(lock), lines_(memory, log, "av: "), d3d11_(nullptr), dxgi_(nullptr), create_device_(nullptr),
       create_factory_(nullptr), compiler_(nullptr), compile_(nullptr), load_refused_(false),
       devices_(), chains_(memory), windows_(memory, Pool::paged)

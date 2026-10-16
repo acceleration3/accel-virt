@@ -24,13 +24,13 @@
 
 namespace av::icd {
 
-class ThreadLock;
 struct ExternalObjectsProbe;
 
 }  // namespace av::icd
 
 namespace av {
 class BlockSource;
+class ThreadLock;
 }
 
 namespace av::icd {

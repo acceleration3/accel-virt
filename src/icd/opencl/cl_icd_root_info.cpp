@@ -4,9 +4,9 @@
  * device here can be split into, and a sampler's own answers. */
 #include "icd/opencl/cl_icd_root.hpp"
 
+#include "core/platform/thread_lock.hpp"
 #include "core/support/extension_words.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/common/thread_lock.hpp"
 #include "icd/opencl/cl_extension_policy.hpp"
 #include "icd/opencl/cl_info_request.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"

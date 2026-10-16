@@ -2,9 +2,9 @@
  * retain and release, which an application sharing with Direct3D 11 makes. */
 #include "icd/opencl/cl_icd_root.hpp"
 
+#include "core/platform/thread_lock.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/sliced_wait.hpp"
-#include "icd/common/thread_lock.hpp"
 #include "icd/opencl/d3d_adapter_source.hpp"
 #include "icd/opencl/cl_d3d11_download.hpp"
 #include "icd/opencl/cl_d3d11_upload.hpp"

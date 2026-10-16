@@ -4,9 +4,9 @@
  * every transfer the host blocks on makes first, behind its wait list. */
 #include "icd/opencl/cl_icd_root.hpp"
 
+#include "core/platform/thread_lock.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/sliced_wait.hpp"
-#include "icd/common/thread_lock.hpp"
 #include "icd/opencl/cl_image_region.hpp"
 #include "icd/opencl/cl_transfer_chunks.hpp"
 #include "icd/opencl/mapped_region.hpp"

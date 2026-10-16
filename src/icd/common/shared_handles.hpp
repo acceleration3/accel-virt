@@ -25,11 +25,11 @@
 namespace av {
 class BlockSource;
 class Kmt;
+class ThreadLock;
 }
 
 namespace av::icd {
 
-class ThreadLock;
 struct SharedHandlesProbe;
 
 /* One handle this process holds. A type of its own so the table's slots are

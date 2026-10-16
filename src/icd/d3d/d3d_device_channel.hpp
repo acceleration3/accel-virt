@@ -20,9 +20,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-namespace av::icd {
+namespace av {
 class ThreadLock;
-}  // namespace av::icd
+}  // namespace av
 
 namespace av::d3d {
 
@@ -33,7 +33,7 @@ public:
     /* `device` is the id the host knows the device by; 0 for a Direct3D 12
      * device, which the stream never selects and which is never opened or
      * closed through this. */
-    D3dDeviceChannel(D3dCommandStream &stream, icd::ThreadLock &lock, uint32_t device);
+    D3dDeviceChannel(D3dCommandStream &stream, ThreadLock &lock, uint32_t device);
     D3dDeviceChannel(const D3dDeviceChannel &) = delete;
     D3dDeviceChannel &operator=(const D3dDeviceChannel &) = delete;
 
@@ -77,7 +77,7 @@ public:
 
 private:
     D3dCommandStream &stream_;
-    icd::ThreadLock  &lock_;
+    ThreadLock       &lock_;
     uint32_t          device_;
     /* The stream's recorded_total() just after a command list's closing
      * ClearState11: a list executed right after needs no opening one. */

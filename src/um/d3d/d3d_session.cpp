@@ -213,7 +213,7 @@ ClientBlobArena &D3dSession::blobs()
     return channel_.transport().blobs();
 }
 
-icd::ThreadLock &D3dSession::lock()
+ThreadLock &D3dSession::lock()
 {
     AV_SCOPE("D3dSession::lock");
     return lock_;

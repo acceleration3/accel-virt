@@ -1,11 +1,11 @@
 #include "icd/common/host_channel.hpp"
 
 #include "core/platform/block_source.hpp"
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/transport/guest_connection.hpp"
-#include "icd/common/thread_lock_hold.hpp"
 
 namespace av::icd {
 

@@ -63,11 +63,11 @@ class ExtensionWords;
 class ClientTransport;
 class Kmt;
 class StateWriter;
+class ThreadLock;
 }  // namespace av
 
 namespace av::icd {
 class ServiceThread;
-class ThreadLock;
 }  // namespace av::icd
 
 namespace av::clicd {
@@ -99,8 +99,8 @@ public:
     /* `objects_lock` is the object table's own (ClObjectTable): every entry
      * point looks its arguments up there without `lock`. `blocks_lock` is
      * every context's arena blocks' (ClArenaBlocks). */
-    ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
-              icd::ThreadLock &objects_lock, icd::ThreadLock &blocks_lock, LogSink &log, icd::ServiceThread &watcher_thread, GlShareSource &gl_share,
+    ClIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock,
+              ThreadLock &objects_lock, ThreadLock &blocks_lock, LogSink &log, icd::ServiceThread &watcher_thread, GlShareSource &gl_share,
               D3dAdapterSource &d3d_adapters, D3d11Bridge &d3d11,
               ClIcdBinding &binding);
     ~ClIcdRoot();
@@ -843,7 +843,7 @@ private:
      * that kind: the API's own error for each. */
     cl_int           refusal_for(ClObject::Kind kind) const;
 
-    icd::ThreadLock       &lock_;
+    ThreadLock            &lock_;
     LogSink          &log_;
     GlShareSource         &gl_share_;
     D3dAdapterSource      &d3d_adapters_;
@@ -861,8 +861,8 @@ private:
     icd::SharedHandles     shared_handles_;
     ObjectPool<GuestClContext> contexts_;
     BlockSource           &memory_;
-    icd::ThreadLock       &send_lock_;
-    icd::ThreadLock       &blocks_lock_;
+    ThreadLock            &send_lock_;
+    ThreadLock            &blocks_lock_;
     ClEventWatcher         watcher_;
     ClBlockingWait         waits_;
     /* The host's device answers, keyed by the device they are about, each

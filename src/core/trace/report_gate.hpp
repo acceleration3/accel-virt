@@ -2,17 +2,15 @@
  * runs on the trace thread when the process may be hung with that lock held,
  * so it never waits: it opens its section, tries the lock, and says whether
  * the root was busy - a busy root's section closes with nothing more in it,
- * since what it guards could be mid-change. Every ICD root's dump starts this
- * way (IcdRoot, GlIcdRoot, ClIcdRoot, UmdRoot). */
-#ifndef AV_ICD_REPORT_GATE_HPP
-#define AV_ICD_REPORT_GATE_HPP
+ * since what it guards could be mid-change. Every driver root's dump starts
+ * this way (IcdRoot, GlIcdRoot, ClIcdRoot, UmdRoot), its section named after
+ * its driver. */
+#ifndef AV_REPORT_GATE_HPP
+#define AV_REPORT_GATE_HPP
 
 namespace av {
+
 class StateWriter;
-}  // namespace av
-
-namespace av::icd {
-
 class ThreadLock;
 
 class ReportGate {
@@ -32,6 +30,6 @@ private:
     bool        held_;
 };
 
-}  // namespace av::icd
+}  // namespace av
 
-#endif  // AV_ICD_REPORT_GATE_HPP
+#endif  // AV_REPORT_GATE_HPP

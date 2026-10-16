@@ -17,16 +17,16 @@
 #include "guest/transport/host_allocation.hpp"
 #include "proto/resources/cl_blob_backing.hpp"
 
-#include "icd/common/report_gate.hpp"
+#include "core/trace/report_gate.hpp"
 #include "icd/common/sliced_wait.hpp"
 
+#include "core/platform/thread_lock.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "core/log/log_sink.hpp"
-#include "icd/common/thread_lock.hpp"
 #include "icd/opencl/unanswered_transport.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
@@ -70,8 +70,8 @@ constexpr uint64_t kib = 1024u;
 
 }  // namespace
 
-ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
-                     icd::ThreadLock &send_lock, icd::ThreadLock &objects_lock, icd::ThreadLock &blocks_lock,
+ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock,
+                     ThreadLock &send_lock, ThreadLock &objects_lock, ThreadLock &blocks_lock,
                      LogSink &log,
                      icd::ServiceThread &watcher_thread, GlShareSource &gl_share, D3dAdapterSource &d3d_adapters,
                      D3d11Bridge &d3d11,
@@ -809,7 +809,7 @@ void ClIcdRoot::report(StateWriter &writer)
     AV_SCOPE("ClIcdRoot::report");
     /* Read under the root's lock, as every root's dump is: the trace thread
      * runs while application threads release objects and open devices. */
-    const icd::ReportGate gate(lock_, writer, "avcl");
+    const ReportGate gate(lock_, writer, "avcl");
     if (!gate.held()) return;
     devices_.report(writer);
     objects_.report(writer);

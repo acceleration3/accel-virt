@@ -1,12 +1,12 @@
 #include "icd/opencl/cl_object_table.hpp"
 
+#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "icd/common/thread_lock_hold.hpp"
 
 namespace av::clicd {
 
-ClObjectTable::ClObjectTable(BlockSource &memory, const cl_icd_dispatch &table, icd::ThreadLock &lock)
+ClObjectTable::ClObjectTable(BlockSource &memory, const cl_icd_dispatch &table, ThreadLock &lock)
     : memory_(memory), tree_(memory), table_(table), lock_(lock)
 {
     AV_SCOPE("ClObjectTable::ClObjectTable");
@@ -20,7 +20,7 @@ Status ClObjectTable::make(ClObject::Kind kind, uint64_t wire, GuestClContext *c
     /* Zero is what the host answers when it made nothing, so it never names
      * an object. */
     if (wire == 0u) return Status::invalid_parameter;
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     /* A parent this table does not hold would leave a subtree that cannot be
      * destroyed with it, and one of the same kind or higher makes the chain to
      * a context unbounded. */
@@ -36,7 +36,7 @@ Status ClObjectTable::make(ClObject::Kind kind, uint64_t wire, GuestClContext *c
 ClObject *ClObjectTable::made(const void *pointer, ClObject::Kind kind) const
 {
     AV_SCOPE("ClObjectTable::made");
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     ClObject *const object = tree_.made(pointer, kind);
     return object != nullptr && object->references() != 0u ? object : nullptr;
 }
@@ -56,7 +56,7 @@ void ClObjectTable::destroy_held(ClObject &object)
 void ClObjectTable::destroy(ClObject &object)
 {
     AV_SCOPE("ClObjectTable::destroy");
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     destroy_held(object);
 }
 
@@ -73,7 +73,7 @@ bool ClObjectTable::release(ClObject &object, GuestClContext *&freed, const void
     AV_SCOPE("ClObjectTable::release");
     freed = nullptr;
     count = 0u;
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     if (!tree_.holds(&object) || object.references() == 0u) return false;
     if (!object.release()) return true;
     /* Up the chain while each is held by nothing: the kinds only rise towards
@@ -91,14 +91,14 @@ bool ClObjectTable::release(ClObject &object, GuestClContext *&freed, const void
 uint32_t ClObjectTable::live() const
 {
     AV_SCOPE("ClObjectTable::live");
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     return tree_.live();
 }
 
 uint32_t ClObjectTable::live_of(ClObject::Kind kind) const
 {
     AV_SCOPE("ClObjectTable::live_of");
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     uint32_t counted = 0u;
     tree_.nodes().for_each([&counted, kind](const ClObject &object) {
         if (object.kind() == kind) ++counted;
@@ -110,7 +110,7 @@ bool ClObjectTable::queues_idle(const ClObject *context) const
 {
     AV_SCOPE("ClObjectTable::queues_idle");
     if (context == nullptr) return true;
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     bool idle = true;
     tree_.for_children(*context, [&idle](const ClObject &object) {
         if (object.kind() == ClObject::Kind::command_queue && !object.known_idle()) idle = false;
@@ -134,7 +134,7 @@ void ClObjectTable::report(StateWriter &writer) const
 bool ClObjectTable::invariants_hold() const
 {
     AV_SCOPE("ClObjectTable::invariants_hold");
-    const icd::ThreadLockHold held(lock_);
+    const ThreadLockHold held(lock_);
     /* Every parent is still held, so a live child of a dead parent cannot
      * happen - and is proven before an object's own invariants read it. */
     if (!tree_.invariants_hold()) return false;

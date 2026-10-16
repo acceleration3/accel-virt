@@ -24,11 +24,8 @@
 
 namespace av {
 class BlockSource;
-}  // namespace av
-
-namespace av::icd {
 class ThreadLock;
-}  // namespace av::icd
+}  // namespace av
 
 namespace av::clicd {
 
@@ -39,7 +36,7 @@ public:
     /* What every block's offset and length are a whole number of. */
     static constexpr uint64_t alignment = 4096u;
 
-    ClArenaBlocks(BlockSource &memory, icd::ThreadLock &lock);
+    ClArenaBlocks(BlockSource &memory, ThreadLock &lock);
     ClArenaBlocks(const ClArenaBlocks &) = delete;
     ClArenaBlocks &operator=(const ClArenaBlocks &) = delete;
 
@@ -73,7 +70,7 @@ public:
 private:
     friend struct ClArenaBlocksProbe;
 
-    icd::ThreadLock                 &lock_;
+    ThreadLock                      &lock_;
     uint8_t                         *base_;
     uint64_t                         bytes_;
     /* The blocks, first fit over the arena (RangeTable). */

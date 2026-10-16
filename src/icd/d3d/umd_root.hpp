@@ -31,11 +31,8 @@ class LogSink;
 namespace av {
 class BlockSource;
 class Kmt;
-}  // namespace av
-
-namespace av::icd {
 class ThreadLock;
-}  // namespace av::icd
+}  // namespace av
 
 namespace av::d3d {
 
@@ -52,7 +49,7 @@ struct D3d12ddiargOpenAdapterRecord;
 class UmdRoot final : public StateReporter {
 public:
     /* Binds itself into `binding` until destroyed. */
-    UmdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, LogSink &log, UmdBinding &binding,
+    UmdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, LogSink &log, UmdBinding &binding,
             UmdHostDriver *builder = nullptr);
     ~UmdRoot();
     UmdRoot(const UmdRoot &) = delete;
@@ -117,7 +114,7 @@ private:
     Hresult adopt_device(UmdAdapter &adapter, D3d10ddiargCreateDeviceRecord &create, UmdDevice *&made);
     void    forget_device(void *block); 
 
-    icd::ThreadLock &lock_;
+    ThreadLock      &lock_;
     DriverLog       lines_;
     UmdBinding      &binding_;
     UmdHostDriver *builder_;

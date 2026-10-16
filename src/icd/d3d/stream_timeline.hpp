@@ -13,11 +13,8 @@
 
 namespace av {
 class KmtTransport;
-}  // namespace av
-
-namespace av::icd {
 class ThreadLock;
-}  // namespace av::icd
+}  // namespace av
 
 namespace av::d3d {
 
@@ -26,7 +23,7 @@ class D3dCommandStream;
 class StreamTimeline final : public GpuTimeline {
 public:
     /* `lock` is the one every command of the stream is written under. */
-    StreamTimeline(D3dCommandStream &stream, KmtTransport &transport, icd::ThreadLock &lock);
+    StreamTimeline(D3dCommandStream &stream, KmtTransport &transport, ThreadLock &lock);
 
     uint64_t           recording() const override;
     uint64_t           completed() const override;
@@ -36,7 +33,7 @@ public:
 private:
     D3dCommandStream &stream_;
     KmtTransport     &transport_;
-    icd::ThreadLock  &lock_;
+    ThreadLock       &lock_;
     /* The newest fence a wait returned for, which a driver with no fence page
      * knows done though its page says nothing. */
     uint64_t          waited_;

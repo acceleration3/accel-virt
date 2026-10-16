@@ -21,11 +21,8 @@
 
 namespace av {
 class Kmt;
-}  // namespace av
-
-namespace av::icd {
 class ThreadLock;
-}  // namespace av::icd
+}  // namespace av
 
 namespace av::vendor {
 
@@ -50,7 +47,7 @@ public:
     static constexpr int asic_integrated = 2;
 
     /* `lock` is what keeps two threads' calls apart. */
-    AdlRoot(Kmt &kmt, icd::ThreadLock &lock);
+    AdlRoot(Kmt &kmt, ThreadLock &lock);
     AdlRoot(const AdlRoot &) = delete;
     AdlRoot &operator=(const AdlRoot &) = delete;
 
@@ -89,7 +86,7 @@ private:
      * serves every adapter, so the first's. */
     void driver_version(char *out, uint32_t capacity) const;
 
-    icd::ThreadLock &lock_;
+    ThreadLock      &lock_;
     VendorAdapters   adapters_;
     uint32_t         opened_;
 };

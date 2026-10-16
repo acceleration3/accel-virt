@@ -21,11 +21,8 @@
 
 namespace av {
 class Kmt;
-}  // namespace av
-
-namespace av::icd {
 class ThreadLock;
-}  // namespace av::icd
+}  // namespace av
 
 namespace av::vendor {
 
@@ -51,7 +48,7 @@ public:
     static constexpr int gpu_integrated = 1;
     static constexpr int gpu_discrete = 2;
 
-    NvapiRoot(Kmt &kmt, icd::ThreadLock &lock);
+    NvapiRoot(Kmt &kmt, ThreadLock &lock);
     NvapiRoot(const NvapiRoot &) = delete;
     NvapiRoot &operator=(const NvapiRoot &) = delete;
 
@@ -88,7 +85,7 @@ private:
     /* The adapter `gpu` is the handle of, or null - also when uninitialised. */
     const VendorAdapter *adapter(const void *gpu) const;
 
-    icd::ThreadLock &lock_;
+    ThreadLock      &lock_;
     VendorAdapters   adapters_;
     uint32_t         opened_;
     /* One token per adapter, whose address is the display handle. */

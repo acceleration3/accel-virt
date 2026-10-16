@@ -4,11 +4,11 @@
 #ifndef AV_UM_SRW_LOCK_HPP
 #define AV_UM_SRW_LOCK_HPP
 
-#include "icd/common/thread_lock.hpp"
+#include "core/platform/thread_lock.hpp"
 
 namespace av {
 
-class SrwLock final : public icd::ThreadLock {
+class SrwLock final : public ThreadLock {
 public:
     SrwLock();
     SrwLock(const SrwLock &) = delete;

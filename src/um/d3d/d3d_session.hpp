@@ -84,7 +84,7 @@ public:
     /* A non-zero id no other object or device of the session has. Any thread. */
     uint32_t               next_id();
     d3d::D3dCommandStream &stream();
-    icd::ThreadLock       &lock();
+    ThreadLock            &lock();
     d3d11::QueryResults   &query_results();
     /* The process's view of the arena, and its size; null and 0 without one. */
     uint8_t               *arena_view() const;

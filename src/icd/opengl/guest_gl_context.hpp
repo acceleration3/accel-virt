@@ -45,11 +45,8 @@ namespace av {
 class BlockSource;
 class ClientTransport;
 class StateWriter;
-}  // namespace av
-
-namespace av::icd {
 class ThreadLock;
-}  // namespace av::icd
+}  // namespace av
 
 namespace av::glicd {
 
@@ -72,7 +69,7 @@ public:
     };
     enum : uint32_t { gl_out_of_memory = 0x0505u, gl_context_lost = 0x0507u, gl_unknown_context_reset = 0x8255u };
 
-    GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock, LogSink &log,
+    GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock, LogSink &log,
                    const GlExtensionPolicy &extensions, icd::SharedHandles &handles, int32_t pixel_format,
                    const GlContextOptions &options);
     ~GuestGlContext();

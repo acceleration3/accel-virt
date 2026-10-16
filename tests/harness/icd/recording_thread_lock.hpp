@@ -6,7 +6,7 @@
 #ifndef AV_RECORDING_THREAD_LOCK_HPP
 #define AV_RECORDING_THREAD_LOCK_HPP
 
-#include "icd/common/thread_lock.hpp"
+#include "core/platform/thread_lock.hpp"
 
 #include <cstdint>
 
@@ -14,7 +14,7 @@ namespace av {
 
 class LockTrace;
 
-class RecordingThreadLock final : public icd::ThreadLock {
+class RecordingThreadLock final : public ThreadLock {
 public:
     /* `letter` is upper case; its release is recorded in lower case. */
     RecordingThreadLock(LockTrace &trace, char letter);

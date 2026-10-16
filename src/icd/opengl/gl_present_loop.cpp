@@ -1,10 +1,10 @@
 #include "icd/opengl/gl_present_loop.hpp"
 
+#include "core/platform/thread_lock.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "core/log/log_sink.hpp"
-#include "icd/common/thread_lock.hpp"
 #include "icd/opengl/wake_signal.hpp"
 #include "icd/common/window_chains.hpp"
 #include "icd/common/window_surface.hpp"
@@ -14,7 +14,7 @@ namespace av::glicd {
 
 GlPresentLoop::GlPresentLoop(BlockSource &memory, icd::ServiceThread &thread, icd::WakeSignal &handed,
                              icd::WakeSignal &shown,
-                             icd::ThreadLock &lock, Kmt &kmt, icd::WindowSurface &surface,
+                             ThreadLock &lock, Kmt &kmt, icd::WindowSurface &surface,
                              icd::WindowChains &chains, LogSink &log)
     : thread_(thread), handed_(handed), shown_(shown), lock_(lock), kmt_(kmt), surface_(surface), chains_(chains),
       log_(log),
