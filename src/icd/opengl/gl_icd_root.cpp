@@ -126,7 +126,7 @@ constexpr uint32_t reported_wgl_count = sizeof reported_wgl_extensions / sizeof 
 GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock, icd::ThreadLock &send_lock,
                      LogSink &log, icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
                      GlPresentLoop &presents, GlIcdBinding &binding)
-    : lock_(lock), log_(log), lines_(log, "avgl: "), surface_(surface), slot_(slot), system_(system), presents_(presents),
+    : lock_(lock), log_(log), lines_(memory, log, "avgl: "), refused_(lines_), surface_(surface), slot_(slot), system_(system), presents_(presents),
       binding_(binding), formats_(),
       query_(formats_), windows_(memory), currents_(slot), connection_(memory, kmt, 0u),
       extensions_(reported_extensions, reported_count, reported_wgl_extensions, reported_wgl_count),
@@ -653,7 +653,7 @@ void GlIcdRoot::note_profile(const GuestGlContext &context)
 void GlIcdRoot::note_dropped(const char *api, const char *command, size_t written)
 {
     AV_SCOPE("GlIcdRoot::note_dropped");
-    LogLine(lines_).text(api).text(" ").text(command).text(" not sent: its encoding overflowed at byte ").number(written).write();
+    refused_.dropped(api, command, written);
 }
 
 void GlIcdRoot::report(StateWriter &writer)

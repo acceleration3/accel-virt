@@ -12,10 +12,11 @@
 #ifndef AV_GLICD_GL_ICD_ROOT_HPP
 #define AV_GLICD_GL_ICD_ROOT_HPP
 
-#include "core/log/driver_log.hpp"
+#include "core/log/keyed_log.hpp"
 #include "core/trace/state_reporter.hpp"
 #include "icd/opengl/current_contexts.hpp"
 #include "icd/common/icd_connection.hpp"
+#include "icd/common/refused_calls.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/opengl/gl_context_table.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
@@ -151,7 +152,8 @@ public:
      * nothing was held), 0 with nothing current or the context lost. */
     int32_t          run_held_calls();
     uint64_t         mint_sync_token();
-    /* A command whose encoding overflowed and was not sent. */
+    /* A command whose encoding overflowed and was not sent: said once per
+     * command, since an application sends it again every frame. */
     void             note_dropped(const char *api, const char *command, size_t written);
 
     void report(StateWriter &writer) override;
@@ -182,7 +184,8 @@ private:
 
     icd::ThreadLock  &lock_;
     LogSink     &log_;
-    DriverLog   lines_;
+    KeyedLog    lines_;
+    icd::RefusedCalls refused_;
     icd::WindowSurface    &surface_;
     ThreadSlot       &slot_;
     SystemOpengl     &system_;

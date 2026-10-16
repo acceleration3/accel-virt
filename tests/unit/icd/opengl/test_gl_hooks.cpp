@@ -88,6 +88,21 @@ TEST(gl_hooks, answer_nothing_with_nothing_current)
   CHECK(!glicd::legacy_calls_live());
   CHECK(rig.opengl32().delete_context(context)); }
 
+/* B-7: a command whose encoding overflows does so on every frame the
+ * application sends it - and every line was written, flooding the log. Each
+ * command that overflows is said once. */
+TEST(gl_hooks, a_payload_dropped_every_frame_is_said_once_per_command)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  const std::uint32_t lines = rig.log().lines();
+  for (std::uint32_t frame = 0u; frame < 3u; frame++) av::icd::payload_dropped("gl", "glBufferData", 4096u + frame);
+  CHECK_EQ(rig.log().lines(), lines + 1u);
+  CHECK_EQ(rig.log().holding("glBufferData not sent: its encoding overflowed at byte 4096"), 1u);
+  av::icd::payload_dropped("gl", "glTexImage2D", 9u);
+  av::icd::payload_dropped("gl", "glTexImage2D", 9u);
+  CHECK_EQ(rig.log().lines(), lines + 2u);
+  CHECK_EQ(rig.log().holding("glTexImage2D not sent"), 1u); }
+
 TEST(gl_hooks, answer_from_the_current_context)
 { GlIcdRig rig;
   rig.load_with_format();
