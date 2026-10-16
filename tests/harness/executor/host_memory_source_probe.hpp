@@ -11,6 +11,8 @@
 
 #include <stdint.h>
 
+#include <pthread.h>
+
 namespace av {
 
 class ExportedMemory;
@@ -28,6 +30,9 @@ struct HostMemorySourceProbe {
     void                 mark_visible(uint32_t types);
     /* The pool the allocations live in, for a test that corrupts it. */
     ObjectPool<SourceMemory> &pool();
+    /* The mutex allocate and release hold, for a test that holds it as a
+     * worker would. */
+    pthread_mutex_t          &mutex();
 
     HostMemorySource &source;
 };

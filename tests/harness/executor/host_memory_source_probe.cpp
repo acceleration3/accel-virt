@@ -22,4 +22,9 @@ void HostMemorySourceProbe::mark_visible(uint32_t types) { source.visible_ |= ty
 
 ObjectPool<SourceMemory> &HostMemorySourceProbe::pool() { return source.memories_; }
 
+pthread_mutex_t &HostMemorySourceProbe::mutex()
+{
+    return source.mutex_;
+}
+
 }  // namespace av

@@ -225,9 +225,17 @@ void HostMemorySource::report(StateWriter &writer) const
     writer.open("memory_source", 0u);
     writer.hex("mappable_types", mappable_);
     writer.hex("visible_types", visible_);
+    /* allocate and release change the pool under the mutex, from any
+     * session's worker; a dump must not wait on one holding it. */
+    if (pthread_mutex_trylock(&mutex_) != 0) {
+        writer.flag("busy", true);
+        writer.close();
+        return;
+    }
     writer.number("live", memories_.live());
     uint64_t bytes = 0u;
     memories_.for_each([&bytes](const SourceMemory &memory) { bytes += memory.size(); });
+    pthread_mutex_unlock(&mutex_);
     writer.number("bytes", bytes);
     writer.close();
 }

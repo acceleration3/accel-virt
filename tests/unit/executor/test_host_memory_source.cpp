@@ -617,6 +617,30 @@ TEST(host_memory_source, reports_what_it_maps_and_holds)
   CHECK(std::strstr(writer.dump(), "bytes=12288") != nullptr);
   rig.source.free_domain(domain); }
 
+/* The dump thread reports while a worker allocates: it never walks the pool
+ * the worker is changing, and never waits for it. */
+TEST(host_memory_source, a_report_while_a_worker_holds_the_pool_says_busy_and_walks_nothing)
+{ Rig rig;
+  rig.discrete();
+  AvHostMemory memory = {};
+  CHECK_STATUS(rig.allocate(1u, readback, memory), Status::ok);
+  pthread_mutex_t &held = HostMemorySourceProbe(rig.source).mutex();
+  pthread_mutex_lock(&held);
+  char            bytes[512] = {};
+  av::StateWriter writer(bytes, sizeof bytes);
+  rig.source.report(writer);
+  pthread_mutex_unlock(&held);
+  CHECK(std::strstr(writer.dump(), "busy=true") != nullptr);
+  CHECK(std::strstr(writer.dump(), "live=") == nullptr);
+  CHECK(std::strstr(writer.dump(), "bytes=") == nullptr);
+  /* Let go of, the next report walks it again. */
+  char            again[512] = {};
+  av::StateWriter after(again, sizeof again);
+  rig.source.report(after);
+  CHECK(std::strstr(after.dump(), "busy=true") == nullptr);
+  CHECK(std::strstr(after.dump(), "live=1") != nullptr);
+  rig.source.free_domain(domain); }
+
 /* Two live allocations answering one key would hand an import whichever the
  * pool found first. */
 TEST(host_memory_source_invariants, two_allocations_answering_one_key_break_them)
