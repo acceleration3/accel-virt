@@ -29,7 +29,7 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
+class DriverLog;
 }  // namespace av
 
 namespace av {
@@ -70,7 +70,7 @@ public:
         gl_pack_alignment = 0x0D05u, gl_pack_skip_images = 0x806Bu, gl_pack_image_height = 0x806Cu,
     };
 
-    BackBufferPresenter(BlockSource &memory, LogSink &log);
+    BackBufferPresenter(BlockSource &memory, DriverLog &log);
     ~BackBufferPresenter();
     BackBufferPresenter(const BackBufferPresenter &) = delete;
     BackBufferPresenter &operator=(const BackBufferPresenter &) = delete;
@@ -148,8 +148,7 @@ private:
     size_t               stored_bytes() const;
 
     BlockSource  &memory_;
-    LogSink &log_;
-    DriverLog lines_;
+    DriverLog &lines_;
     void         *window_;
     PixelFormat   format_;
     uint32_t      width_;

@@ -25,7 +25,6 @@
 #ifndef AV_CLICD_CL_ICD_ROOT_HPP
 #define AV_CLICD_CL_ICD_ROOT_HPP
 
-#include "core/log/keyed_log.hpp"
 #include "core/support/object_pool.hpp"
 #include "core/trace/state_reporter.hpp"
 #include "icd/common/refused_calls.hpp"
@@ -54,7 +53,7 @@
 #include <CL/cl_icd.h>
 
 namespace av {
-class LogSink;
+class KeyedLog;
 }  // namespace av
 
 namespace av {
@@ -100,7 +99,7 @@ public:
      * point looks its arguments up there without `lock`. `blocks_lock` is
      * every context's arena blocks' (ClArenaBlocks). */
     ClIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock,
-              ThreadLock &objects_lock, ThreadLock &blocks_lock, LogSink &log, icd::ServiceThread &watcher_thread, GlShareSource &gl_share,
+              ThreadLock &objects_lock, ThreadLock &blocks_lock, KeyedLog &log, icd::ServiceThread &watcher_thread, GlShareSource &gl_share,
               D3dAdapterSource &d3d_adapters, D3d11Bridge &d3d11,
               ClIcdBinding &binding);
     ~ClIcdRoot();
@@ -855,7 +854,9 @@ private:
     cl_uint          reference_count(const ClObject &held);
 
     ThreadLock            &lock_;
-    LogSink          &log_;
+    /* The ICD's lines, and those said once: every refused call, and what
+     * else ClRefusalLog names. */
+    KeyedLog              &lines_;
     GlShareSource         &gl_share_;
     D3dAdapterSource      &d3d_adapters_;
     D3d11Bridge           &d3d11_;
@@ -880,9 +881,6 @@ private:
      * as long as the longest - the extension list. */
     ClInfoAnswers<host_extensions_bytes> device_answers_;
     ClPendingReads         reads_;
-    /* The ICD's lines said once: every refused call, and what else
-     * ClRefusalLog names. */
-    KeyedLog               lines_;
     icd::RefusedCalls      refused_;
     ClRefusalLog           refusals_;
     /* Under lock_, as the object releases that make them due are. */

@@ -4,7 +4,7 @@
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/shared_object_call.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "icd/d3d/passthrough_geometry_shader.hpp"
@@ -573,7 +573,7 @@ void D3d11Device::create_shader(uint32_t stage, const UINT *code, D3D10DDI_HSHAD
     /* The second token is the stream's length in tokens. */
     const size_t bytes = static_cast<size_t>(code[1]) * sizeof(UINT);
     if (!wire().make_room_for_blobs(bytes))
-        log_.write("avumd: a shader larger than the arena");
+        lines_.write("a shader larger than the arena");
     if (!d3dproto::av_d3d_CreateShader(wire(), record_of.stamp.id(), stage, counts[0], signatures[0], counts[1],
                                         signatures[1], counts[2], signatures[2], declared, declaration, strides_count,
                                         strides, rasterized, code, bytes))
@@ -658,7 +658,7 @@ void D3d11Device::stream_vertex_output(const D3D11DDIARG_CREATEGEOMETRYSHADERWIT
         taken = written.add(passed[index].Register, passed[index].Mask, static_cast<uint32_t>(passed[index].SystemValue));
     const uint32_t *const tokens = taken ? written.tokens() : nullptr;
     if (tokens == nullptr) {
-        log_.write("avumd: a stream output with no shader names no register it can pass through");
+        lines_.write("a stream output with no shader names no register it can pass through");
         set_error(E_INVALIDARG);
         return;
     }

@@ -22,7 +22,6 @@
 #include "core/support/growable_array.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/log/keyed_log.hpp"
 #include "icd/common/loss_latch.hpp"
 #include "icd/common/refused_calls.hpp"
 #include "icd/common/once_latch.hpp"
@@ -49,11 +48,8 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
-}  // namespace av
-
-namespace av {
 class BlockSource;
+class KeyedLog;
 }  // namespace av
 
 
@@ -68,7 +64,7 @@ class D3d11HostCaps;
 
 class D3d11Device {
 public:
-    D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps,
+    D3d11Device(d3d::D3dSession &session, BlockSource &memory, KeyedLog &log, const D3d11HostCaps &caps,
                 d3d::D3dCallTrace &trace, const d3d::SharedRowsRequest &rows);
     ~D3d11Device();
     D3d11Device(const D3d11Device &) = delete;
@@ -294,8 +290,7 @@ private:
     icd::OpenMappings<icd::StagedMapping> maps_;
     /* The runs of a watched shadow an unmap sends, kept off the stack. */
     icd::WrittenRuns       written_;
-    LogSink          &log_;
-    KeyedLog         lines_;
+    KeyedLog        &lines_;
     icd::RefusedCalls refused_;
     icd::LossLatch    loss_;
     const D3d11HostCaps   &caps_;

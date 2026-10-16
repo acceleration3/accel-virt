@@ -7,7 +7,7 @@
 #include "core/trace/state_writer.hpp"
 #include "icd/common/icd_connection.hpp"
 #include "guest/transport/guest_connection.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
 #include "icd/common/arena_spans.hpp"
@@ -15,14 +15,14 @@
 namespace av::clicd {
 
 GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memory,
-                               ThreadLock &send_lock, ThreadLock &blocks_lock, LogSink &log, KeyedLog &lines,
+                               ThreadLock &send_lock, ThreadLock &blocks_lock, KeyedLog &lines,
                                icd::SharedHandles &handles)
-    : memory_(memory), log_(log),
+    : memory_(memory), lines_(lines),
       link_(connection), loss_(lines), gl_share_(0u), wakes_(false),
-      channel_(memory, log, "avcl: ", icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes),
+      channel_(memory, lines, icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes),
                send_lock),
       blocks_(memory, blocks_lock), orphaned_work_(false), staging_(memory, blocks_lock),
-      svm_(memory), external_(handles, memory, log), d3d11_(memory), mappings_(memory), properties_(), notify_(), state_(State::created)
+      svm_(memory), external_(handles, memory, lines), d3d11_(memory), mappings_(memory), properties_(), notify_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
 }
@@ -43,8 +43,8 @@ Status GuestClContext::make(uint32_t gl_share, uint64_t wake)
     undo.dismiss();
     if (wake != 0u) {
         wakes_ = channel_.transport().wake_on_raise(wake) == Status::ok;
-        log_.write(wakes_ ? "avcl: the driver wakes this context's waits"
-                          : "avcl: this context's waits ask on a timer; the driver does not wake them");
+        lines_.write(wakes_ ? "the driver wakes this context's waits"
+                            : "this context's waits ask on a timer; the driver does not wake them");
     }
     gl_share_ = gl_share;
     state_ = State::made;
@@ -97,7 +97,7 @@ Status GuestClContext::build(uint32_t gl_share)
     const Status opened = channel_.open(link_.device(), GlContextOptions().sharing(gl_share));
     if (opened != Status::ok) return opened;
     if (channel_.arena_view() == nullptr) {
-        log_.write("avcl: buffers are staged; a map copies in and out");
+        lines_.write("buffers are staged; a map copies in and out");
         return Status::ok;
     }
     /* The arena is the memory a mappable buffer is made over, on both sides:
@@ -109,7 +109,7 @@ Status GuestClContext::build(uint32_t gl_share)
     uint64_t        staged = 0u;
     if (spans.span(staging_reserve, staging, staged)) staging_.lend(staging, staged);
     blocks_.lend(channel_.arena_view(), spans.lent());
-    log_.write("avcl: buffers map through the blob arena; no copy");
+    lines_.write("buffers map through the blob arena; no copy");
     return Status::ok;
 }
 

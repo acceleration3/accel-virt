@@ -15,7 +15,6 @@
 #ifndef AV_SWAPCHAIN_HPP
 #define AV_SWAPCHAIN_HPP
 
-#include "core/log/driver_log.hpp"
 #include "icd/common/present_pacing.hpp"
 #include "icd/common/handed_frame.hpp"
 #include "icd/common/once_latch.hpp"
@@ -29,7 +28,7 @@
 #include <vulkan/vulkan_core.h>
 
 namespace av {
-class LogSink;
+class DriverLog;
 }  // namespace av
 
 namespace av {
@@ -58,7 +57,7 @@ public:
      * on and the wire a chain's slot is opened through. Its frames are shown
      * by `presents`. */
     Swapchain(WindowSurface &windows, WindowChains &chains, EntryLookup &entries, VkDevice device,
-              uint64_t host_device, VkPhysicalDevice physical, Kmt &kmt, LogSink &log, Connection &connection,
+              uint64_t host_device, VkPhysicalDevice physical, Kmt &kmt, DriverLog &log, Connection &connection,
               VkPresentQueue &presents);
     ~Swapchain();
     Swapchain(const Swapchain &) = delete;
@@ -131,9 +130,8 @@ private:
     VkPresentQueue &presents_;
     PresentDevice  device_;
     ChainedImage   chained_;
-    DriverLog      lines_;
+    DriverLog     &lines_;
     PresentPacing  pacing_;
-    LogSink       &log_;
     uint64_t       luid_;
     VkDevice       app_device_;
     void          *window_;

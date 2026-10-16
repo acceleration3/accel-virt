@@ -36,10 +36,6 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
-}  // namespace av
-
-namespace av {
 class BlockSource;
 class ClientTransport;
 class HostAllocation;
@@ -87,9 +83,9 @@ public:
     static constexpr uint64_t staging_reserve = uint64_t{8} << 20u;
 
     /* `blocks_lock` is the arena blocks' own (ClArenaBlocks); `lines` is the
-     * root's, where a loss is said once (icd::LossLatch). */
+     * driver's, where a loss is said once (icd::LossLatch). */
     GuestClContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock,
-                   ThreadLock &blocks_lock, LogSink &log, KeyedLog &lines, icd::SharedHandles &handles);
+                   ThreadLock &blocks_lock, KeyedLog &lines, icd::SharedHandles &handles);
     ~GuestClContext();
     GuestClContext(const GuestClContext &) = delete;
     GuestClContext &operator=(const GuestClContext &) = delete;
@@ -218,7 +214,7 @@ private:
     void                 teardown();
 
     BlockSource        &memory_;
-    LogSink       &log_;
+    KeyedLog           &lines_;
     icd::ContextLink    link_;
     /* Why the context was lost. */
     icd::LossLatch      loss_;

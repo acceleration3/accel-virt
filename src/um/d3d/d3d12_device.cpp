@@ -4,7 +4,7 @@
 
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
 #include "icd/common/pieces.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
@@ -40,10 +40,10 @@ uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 
 }  // namespace
 
-D3d12Device::D3d12Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log,
+D3d12Device::D3d12Device(d3d::D3dSession &session, KeyedLog &log,
                          const D3d12HostCaps &caps,
                          void *const &list_table, d3d::D3dCallTrace &trace)
-    : session_(session), log_(log), lines_(memory, log, "avumd: "), refused_(lines_), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), kernel_(nullptr), follower_(), residency_(), channel_(), addresses_(),
+    : session_(session), lines_(log), refused_(lines_), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), kernel_(nullptr), follower_(), residency_(), channel_(), addresses_(),
       recorder_(*this), null_resource_{}, loss_(lines_), library_blob_(), trace_(trace),
       context_number_(trace.number_context())
 {
@@ -77,7 +77,7 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), 0u));
     uint32_t hresult = 1u;
     if (!d3d12proto::av_d3d12_OpenDevice12(channel_.object(), 0u, &hresult) || hresult != 0u) {
-        log_.write("avumd: the host made no Direct3D 12 device");
+        lines_.write("the host made no Direct3D 12 device");
         channel_.destroy();
         session_.leave();
         return E_FAIL;
@@ -277,7 +277,7 @@ HRESULT D3d12Device::create_command_queue(const D3D12DDIARG_CREATECOMMANDQUEUE_0
     context.NodeOrdinal = 0u;
     context.EngineAffinity = 1u;
     if (FAILED(core_->pfnCreateContextVirtualCb(runtime, &context))) {
-        log_.write("avumd: the kernel refused a Direct3D 12 queue's context");
+        lines_.write("the kernel refused a Direct3D 12 queue's context");
         return E_OUTOFMEMORY;
     }
     queue.context = context.hContext;

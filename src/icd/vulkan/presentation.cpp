@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/driver_log.hpp"
 #include "icd/vulkan/handle_bits.hpp"
 #include "proto/wire/foreign_enum.hpp"
 #include "icd/vulkan/icd_root.hpp"
@@ -11,11 +11,10 @@
 namespace av::icd {
 
 Presentation::Presentation(BlockSource &memory, Kmt &kmt, WindowSurface &windows, WindowChains &chains,
-                           LogSink &log, IcdRoot &root, EntryLookup &entries, ServiceThread &present_thread,
+                           DriverLog &log, IcdRoot &root, EntryLookup &entries, ServiceThread &present_thread,
                            ThreadWake &handed, ThreadWake &shown, ThreadLock &present_lock)
     : memory_(memory), kmt_(kmt), windows_(windows), chains_(chains), log_(log), root_(root), entries_(entries),
-      ready_(entries), presents_(memory, present_thread, handed, shown, present_lock, ready_, windows, chains, log,
-                                 "avvk: "),
+      ready_(entries), presents_(memory, present_thread, handed, shown, present_lock, ready_, windows, chains, log),
       surfaces_(memory), chains_made_(memory), swapchains_(memory, Pool::paged)
 {
     AV_SCOPE("Presentation::Presentation");
@@ -106,12 +105,12 @@ VkResult Presentation::create_swapchain(VkDevice device, const VkSwapchainCreate
     uint64_t         host_device = 0u;
     Connection      *connection = nullptr;
     if (info == nullptr || !root_.present_context(device, physical, host_device, connection)) {
-        log_.write("avvk: a swapchain is refused: its device has no adapter to present on");
+        log_.write("a swapchain is refused: its device has no adapter to present on");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     void *const window = surfaces_.window_of(info->surface);
     if (window == nullptr) {
-        log_.write("avvk: a swapchain is refused: its surface names no window");
+        log_.write("a swapchain is refused: its surface names no window");
         return VK_ERROR_SURFACE_LOST_KHR;
     }
     /* Retired first, whether or not the new one is made, as Vulkan has it:

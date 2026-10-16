@@ -22,7 +22,7 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
+class KeyedLog;
 }  // namespace av
 
 namespace av {
@@ -41,7 +41,7 @@ namespace av::d3d9 {
 
 class D3d9Driver {
 public:
-    D3d9Driver(BlockSource &memory, Kmt &kmt, LogSink &log, d3d::D3dCallTrace &trace);
+    D3d9Driver(BlockSource &memory, Kmt &kmt, KeyedLog &log, d3d::D3dCallTrace &trace);
     D3d9Driver(const D3d9Driver &) = delete;
     D3d9Driver &operator=(const D3d9Driver &) = delete;
 
@@ -58,8 +58,7 @@ private:
     uint32_t slot_of(uint32_t kmt_adapter);
 
     BlockSource                   &memory_;
-    LogSink                  &log_;
-    DriverLog                lines_;
+    KeyedLog               &lines_;
     d3d::D3dCallTrace       &trace_;
     ObjectPool<D3d9Device>         devices_;
     AdapterSessions<D3d9HostCaps>  adapters_;

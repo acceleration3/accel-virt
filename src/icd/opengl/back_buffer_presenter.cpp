@@ -4,7 +4,7 @@
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/driver_log.hpp"
 #include "icd/common/row_pieces.hpp"
 #include "icd/common/slot_format.hpp"
 #include "icd/opengl/client_array_state.hpp"
@@ -30,8 +30,8 @@ namespace {
 static_assert(BackBufferPresenter::max_edge * 4u + TransferRoom::command_bytes <= GuestGlContext::reply_bytes,
               "a read-back of one row fits a reply");
 
-BackBufferPresenter::BackBufferPresenter(BlockSource &memory, LogSink &log)
-    : memory_(memory), log_(log), lines_(log, "avgl: "), window_(nullptr), format_(0u, 0u, false, false, 0u), width_(0u), height_(0u),
+BackBufferPresenter::BackBufferPresenter(BlockSource &memory, DriverLog &log)
+    : memory_(memory), lines_(log), window_(nullptr), format_(0u, 0u, false, false, 0u), width_(0u), height_(0u),
       framebuffers_{}, texture_(0u), renderbuffers_{}, pixels_(nullptr), front_(), capacity_(0u), refusal_logged_(),
       loop_(nullptr), arena_(nullptr), room_(), pending_(slot_count), pending_chained_(false), chained_(),
       chain_refused_(false)
@@ -342,7 +342,7 @@ bool BackBufferPresenter::draw_chained(ClientTransport &wire, GlPresentQueue &lo
         settle();
         if (!chained_.open(wire, loop.chains(), window_, luid, width_, height_, format_.srgb())) {
             chain_refused_ = true;
-            log_.write("avgl: a window's frames cannot be presented as host surfaces; they are read back");
+            lines_.write("a window's frames cannot be presented as host surfaces; they are read back");
             return false;
         }
     }

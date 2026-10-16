@@ -23,7 +23,7 @@
 #include "icd/vulkan/host_extension_list.hpp"
 #include "icd/vulkan/icd_binding.hpp"
 #include "icd/vulkan/local_entries.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
 #include "icd/vulkan/memory_allocate_chain.hpp"
 #include "icd/vulkan/memory_type_table.hpp"
 #include "icd/vulkan/physical_device_view.hpp"
@@ -303,9 +303,9 @@ constexpr uint32_t max_allocated_at_once = 1024u;
 }  // namespace
 
 IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &memory_lock,
-                 LogSink &log, IcdBinding &binding, WindowSurface &windows, WindowChains &chains,
+                 KeyedLog &log, IcdBinding &binding, WindowSurface &windows, WindowChains &chains,
                  ServiceThread &present_thread, ThreadWake &handed, ThreadWake &shown, ThreadLock &present_lock)
-    : memory_(memory), kmt_(kmt), lock_(lock), send_lock_(send_lock), memory_lock_(memory_lock), log_(log), lines_(memory, log, "avvk: "),
+    : memory_(memory), kmt_(kmt), lock_(lock), send_lock_(send_lock), memory_lock_(memory_lock), lines_(log),
       binding_(binding),
       api_version_(vulkan_1_3), before_instance_(local_rows, before_instance_rows),
       entry_points_(local_rows, local_row_count),
@@ -332,7 +332,7 @@ VkResult IcdRoot::negotiate(uint32_t *version)
 {
     AV_SCOPE("IcdRoot::negotiate");
     if (version == nullptr) {
-        log_.write("avvk: loader interface negotiation without a version");
+        lines_.write("loader interface negotiation without a version");
         return VK_ERROR_INCOMPATIBLE_DRIVER;
     }
     if (*version < oldest_interface) {
@@ -367,7 +367,7 @@ VkResult IcdRoot::enumerate_instance_extensions(const char *layer, uint32_t *cou
 {
     AV_SCOPE("IcdRoot::enumerate_instance_extensions");
     if (layer != nullptr) {
-        log_.write("avvk: instance extensions of a layer asked for; this driver is no layer");
+        lines_.write("instance extensions of a layer asked for; this driver is no layer");
         return VK_ERROR_LAYER_NOT_PRESENT;
     }
     if (properties == nullptr) {
@@ -396,7 +396,7 @@ Status IcdRoot::open_connection(Connection *&opened, uint64_t luid)
 {
     AV_SCOPE("IcdRoot::open_connection");
     const ThreadLockHold release(lock_);
-    const Status made = connections_.create(opened, kmt_, memory_, send_lock_, log_, lines_, shared_handles_);
+    const Status made = connections_.create(opened, kmt_, memory_, send_lock_, lines_, shared_handles_);
     if (made != Status::ok) return made;
     const Status status = opened->open(luid);
     if (status == Status::ok) return Status::ok;
@@ -453,7 +453,7 @@ void IcdRoot::span_adapters(const VkInstanceCreateInfo &forwarded, const VkAlloc
     {
         const ThreadLockHold release(lock_);
         if (spans_.create(span, own) != Status::ok) {
-            log_.write("avvk: no room to span the other adapters; the instance has the primary display's alone");
+            lines_.write("no room to span the other adapters; the instance has the primary display's alone");
             return;
         }
     }
@@ -581,7 +581,7 @@ VkResult IcdRoot::enumerate_adapter_physical_devices(VkInstance instance, uint64
     AV_SCOPE("IcdRoot::enumerate_adapter_physical_devices");
     Connection *const connection = connection_of(instance, LoaderHandle::Kind::instance);
     if (connection == nullptr) {
-        log_.write("avvk: vk_icdEnumerateAdapterPhysicalDevices on an instance this driver did not make");
+        lines_.write("vk_icdEnumerateAdapterPhysicalDevices on an instance this driver did not make");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     if (connection->refuses("vk_icdEnumerateAdapterPhysicalDevices")) return VK_ERROR_DEVICE_LOST;
@@ -621,12 +621,12 @@ VkResult IcdRoot::enumerate_device_extensions(VkPhysicalDevice physical_device, 
     AV_SCOPE("IcdRoot::enumerate_device_extensions");
     LoaderHandle *const made = handle_of(physical_device, LoaderHandle::Kind::physical_device);
     if (made == nullptr) {
-        log_.write("avvk: vkEnumerateDeviceExtensionProperties on a physical device this driver did not make");
+        lines_.write("vkEnumerateDeviceExtensionProperties on a physical device this driver did not make");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     if (made->connection()->refuses("vkEnumerateDeviceExtensionProperties")) return VK_ERROR_DEVICE_LOST;
     if (layer != nullptr) {
-        log_.write("avvk: device extensions of a layer asked for; this driver is no layer");
+        lines_.write("device extensions of a layer asked for; this driver is no layer");
         return VK_ERROR_LAYER_NOT_PRESENT;
     }
     ClientTransport &transport = made->connection()->transport();
@@ -684,7 +684,7 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
     AV_SCOPE("IcdRoot::create_device");
     LoaderHandle *const made = handle_of(physical_device, LoaderHandle::Kind::physical_device);
     if (made == nullptr) {
-        log_.write("avvk: vkCreateDevice on a physical device this driver did not make");
+        lines_.write("vkCreateDevice on a physical device this driver did not make");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     if (made->connection()->refuses("vkCreateDevice")) return VK_ERROR_DEVICE_LOST;
@@ -759,7 +759,7 @@ VkResult IcdRoot::create_descriptor_update_template(VkDevice device,
      * blob cannot be sized is one no update through it could carry. */
     DescriptorTemplateLayout layout;
     if (layout.take(create->pDescriptorUpdateEntries, create->descriptorUpdateEntryCount) != Status::ok) {
-        log_.write("avvk: a descriptor update template names entries this driver cannot size");
+        lines_.write("a descriptor update template names entries this driver cannot size");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     const VkResult result = vkicd::generated::Wrap_vkCreateDescriptorUpdateTemplate(device, create, allocator, made);
@@ -822,7 +822,7 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
     }
     ScopeExit unwind([&] { static_cast<void>(kmt_.destroy_shared_allocation(guest_device, carrier)); });
     if (carrier_data.reread(SharedAllocationData::encoded_size) != Status::ok || !carrier_data.assigned()) {
-        log_.write("avvk: the miniport minted no identity into a shared object's carrier");
+        lines_.write("the miniport minted no identity into a shared object's carrier");
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
     /* Published before the handle is minted: a handle naming an object the
@@ -841,7 +841,7 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
     const Status shared = shared_handles_.mint(guest_device, carrier, carrier_data.object_id(), handle);
     if (shared != Status::ok) {
         if (shared == Status::no_memory) {
-            log_.write("avvk: no memory to keep a shared object's NT handle");
+            lines_.write("no memory to keep a shared object's NT handle");
             return VK_ERROR_OUT_OF_HOST_MEMORY;
         }
         refused("vkAllocateMemory: no NT handle for a shared object, NTSTATUS");
@@ -850,7 +850,7 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
     /* A row the arguments here always make: what refuses one is a process
      * with no memory left, and then nothing published is left behind. */
     if (!externals_.remember(device, memory, semaphore, carrier_data.object_id(), size, handle, carrier)) {
-        log_.write("avvk: no memory to remember a shared object; it is given back");
+        lines_.write("no memory to remember a shared object; it is given back");
         shared_handles_.forget(handle);
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
@@ -883,7 +883,7 @@ VkResult IcdRoot::export_memory_handle(VkDevice device, const MemoryGetWin32Hand
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     const uint64_t named = externals_.handle_of_memory(request->memory_);
     if (named == 0u) {
-        log_.write("avvk: vkGetMemoryWin32HandleKHR names memory this process never declared exportable");
+        lines_.write("vkGetMemoryWin32HandleKHR names memory this process never declared exportable");
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
     *handle = reinterpret_cast<void *>(static_cast<uintptr_t>(named));
@@ -940,7 +940,7 @@ VkResult IcdRoot::memory_handle_properties(VkDevice device, void *)
     if (allocating_device(device) == nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     /* The query answers for a handle from outside, and a handle this ICD did
      * not export names nothing here (contracts/external_objects.md). */
-    log_.write("avvk: vkGetMemoryWin32HandlePropertiesKHR: a handle this driver did not export names nothing");
+    lines_.write("vkGetMemoryWin32HandlePropertiesKHR: a handle this driver did not export names nothing");
     return VK_ERROR_INVALID_EXTERNAL_HANDLE;
 }
 
@@ -973,7 +973,7 @@ VkResult IcdRoot::import_semaphore_handle(VkDevice device, const ImportSemaphore
     if (opened == semaphore) return VK_SUCCESS;
     /* The device answered another object than the one the payload went
      * into: nothing the application holds names it. */
-    log_.write("avvk: a semaphore's import answered another semaphore; it is given back");
+    lines_.write("a semaphore's import answered another semaphore; it is given back");
     static_cast<void>(opens.give_back(connection.transport(), SharedObjectKind::monitored_fence, opened));
     return VK_ERROR_INVALID_EXTERNAL_HANDLE;
 }
@@ -1262,7 +1262,7 @@ LoaderHandle *IcdRoot::allocating_device(VkDevice device)
     AV_SCOPE("IcdRoot::allocating_device");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made != nullptr && made->parent()->kind() == LoaderHandle::Kind::physical_device) return made;
-    log_.write("avvk: memory of a device this driver did not make through a physical device");
+    lines_.write("memory of a device this driver did not make through a physical device");
     return nullptr;
 }
 
@@ -1272,8 +1272,8 @@ DeviceMemory *IcdRoot::memory_of(LoaderHandle &device)
     const ThreadLockHold release(lock_);
     if (device.device_memory() != nullptr) return device.device_memory();
     DeviceMemory *made = nullptr;
-    if (memories_.create(made, kmt_, *device.connection(), translation_, log_) != Status::ok) {
-        log_.write("avvk: no memory to keep a device's allocations in");
+    if (memories_.create(made, kmt_, *device.connection(), translation_, lines_) != Status::ok) {
+        lines_.write("no memory to keep a device's allocations in");
         return nullptr;
     }
     device.allocate_from(memories_, *made);
@@ -1352,7 +1352,7 @@ VkResult IcdRoot::map_memory2(VkDevice device, const VkMemoryMapInfoKHR *info, v
     AV_SCOPE("IcdRoot::map_memory2");
     if (info == nullptr || data == nullptr) return VK_ERROR_MEMORY_MAP_FAILED;
     if (info->pNext != nullptr) {
-        log_.write("avvk: vkMapMemory2 names something this driver cannot place");
+        lines_.write("vkMapMemory2 names something this driver cannot place");
         return VK_ERROR_MEMORY_MAP_FAILED;
     }
     return map_memory(device, info->memory, info->offset, info->size, info->flags, data);
@@ -1363,7 +1363,7 @@ VkResult IcdRoot::mapped_ranges(VkDevice device, const char *entry)
     AV_SCOPE("IcdRoot::mapped_ranges");
     Connection *const connection = connection_of(device, LoaderHandle::Kind::device);
     if (connection == nullptr) {
-        log_.write("avvk: mapped ranges of a device this driver did not make");
+        lines_.write("mapped ranges of a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
     return connection->refuses(entry) ? VK_ERROR_DEVICE_LOST : VK_SUCCESS;
@@ -1375,7 +1375,7 @@ void IcdRoot::physical_device_properties(VkPhysicalDevice physical_device, VkPhy
     Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
     if (connection == nullptr) return;
     PhysicalDeviceView view(connection->transport(), translation_, connection->luid(), connection->adapter_name(), api_version_,
-                            log_);
+                            lines_);
     view.properties(physical_device, properties);
 }
 
@@ -1385,7 +1385,7 @@ void IcdRoot::physical_device_properties2(VkPhysicalDevice physical_device, VkPh
     Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
     if (connection == nullptr) return;
     PhysicalDeviceView view(connection->transport(), translation_, connection->luid(), connection->adapter_name(), api_version_,
-                            log_);
+                            lines_);
     view.properties2(physical_device, properties);
 }
 
@@ -1401,7 +1401,7 @@ void IcdRoot::release_connection(Connection *connection)
 {
     AV_SCOPE("IcdRoot::release_connection");
     const ThreadLockHold release(lock_);
-    if (connections_.destroy(connection) != Status::ok) log_.write("avvk: release of a connection never opened");
+    if (connections_.destroy(connection) != Status::ok) lines_.write("release of a connection never opened");
 }
 
 void *IcdRoot::wrap(LoaderHandle::Kind kind, uint64_t host, Connection *connection)
@@ -1471,7 +1471,7 @@ void IcdRoot::destroy_wrapper(void *handle, LoaderHandle::Kind kind)
     AV_SCOPE("IcdRoot::destroy_wrapper");
     const ThreadLockHold release(lock_);
     if (handles_.destroy(handles_.made(handle, kind)) != Status::ok)
-        log_.write("avvk: destroy of a handle this driver did not make");
+        lines_.write("destroy of a handle this driver did not make");
 }
 
 CommandBatch &IcdRoot::record_target(VkCommandBuffer command_buffer)
@@ -1507,7 +1507,7 @@ VkResult IcdRoot::allocate_command_buffers(VkDevice device, const VkCommandBuffe
     AV_SCOPE("IcdRoot::allocate_command_buffers");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) {
-        log_.write("avvk: vkAllocateCommandBuffers on a device this driver did not make");
+        lines_.write("vkAllocateCommandBuffers on a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
     if (made->connection()->refuses("vkAllocateCommandBuffers")) return VK_ERROR_DEVICE_LOST;
@@ -1553,7 +1553,7 @@ VkResult IcdRoot::begin_command_buffer(VkCommandBuffer command_buffer, const VkC
     CommandBatch &batch = record_target(command_buffer);
     batch.discard();
     if (vkproto::av_vkBeginCommandBuffer(batch, translation_, command_buffer, info) == VK_SUCCESS) return VK_SUCCESS;
-    log_.write("avvk: vkBeginCommandBuffer: no memory to record into");
+    lines_.write("vkBeginCommandBuffer: no memory to record into");
     return VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
@@ -1588,7 +1588,7 @@ VkResult IcdRoot::wait_for_fences(VkDevice device, uint32_t count, const VkFence
     AV_SCOPE("IcdRoot::wait_for_fences");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) {
-        log_.write("avvk: vkWaitForFences on a device this driver did not make");
+        lines_.write("vkWaitForFences on a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
     if (made->connection()->refuses("vkWaitForFences")) return VK_ERROR_DEVICE_LOST;
@@ -1603,7 +1603,7 @@ VkResult IcdRoot::wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *in
     AV_SCOPE("IcdRoot::wait_semaphores");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) {
-        log_.write("avvk: vkWaitSemaphores on a device this driver did not make");
+        lines_.write("vkWaitSemaphores on a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
     if (made->connection()->refuses("vkWaitSemaphores")) return VK_ERROR_DEVICE_LOST;
@@ -1621,7 +1621,7 @@ VkResult IcdRoot::query_pool_results(VkDevice device, VkQueryPool pool, uint32_t
     AV_SCOPE("IcdRoot::query_pool_results");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) {
-        log_.write("avvk: vkGetQueryPoolResults on a device this driver did not make");
+        lines_.write("vkGetQueryPoolResults on a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
     if (made->connection()->refuses("vkGetQueryPoolResults")) return VK_ERROR_DEVICE_LOST;
@@ -1644,7 +1644,7 @@ VkResult IcdRoot::queue_wait_idle(VkQueue queue)
     AV_SCOPE("IcdRoot::queue_wait_idle");
     LoaderHandle *const made = handle_of(queue, LoaderHandle::Kind::queue);
     if (made == nullptr || made->parent()->kind() != LoaderHandle::Kind::device) {
-        log_.write("avvk: vkQueueWaitIdle on a queue this driver did not make through a device");
+        lines_.write("vkQueueWaitIdle on a queue this driver did not make through a device");
         return VK_ERROR_DEVICE_LOST;
     }
     if (made->connection()->refuses("vkQueueWaitIdle")) return VK_ERROR_DEVICE_LOST;
@@ -1686,7 +1686,7 @@ VkResult IcdRoot::signal_acquire(VkDevice device, VkSemaphore semaphore, VkFence
     if (made->connection()->refuses("vkAcquireNextImageKHR")) return VK_ERROR_DEVICE_LOST;
     LoaderHandle *const queue = child_of(*made, LoaderHandle::Kind::queue, 0u);
     if (queue == nullptr) {
-        log_.write("avvk: vkAcquireNextImageKHR has nothing to signal on: the device handed out no queue");
+        lines_.write("vkAcquireNextImageKHR has nothing to signal on: the device handed out no queue");
         return VK_ERROR_DEVICE_LOST;
     }
     VkSubmitInfo submit = {};
@@ -1704,7 +1704,7 @@ VkResult IcdRoot::device_wait_idle(VkDevice device)
     AV_SCOPE("IcdRoot::device_wait_idle");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) {
-        log_.write("avvk: vkDeviceWaitIdle on a device this driver did not make");
+        lines_.write("vkDeviceWaitIdle on a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
     if (made->connection()->refuses("vkDeviceWaitIdle")) return VK_ERROR_DEVICE_LOST;
@@ -1721,13 +1721,13 @@ VkResult IcdRoot::force_context_fault(VkDevice device)
     AV_SCOPE("IcdRoot::force_context_fault");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) {
-        log_.write("avvk: vkAvForceContextFault on a device this driver did not make");
+        lines_.write("vkAvForceContextFault on a device this driver did not make");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     Connection &connection = *made->connection();
     if (connection.refuses("vkAvForceContextFault")) return VK_ERROR_DEVICE_LOST;
     if (ContextFault(connection.transport()).send() != Status::ok) {
-        log_.write("avvk: the host answered a truncated vkCreateInstance");
+        lines_.write("the host answered a truncated vkCreateInstance");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     return VK_ERROR_DEVICE_LOST;

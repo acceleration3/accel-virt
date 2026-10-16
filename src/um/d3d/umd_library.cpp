@@ -11,7 +11,7 @@
 namespace av {
 
 UmdLibrary::Seams::Seams()
-    : process(L"avumd"), lock(), driver(process.heap(), process.kmt(), process.log()),
+    : process(L"avumd", "avumd: "), lock(), driver(process.heap(), process.kmt(), process.log()),
       root(process.heap(), process.kmt(), lock, process.log(), d3d::umd_binding, &driver)
 {
     AV_SCOPE("UmdLibrary::Seams::Seams");

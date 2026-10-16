@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/driver_log.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/opencl/cl_property_list.hpp"
 #include "proto/resources/shared_object_kind.hpp"
@@ -20,8 +20,8 @@ static_assert(ClExternalMemory::handle_properties[2] == CL_EXTERNAL_MEMORY_HANDL
 static_assert(ClExternalMemory::handle_properties[3] == CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_FD_KHR);
 static_assert(ClExternalMemory::handle_properties[4] == CL_EXTERNAL_MEMORY_HANDLE_DMA_BUF_KHR);
 
-ClExternalMemory::ClExternalMemory(icd::SharedHandles &handles, BlockSource &memory, LogSink &log)
-    : log_(log), handles_(handles), opened_(handles, memory, log, "avcl: ")
+ClExternalMemory::ClExternalMemory(icd::SharedHandles &handles, BlockSource &memory, DriverLog &log)
+    : log_(log), handles_(handles), opened_(handles, memory, log)
 {
     AV_SCOPE("ClExternalMemory::ClExternalMemory");
 }
@@ -65,7 +65,7 @@ cl_int ClExternalMemory::open(ClientTransport &wire, uint32_t device, const ClPr
     bool     taken = false;
     if (!names_handle(list, named, taken)) return CL_INVALID_VALUE;
     if (!taken) {
-        log_.write("avcl: an external memory handle type this driver does not take, or two at once");
+        log_.write("an external memory handle type this driver does not take, or two at once");
         return CL_INVALID_PROPERTY;
     }
     return answer(opened_.open(wire, device, named, SharedObjectKind::memory, size, 0u, made));

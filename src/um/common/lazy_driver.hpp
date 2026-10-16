@@ -25,11 +25,10 @@ namespace av {
 template <typename Seams>
 class LazyDriver final : public OnceBody {
 public:
-    /* `prefix` starts the driver's lines ("avvk: "), `module` names its
-     * trace ("avvk"), and `crashed` is the exports' unhandled-exception
-     * filter, which forwards to crashed(). Constexpr: the driver is the
-     * exports' constinit storage. */
-    constexpr LazyDriver(const char *prefix, const char *module, ProcessTrace::Filter crashed);
+    /* `module` names the driver's trace ("avvk"), and `crashed` is the
+     * exports' unhandled-exception filter, which forwards to crashed().
+     * Constexpr: the driver is the exports' constinit storage. */
+    constexpr LazyDriver(const char *module, ProcessTrace::Filter crashed);
     LazyDriver(const LazyDriver &) = delete;
     LazyDriver &operator=(const LazyDriver &) = delete;
 
@@ -44,14 +43,13 @@ public:
 private:
     ObjectStorage<Seams> seams_;
     RunOnce              once_;
-    const char          *prefix_;
     const char          *module_;
     ProcessTrace::Filter crashed_;
 };
 
 template <typename Seams>
-constexpr LazyDriver<Seams>::LazyDriver(const char *prefix, const char *module, ProcessTrace::Filter crashed)
-    : seams_(), once_(), prefix_(prefix), module_(module), crashed_(crashed)
+constexpr LazyDriver<Seams>::LazyDriver(const char *module, ProcessTrace::Filter crashed)
+    : seams_(), once_(), module_(module), crashed_(crashed)
 {}
 
 template <typename Seams>
@@ -82,8 +80,8 @@ void LazyDriver<Seams>::run_once()
 {
     AV_SCOPE("LazyDriver::run_once");
     if (seams_.construct() != Status::ok) return;
-    Seams         &seams = seams_.object();
-    DriverLog lines(seams.process.log(), prefix_);
+    Seams    &seams = seams_.object();
+    DriverLog &lines = seams.process.log();
     if (seams.process.initialize() != Status::ok) {
         lines.write("no D3DKMT wait event; this process is refused");
         seams_.destroy();

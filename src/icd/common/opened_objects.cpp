@@ -1,5 +1,6 @@
 #include "icd/common/opened_objects.hpp"
 
+#include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/transport/shared_object_call.hpp"
@@ -10,8 +11,8 @@
 
 namespace av::icd {
 
-OpenedObjects::OpenedObjects(SharedHandles &handles, BlockSource &memory, LogSink &log, const char *prefix)
-    : handles_(handles), lines_(log, prefix),
+OpenedObjects::OpenedObjects(SharedHandles &handles, BlockSource &memory, DriverLog &log)
+    : handles_(handles), lines_(log),
       opens_{{memory, Pool::paged}, {memory, Pool::paged}, {memory, Pool::paged}}
 {
     AV_SCOPE("OpenedObjects::OpenedObjects");

@@ -7,11 +7,11 @@
 namespace av {
 
 GlIcdLibrary::Seams::Seams()
-    : process(L"avgl"), lock(), send_lock(), surface(), slot(), opengl32(), chains_lock(),
+    : process(L"avgl", "avgl: "), lock(), send_lock(), surface(), slot(), opengl32(), chains_lock(),
       chains(process.heap(), process.kmt(), chains_lock, process.log()), present_lock(), present_kmt(), present_thread(),
       present_handed(), present_shown(), present_ready(present_kmt),
       presents(process.heap(), present_thread, present_handed, present_shown, present_lock, present_ready, surface,
-               chains, process.log(), "avgl: "),
+               chains, process.log()),
       root(process.heap(), process.kmt(), lock, send_lock, process.log(), surface, slot, opengl32, presents,
            glicd::gl_icd_binding)
 {
@@ -22,7 +22,7 @@ GlIcdLibrary::Seams::Seams()
      * call, never under the loader lock. */
     if (present_kmt.initialize() != Status::ok || present_handed.initialize() != Status::ok ||
         present_shown.initialize() != Status::ok) {
-        process.log().write("avgl: no present thread: its D3DKMT event or wake events could not be made");
+        process.log().write("no present thread: its D3DKMT event or wake events could not be made");
         presents.refuse();
     }
 }

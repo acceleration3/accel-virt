@@ -21,7 +21,7 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
+class KeyedLog;
 }  // namespace av
 
 namespace av {
@@ -40,7 +40,7 @@ namespace av::d3d12 {
 
 class D3d12Driver {
 public:
-    D3d12Driver(BlockSource &memory, Kmt &kmt, LogSink &log, d3d::D3dCallTrace &trace);
+    D3d12Driver(BlockSource &memory, Kmt &kmt, KeyedLog &log, d3d::D3dCallTrace &trace);
     D3d12Driver(const D3d12Driver &) = delete;
     D3d12Driver &operator=(const D3d12Driver &) = delete;
 
@@ -57,9 +57,7 @@ private:
     /* The slot's session (AdapterSessions) and the heap arena over it. */
     d3d::D3dSession *session(uint32_t slot);
 
-    BlockSource               &memory_;
-    LogSink                   &log_;
-    DriverLog                      lines_;
+    KeyedLog                     &lines_;
     d3d::D3dCallTrace             &trace_;
     ObjectPool<D3d12Device>         devices_;
     AdapterSessions<D3d12HostCaps>  adapters_;

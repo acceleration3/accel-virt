@@ -33,7 +33,7 @@
 
 namespace av {
 class BlockSource;
-class LogSink;
+class DriverLog;
 }  // namespace av
 
 namespace av {
@@ -66,7 +66,7 @@ public:
         0x2067u}; /* CL_EXTERNAL_MEMORY_HANDLE_DMA_BUF_KHR           */
 
     /* Rows are kept in `memory`. */
-    ClExternalMemory(icd::SharedHandles &handles, BlockSource &memory, LogSink &log);
+    ClExternalMemory(icd::SharedHandles &handles, BlockSource &memory, DriverLog &log);
     ClExternalMemory(const ClExternalMemory &) = delete;
     ClExternalMemory &operator=(const ClExternalMemory &) = delete;
 
@@ -130,7 +130,7 @@ private:
     /* An open's status as OpenCL answers it. */
     cl_int              answer(Status opened) const;
 
-    LogSink            &log_;
+    DriverLog          &log_;
     icd::SharedHandles &handles_;
     icd::OpenedObjects  opened_;
 };

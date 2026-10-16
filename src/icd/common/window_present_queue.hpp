@@ -45,10 +45,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-namespace av {
-class LogSink;
-}  // namespace av
-
 namespace av::icd {
 
 template <typename Source, typename Readiness>
@@ -65,10 +61,10 @@ public:
     static constexpr uint32_t slot_milliseconds = 4u;
     static constexpr uint32_t slot_looks = 500u;
 
-    /* `prefix` is the presenting driver's, for the lines the queue writes. */
+    /* `log` is the presenting driver's. */
     WindowPresentQueue(BlockSource &memory, ServiceThread &thread, ThreadWake &handed, ThreadWake &shown,
                        ThreadLock &lock, Readiness &readiness, WindowSurface &surface, WindowChains &chains,
-                       LogSink &log, const char *prefix);
+                       DriverLog &log);
     ~WindowPresentQueue();
     WindowPresentQueue(const WindowPresentQueue &) = delete;
     WindowPresentQueue &operator=(const WindowPresentQueue &) = delete;
@@ -160,7 +156,7 @@ private:
     Readiness      &readiness_;
     WindowSurface  &surface_;
     WindowChains   &chains_;
-    DriverLog       lines_;
+    DriverLog      &lines_;
     /* As many as frames are ever handed at once - two for each window
      * presenting - and reused once free. */
     GrowableArray<Row> rows_;
@@ -180,9 +176,9 @@ template <typename Source, typename Readiness>
 WindowPresentQueue<Source, Readiness>::WindowPresentQueue(BlockSource &memory, ServiceThread &thread,
                                                           ThreadWake &handed, ThreadWake &shown, ThreadLock &lock,
                                                           Readiness &readiness, WindowSurface &surface,
-                                                          WindowChains &chains, LogSink &log, const char *prefix)
+                                                          WindowChains &chains, DriverLog &log)
     : memory_(memory), thread_(thread), handed_(handed), shown_(shown), lock_(lock), readiness_(readiness),
-      surface_(surface), chains_(chains), lines_(log, prefix), rows_(memory, Pool::paged), next_order_(1u),
+      surface_(surface), chains_(chains), lines_(log), rows_(memory, Pool::paged), next_order_(1u),
       shown_frames_(0u), dropped_frames_(0u), scratch_(nullptr), scratch_bytes_(0u), stopping_(0u), refused_(false),
       refusal_logged_()
 {

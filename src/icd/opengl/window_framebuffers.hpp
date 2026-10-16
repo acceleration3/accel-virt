@@ -15,7 +15,7 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
+class DriverLog;
 }  // namespace av
 
 namespace av {
@@ -47,7 +47,7 @@ public:
         gl_framebuffer = 0x8D40u,
     };
 
-    WindowFramebuffers(BlockSource &memory, LogSink &log);
+    WindowFramebuffers(BlockSource &memory, DriverLog &log);
     ~WindowFramebuffers();
     WindowFramebuffers(const WindowFramebuffers &) = delete;
     WindowFramebuffers &operator=(const WindowFramebuffers &) = delete;
@@ -116,7 +116,7 @@ private:
     void     bind_window(ClientTransport &wire, uint32_t framebuffer);
 
     BlockSource                        &memory_;
-    LogSink                       &log_;
+    DriverLog                     &log_;
     ObjectPool<BackBufferPresenter>     pool_;
     /* Each presenter by the window it draws on. */
     KeyedSlots<uint64_t, BackBufferPresenter *> presenters_;

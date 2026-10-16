@@ -21,7 +21,6 @@
 #ifndef AV_UM_DXGI_WINDOW_CHAINS_HPP
 #define AV_UM_DXGI_WINDOW_CHAINS_HPP
 
-#include "core/log/keyed_log.hpp"
 #include "core/support/keyed_slots.hpp"
 #include "core/support/object_pool.hpp"
 #include "guest/kmt/avgpu_adapters.hpp"
@@ -43,7 +42,7 @@ struct IDXGISwapChain1;
 
 namespace av {
 class BlockSource;
-class LogSink;
+class KeyedLog;
 }  // namespace av
 
 namespace av {
@@ -58,7 +57,7 @@ public:
      * finishes nothing in two seconds is given before the slot is let go. */
     static constexpr uint32_t copy_looks = 2000u;
 
-    DxgiWindowChains(BlockSource &memory, Kmt &kmt, ThreadLock &lock, LogSink &log);
+    DxgiWindowChains(BlockSource &memory, Kmt &kmt, ThreadLock &lock, KeyedLog &log);
     ~DxgiWindowChains();
     DxgiWindowChains(const DxgiWindowChains &) = delete;
     DxgiWindowChains &operator=(const DxgiWindowChains &) = delete;
@@ -127,7 +126,7 @@ private:
 
     Kmt             &kmt_;
     ThreadLock      &lock_;
-    KeyedLog   lines_;
+    KeyedLog        &lines_;
     void            *d3d11_;
     void            *dxgi_;
     void            *create_device_;

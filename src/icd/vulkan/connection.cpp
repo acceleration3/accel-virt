@@ -1,5 +1,6 @@
 #include "icd/vulkan/connection.hpp"
 
+#include "core/log/keyed_log.hpp"
 #include "core/platform/block_source.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
@@ -9,12 +10,12 @@
 
 namespace av::icd {
 
-Connection::Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink &log, KeyedLog &lines,
+Connection::Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, KeyedLog &lines,
                        SharedHandles &handles)
     : kmt_(kmt), search_(kmt), connection_(kmt),
-      channel_(memory, log, "avvk: ", ChannelShape(SubApi::vulkan, ring_order, reply_bytes, command_bytes, 0u, 0u),
+      channel_(memory, lines, ChannelShape(SubApi::vulkan, ring_order, reply_bytes, command_bytes, 0u, 0u),
                lock),
-      loss_(lines), opened_(false), adapter_(), host_dma_buf_(false), opened_objects_(handles, memory, log, "avvk: ")
+      loss_(lines), opened_(false), adapter_(), host_dma_buf_(false), opened_objects_(handles, memory, lines)
 {
     AV_SCOPE("Connection::Connection");
 }

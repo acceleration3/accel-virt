@@ -6,9 +6,9 @@
 namespace av::glicd {
 
 GlContextTable::GlContextTable(BlockSource &memory, icd::IcdConnection &connection, ThreadLock &send_lock,
-                               LogSink &log, KeyedLog &lines, const GlExtensionPolicy &extensions,
+                               KeyedLog &lines, const GlExtensionPolicy &extensions,
                                icd::SharedHandles &handles)
-    : memory_(memory), connection_(connection), send_lock_(send_lock), log_(log), lines_(lines), extensions_(extensions),
+    : memory_(memory), connection_(connection), send_lock_(send_lock), lines_(lines), extensions_(extensions),
       handles_(handles), pool_(memory), contexts_(memory, Pool::paged), next_(1u)
 {
     AV_SCOPE("GlContextTable::GlContextTable");
@@ -31,7 +31,7 @@ Status GlContextTable::create(int32_t pixel_format, const GlContextOptions &opti
     const Status room = contexts_.reserve(contexts_.count() + 1u);
     if (room != Status::ok) return room;
     GuestGlContext *made = nullptr;
-    const Status status = pool_.create(made, connection_, memory_, send_lock_, log_, lines_, extensions_, handles_,
+    const Status status = pool_.create(made, connection_, memory_, send_lock_, lines_, extensions_, handles_,
                                        pixel_format, options);
     if (status != Status::ok) return status;
     const uint64_t minted = mint();

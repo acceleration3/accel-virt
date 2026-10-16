@@ -15,7 +15,7 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
+class KeyedLog;
 }  // namespace av
 
 namespace av {
@@ -28,7 +28,7 @@ namespace av {
 
 class UmdDrivers final : public d3d::UmdHostDriver {
 public:
-    UmdDrivers(BlockSource &memory, Kmt &kmt, LogSink &log);
+    UmdDrivers(BlockSource &memory, Kmt &kmt, KeyedLog &log);
 
     d3d::Hresult build(d3d::UmdDevice &adopted, d3d::D3d10ddiargCreateDeviceRecord &create,
                        uint32_t kmt_adapter) override;

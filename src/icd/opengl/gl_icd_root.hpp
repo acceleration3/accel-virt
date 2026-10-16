@@ -12,7 +12,6 @@
 #ifndef AV_GLICD_GL_ICD_ROOT_HPP
 #define AV_GLICD_GL_ICD_ROOT_HPP
 
-#include "core/log/keyed_log.hpp"
 #include "core/trace/state_reporter.hpp"
 #include "icd/opengl/current_contexts.hpp"
 #include "icd/common/icd_connection.hpp"
@@ -32,11 +31,8 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
-}  // namespace av
-
-namespace av {
 class BlockSource;
+class KeyedLog;
 class ClientTransport;
 class Kmt;
 class StateWriter;
@@ -69,7 +65,7 @@ public:
     enum : uint32_t { gl_invalid_operation = 0x0502u, gl_invalid_enum = 0x0500u, gl_invalid_value = 0x0501u };
     static constexpr uint32_t swap_main_plane = 1u;
 
-    GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, LogSink &log,
+    GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, KeyedLog &log,
               icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system, GlPresentQueue &presents,
               GlIcdBinding &binding);
     ~GlIcdRoot();
@@ -180,8 +176,7 @@ private:
     void                 note_profile(const GuestGlContext &context);
 
     ThreadLock       &lock_;
-    LogSink     &log_;
-    KeyedLog    lines_;
+    KeyedLog    &lines_;
     icd::RefusedCalls refused_;
     icd::WindowSurface    &surface_;
     ThreadSlot       &slot_;

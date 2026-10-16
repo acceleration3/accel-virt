@@ -40,10 +40,6 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
-}  // namespace av
-
-namespace av {
 class BlockSource;
 class ClientTransport;
 class KeyedLog;
@@ -76,7 +72,7 @@ public:
     };
 
     /* `lines` is the root's: a loss is said there once (icd::LossLatch). */
-    GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock, LogSink &log,
+    GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock,
                    KeyedLog &lines, const GlExtensionPolicy &extensions, icd::SharedHandles &handles, int32_t pixel_format,
                    const GlContextOptions &options);
     ~GuestGlContext();
@@ -225,8 +221,7 @@ private:
     void                 teardown();
 
     BlockSource                   &memory_;
-    LogSink                  &log_;
-    DriverLog                      lines_;
+    KeyedLog                      &lines_;
     const GlExtensionPolicy       &policy_;
     int32_t                        pixel_format_;
     GlContextOptions               options_;

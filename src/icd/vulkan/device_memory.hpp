@@ -11,7 +11,6 @@
 #ifndef AV_ICD_DEVICE_MEMORY_HPP
 #define AV_ICD_DEVICE_MEMORY_HPP
 
-#include "core/log/driver_log.hpp"
 #include "core/support/status.hpp"
 #include "icd/vulkan/memory_type_table.hpp"
 
@@ -22,7 +21,7 @@
 namespace av {
 class HostAllocation;
 class Kmt;
-class LogSink;
+class DriverLog;
 class StateWriter;
 }  // namespace av
 
@@ -37,7 +36,7 @@ struct DeviceMemoryProbe;
 
 class DeviceMemory {
 public:
-    DeviceMemory(Kmt &kmt, Connection &connection, vkproto::HandleTranslation &handles, LogSink &log);
+    DeviceMemory(Kmt &kmt, Connection &connection, vkproto::HandleTranslation &handles, DriverLog &log);
     DeviceMemory(const DeviceMemory &) = delete;
     DeviceMemory &operator=(const DeviceMemory &) = delete;
 
@@ -88,8 +87,7 @@ private:
 
     Connection     &connection_;
     vkproto::HandleTranslation &handles_;
-    LogSink        &log_;
-    DriverLog       lines_;
+    DriverLog      &lines_;
     MemoryTypeTable types_;
     bool            learnt_;
 

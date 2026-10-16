@@ -8,7 +8,7 @@
  * bound from its first vertex too, and the draw counts from 0. Streams are
  * bound when a draw needs them and only where the host's binding differs. */
 #include "core/trace/function_scope.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
 #include "icd/d3d/list_pieces.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"

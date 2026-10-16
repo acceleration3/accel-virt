@@ -9,7 +9,7 @@
  * allocation the first time it is presented. */
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "proto/d3d/d3d9_present_format.hpp"

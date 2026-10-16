@@ -14,7 +14,6 @@
 #define AV_D3D_UMD_ROOT_HPP
 
 #include "core/trace/state_reporter.hpp"
-#include "core/log/driver_log.hpp"
 #include "icd/d3d/adapter_table.hpp"
 #include "icd/d3d/device_table.hpp"
 #include "icd/d3d/hresult.hpp"
@@ -25,7 +24,7 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
+class DriverLog;
 }  // namespace av
 
 namespace av {
@@ -49,7 +48,7 @@ struct D3d12ddiargOpenAdapterRecord;
 class UmdRoot final : public StateReporter {
 public:
     /* Binds itself into `binding` until destroyed. */
-    UmdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, LogSink &log, UmdBinding &binding,
+    UmdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, DriverLog &log, UmdBinding &binding,
             UmdHostDriver *builder = nullptr);
     ~UmdRoot();
     UmdRoot(const UmdRoot &) = delete;
@@ -115,7 +114,7 @@ private:
     void    forget_device(void *block); 
 
     ThreadLock      &lock_;
-    DriverLog       lines_;
+    DriverLog      &lines_;
     UmdBinding      &binding_;
     UmdHostDriver *builder_;
     UmdConnections   connections_;

@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/driver_log.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
 
 #include "gl_dispatch_client.h"
@@ -31,7 +31,7 @@ uint32_t access_error(uint32_t access)
 
 }  // namespace
 
-MappedBuffers::MappedBuffers(BlockSource &memory, BufferShadows &shadows, LogSink &log)
+MappedBuffers::MappedBuffers(BlockSource &memory, BufferShadows &shadows, DriverLog &log)
     : shadows_(shadows), log_(log), transfer_(shadows), mappings_(memory), persistent_writers_(0u), logged_()
 {
     AV_SCOPE("MappedBuffers::MappedBuffers");
@@ -215,7 +215,7 @@ void MappedBuffers::log_once()
 {
     AV_SCOPE("MappedBuffers::log_once");
     if (!logged_.first()) return;
-    log_.write("avgl: buffer maps are guest copies: filled at map from what the host holds, the bytes that "
+    log_.write("buffer maps are guest copies: filled at map from what the host holds, the bytes that "
                "changed written back at unmap, and before every command that reads buffers while a persistent "
                "map writes");
 }

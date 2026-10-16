@@ -8,7 +8,7 @@
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
@@ -33,13 +33,13 @@ constexpr uint32_t no_error = 0u;
 }  // namespace
 
 GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock,
-                               LogSink &log, KeyedLog &lines, const GlExtensionPolicy &extensions,
+                               KeyedLog &lines, const GlExtensionPolicy &extensions,
                                icd::SharedHandles &handles, int32_t pixel_format,
                                const GlContextOptions &options)
-    : memory_(memory), log_(log), lines_(log, "avgl: "), policy_(extensions),
+    : memory_(memory), lines_(lines), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_(lines), loss_reported_(false),
-      channel_(memory, log, "avgl: ", icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), timeline_(channel_), extensions_(memory), framebuffers_(memory, log), shadows_(memory), staging_(), mappings_(memory, shadows_, log), externals_(handles, memory, log), pinned_(memory, channel_),
+      channel_(memory, lines, icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), timeline_(channel_), extensions_(memory), framebuffers_(memory, lines), shadows_(memory), staging_(), mappings_(memory, shadows_, lines), externals_(handles, memory, lines), pinned_(memory, channel_),
       strings_{},
       debug_callback_(0u), debug_user_(0u), luid_(0u)
 {
@@ -91,7 +91,7 @@ Status GuestGlContext::make_once()
     const Status built = build();
     if (built != Status::ok) return built;
     if (!learn()) {
-        log_.write("avgl: the host refused the context's options");
+        lines_.write("the host refused the context's options");
         return Status::invalid_parameter;
     }
     undo.dismiss();
@@ -190,7 +190,7 @@ void GuestGlContext::flush()
     AV_SCOPE("GuestGlContext::flush");
     if (state_ != State::made) return;
     const TransportResult sent = channel_.flush();
-    if (sent != TransportResult::ok) log_.write("avgl: the held calls could not be sent");
+    if (sent != TransportResult::ok) lines_.write("the held calls could not be sent");
 }
 
 Status GuestGlContext::run_held()
@@ -198,7 +198,7 @@ Status GuestGlContext::run_held()
     AV_SCOPE("GuestGlContext::run_held");
     if (state_ != State::made) return Status::invalid_state;
     if (channel_.run_held() == Status::ok) return Status::ok;
-    log_.write("avgl: the held calls could not be run for another API");
+    lines_.write("the held calls could not be run for another API");
     return Status::invalid_state;
 }
 
@@ -220,7 +220,7 @@ void GuestGlContext::end_frame()
     const uint64_t now = link_.device().kmt().performance_counter(frequency);
     const uint64_t behind = frames_.end(timeline_.recording() - 1u, now, frequency, timeline_.completed());
     if (behind != 0u && !timeline_.wait(behind))
-        log_.write("avgl: the host never finished an earlier frame; the context is lost");
+        lines_.write("the host never finished an earlier frame; the context is lost");
 }
 
 ClientTransport *GuestGlContext::wire()

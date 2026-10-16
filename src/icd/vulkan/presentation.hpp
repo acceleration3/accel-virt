@@ -17,7 +17,7 @@
 #include <vulkan/vulkan_core.h>
 
 namespace av {
-class LogSink;
+class DriverLog;
 }  // namespace av
 
 namespace av {
@@ -41,7 +41,7 @@ public:
     /* The present thread is `present_thread`, woken by `handed`, waking a
      * present that waits for a slot by `shown`, its tables under
      * `present_lock` (WindowPresentQueue). */
-    Presentation(BlockSource &memory, Kmt &kmt, WindowSurface &windows, WindowChains &chains, LogSink &log,
+    Presentation(BlockSource &memory, Kmt &kmt, WindowSurface &windows, WindowChains &chains, DriverLog &log,
                  IcdRoot &root, EntryLookup &entries, ServiceThread &present_thread, ThreadWake &handed,
                  ThreadWake &shown, ThreadLock &present_lock);
     ~Presentation();
@@ -90,7 +90,7 @@ private:
     Kmt           &kmt_;
     WindowSurface &windows_;
     WindowChains  &chains_;
-    LogSink       &log_;
+    DriverLog     &log_;
     IcdRoot       &root_;
     EntryLookup   &entries_;
     FenceReady     ready_;

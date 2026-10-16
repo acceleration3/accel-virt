@@ -4,7 +4,7 @@
  * GPU reads. */
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
 #include "guest/transport/host_allocation.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
@@ -216,7 +216,7 @@ HRESULT D3d12Device::heap_memory(uint64_t bytes, HeapRecord &heap)
                                                             : HostMemoryRequest::Kind::readback,
                                    0u);
     if (session_.open_memory(bytes, memory, heap.memory) == Status::ok) return S_OK;
-    log_.write("avumd: no host memory for an upload or readback heap");
+    lines_.write("no host memory for an upload or readback heap");
     return E_OUTOFMEMORY;
 }
 
@@ -235,7 +235,7 @@ Status D3d12Device::lend_pages(uint64_t bytes, HeapRecord &heap)
         session_.adopt_memory(own, pages, HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u), heap.memory);
     if (lent != Status::ok) {
         static_cast<void>(VirtualFree(own, 0u, MEM_RELEASE));
-        log_.write("avumd: the device took no write-back heap's pages; its memory is the host's");
+        lines_.write("the device took no write-back heap's pages; its memory is the host's");
         return lent;
     }
     heap.own_pages = own;
@@ -444,7 +444,7 @@ HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRe
     if (heap.address == 0u) return E_OUTOFMEMORY;
     const HostMemoryRequest readback(HostMemoryRequest::Kind::readback, 0u);
     if (session_.adopt_memory(pages, heap.size, readback, heap.memory) != Status::ok) {
-        log_.write("avumd: the device took no existing heap's pages");
+        lines_.write("the device took no existing heap's pages");
         return E_OUTOFMEMORY;
     }
     if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.stamp.id(), properties_of(heap.type), 0u, heap.size,

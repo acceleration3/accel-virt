@@ -5,7 +5,7 @@
 #include "core/platform/thread_lock.hpp"
 #include "core/trace/function_scope.hpp"
 #include "proto/client/transfer_room.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
 #include "icd/d3d/device_table.hpp"
 #include "icd/d3d/texture_upload.hpp"
 #include "proto/client/client_blob_arena.hpp"
@@ -33,9 +33,9 @@ constexpr uint32_t copy_discard = 0x2u;
 
 }  // namespace
 
-D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d11HostCaps &caps,
+D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, KeyedLog &log, const D3d11HostCaps &caps,
                          d3d::D3dCallTrace &trace, const d3d::SharedRowsRequest &rows)
-    : session_(session), memory_(memory), shadows_(memory), maps_(memory), log_(log), lines_(memory, log, "avumd: "), refused_(lines_), loss_(lines_), caps_(caps), runtime_{}, core_layer_{}, kernel_(), clock_(), allocations_(kernel_, lines_, session_.kmt()),
+    : session_(session), memory_(memory), shadows_(memory), maps_(memory), lines_(log), refused_(lines_), loss_(lines_), caps_(caps), runtime_{}, core_layer_{}, kernel_(), clock_(), allocations_(kernel_, lines_, session_.kmt()),
       core_(nullptr), dxgi_(nullptr), channel_(), slices_(), parent_(nullptr), recording_lock_(), calls_(), recording_(),
       recorded_(), context_(nullptr), follower_(), gate_(), feature_level_(0u),
       guest_surfaces_(memory, Pool::paged), guest_lock_refused_(), present_refused_(), present_flags_(~0u), follow_refused_(), token_refused_(), frame_(1u),
@@ -84,7 +84,7 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), session_.next_id()));
     uint32_t hresult = 1u, made = 0u;
     if (!channel_.object().open(feature_level_, hresult, made) || hresult != 0u) {
-        log_.write("avumd: the host made no Direct3D 11 device");
+        lines_.write("the host made no Direct3D 11 device");
         channel_.destroy();
         session_.leave();
         return E_FAIL;
@@ -582,7 +582,7 @@ VOID D3d11Device::create_deferred_context(const D3D11DDIARG_CREATEDEFERREDCONTEX
     }
     D3d11Device *context = nullptr;
     session_.lock().acquire();
-    const Status pooled = session_.contexts().create(context, session_, memory_, log_, caps_, trace_, rows_);
+    const Status pooled = session_.contexts().create(context, session_, memory_, lines_, caps_, trace_, rows_);
     session_.lock().release();
     if (pooled != Status::ok) {
         set_error(E_OUTOFMEMORY);
@@ -641,7 +641,7 @@ VOID D3d11Device::create_command_list(const D3D11DDIARG_CREATECOMMANDLIST *args,
             lost(__func__);
             return;
         }
-        log_.write("avumd: a command list outgrew its deferred context's recording block");
+        lines_.write("a command list outgrew its deferred context's recording block");
         set_error(E_OUTOFMEMORY);
         return;
     }

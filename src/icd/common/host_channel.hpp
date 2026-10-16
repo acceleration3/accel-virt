@@ -34,7 +34,6 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/retire_list.hpp"
 #include "icd/common/locked_transport.hpp"
-#include "core/log/driver_log.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/submission/fault_code.hpp"
@@ -43,11 +42,8 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
-}  // namespace av
-
-namespace av {
 class BlockSource;
+class DriverLog;
 class GuestConnection;
 class StateWriter;
 class ThreadLock;
@@ -78,9 +74,9 @@ private:
 
 class HostChannel {
 public:
-    /* `prefix` is the driver's, for the lines the channel writes; `lock` is
-     * its send lock, which may be other channels' too. */
-    HostChannel(BlockSource &memory, LogSink &log, const char *prefix, const ChannelShape &shape, ThreadLock &lock);
+    /* `log` is the driver's; `lock` is its send lock, which may be other
+     * channels' too. */
+    HostChannel(BlockSource &memory, DriverLog &log, const ChannelShape &shape, ThreadLock &lock);
     /* Closed as a lost channel: nothing is left to tell the host. */
     ~HostChannel();
     HostChannel(const HostChannel &) = delete;
@@ -202,7 +198,7 @@ private:
     void                 close_memories(bool lost);
 
     BlockSource                   &memory_;
-    DriverLog                      lines_;
+    DriverLog                     &lines_;
     ThreadLock                    &lock_;
     SubApi                         sub_api_;
     uint8_t                        ring_order_;

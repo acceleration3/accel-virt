@@ -5,7 +5,7 @@
 #include "core/platform/block_source.hpp"
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
 #include "icd/common/pieces.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "um/d3d/d3d9_host_caps.hpp"
@@ -51,9 +51,9 @@ uint32_t query_bytes(D3DDDIQUERYTYPE type)
 
 }  // namespace
 
-D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d9HostCaps &caps,
+D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, KeyedLog &log, const D3d9HostCaps &caps,
                        d3d::UmdAdapter &adapter, d3d::D3dCallTrace &trace)
-    : session_(session), memory_(memory), log_(log), lines_(memory, log, "avumd: "), refused_(lines_), loss_(lines_), caps_(caps), adapter_(adapter), lock_(), channel_(),
+    : session_(session), memory_(memory), lines_(log), refused_(lines_), loss_(lines_), caps_(caps), adapter_(adapter), lock_(), channel_(),
       follower_(), resources_(memory), queries_(memory), blocks_(memory), recording_(nullptr), batch_(), shadow_(),
       callbacks_{}, kernel_(), allocations_(kernel_, lines_, session_.kmt()), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
@@ -105,7 +105,7 @@ HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVIC
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), session_.next_id()));
     uint32_t hresult = 1u;
     if (!channel_.object().open9(hresult) || hresult != 0u) {
-        log_.write("avumd: the host made no Direct3D 9 device");
+        lines_.write("the host made no Direct3D 9 device");
         channel_.destroy();
         session_.leave();
         return E_FAIL;
@@ -242,7 +242,7 @@ bool D3d9Device::recorded(const D3d9StateEntry &entry)
         static_cast<void>(shadow_.set(entry));
         return false;
     }
-    if (recording_->record(entry) != Status::ok) log_.write("avumd: a Direct3D 9 state block has no room");
+    if (recording_->record(entry) != Status::ok) lines_.write("a Direct3D 9 state block has no room");
     return true;
 }
 

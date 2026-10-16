@@ -4,9 +4,9 @@
  * device list judged here names that device or none. */
 #include "icd/opencl/cl_icd_root.hpp"
 
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
+#include "core/log/log_line.hpp"
 #include "core/support/scope_exit.hpp"
-#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/opencl/cl_info_request.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
@@ -78,11 +78,7 @@ void ClIcdRoot::note_build_log(ClientTransport &wire, uint64_t program, uint64_t
 {
     AV_SCOPE("ClIcdRoot::note_build_log");
     constexpr uint32_t most_lines = 24u;
-    char       bytes[256];
-    TextBuffer line(bytes, sizeof bytes);
-    line.append("avcl: a program did not build; its options: ");
-    line.append(options != nullptr ? options : "");
-    log_.write(line.text());
+    LogLine(lines_).text("a program did not build; its options: ").text(options != nullptr ? options : "").write();
     size_t size = 0u;
     if (device == 0u ||
         av::clproto::av_clGetProgramBuildInfo(wire, program, device, CL_PROGRAM_BUILD_LOG, 0u,
@@ -103,10 +99,7 @@ void ClIcdRoot::note_build_log(ClientTransport &wire, uint64_t program, uint64_t
         const bool last = *end == '\0';
         *end = '\0';
         if (end != start) {
-            TextBuffer said(bytes, sizeof bytes);
-            said.append("avcl: build: ");
-            said.append(start);
-            log_.write(said.text());
+            LogLine(lines_).text("build: ").text(start).write();
             written++;
         }
         if (last) break;

@@ -4,10 +4,11 @@
 
 namespace av {
 
-DriverSeams::DriverSeams(const wchar_t *stem) : heap_(), log_(stem), kmt_(), trace_()
+DriverSeams::DriverSeams(const wchar_t *stem, const char *prefix)
+    : heap_(), file_(stem), log_(heap_, file_, prefix), kmt_(), trace_()
 {
     AV_SCOPE("DriverSeams::DriverSeams");
-    log_.open();
+    file_.open();
 }
 
 Status DriverSeams::initialize()
@@ -22,7 +23,7 @@ ProcessHeap &DriverSeams::heap()
     return heap_;
 }
 
-FileLog &DriverSeams::log()
+KeyedLog &DriverSeams::log()
 {
     AV_SCOPE("DriverSeams::log");
     return log_;

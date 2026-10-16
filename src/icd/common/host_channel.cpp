@@ -1,5 +1,6 @@
 #include "icd/common/host_channel.hpp"
 
+#include "core/log/driver_log.hpp"
 #include "core/platform/block_source.hpp"
 #include "core/platform/thread_lock_hold.hpp"
 #include "core/support/scope_exit.hpp"
@@ -17,9 +18,9 @@ ChannelShape::ChannelShape(SubApi sub_api, uint8_t ring_order, uint32_t reply_by
     AV_SCOPE("ChannelShape::ChannelShape");
 }
 
-HostChannel::HostChannel(BlockSource &memory, LogSink &log, const char *prefix, const ChannelShape &shape,
+HostChannel::HostChannel(BlockSource &memory, DriverLog &log, const ChannelShape &shape,
                          ThreadLock &lock)
-    : memory_(memory), lines_(log, prefix), lock_(lock), sub_api_(shape.sub_api_), ring_order_(shape.ring_order_),
+    : memory_(memory), lines_(log), lock_(lock), sub_api_(shape.sub_api_), ring_order_(shape.ring_order_),
       reply_bytes_(shape.reply_bytes_), staging_bytes_(shape.staging_bytes_), batch_bytes_(shape.batch_bytes_),
       arena_bytes_(shape.arena_bytes_), staging_(nullptr), batch_block_(nullptr), transport_(), locked_(), arena_(),
       device_(nullptr), memories_(memory), handles_(memory, Pool::paged), retired_(memory, Pool::paged)

@@ -4,13 +4,13 @@
 #include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/driver_log.hpp"
 #include "icd/opencl/cl_object.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
 namespace av::clicd {
 
-ClEventWatcher::ClEventWatcher(BlockSource &memory, icd::ServiceThread &thread, LogSink &log, ThreadLock &lock,
+ClEventWatcher::ClEventWatcher(BlockSource &memory, icd::ServiceThread &thread, DriverLog &log, ThreadLock &lock,
                                ClEventOwner &owner)
     : thread_(thread), log_(log), lock_(lock), owner_(owner), rows_(memory, Pool::paged), queues_(memory, Pool::paged),
       held_(0u), delivered_(0u), next_(0u)
@@ -56,7 +56,7 @@ cl_int ClEventWatcher::watch(ClObject *event, uint64_t wire, ClientTransport *wi
             rows_.at(slot).registration_.give_up();
             --held_;
         }
-        log_.write("avcl: no thread to watch events on");
+        log_.write("no thread to watch events on");
         return CL_OUT_OF_RESOURCES;
     }
     return CL_SUCCESS;

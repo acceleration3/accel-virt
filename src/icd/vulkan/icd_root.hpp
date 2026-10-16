@@ -22,7 +22,6 @@
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/state_reporter.hpp"
-#include "core/log/keyed_log.hpp"
 #include "icd/vulkan/command_batch.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/device_memory.hpp"
@@ -47,7 +46,7 @@
 #include <vulkan/vulkan_core.h>
 
 namespace av {
-class LogSink;
+class KeyedLog;
 }  // namespace av
 
 namespace av {
@@ -75,7 +74,7 @@ public:
     /* Binds itself into `binding` until destroyed. The present thread and
      * what it is woken and locked by are Presentation's. */
     IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &memory_lock,
-            LogSink &log, IcdBinding &binding, WindowSurface &windows, WindowChains &chains,
+            KeyedLog &log, IcdBinding &binding, WindowSurface &windows, WindowChains &chains,
             ServiceThread &present_thread, ThreadWake &handed, ThreadWake &shown, ThreadLock &present_lock);
     ~IcdRoot();
     IcdRoot(const IcdRoot &) = delete;
@@ -312,8 +311,7 @@ private:
     ThreadLock            &lock_;
     ThreadLock            &send_lock_;
     ThreadLock            &memory_lock_;
-    LogSink               &log_;
-    KeyedLog              lines_;
+    KeyedLog              &lines_;
     IcdBinding            &binding_;
     uint32_t               api_version_;
     EntryPoints            before_instance_;

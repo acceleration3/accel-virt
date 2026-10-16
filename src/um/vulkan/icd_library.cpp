@@ -6,7 +6,7 @@
 namespace av {
 
 IcdLibrary::Seams::Seams()
-    : process(L"avvk"), lock(), send_lock(), memory_lock(), windows(), chains_lock(),
+    : process(L"avvk", "avvk: "), lock(), send_lock(), memory_lock(), windows(), chains_lock(),
       chains(process.heap(), process.kmt(), chains_lock, process.log()), present_lock(), present_thread(),
       present_handed(), present_shown(),
       root(process.heap(), process.kmt(), lock, send_lock, memory_lock, process.log(), icd::icd_binding, windows, chains,
@@ -17,7 +17,7 @@ IcdLibrary::Seams::Seams()
      * costs the process nothing else. Made on the first call, never under the
      * loader lock. */
     if (present_handed.initialize() != Status::ok || present_shown.initialize() != Status::ok) {
-        process.log().write("avvk: no present thread: its wake events could not be made");
+        process.log().write("no present thread: its wake events could not be made");
         root.presentation().refuse_presents();
     }
 }

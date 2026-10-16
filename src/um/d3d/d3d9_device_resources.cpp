@@ -12,7 +12,7 @@
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "proto/client/transfer_room.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/common/pieces.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"

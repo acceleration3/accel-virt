@@ -29,7 +29,6 @@
 #define AV_UM_D3D12_DEVICE_HPP
 
 #include "core/support/object_storage.hpp"
-#include "core/log/keyed_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/common/loss_latch.hpp"
 #include "icd/common/refused_calls.hpp"
@@ -47,8 +46,7 @@
 #include <stdint.h>
 
 namespace av {
-class BlockSource;
-class LogSink;
+class KeyedLog;
 }  // namespace av
 
 namespace av::d3d {
@@ -66,7 +64,7 @@ public:
     static constexpr UINT descriptor_bytes = 32u;
 
     /* `list_table` is the driver's, and is filled after the device is made. */
-    D3d12Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d12HostCaps &caps,
+    D3d12Device(d3d::D3dSession &session, KeyedLog &log, const D3d12HostCaps &caps,
                 void *const &list_table, d3d::D3dCallTrace &trace);
     ~D3d12Device();
     D3d12Device(const D3d12Device &) = delete;
@@ -177,8 +175,7 @@ private:
                       const void *members, d3d12proto::ViewDesc &view) const;
 
     d3d::D3dSession                      &session_;
-    LogSink                         &log_;
-    KeyedLog                         lines_;
+    KeyedLog                        &lines_;
     /* Refusals logged so far; some slots are asked in a loop. */
     icd::RefusedCalls                refused_;
     const D3d12HostCaps                  &caps_;

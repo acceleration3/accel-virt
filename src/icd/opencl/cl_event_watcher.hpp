@@ -28,7 +28,7 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
+class DriverLog;
 }  // namespace av
 
 namespace av {
@@ -65,7 +65,7 @@ public:
     /* `lock` is the ICD's: the table is written by application threads and
      * read by the watcher's own, so both hold it while they touch a row -
      * and never while a callback runs or the host is asked. */
-    ClEventWatcher(BlockSource &memory, icd::ServiceThread &thread, LogSink &log, ThreadLock &lock,
+    ClEventWatcher(BlockSource &memory, icd::ServiceThread &thread, DriverLog &log, ThreadLock &lock,
                    ClEventOwner &owner);
     ~ClEventWatcher();
     ClEventWatcher(const ClEventWatcher &) = delete;
@@ -138,7 +138,7 @@ private:
     bool mark_oldest();
 
     icd::ServiceThread &thread_;
-    LogSink       &log_;
+    DriverLog     &log_;
     ThreadLock         &lock_;
     ClEventOwner       &owner_;
     struct Row {

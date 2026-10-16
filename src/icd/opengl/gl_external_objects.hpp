@@ -26,7 +26,7 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
+class DriverLog;
 }  // namespace av
 
 namespace av {
@@ -81,7 +81,7 @@ public:
     static constexpr uint32_t d3d12_fence_value = 0x9595u;
 
     /* Rows are kept in `memory`: as many names as the context creates. */
-    GlExternalObjects(icd::SharedHandles &handles, BlockSource &memory, LogSink &log);
+    GlExternalObjects(icd::SharedHandles &handles, BlockSource &memory, DriverLog &log);
     GlExternalObjects(const GlExternalObjects &) = delete;
     GlExternalObjects &operator=(const GlExternalObjects &) = delete;
 
@@ -158,7 +158,7 @@ private:
     uint32_t                 wire_kind(const GlSharedObjectRow &row) const;
     uint32_t                 imported() const;
 
-    LogSink           &log_;
+    DriverLog         &log_;
     icd::OpenedObjects opened_;
     /* Every name this context handed out, by the name: both namespaces draw
      * from one mint, so a name is in one row whichever it is in. */

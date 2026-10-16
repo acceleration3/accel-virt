@@ -11,7 +11,7 @@
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/driver_log.hpp"
 #include "icd/d3d/ddi/d3d10_2ddi_adapter_funcs_record.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
 #include "icd/d3d/ddi/d3d10ddiarg_create_device_record.hpp"
@@ -29,9 +29,9 @@
 
 namespace av::d3d {
 
-UmdRoot::UmdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, LogSink &log, UmdBinding &binding,
+UmdRoot::UmdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, DriverLog &log, UmdBinding &binding,
                  UmdHostDriver *builder)
-    : lock_(lock), lines_(log, "avumd: "), binding_(binding), builder_(builder), connections_(kmt),
+    : lock_(lock), lines_(log), binding_(binding), builder_(builder), connections_(kmt),
       adapters_(memory), devices_(memory)
 {
     AV_SCOPE("UmdRoot::UmdRoot");

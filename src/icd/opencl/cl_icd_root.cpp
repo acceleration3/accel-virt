@@ -24,12 +24,12 @@
 #include "core/platform/thread_lock.hpp"
 #include "core/platform/thread_lock_hold.hpp"
 #include "core/support/scope_exit.hpp"
-#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "proto/client/transfer_room.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
+#include "core/log/log_line.hpp"
 #include "icd/opencl/unanswered_transport.hpp"
 #include "icd/opencl/cl_external_memory.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
@@ -75,14 +75,14 @@ constexpr uint64_t kib = 1024u;
 
 ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock,
                      ThreadLock &send_lock, ThreadLock &objects_lock, ThreadLock &blocks_lock,
-                     LogSink &log,
+                     KeyedLog &log,
                      icd::ServiceThread &watcher_thread, GlShareSource &gl_share, D3dAdapterSource &d3d_adapters,
                      D3d11Bridge &d3d11,
                      ClIcdBinding &binding)
-    : lock_(lock), log_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), d3d11_(d3d11), binding_(binding), dispatch_(), platform_(),
+    : lock_(lock), lines_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), d3d11_(d3d11), binding_(binding), dispatch_(), platform_(),
       objects_(memory, dispatch_.table(), objects_lock), kmt_(kmt), devices_(memory, kmt),
       shared_handles_(kmt, lock, memory), contexts_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock),
-      watcher_(memory, watcher_thread, log, lock, *this), waits_(kmt, watcher_), device_answers_(memory), reads_(), lines_(memory, log, "avcl: "), refused_(lines_), refusals_(lines_),
+      watcher_(memory, watcher_thread, log, lock, *this), waits_(kmt, watcher_), device_answers_(memory), reads_(), refused_(lines_), refusals_(lines_),
       destructor_callbacks_(memory)
 {
     AV_SCOPE("ClIcdRoot::ClIcdRoot");
@@ -167,7 +167,7 @@ void ClIcdRoot::learn_devices()
     if (!devices_.learnt()) {
         devices_.learn(adapters);
         if (devices_.left_out() != 0u)
-            log_.write("avcl: an avgpu adapter is left out: Windows gave it no LUID");
+            lines_.write("an avgpu adapter is left out: Windows gave it no LUID");
     }
     for (uint32_t index = 0u; index < devices_.count(); ++index) {
         ClDevice &device = devices_.at(index);
@@ -227,9 +227,9 @@ Status ClIcdRoot::open_device(ClDevice &device)
      * contexts are its own, made beside this one. */
     GuestClContext *context = nullptr;
     const Status    made =
-        contexts_.create(context, device.connection(), memory_, send_lock_, blocks_lock_, log_, lines_, shared_handles_);
+        contexts_.create(context, device.connection(), memory_, send_lock_, blocks_lock_, lines_, shared_handles_);
     if (made != Status::ok) {
-        log_.write("avcl: no room for the ICD's own context");
+        lines_.write("no room for the ICD's own context");
         return made;
     }
     /* A context that was made has a transport - that is what being made
@@ -237,7 +237,7 @@ Status ClIcdRoot::open_device(ClDevice &device)
     const Status           opened = context->make();
     ClientTransport *const wire = opened == Status::ok ? context->wire() : nullptr;
     if (wire == nullptr) {
-        log_.write("avcl: the ICD's own context could not be made");
+        lines_.write("the ICD's own context could not be made");
         static_cast<void>(contexts_.destroy(context));
         /* Only a make that failed gets here, since one that did not leaves a
          * transport behind it. */
@@ -567,11 +567,7 @@ cl_int ClIcdRoot::judge(const Property *properties, const uint64_t *allowed, uin
         if (known) continue;
         /* Named, because an application that only checks for failure - an
          * OpenCL capability probe - otherwise leaves nothing to say why. */
-        char       bytes[80];
-        TextBuffer line(bytes, sizeof bytes);
-        line.append("avcl: a property this ICD does not take: 0x");
-        line.append_hex(name, 4u);
-        log_.write(line.text());
+        LogLine(lines_).text("a property this ICD does not take: ").hex(name, 4u).write();
         return CL_INVALID_PROPERTY;
     }
     return CL_SUCCESS;
@@ -641,7 +637,7 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
     const ThreadLockHold locked(lock_);
     GuestClContext *context = nullptr;
     Status          made =
-        contexts_.create(context, device->connection(), memory_, send_lock_, blocks_lock_, log_, lines_, shared_handles_);
+        contexts_.create(context, device->connection(), memory_, send_lock_, blocks_lock_, lines_, shared_handles_);
     if (made == Status::ok) made = context->make(gl_share, watcher_.wake_handle());
     if (made == Status::ok) context->keep_properties(properties);
     if (made == Status::ok) context->notify_with(notify);
@@ -1299,7 +1295,7 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
         /* No room to remember it. The read still has to deliver, so it is
          * made blocking instead: slower, and never wrong. */
         static_cast<void>(av::clproto::av_clReleaseEvent(*wire, produced));
-        log_.write("avcl: too many reads outstanding; this one blocks");
+        lines_.write("too many reads outstanding; this one blocks");
         produced = 0u;
     }
     /* A blocking read is answered inside this one call, so the bytes have to
@@ -1658,7 +1654,7 @@ cl_int ClIcdRoot::svm_map(cl_command_queue queue, cl_bool blocking, cl_map_flags
      *
      * Said once, into the log, rather than pretended (constitution VI). */
     if (allocation->map_depth() == 0u) {
-        log_.write("avcl: shared memory is mapped, and the mirror is not synchronised yet");
+        lines_.write("shared memory is mapped, and the mirror is not synchronised yet");
     }
     allocation->mapped();
     if (event != nullptr) {
@@ -2416,7 +2412,7 @@ cl_mem ClIcdRoot::create_image(cl_context context, cl_mem_flags flags,
         return nullptr;
     }
     if ((flags & CL_MEM_USE_HOST_PTR) != 0u) {
-        log_.write("avcl: an image over the application's own memory is not carried");
+        lines_.write("an image over the application's own memory is not carried");
         report_error(error, CL_INVALID_VALUE);
         return nullptr;
     }

@@ -65,7 +65,7 @@ private:
     LazyDriver<Seams> driver_;
 };
 
-constexpr ClIcdLibrary::ClIcdLibrary(ProcessTrace::Filter crashed) : driver_("avcl: ", "avcl", crashed) {}
+constexpr ClIcdLibrary::ClIcdLibrary(ProcessTrace::Filter crashed) : driver_("avcl", crashed) {}
 
 }  // namespace av
 

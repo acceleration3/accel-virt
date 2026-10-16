@@ -33,7 +33,7 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
+class DriverLog;
 }  // namespace av
 
 namespace av {
@@ -59,7 +59,7 @@ public:
      * Direct3D 11's for 11 and 12, Direct3D 9's for 9. */
     /* `slice_store_size` is the host upload memory dynamic buffers are drawn
      * from in place: 0 for a runtime that places none there. */
-    D3dSession(Kmt &kmt, BlockSource &memory, LogSink &log, uint64_t arena_size, uint64_t slice_store_size,
+    D3dSession(Kmt &kmt, BlockSource &memory, DriverLog &log, uint64_t arena_size, uint64_t slice_store_size,
                uint32_t select_command, uint32_t flush_command);
     ~D3dSession();
     D3dSession(const D3dSession &) = delete;
@@ -131,7 +131,7 @@ private:
     void    open_slices();
 
     BlockSource                    &memory_;
-    LogSink                        &log_;
+    DriverLog                      &lines_;
     SrwLock                              lock_;
     GuestConnection                      connection_;
     icd::HostChannel                     channel_;

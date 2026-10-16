@@ -20,7 +20,6 @@
 #ifndef AV_ICD_OPENED_OBJECTS_HPP
 #define AV_ICD_OPENED_OBJECTS_HPP
 
-#include "core/log/driver_log.hpp"
 #include "core/support/keyed_slots.hpp"
 #include "core/support/status.hpp"
 
@@ -28,8 +27,8 @@
 
 namespace av {
 class BlockSource;
+class DriverLog;
 class ClientTransport;
-class LogSink;
 class StateWriter;
 }  // namespace av
 
@@ -53,10 +52,10 @@ struct OpenedObjectRow {
 
 class OpenedObjects {
 public:
-    /* `prefix` starts every refusal this writes ("avcl: "). Rows are kept in
-     * `memory`: as many as the context opens. The table takes no lock; its
-     * owner serializes it. */
-    OpenedObjects(SharedHandles &handles, BlockSource &memory, LogSink &log, const char *prefix);
+    /* Refusals go to the driver's `log`. Rows are kept in `memory`: as many
+     * as the context opens. The table takes no lock; its owner serializes
+     * it. */
+    OpenedObjects(SharedHandles &handles, BlockSource &memory, DriverLog &log);
     OpenedObjects(const OpenedObjects &) = delete;
     OpenedObjects &operator=(const OpenedObjects &) = delete;
 
@@ -110,7 +109,7 @@ private:
     static constexpr uint32_t kinds = 3u;
 
     SharedHandles                         &handles_;
-    DriverLog                              lines_;
+    DriverLog                             &lines_;
     /* Each kind's opens by what the device answered for them. */
     KeyedSlots<uint64_t, OpenedObjectRow>  opens_[kinds];
 };

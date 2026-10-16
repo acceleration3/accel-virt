@@ -5,6 +5,7 @@
  * (pfnGetMipPacking), and the host's vkd3d-proton tiles by the same shapes, so
  * the host's answer is the runtime's. An update of the mappings crosses in
  * pieces of what one command carries (TilePieces). */
+#include "core/log/keyed_log.hpp"
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/d3d/d3d12_address_space.hpp"

@@ -8,7 +8,7 @@
 #include "core/platform/thread_lock.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
 #include "guest/transport/context_fault.hpp"
 #include "icd/opengl/context_attributes.hpp"
 #include "icd/opengl/gl_entry_points.hpp"
@@ -123,14 +123,14 @@ constexpr uint32_t reported_wgl_count = sizeof reported_wgl_extensions / sizeof 
 }  // namespace
 
 GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock,
-                     LogSink &log, icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
+                     KeyedLog &log, icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
                      GlPresentQueue &presents, GlIcdBinding &binding)
-    : lock_(lock), log_(log), lines_(memory, log, "avgl: "), refused_(lines_), surface_(surface), slot_(slot), system_(system), presents_(presents),
+    : lock_(lock), lines_(log), refused_(lines_), surface_(surface), slot_(slot), system_(system), presents_(presents),
       binding_(binding), formats_(),
       query_(formats_), windows_(memory), currents_(slot), connection_(memory, kmt, 0u),
       extensions_(reported_extensions, reported_count, reported_wgl_extensions, reported_wgl_count),
       shared_handles_(kmt, lock, memory),
-      contexts_(memory, connection_, send_lock, log, lines_, extensions_, shared_handles_),
+      contexts_(memory, connection_, send_lock, lines_, extensions_, shared_handles_),
       manual_(currents_, kmt), callbacks_{}, callback_count_(0u), proc_table_(), pending_(memory, Pool::paged), sync_tokens_()
 {
     AV_SCOPE("GlIcdRoot::GlIcdRoot");
@@ -618,7 +618,7 @@ int32_t GlIcdRoot::force_context_fault()
      * OpenGL context only skips the Vulkan command 045's fault sends. */
     static_cast<void>(ContextFault(*transport, glproto::kCmd_glGetString).send());
     if (context->wire() == nullptr) return 1;
-    log_.write("avgl: the host answered the forced fault; the context goes on");
+    lines_.write("the host answered the forced fault; the context goes on");
     return 0;
 }
 

@@ -6,7 +6,7 @@
  * and DISCARD allows. */
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d_session.hpp"

@@ -1,13 +1,13 @@
 #include "icd/vulkan/physical_device_view.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/driver_log.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 
 namespace av::icd {
 
 PhysicalDeviceView::PhysicalDeviceView(ClientTransport &transport, vkproto::HandleTranslation &handles, uint64_t luid, const char *name,
-                                       uint32_t latest_version, LogSink &log)
+                                       uint32_t latest_version, DriverLog &log)
     : transport_(transport), handles_(handles), luid_(luid), name_(name), latest_version_(latest_version), log_(log), nodes_{}, types_{}, nexts_{}, remembered_(0u)
     {
         AV_SCOPE("PhysicalDeviceView::PhysicalDeviceView");
@@ -26,7 +26,7 @@ void PhysicalDeviceView::properties2(VkPhysicalDevice physical_device, VkPhysica
 {
     AV_SCOPE("PhysicalDeviceView::properties2");
     if (!remember(answer)) {
-        log_.write("avvk: vkGetPhysicalDeviceProperties2 chain longer than 32 structures, not sent");
+        log_.write("vkGetPhysicalDeviceProperties2 chain longer than 32 structures, not sent");
         return;
     }
     answer->properties = VkPhysicalDeviceProperties{};

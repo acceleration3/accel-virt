@@ -7,7 +7,6 @@
 #include "core/trace/function_scope.hpp"
 #include "core/log/driver_log.hpp"
 #include "core/log/log_line.hpp"
-#include "core/log/log_sink.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
@@ -15,10 +14,10 @@
 
 namespace av::d3d {
 
-D3dSession::D3dSession(Kmt &kmt, BlockSource &memory, LogSink &log, uint64_t arena_size, uint64_t slice_store_size,
+D3dSession::D3dSession(Kmt &kmt, BlockSource &memory, DriverLog &log, uint64_t arena_size, uint64_t slice_store_size,
                        uint32_t select_command, uint32_t flush_command)
-    : memory_(memory), log_(log), lock_(), connection_(kmt),
-      channel_(memory, log, "avumd: ",
+    : memory_(memory), lines_(log), lock_(), connection_(kmt),
+      channel_(memory, log,
                icd::ChannelShape(SubApi::d3d, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_size), lock_),
       stream_(), slices_lock_(), timeline_(), slices_(), slice_store_bytes_(slice_store_size), slice_store_(nullptr), query_results_(), contexts_(memory), members_(0u), ids_(),
       select_command_(select_command), flush_command_(flush_command)
@@ -83,7 +82,7 @@ HRESULT D3dSession::open(uint32_t adapter)
 {
     AV_SCOPE("D3dSession::open");
     if (connection_.open(adapter) != Status::ok) {
-        log_.write("avumd: no device on the adapter for a Direct3D session");
+        lines_.write("no device on the adapter for a Direct3D session");
         return E_FAIL;
     }
     /* An arena of the shape's size is the host window's when it has room
@@ -110,7 +109,7 @@ bool D3dSession::host_has_slices()
     const bool   asked = d3dproto::av_d3d_QueryBufferSlices11(stream_.object(), &supported);
     stream_.object().end_call();
     if (asked && supported == 1u) return true;
-    log_.write("avumd: the host copies mapped buffers: it cannot draw them from the arena in place");
+    lines_.write("the host copies mapped buffers: it cannot draw them from the arena in place");
     return false;
 }
 
@@ -122,15 +121,14 @@ void D3dSession::open_slices()
     HostAllocation *store = nullptr;
     if (channel_.open_memory(slice_store_bytes_, HostMemoryRequest(HostMemoryRequest::Kind::upload, 0u), this, store) !=
         Status::ok) {
-        log_.write("avumd: no host memory for the slice store; mapped buffers are copied");
+        lines_.write("no host memory for the slice store; mapped buffers are copied");
         return;
     }
     slice_store_ = store;
     static_cast<void>(timeline_.construct(channel_, lock_));
     static_cast<void>(slices_.construct(memory_, timeline_.object(), slices_lock_));
     slices_.object().take(store->bytes());
-    DriverLog lines(log_, "avumd: ");
-    LogLine(lines).text("dynamic buffers are drawn in place from ").number(store->bytes() >> 20u).text(" MiB").write();
+    LogLine(lines_).text("dynamic buffers are drawn in place from ").number(store->bytes() >> 20u).text(" MiB").write();
 }
 
 uint64_t D3dSession::slice_memory() const

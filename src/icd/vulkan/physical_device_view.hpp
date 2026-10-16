@@ -22,7 +22,7 @@
 #include <vulkan/vulkan_core.h>
 
 namespace av {
-class LogSink;
+class DriverLog;
 }  // namespace av
 
 namespace av {
@@ -47,7 +47,7 @@ public:
     /* `latest_version` is the API version the ICD implements; `name` the
      * adapter's (Connection::adapter_name), empty to keep the host's. */
     PhysicalDeviceView(ClientTransport &transport, vkproto::HandleTranslation &handles, uint64_t luid, const char *name, uint32_t latest_version,
-                       LogSink &log);
+                       DriverLog &log);
     PhysicalDeviceView(const PhysicalDeviceView &) = delete;
     PhysicalDeviceView &operator=(const PhysicalDeviceView &) = delete;
 
@@ -68,7 +68,7 @@ private:
     uint64_t            luid_;
     const char         *name_;
     uint32_t            latest_version_;
-    LogSink            &log_;
+    DriverLog          &log_;
     VkBaseOutStructure *nodes_[max_chain];
     VkStructureType     types_[max_chain];
     VkBaseOutStructure *nexts_[max_chain];

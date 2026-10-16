@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/driver_log.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 
 namespace av::glicd {
@@ -15,8 +15,8 @@ constexpr uint32_t semaphore_kind = SharedObjectKind::monitored_fence;
 
 }  // namespace
 
-GlExternalObjects::GlExternalObjects(icd::SharedHandles &handles, BlockSource &memory, LogSink &log)
-    : log_(log), opened_(handles, memory, log, "avgl: "), rows_(memory, Pool::paged), names_()
+GlExternalObjects::GlExternalObjects(icd::SharedHandles &handles, BlockSource &memory, DriverLog &log)
+    : log_(log), opened_(handles, memory, log), rows_(memory, Pool::paged), names_()
 {
     AV_SCOPE("GlExternalObjects::GlExternalObjects");
 }
@@ -59,7 +59,7 @@ uint32_t GlExternalObjects::create(uint32_t kind, int32_t count, uint32_t *names
     if (wanted == 0u) return gl_no_error;
     /* Below 2^31 each, so the sum cannot wrap. */
     if (rows_.reserve(rows_.count() + wanted) != Status::ok) {
-        log_.write("avgl: no memory for a memory object or semaphore name");
+        log_.write("no memory for a memory object or semaphore name");
         return gl_out_of_memory;
     }
     const uint32_t first = names_.run(wanted);
@@ -69,7 +69,7 @@ uint32_t GlExternalObjects::create(uint32_t kind, int32_t count, uint32_t *names
          * context still holds it is refused. */
         if (rows_.insert(first + index, GlSharedObjectRow{0u, memory, false, false}, slot) != Status::ok) {
             for (uint32_t made = 0u; made < index; made++) static_cast<void>(rows_.erase(first + made));
-            log_.write("avgl: every memory object and semaphore name is taken");
+            log_.write("every memory object and semaphore name is taken");
             return gl_out_of_memory;
         }
     }
@@ -126,7 +126,7 @@ uint32_t GlExternalObjects::import(ClientTransport &wire, uint32_t device, uint3
     bool memory = false;
     if (!known(kind, memory)) return gl_invalid_value;
     if (handle_type != opaque_win32) {
-        log_.write("avgl: an external object handle type this driver does not take");
+        log_.write("an external object handle type this driver does not take");
         return gl_invalid_operation;
     }
     GlSharedObjectRow *const row = row_of(memory, name);
@@ -139,7 +139,7 @@ uint32_t GlExternalObjects::import(ClientTransport &wire, uint32_t device, uint3
      * and is told neither, so the honest answer is the error the extension
      * has rather than an import that quietly ignores both (research.md §12). */
     if (row->dedicated_ || row->protected_) {
-        log_.write("avgl: a memory object asked for dedicated or protected memory, which a shared "
+        log_.write("a memory object asked for dedicated or protected memory, which a shared "
                    "object cannot be");
         return gl_invalid_operation;
     }

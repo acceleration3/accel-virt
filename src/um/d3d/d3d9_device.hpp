@@ -20,7 +20,6 @@
 #include "core/support/object_pool.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/support/object_storage.hpp"
-#include "core/log/keyed_log.hpp"
 #include "icd/common/loss_latch.hpp"
 #include "icd/common/refused_calls.hpp"
 #include "icd/d3d/d3d9_state_batch.hpp"
@@ -41,11 +40,8 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
-}  // namespace av
-
-namespace av {
 class BlockSource;
+class KeyedLog;
 class TexelLayout;
 }  // namespace av
 
@@ -61,7 +57,7 @@ class D3d9HostCaps;
 
 class D3d9Device {
 public:
-    D3d9Device(d3d::D3dSession &session, BlockSource &memory, LogSink &log, const D3d9HostCaps &caps,
+    D3d9Device(d3d::D3dSession &session, BlockSource &memory, KeyedLog &log, const D3d9HostCaps &caps,
                d3d::UmdAdapter &adapter, d3d::D3dCallTrace &trace);
     ~D3d9Device();
     D3d9Device(const D3d9Device &) = delete;
@@ -233,8 +229,7 @@ private:
 
     d3d::D3dSession                     &session_;
     BlockSource                         &memory_;
-    LogSink                        &log_;
-    KeyedLog                        lines_;
+    KeyedLog                       &lines_;
     icd::RefusedCalls               refused_;
     /* Why the device is gone, said once by each call that finds it. */
     icd::LossLatch                  loss_;

@@ -28,10 +28,6 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
-}  // namespace av
-
-namespace av {
 class BlockSource;
 class ClientTransport;
 class KeyedLog;
@@ -51,11 +47,10 @@ public:
     static constexpr uint32_t reply_bytes = 64u * 1024u;
     static constexpr size_t   command_bytes = 256u * 1024u;
 
-    /* `log` takes the lines the channel writes, and `lock` is its send lock;
-     * `lines` is the root's, where a loss is said once per entry point.
-     * `handles` resolves the Win32 handles an import names. */
-    Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, LogSink &log, KeyedLog &lines,
-               SharedHandles &handles);
+    /* `lock` is the channel's send lock; `lines` is the driver's, where a
+     * loss is said once per entry point. `handles` resolves the Win32
+     * handles an import names. */
+    Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, KeyedLog &lines, SharedHandles &handles);
     ~Connection();
     Connection(const Connection &) = delete;
     Connection &operator=(const Connection &) = delete;

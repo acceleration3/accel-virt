@@ -2,7 +2,6 @@
 
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/log/log_sink.hpp"
 #include "icd/common/slot_format.hpp"
 #include "icd/common/window_present_queue.hpp"
 #include "icd/common/window_extent.hpp"
@@ -23,11 +22,11 @@ constexpr uint64_t nanoseconds_per_millisecond = 1000000u;
 }  // namespace
 
 Swapchain::Swapchain(WindowSurface &windows, WindowChains &chains, EntryLookup &entries, VkDevice device,
-                     uint64_t host_device, VkPhysicalDevice physical, Kmt &kmt, LogSink &log,
+                     uint64_t host_device, VkPhysicalDevice physical, Kmt &kmt, DriverLog &log,
                      Connection &connection, VkPresentQueue &presents)
     : windows_(windows), presents_(presents), device_(entries, device, physical),
       chained_(entries, device, host_device, chains, connection.transport()),
-      lines_(log, "avvk: "), pacing_(), log_(log), luid_(connection.luid()),
+      lines_(log), pacing_(), luid_(connection.luid()),
       app_device_(device), window_(nullptr), extent_{0u, 0u}, format_(static_cast<int32_t>(VK_FORMAT_UNDEFINED)),
       holders_{}, slot_images_{}, count_(0u), next_(0u),
       through_chain_(false), retired_(false), presented_(0u), window_refused_(), chain_refused_()
@@ -59,7 +58,7 @@ VkResult Swapchain::initialize(const VkSwapchainCreateInfoKHR &info, void *windo
         made = device_.make_image(format, info.imageExtent, info.imageUsage, image);
     }
     if (made != VK_SUCCESS) {
-        log_.write("avvk: a swapchain's host objects could not be made");
+        lines_.write("a swapchain's host objects could not be made");
         release();
         return made;
     }
@@ -132,8 +131,7 @@ VkResult Swapchain::judge(const VkSwapchainCreateInfoKHR &info, SurfacePropertie
 void Swapchain::refused(const char *what, uint64_t asked, uint64_t beside) const
 {
     AV_SCOPE("Swapchain::refused");
-    DriverLog lines(log_, "avvk: ");
-    LogLine(lines).text("a swapchain is refused on its ").text(what).text(": ").number(asked).text(" / ").number(beside).write();
+    LogLine(lines_).text("a swapchain is refused on its ").text(what).text(": ").number(asked).text(" / ").number(beside).write();
 }
 
 VkResult Swapchain::images(uint32_t &count, VkImage *images) const
@@ -241,7 +239,7 @@ VkResult Swapchain::present_now(VkQueue queue, uint32_t index, uint32_t wait_cou
     give(index, Holder::none);
     if (copied != VK_SUCCESS) return copied;
     if (presents_.show_now(frame(0u))) return VK_SUCCESS;
-    if (window_refused_.first()) log_.write("avvk: a presented frame was refused by its window; later ones are not logged");
+    if (window_refused_.first()) lines_.write("a presented frame was refused by its window; later ones are not logged");
     const VkResult state = window_state();
     return state != VK_SUCCESS ? state : VK_ERROR_OUT_OF_DATE_KHR;
 }

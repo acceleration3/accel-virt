@@ -16,7 +16,7 @@
 #include <stdint.h>
 
 namespace av {
-class LogSink;
+class DriverLog;
 }  // namespace av
 
 namespace av {
@@ -41,7 +41,7 @@ public:
         gl_buffer_map_length = 0x9120u, gl_buffer_map_offset = 0x9121u,
     };
 
-    MappedBuffers(BlockSource &memory, BufferShadows &shadows, LogSink &log);
+    MappedBuffers(BlockSource &memory, BufferShadows &shadows, DriverLog &log);
     ~MappedBuffers();
     MappedBuffers(const MappedBuffers &) = delete;
     MappedBuffers &operator=(const MappedBuffers &) = delete;
@@ -82,7 +82,7 @@ private:
     void                 log_once();
 
     BufferShadows                     &shadows_;
-    LogSink                           &log_;
+    DriverLog                         &log_;
     BufferMapTransfer                  transfer_;
     /* Each mapping by the buffer it maps: OpenGL maps a buffer once. */
     icd::OpenMappings<BufferMapping>   mappings_;

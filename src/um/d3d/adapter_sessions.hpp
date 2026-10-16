@@ -26,7 +26,6 @@ namespace av {
 
 class BlockSource;
 class Kmt;
-class LogSink;
 
 template <typename Caps>
 class AdapterSessions {
@@ -40,7 +39,7 @@ public:
      * session opens an arena of `arena_bytes`, a slice store of
      * `slice_store_bytes` (none for 0) where the host draws in place, and
      * selects and flushes with the runtime's two commands (D3dCommandStream). */
-    AdapterSessions(Kmt &kmt, BlockSource &memory, LogSink &log, const char *refusal, uint64_t arena_bytes,
+    AdapterSessions(Kmt &kmt, BlockSource &memory, DriverLog &log, const char *refusal, uint64_t arena_bytes,
                     uint64_t slice_store_bytes, uint32_t select_command, uint32_t flush_command);
     ~AdapterSessions();
     AdapterSessions(const AdapterSessions &) = delete;
@@ -68,8 +67,7 @@ private:
 
     Kmt                           &kmt_;
     BlockSource                   &memory_;
-    LogSink                       &log_;
-    DriverLog                      lines_;
+    DriverLog                     &lines_;
     const char                    *refusal_;
     uint64_t                       arena_bytes_;
     uint64_t slice_store_bytes_;
@@ -83,10 +81,10 @@ private:
 };
 
 template <typename Caps>
-AdapterSessions<Caps>::AdapterSessions(Kmt &kmt, BlockSource &memory, LogSink &log, const char *refusal,
+AdapterSessions<Caps>::AdapterSessions(Kmt &kmt, BlockSource &memory, DriverLog &log, const char *refusal,
                                        uint64_t arena_bytes, uint64_t slice_store_bytes, uint32_t select_command,
                                        uint32_t flush_command)
-    : kmt_(kmt), memory_(memory), log_(log), lines_(log, "avumd: "), refusal_(refusal), arena_bytes_(arena_bytes),
+    : kmt_(kmt), memory_(memory), lines_(log), refusal_(refusal), arena_bytes_(arena_bytes),
       slice_store_bytes_(slice_store_bytes),
       select_command_(select_command), flush_command_(flush_command), caps_(),
       sessions_(), adapters_{}
@@ -130,7 +128,7 @@ bool AdapterSessions<Caps>::learn(Caps &caps, uint32_t kmt_adapter)
     if (connection.open(kmt_adapter) != Status::ok) return false;
     ScopeExit        closed([&] { connection.close(); });
     SrwLock          unshared;
-    icd::HostChannel probe(memory_, log_, "avumd: ",
+    icd::HostChannel probe(memory_, lines_,
                            icd::ChannelShape(SubApi::d3d, probe_ring_order, probe_reply_bytes, probe_staging_bytes,
                                              0u, 0u),
                            unshared);
@@ -152,7 +150,7 @@ d3d::D3dSession *AdapterSessions<Caps>::session(uint32_t slot)
 {
     AV_SCOPE("AdapterSessions::session");
     bool                   left_lost = false;
-    d3d::D3dSession *const joined = sessions_[slot].object().join(left_lost, kmt_, memory_, log_, arena_bytes_,
+    d3d::D3dSession *const joined = sessions_[slot].object().join(left_lost, kmt_, memory_, lines_, arena_bytes_,
                                                                   slice_store_bytes_, select_command_, flush_command_);
     if (left_lost) lines_.write("the host faulted the adapter's session: new devices open one of their own");
     return joined;

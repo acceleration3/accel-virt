@@ -54,7 +54,7 @@ private:
     LazyDriver<Seams> driver_;
 };
 
-constexpr UmdLibrary::UmdLibrary(ProcessTrace::Filter crashed) : driver_("avumd: ", "avumd", crashed) {}
+constexpr UmdLibrary::UmdLibrary(ProcessTrace::Filter crashed) : driver_("avumd", crashed) {}
 
 }  // namespace av
 

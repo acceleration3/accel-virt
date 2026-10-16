@@ -64,7 +64,7 @@ private:
     LazyDriver<Seams> driver_;
 };
 
-constexpr IcdLibrary::IcdLibrary(ProcessTrace::Filter crashed) : driver_("avvk: ", "avvk", crashed) {}
+constexpr IcdLibrary::IcdLibrary(ProcessTrace::Filter crashed) : driver_("avvk", crashed) {}
 
 }  // namespace av
 

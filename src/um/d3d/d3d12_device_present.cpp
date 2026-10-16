@@ -17,7 +17,7 @@
  * driver cannot tell the two apart: the runtime presents both alike. */
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "proto/escape/present_point_record.hpp"
@@ -51,7 +51,7 @@ HRESULT D3d12Device::show(ResourceRecord &resource, D3D12DDI_HRTRESOURCE runtime
     resource.runtime_resource = runtime.handle;
     const uint64_t key = surface.key();
     if (key == 0u) {
-        log_.write("avumd: the miniport minted no identity for a swap chain buffer; DWM cannot open it");
+        lines_.write("the miniport minted no identity for a swap chain buffer; DWM cannot open it");
         return S_OK;
     }
     /* Every shown surface is shared, whatever its shape: the host marks it

@@ -10,7 +10,7 @@
 #include "core/platform/block_source.hpp"
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "core/log/log_sink.hpp"
+#include "core/log/keyed_log.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "proto/d3d/d3d9_present_format.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
@@ -127,7 +127,7 @@ HRESULT D3d11Device::present_pages(ResourceRecord &source, uint32_t subresource,
         return lost(__func__);
     }
     if (FAILED(published)) {
-        log_.write("avumd: a present whose surface could not be read back");
+        lines_.write("a present whose surface could not be read back");
         return published;
     }
     return present_to_kernel(source, destination, dxgi_context, 0u);
@@ -531,7 +531,7 @@ void D3d11Device::refresh_guest_surface(ResourceRecord &resource)
     if (resource.allocation == 0u || resource.shadow == nullptr) return;
     const auto *const pixels = static_cast<const uint8_t *>(kernel_.lock_to_read(resource.allocation));
     if (pixels == nullptr) {
-        if (guest_lock_refused_.first()) log_.write("avumd: a GDI surface the kernel would not lock");
+        if (guest_lock_refused_.first()) lines_.write("a GDI surface the kernel would not lock");
         return;
     }
     const size_t pitch = resource.allocation_pitch;

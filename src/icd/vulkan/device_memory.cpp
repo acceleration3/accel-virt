@@ -1,6 +1,6 @@
 #include "icd/vulkan/device_memory.hpp"
 
-#include "core/log/log_sink.hpp"
+#include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/host_allocation.hpp"
 #include "core/trace/state_writer.hpp"
@@ -10,8 +10,8 @@
 
 namespace av::icd {
 
-DeviceMemory::DeviceMemory(Kmt &kmt, Connection &connection, vkproto::HandleTranslation &handles, LogSink &log)
-    : connection_(connection), handles_(handles), log_(log), lines_(log, "avvk: "), types_(kmt, connection.adapter()), learnt_(false)
+DeviceMemory::DeviceMemory(Kmt &kmt, Connection &connection, vkproto::HandleTranslation &handles, DriverLog &log)
+    : connection_(connection), handles_(handles), lines_(log), types_(kmt, connection.adapter()), learnt_(false)
 {
     AV_SCOPE("DeviceMemory::DeviceMemory");
 }
@@ -23,7 +23,7 @@ bool DeviceMemory::learn(VkPhysicalDevice physical)
     VkPhysicalDeviceMemoryProperties host = {};
     vkproto::av_vkGetPhysicalDeviceMemoryProperties(connection_.transport(), handles_, physical, &host);
     if (connection_.lost()) {
-        log_.write("avvk: vkAllocateMemory: the device's memory types cannot be learnt on a lost device");
+        lines_.write("vkAllocateMemory: the device's memory types cannot be learnt on a lost device");
         return false;
     }
     const Status built = types_.build(host);
