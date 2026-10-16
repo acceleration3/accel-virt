@@ -12,7 +12,6 @@
 #include "icd/opencl/d3d11_bridge.hpp"
 #include "icd/opencl/d3d11_object.hpp"
 #include "proto/d3d/dxgi_format.hpp"
-#include "proto/d3d/dxgi_format_layout.hpp"
 
 namespace av::clicd {
 
@@ -108,7 +107,7 @@ cl_mem ClIcdRoot::create_from_d3d11_texture(cl_context context, cl_mem_flags fla
     /* A twin is opened on the host as the image it is only where the host
      * views its format as one; any other is opened as bytes there. */
     const cl_mem twinned = kind == D3d11Resource::Kind::texture2d && mapped.cl_image_on_host()
-                               ? d3d11_twin(context, *owner, resource, subresource, described, twin)
+                               ? d3d11_twin(context, *owner, resource, subresource, twin)
                                : nullptr;
     if (twinned != nullptr) {
         const cl_mem kept = d3d11_object(twinned, *owner, resource, subresource, described, flags, error);
@@ -136,21 +135,19 @@ cl_mem ClIcdRoot::create_from_d3d11_texture(cl_context context, cl_mem_flags fla
     return d3d11_object(made, *owner, resource, subresource, described, flags, error);
 }
 
-/* The size the open names is the one avumd published the twin as: its tight
- * rows, whole pages (KernelSurface). */
+/* The size the open names is the one avumd published the twin as, read back
+ * with it (SharedRowsTexture). */
 cl_mem ClIcdRoot::d3d11_twin(cl_context context, GuestClContext &owner, void *resource, uint32_t subresource,
-                             const D3d11Resource &described, void *&twin)
+                             void *&twin)
 {
     AV_SCOPE("ClIcdRoot::d3d11_twin");
     twin = nullptr;
     uint64_t    handle = 0u;
-    void *const made = d3d11_.twin(owner.d3d11().device(), resource, subresource, handle);
+    uint64_t    bytes = 0u;
+    void *const made = d3d11_.twin(owner.d3d11().device(), resource, subresource, owner.guest_device(), handle, bytes);
     if (made == nullptr) return nullptr;
     ClObject *const        held = judged(context, ClObject::Kind::context);
     ClientTransport *const wire = held != nullptr ? wire_of(*held) : nullptr;
-    const DxgiFormatLayout layout(described.format());
-    const uint64_t         bytes =
-        uint64_t{described.width_of(subresource)} * layout.element_bytes() * described.height_of(subresource);
     uint64_t     opened = 0u;
     bool         closed = false;
     const cl_int taken = wire != nullptr ? owner.external().open_own(*wire, owner.guest_device(), handle, bytes,

@@ -103,9 +103,11 @@ Built. For a 2D texture, the copies never leave the GPU:
    slice, `D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE`.
    avumd makes it over memory the host exports (`ExportableImages`), laid out
    as rows, which avcl asks for around the CreateTexture2D
-   (`SharedRowsScope`; every other shared texture is tiled), and publishes it
-   under the key the miniport minted, as the size of its tight rows in whole
-   pages (`D3d11Device::publish_shared`).
+   (`SharedRowsTexture`, the same texture a Vulkan or OpenGL window chain's
+   slot is; every other shared texture is tiled), and publishes it under the
+   key the miniport minted, as the size of its tight rows in whole pages
+   (`D3d11Device::publish_shared`). avcl reads that size back from the
+   texture's private driver data rather than working it out again.
 2. **The image.** Publishing, the executor describes what the memory is as an
    image: width, height, DXGI format and the row pitch of the linear image
    (`SharedImageShape`, `D3dBackend::describe_shared_image`). The kind on the

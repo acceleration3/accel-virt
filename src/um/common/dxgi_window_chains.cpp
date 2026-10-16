@@ -8,8 +8,7 @@
 #include "guest/kmt/kmt.hpp"
 #include "core/log/log_sink.hpp"
 #include "icd/common/slot_format.hpp"
-#include "proto/resources/shared_allocation_data.hpp"
-#include "um/common/shared_rows_scope.hpp"
+#include "um/common/shared_rows_texture.hpp"
 
 #include <d3d11.h>
 #include <dxgi1_2.h>
@@ -359,43 +358,24 @@ bool DxgiWindowChains::make_slots(Chain &chain, Device &device, uint32_t count)
     described.SampleDesc = {1u, 0u};
     described.Usage = D3D11_USAGE_DEFAULT;
     described.BindFlags = icd::SlotFormat(chain.layout).bind_flags();
-    described.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
     /* The ICD opens each slot's memory as an image of rows (ChainedImage,
-     * OpenGL's memory object), so the host lays it out so. */
-    const SharedRowsScope rows;
+     * OpenGL's memory object), by the id and bytes it was published as. */
     for (uint32_t slot = 0u; slot < count; slot++) {
-        if (FAILED(device.device->CreateTexture2D(&described, nullptr, chain.slots[slot].receive())) ||
-            FAILED(device.device->CreateShaderResourceView(chain.slots[slot].get(), nullptr,
-                                                           chain.views[slot].receive())) ||
-            !identify(device, chain.slots[slot].get(), chain.ids[slot], chain.bytes[slot])) {
+        SharedRowsTexture made(kmt_);
+        if (!made.make(*device.device.get(), device.kmt_device, described)) {
             refuse("a slot of the window's chain was not made shareable");
+            return false;
+        }
+        *chain.slots[slot].receive() = made.take_texture();
+        chain.ids[slot] = made.object_id();
+        chain.bytes[slot] = made.bytes();
+        if (FAILED(device.device->CreateShaderResourceView(chain.slots[slot].get(), nullptr,
+                                                           chain.views[slot].receive()))) {
+            refuse("a slot of the window's chain cannot be read");
             return false;
         }
         chain.count = slot + 1u;
     }
-    return true;
-}
-
-bool DxgiWindowChains::identify(Device &device, ID3D11Texture2D *texture, uint64_t &id, uint64_t &bytes)
-{
-    AV_SCOPE("DxgiWindowChains::identify");
-    ComReference<IDXGIResource1> resource;
-    if (FAILED(texture->QueryInterface(__uuidof(IDXGIResource1), reinterpret_cast<void **>(resource.receive()))))
-        return false;
-    HANDLE shared = nullptr;
-    if (FAILED(resource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr,
-                                            &shared)))
-        return false;
-    SharedAllocationData carried;
-    uint32_t             written = 0u;
-    uint32_t             opened = 0u;
-    const Status         read = kmt_.open_shared_object(device.kmt_device, reinterpret_cast<uint64_t>(shared), opened,
-                                                        carried.lend(), static_cast<uint32_t>(SharedAllocationData::encoded_size), written);
-    if (read == Status::ok) static_cast<void>(kmt_.destroy_shared_allocation(device.kmt_device, opened));
-    static_cast<void>(kmt_.close_shared_object(reinterpret_cast<uint64_t>(shared)));
-    if (read != Status::ok || carried.reread(written) != Status::ok || !carried.assigned()) return false;
-    id = carried.object_id();
-    bytes = carried.size();
     return true;
 }
 

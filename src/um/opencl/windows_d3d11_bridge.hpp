@@ -22,9 +22,12 @@
 
 namespace av {
 
+class Kmt;
+
 class WindowsD3d11Bridge final : public clicd::D3d11Bridge {
 public:
-    WindowsD3d11Bridge();
+    /* `kmt` reads back what a twin was published as. */
+    explicit WindowsD3d11Bridge(Kmt &kmt);
 
     bool   device(void *object) override;
     bool   describe(void *object, void *device, clicd::D3d11Resource &described) override;
@@ -32,7 +35,8 @@ public:
     void   let_go(void *object) override;
     cl_int read(void *device, void *resource, uint32_t subresource, clicd::D3d11Rows &rows) override;
     cl_int write(void *device, void *resource, uint32_t subresource, clicd::D3d11Rows &rows) override;
-    void  *twin(void *device, void *resource, uint32_t subresource, uint64_t &handle) override;
+    void  *twin(void *device, void *resource, uint32_t subresource, uint32_t kmt_device, uint64_t &handle,
+                uint64_t &bytes) override;
     void   close_handle(uint64_t handle) override;
     cl_int to_twin(void *device, void *resource, uint32_t subresource, void *twin) override;
     cl_int from_twin(void *device, void *twin, void *resource, uint32_t subresource) override;
@@ -52,9 +56,6 @@ private:
                                 UINT cpu_access);
     ID3D11Resource *staging_texture(ID3D11Device &device, ID3D11Resource &resource, uint32_t subresource,
                                     UINT cpu_access);
-    /* An NT handle to `texture`, shared for reading and writing; 0 when it
-     * will not give one. */
-    uint64_t           shared_handle(ID3D11Texture2D &texture);
     /* Every command on `context` before this, run: a texel of `twin` read
      * through a staging texture, whose map waits for them. */
     cl_int             drain(ID3D11Device &device, ID3D11DeviceContext &context, ID3D11Resource &twin);
@@ -67,10 +68,10 @@ private:
     cl_int             visit_mapped(ID3D11DeviceContext &context, ID3D10Multithread *section,
                                     ID3D11Resource &staging, D3D11_MAP type, clicd::D3d11Rows &rows);
 
-    IID device_iid_;
-    IID resource_iid_;
-    IID multithread_iid_;
-    IID dxgi_resource_iid_;
+    Kmt &kmt_;
+    IID  device_iid_;
+    IID  resource_iid_;
+    IID  multithread_iid_;
 };
 
 }  // namespace av

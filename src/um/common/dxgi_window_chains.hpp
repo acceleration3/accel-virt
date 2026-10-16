@@ -118,9 +118,6 @@ private:
     void               forget_chain(void *window);
     [[nodiscard]] bool make_chain(Chain &chain, Device &device, uint32_t width, uint32_t height);
     [[nodiscard]] bool make_slots(Chain &chain, Device &device, uint32_t count);
-    /* `texture`'s object id and bytes, from the private data its NT handle
-     * opens with. */
-    [[nodiscard]] bool identify(Device &device, ID3D11Texture2D *texture, uint64_t &id, uint64_t &bytes);
     void               drop_slots(Chain &chain);
     void               drop_chain(Chain &chain);
     void               drop_device(Device &device);

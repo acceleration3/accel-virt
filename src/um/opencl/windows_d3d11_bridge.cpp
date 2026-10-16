@@ -3,15 +3,15 @@
 #include "core/trace/function_scope.hpp"
 #include "icd/opencl/d3d11_resource.hpp"
 #include "icd/opencl/d3d11_rows.hpp"
-#include "um/common/shared_rows_scope.hpp"
+#include "um/common/shared_rows_texture.hpp"
 
 namespace av {
 
 using clicd::D3d11Resource;
 
-WindowsD3d11Bridge::WindowsD3d11Bridge()
-    : device_iid_(__uuidof(ID3D11Device)), resource_iid_(__uuidof(ID3D11Resource)),
-      multithread_iid_(__uuidof(ID3D10Multithread)), dxgi_resource_iid_(__uuidof(IDXGIResource1))
+WindowsD3d11Bridge::WindowsD3d11Bridge(Kmt &kmt)
+    : kmt_(kmt), device_iid_(__uuidof(ID3D11Device)), resource_iid_(__uuidof(ID3D11Resource)),
+      multithread_iid_(__uuidof(ID3D10Multithread))
 {
     AV_SCOPE("WindowsD3d11Bridge::WindowsD3d11Bridge");
 }
@@ -154,11 +154,13 @@ bool WindowsD3d11Bridge::made_on(ID3D11Resource &resource, ID3D11Device &device)
 /* One mip, one slice, shared by NT handle: avumd makes such a texture over
  * memory the host exports and publishes it under its key, which is what an
  * open of the handle names - as rows, which OpenCL's image over the memory
- * reads (SharedRowsScope). */
-void *WindowsD3d11Bridge::twin(void *device, void *resource, uint32_t subresource, uint64_t &handle)
+ * reads (SharedRowsTexture). */
+void *WindowsD3d11Bridge::twin(void *device, void *resource, uint32_t subresource, uint32_t kmt_device,
+                               uint64_t &handle, uint64_t &bytes)
 {
     AV_SCOPE("WindowsD3d11Bridge::twin");
     handle = 0u;
+    bytes = 0u;
     ID3D11Device *const   owner = as_device(device);
     ID3D11Resource *const source = as_resource(resource);
     ID3D11Texture2D      *made = nullptr;
@@ -173,14 +175,12 @@ void *WindowsD3d11Bridge::twin(void *device, void *resource, uint32_t subresourc
         shaped.SampleDesc.Count = 1u;
         shaped.Usage = D3D11_USAGE_DEFAULT;
         shaped.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-        shaped.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-        const SharedRowsScope rows;
-        if (FAILED(owner->CreateTexture2D(&shaped, nullptr, &made))) made = nullptr;
-    }
-    if (made != nullptr) handle = shared_handle(*made);
-    if (made != nullptr && handle == 0u) {
-        made->Release();
-        made = nullptr;
+        SharedRowsTexture twin(kmt_);
+        if (twin.make(*owner, kmt_device, shaped)) {
+            bytes = twin.bytes();
+            handle = twin.take_handle();
+            made = twin.take_texture();
+        }
     }
     if (source != nullptr) source->Release();
     if (owner != nullptr) owner->Release();
@@ -239,18 +239,6 @@ cl_int WindowsD3d11Bridge::from_twin(void *device, void *twin, void *resource, u
     if (source != nullptr) source->Release();
     if (owner != nullptr) owner->Release();
     return result;
-}
-
-uint64_t WindowsD3d11Bridge::shared_handle(ID3D11Texture2D &texture)
-{
-    AV_SCOPE("WindowsD3d11Bridge::shared_handle");
-    IDXGIResource1 *shared = nullptr;
-    if (FAILED(texture.QueryInterface(dxgi_resource_iid_, reinterpret_cast<void **>(&shared)))) return 0u;
-    HANDLE     handle = nullptr;
-    const bool given = SUCCEEDED(shared->CreateSharedHandle(
-        nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr, &handle));
-    shared->Release();
-    return given ? reinterpret_cast<uint64_t>(handle) : 0u;
 }
 
 /* A map of staging waits for the copy into it, which waits for every command

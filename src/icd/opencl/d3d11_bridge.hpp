@@ -43,11 +43,13 @@ public:
     virtual cl_int write(void *device, void *resource, uint32_t subresource, D3d11Rows &rows) = 0;
     /* A texture on `device` made to be shared, the size and format of
      * `subresource` of `resource`, with an NT handle to it in `handle` for the
-     * caller to open and close (close_handle): what OpenCL opens as the image
-     * itself (docs/d3d11-sharing.md, stage 2). Null, `handle` 0, when the
+     * caller to open and close (close_handle) and the bytes it was published
+     * as, read through `kmt_device`: what OpenCL opens as the image itself
+     * (docs/d3d11-sharing.md, stage 2). Null, `handle` and `bytes` 0, when the
      * device will not share one - a format the host cannot export, or a
      * resource that is no 2D texture. Held once; let_go releases it. */
-    virtual void  *twin(void *device, void *resource, uint32_t subresource, uint64_t &handle) = 0;
+    virtual void  *twin(void *device, void *resource, uint32_t subresource, uint32_t kmt_device, uint64_t &handle,
+                        uint64_t &bytes) = 0;
     virtual void   close_handle(uint64_t handle) = 0;
     /* `subresource` of `resource` copied into `twin`, and every Direct3D 11
      * command before the copy run, the copy included, when this returns. */
