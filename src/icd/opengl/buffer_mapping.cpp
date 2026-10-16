@@ -225,7 +225,8 @@ size_t BufferMapping::chunk_for(ClientTransport &wire, uint64_t left) const
     const size_t     inline_chunk = left < inline_write_bytes ? static_cast<size_t>(left) : inline_write_bytes;
     if (!blobs.ready()) return inline_chunk;
     const size_t wanted = left < blob_write_bytes ? static_cast<size_t>(left) : blob_write_bytes;
-    /* Any answered call retires every lease: the host has read them all. */
+    /* An answered call goes behind everything held, so its answer retires
+     * every lease the transport has lent: the host has run them all. */
     if (blobs.room() < wanted) static_cast<void>(glproto::av_glIsBuffer(wire, buffer_));
     return blobs.room() >= wanted ? wanted : inline_chunk;
 }
