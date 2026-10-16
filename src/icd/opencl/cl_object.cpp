@@ -6,7 +6,7 @@ namespace av::clicd {
 
 ClObject::ClObject(const cl_icd_dispatch &table, BlockSource &memory, Kind kind, uint64_t wire,
                    GuestClContext *context, ClObject *parent)
-    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), lent_(nullptr), sliced_from_(nullptr), references_(1u), children_(0u), kind_(kind), idle_(true), ordinal_(0u), fixed_(memory)
+    : dispatch_(&table), context_(context), parent_(parent), wire_(wire), backing_offset_(0u), backing_bytes_(0u), application_memory_(nullptr), lent_(nullptr), sliced_from_(nullptr), references_(1u), children_(0u), kind_(kind), idle_(true), ordinals_(), ordinal_(0u), fixed_(memory)
 {
     AV_SCOPE("ClObject::ClObject");
 }
@@ -96,15 +96,6 @@ uint64_t ClObject::backing_bytes() const
     return backing_bytes_;
 }
 
-bool ClObject::descends_from(const ClObject &other) const
-{
-    AV_SCOPE("ClObject::descends_from");
-    for (const ClObject *walk = this; walk != nullptr; walk = walk->parent_) {
-        if (walk == &other) return true;
-    }
-    return false;
-}
-
 ClObject *ClObject::nearest(Kind kind)
 {
     AV_SCOPE("ClObject::nearest");
@@ -177,7 +168,7 @@ bool ClObject::known_idle() const
 uint64_t ClObject::take_ordinal()
 {
     AV_SCOPE("ClObject::take_ordinal");
-    return __atomic_add_fetch(&ordinal_, uint64_t{1}, __ATOMIC_RELAXED);
+    return ordinals_.next();
 }
 
 void ClObject::stamp(uint64_t ordinal)
@@ -189,7 +180,7 @@ void ClObject::stamp(uint64_t ordinal)
 uint64_t ClObject::ordinal() const
 {
     AV_SCOPE("ClObject::ordinal");
-    return __atomic_load_n(&ordinal_, __ATOMIC_RELAXED);
+    return ordinal_;
 }
 
 bool ClObject::kept_answer(cl_mem_info name, const ClInfoRequest &asked, cl_int &result) const

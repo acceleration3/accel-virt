@@ -2130,14 +2130,14 @@ void ClIcdRoot::drained_queue(ClObject &queue)
     AV_SCOPE("ClIcdRoot::drained_queue");
     queue.idle();
     GuestClContext *const context = queue.context();
-    if (context != nullptr && objects_.queues_idle(context)) context->reclaim();
+    if (context != nullptr && objects_.queues_idle(queue.nearest(ClObject::Kind::context))) context->reclaim();
 }
 
 void ClIcdRoot::let_go_of_memory(GuestClContext &context, ClObject &buffer)
 {
     AV_SCOPE("ClIcdRoot::let_go_of_memory");
     const uint64_t block = buffer.backing_offset();
-    if (!objects_.queues_idle(&context)) {
+    if (!objects_.queues_idle(buffer.nearest(ClObject::Kind::context))) {
         context.retire(buffer.backed() ? &block : nullptr, buffer.lent());
         return;
     }

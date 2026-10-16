@@ -106,14 +106,14 @@ uint32_t ClObjectTable::live_of(ClObject::Kind kind) const
     return counted;
 }
 
-bool ClObjectTable::queues_idle(const GuestClContext *context) const
+bool ClObjectTable::queues_idle(const ClObject *context) const
 {
     AV_SCOPE("ClObjectTable::queues_idle");
+    if (context == nullptr) return true;
     const icd::ThreadLockHold held(lock_);
     bool idle = true;
-    tree_.nodes().for_each([&idle, context](const ClObject &object) {
-        if (object.kind() == ClObject::Kind::command_queue && object.context() == context && !object.known_idle())
-            idle = false;
+    tree_.for_children(*context, [&idle](const ClObject &object) {
+        if (object.kind() == ClObject::Kind::command_queue && !object.known_idle()) idle = false;
     });
     return idle;
 }

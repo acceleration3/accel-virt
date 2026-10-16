@@ -19,7 +19,8 @@
 #ifndef AV_GLICD_GL_EXTERNAL_OBJECTS_HPP
 #define AV_GLICD_GL_EXTERNAL_OBJECTS_HPP
 
-#include "core/support/object_pool.hpp"
+#include "core/support/keyed_slots.hpp"
+#include "icd/common/id_mint.hpp"
 #include "icd/common/opened_objects.hpp"
 
 #include <stdint.h>
@@ -42,12 +43,10 @@ namespace av::glicd {
 
 struct GlExternalObjectsProbe;
 
-/* One name this ICD handed out, and what the device made of it. A type of its
- * own so the table's rows are complete (tools/header_scan.py reads a class's
- * members only to its first nested type). */
+/* What the device made of one name this ICD handed out, kept under the name.
+ * A type of its own so the table's rows are complete (tools/header_scan.py
+ * reads a class's members only to its first nested type). */
 struct GlSharedObjectRow {
-    /* What the application holds, which this ICD chose. Never 0. */
-    uint32_t name_;
     /* The host's own name, learnt at the import; 0 for a name created and not
      * yet imported, which every use of must refuse. What the object is and
      * the bytes it was opened as are the opened objects' (OpenedObjects). */
@@ -152,19 +151,22 @@ private:
     bool                     known(uint32_t kind, bool &memory) const;
     GlSharedObjectRow       *row_of(bool memory, uint32_t name);
     const GlSharedObjectRow *row_of(bool memory, uint32_t name) const;
-    /* The object of one row given back to the device, and the row dropped. */
-    void                     give_back(ClientTransport &wire, GlSharedObjectRow &row);
+    /* The object of `name`'s row given back to the device, and the row
+     * dropped. */
+    void                     give_back(ClientTransport &wire, uint32_t name, const GlSharedObjectRow &row);
     /* What a row's namespace is opened as on the wire. */
     uint32_t                 wire_kind(const GlSharedObjectRow &row) const;
     uint32_t                 imported() const;
 
     LogSink           &log_;
     icd::OpenedObjects opened_;
-    mutable ObjectPool<GlSharedObjectRow> rows_;
-    /* The next name this ICD hands out. Its own counter, because the only
-     * memory objects and semaphores that exist in this context are the ones it
-     * made - the host's names for them are never seen by the application. */
-    uint32_t            next_name_;
+    /* Every name this context handed out, by the name: both namespaces draw
+     * from one mint, so a name is in one row whichever it is in. */
+    KeyedSlots<uint32_t, GlSharedObjectRow> rows_;
+    /* The names this ICD hands out. Its own, because the only memory objects
+     * and semaphores that exist in this context are the ones it made - the
+     * host's names for them are never seen by the application. */
+    icd::IdMint<uint32_t> names_;
 };
 
 }  // namespace av::glicd

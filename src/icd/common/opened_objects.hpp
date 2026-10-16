@@ -13,14 +13,15 @@
  * device answered - `made` - is what the guest names the object by from then
  * on, and what releases it.
  *
- * Rows are keyed by kind and `made`: OpenGL's memory objects and semaphores
- * are separate namespaces, so a memory object and a semaphore may be answered
- * the same name. */
+ * A row is kept under its object, and found again under its kind and `made`:
+ * OpenGL's memory objects and semaphores are separate namespaces, so a memory
+ * object and a semaphore may be answered the same name, and each kind has an
+ * index of its own. */
 #ifndef AV_ICD_OPENED_OBJECTS_HPP
 #define AV_ICD_OPENED_OBJECTS_HPP
 
 #include "core/log/driver_log.hpp"
-#include "core/support/object_pool.hpp"
+#include "core/support/keyed_slots.hpp"
 #include "core/support/status.hpp"
 
 #include <stdint.h>
@@ -37,11 +38,10 @@ namespace av::icd {
 class SharedHandles;
 struct OpenedObjectsProbe;
 
-/* One object this context opened. A type of its own so the table's rows are
- * complete (tools/header_scan.py reads a class's members only to its first
- * nested type). */
+/* One object this context opened, kept under the object's id. A type of its
+ * own so the table's rows are complete (tools/header_scan.py reads a class's
+ * members only to its first nested type). */
 struct OpenedObjectRow {
-    uint64_t object_id_;
     /* What the device answered, which the guest names the object by. */
     uint64_t made_;
     /* The bytes it was opened as, which a release names again: whole pages
@@ -91,17 +91,26 @@ public:
 private:
     friend struct OpenedObjectsProbe;
 
-    OpenedObjectRow       *row_of(uint32_t kind, uint64_t made);
-    const OpenedObjectRow *row_of(uint32_t kind, uint64_t made) const;
-    bool                   holds(uint64_t object_id) const;
+    /* The index of `kind`'s answers, or null for a kind no object is opened
+     * as. */
+    KeyedSlots<uint64_t, uint64_t>       *answers_of(uint32_t kind);
+    const KeyedSlots<uint64_t, uint64_t> *answers_of(uint32_t kind) const;
+    /* The object the device answered `made` for as `kind`, or 0. */
+    uint64_t                              object_of(uint32_t kind, uint64_t made) const;
     /* The bytes `kind` is opened as: whole pages of `size` for memory, 0 for a
      * fence. False for memory no whole number of pages holds. */
     bool                   opened_bytes(uint32_t kind, uint64_t size, uint64_t &bytes) const;
     bool                   row_holds(const OpenedObjectRow &row) const;
 
-    SharedHandles                       &handles_;
-    DriverLog                            lines_;
-    mutable ObjectPool<OpenedObjectRow> rows_;
+    /* SharedObjectKind's memory, monitored_fence and native_fence. */
+    static constexpr uint32_t kinds = 3u;
+
+    SharedHandles                           &handles_;
+    DriverLog                                lines_;
+    /* Every object opened, by its id. */
+    KeyedSlots<uint64_t, OpenedObjectRow>    rows_;
+    /* Each kind's objects' ids by what the device answered for them. */
+    KeyedSlots<uint64_t, uint64_t>           answers_[kinds];
 };
 
 }  // namespace av::icd

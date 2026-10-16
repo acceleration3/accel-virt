@@ -12,6 +12,7 @@
 #ifndef AV_CLICD_CL_OBJECT_HPP
 #define AV_CLICD_CL_OBJECT_HPP
 
+#include "icd/common/id_mint.hpp"
 #include "icd/opencl/cl_info_answers.hpp"
 
 #include <CL/cl.h>
@@ -77,8 +78,6 @@ public:
     void      slice_of(ClObject &buffer);
     ClObject *sliced_from() const;
 
-    /* Whether this object is `other` or is somewhere below it. */
-    bool descends_from(const ClObject &other) const;
     /* This object or the closest one above it of `kind`, or null: a buffer's
      * context, a sub-buffer's buffer. */
     ClObject *nearest(Kind kind);
@@ -141,8 +140,9 @@ private:
     /* Atomic: an application's threads may share a queue, and the API leaves
      * ordering their enqueues to it - each only needs to see the other's. */
     bool                   idle_;
-    /* Atomic for a queue, which threads may share; an event's is written once,
-     * before it is handed out. */
+    /* A queue's, which threads may share. */
+    icd::IdMint<uint64_t>  ordinals_;
+    /* An event's, written once, before it is handed out. */
     uint64_t               ordinal_;
     /* One each for the type, the flags, the size, the offset and whether it
      * uses shared memory: none is longer than a word. */

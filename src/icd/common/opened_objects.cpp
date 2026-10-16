@@ -10,30 +10,31 @@
 namespace av::icd {
 
 OpenedObjects::OpenedObjects(SharedHandles &handles, BlockSource &memory, LogSink &log, const char *prefix)
-    : handles_(handles), lines_(log, prefix), rows_(memory)
+    : handles_(handles), lines_(log, prefix), rows_(memory, Pool::paged),
+      answers_{{memory, Pool::paged}, {memory, Pool::paged}, {memory, Pool::paged}}
 {
     AV_SCOPE("OpenedObjects::OpenedObjects");
 }
 
-OpenedObjectRow *OpenedObjects::row_of(uint32_t kind, uint64_t made)
+KeyedSlots<uint64_t, uint64_t> *OpenedObjects::answers_of(uint32_t kind)
 {
-    AV_SCOPE("OpenedObjects::row_of");
-    if (made == 0u) return nullptr;
-    return rows_.find_if([kind, made](const OpenedObjectRow &row) { return row.made_ == made && row.kind_ == kind; });
+    AV_SCOPE("OpenedObjects::answers_of");
+    return kind - 1u < kinds ? &answers_[kind - 1u] : nullptr;
 }
 
-const OpenedObjectRow *OpenedObjects::row_of(uint32_t kind, uint64_t made) const
+const KeyedSlots<uint64_t, uint64_t> *OpenedObjects::answers_of(uint32_t kind) const
 {
-    AV_SCOPE("OpenedObjects::row_of");
-    if (made == 0u) return nullptr;
-    return rows_.find_if([kind, made](const OpenedObjectRow &row) { return row.made_ == made && row.kind_ == kind; });
+    AV_SCOPE("OpenedObjects::answers_of");
+    return kind - 1u < kinds ? &answers_[kind - 1u] : nullptr;
 }
 
-bool OpenedObjects::holds(uint64_t object_id) const
+uint64_t OpenedObjects::object_of(uint32_t kind, uint64_t made) const
 {
-    AV_SCOPE("OpenedObjects::holds");
-    return rows_.find_if([object_id](const OpenedObjectRow &row) { return row.object_id_ == object_id; }) !=
-           nullptr;
+    AV_SCOPE("OpenedObjects::object_of");
+    const KeyedSlots<uint64_t, uint64_t> *const answers = answers_of(kind);
+    if (answers == nullptr || made == 0u) return 0u;
+    const uint64_t *const object_id = answers->find(made);
+    return object_id != nullptr ? *object_id : 0u;
 }
 
 bool OpenedObjects::opened_bytes(uint32_t kind, uint64_t size, uint64_t &bytes) const
@@ -64,14 +65,16 @@ Status OpenedObjects::open(ClientTransport &wire, uint32_t device, uint64_t hand
         lines_.write("a Win32 handle this process may not open");
         return Status::not_found;
     }
-    if (holds(object_id)) {
+    if (rows_.find(object_id) != nullptr) {
         lines_.write("an object this context already imported");
         return Status::conflict;
     }
-    /* The row first: an object the device opened is one this context holds
-     * and must be able to give back. */
-    OpenedObjectRow *row = nullptr;
-    if (rows_.create(row, OpenedObjectRow{object_id, 0u, asked, kind}) != Status::ok) {
+    /* The row and its answer's room first: an object the device opened is one
+     * this context holds and must be able to give back. */
+    KeyedSlots<uint64_t, uint64_t> &answers = *answers_of(kind);
+    uint32_t                        row = 0u;
+    if (answers.reserve(answers.count() + 1u) != Status::ok ||
+        rows_.insert(object_id, OpenedObjectRow{0u, asked, kind}, row) != Status::ok) {
         lines_.write("no memory to keep an opened shared object");
         return Status::no_memory;
     }
@@ -82,10 +85,19 @@ Status OpenedObjects::open(ClientTransport &wire, uint32_t device, uint64_t hand
      * left here to check for. */
     if (call.open(object_id, kind, asked, opened) != Status::ok) {
         lines_.note("the device would not open a shared object for this context, status", call.device_status());
-        static_cast<void>(rows_.destroy(row));
+        static_cast<void>(rows_.erase(object_id));
         return Status::invalid_state;
     }
-    row->made_ = opened;
+    /* Two objects answered one name would leave the second unreachable, and
+     * release the first twice. */
+    uint32_t answer = 0u;
+    if (answers.insert(opened, object_id, answer) != Status::ok) {
+        lines_.note("the device answered a name another object of this context holds", opened);
+        static_cast<void>(call.release(object_id, kind, asked));
+        static_cast<void>(rows_.erase(object_id));
+        return Status::invalid_state;
+    }
+    rows_.at(row)->made_ = opened;
     made = opened;
     return Status::ok;
 }
@@ -93,17 +105,19 @@ Status OpenedObjects::open(ClientTransport &wire, uint32_t device, uint64_t hand
 bool OpenedObjects::answered(uint32_t kind, uint64_t made) const
 {
     AV_SCOPE("OpenedObjects::answered");
-    return row_of(kind, made) != nullptr;
+    return object_of(kind, made) != 0u;
 }
 
 bool OpenedObjects::give_back(ClientTransport &wire, uint32_t kind, uint64_t made)
 {
     AV_SCOPE("OpenedObjects::give_back");
-    OpenedObjectRow *const row = row_of(kind, made);
-    if (row == nullptr) return false;
+    const uint64_t object_id = object_of(kind, made);
+    if (object_id == 0u) return false;
+    OpenedObjectRow row{};
+    static_cast<void>(rows_.take(object_id, row));
+    static_cast<void>(answers_of(kind)->erase(made));
     SharedObjectCall call(wire);
-    static_cast<void>(call.release(row->object_id_, row->kind_, row->size_));
-    static_cast<void>(rows_.destroy(row));
+    static_cast<void>(call.release(object_id, row.kind_, row.size_));
     return true;
 }
 
@@ -111,23 +125,24 @@ void OpenedObjects::release_all(ClientTransport &wire)
 {
     AV_SCOPE("OpenedObjects::release_all");
     SharedObjectCall call(wire);
-    rows_.destroy_if([&call](const OpenedObjectRow &row) {
-        static_cast<void>(call.release(row.object_id_, row.kind_, row.size_));
-        return true;
+    rows_.for_each([&call](uint64_t object_id, const OpenedObjectRow &row) {
+        static_cast<void>(call.release(object_id, row.kind_, row.size_));
     });
+    rows_.clear();
+    for (KeyedSlots<uint64_t, uint64_t> &answers : answers_) answers.clear();
 }
 
 uint32_t OpenedObjects::live() const
 {
     AV_SCOPE("OpenedObjects::live");
-    return rows_.live();
+    return rows_.count();
 }
 
 void OpenedObjects::report(StateWriter &writer) const
 {
     AV_SCOPE("OpenedObjects::report");
-    rows_.for_each([&writer](const OpenedObjectRow &row) {
-        writer.open("object", row.object_id_);
+    rows_.for_each([&writer](uint64_t object_id, const OpenedObjectRow &row) {
+        writer.open("object", object_id);
         writer.number("kind", row.kind_);
         writer.number("made", row.made_);
         writer.number("size", row.size_);
@@ -139,7 +154,7 @@ bool OpenedObjects::row_holds(const OpenedObjectRow &row) const
 {
     AV_SCOPE("OpenedObjects::row_holds");
     const SharedObjectKind kind(row.kind_);
-    if (row.object_id_ == 0u || row.made_ == 0u) return false;
+    if (row.made_ == 0u) return false;
     if (kind.is_fence()) return row.size_ == 0u;
     return kind.is_memory() && row.size_ != 0u && SharedBytes(row.size_).pages() == row.size_;
 }
@@ -147,15 +162,17 @@ bool OpenedObjects::row_holds(const OpenedObjectRow &row) const
 bool OpenedObjects::invariants_hold() const
 {
     AV_SCOPE("OpenedObjects::invariants_hold");
-    return rows_.all_of([this](const OpenedObjectRow &row) {
-        if (!row_holds(row)) return false;
-        uint32_t alike = 0u;
-        rows_.for_each([&row, &alike](const OpenedObjectRow &other) {
-            if (other.object_id_ == row.object_id_ || (other.made_ == row.made_ && other.kind_ == row.kind_))
-                alike++;
-        });
-        return alike == 1u;
+    if (!rows_.invariants_hold()) return false;
+    uint32_t answered = 0u;
+    for (const KeyedSlots<uint64_t, uint64_t> &answers : answers_) {
+        if (!answers.invariants_hold()) return false;
+        answered += answers.count();
+    }
+    bool holds = answered == rows_.count();
+    rows_.for_each([this, &holds](uint64_t object_id, const OpenedObjectRow &row) {
+        if (object_id == 0u || !row_holds(row) || object_of(row.kind_, row.made_) != object_id) holds = false;
     });
+    return holds;
 }
 
 }  // namespace av::icd

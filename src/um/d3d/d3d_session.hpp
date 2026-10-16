@@ -22,6 +22,7 @@
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/host_channel.hpp"
+#include "icd/common/id_mint.hpp"
 #include "icd/d3d/buffer_slices.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/stream_timeline.hpp"
@@ -139,7 +140,7 @@ private:
     d3d11::QueryResults                  query_results_;
     ObjectPool<d3d11::D3d11Device>       contexts_;
     uint32_t                             members_;
-    uint32_t                             next_id_;
+    icd::IdMint<uint32_t>                ids_;
     uint32_t                             select_command_;
     uint32_t                             flush_command_;
 };

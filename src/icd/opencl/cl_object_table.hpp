@@ -74,9 +74,10 @@ public:
     uint32_t live() const;
     /* How many of `kind` are live, for the tests and a state dump. */
     uint32_t live_of(ClObject::Kind kind) const;
-    /* Whether every live command queue of `context` is known to have
-     * finished what was sent to it (ClObject::known_idle). */
-    bool     queues_idle(const GuestClContext *context) const;
+    /* Whether every live command queue made on `context` - a context
+     * object, or null for none - is known to have finished what was sent to
+     * it (ClObject::known_idle). */
+    bool     queues_idle(const ClObject *context) const;
     void     report(StateWriter &writer) const;
 
     bool invariants_hold() const;

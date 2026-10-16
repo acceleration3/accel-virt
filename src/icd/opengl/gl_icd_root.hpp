@@ -16,6 +16,7 @@
 #include "core/trace/state_reporter.hpp"
 #include "icd/opengl/current_contexts.hpp"
 #include "icd/common/icd_connection.hpp"
+#include "icd/common/id_mint.hpp"
 #include "icd/common/refused_calls.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/opengl/gl_context_table.hpp"
@@ -209,7 +210,7 @@ private:
     /* The context each thread's wglCreateContextAttribsARB made and opengl32
      * has yet to claim, by thread. */
     KeyedSlots<uint32_t, uint64_t> pending_;
-    uint64_t          sync_tokens_;
+    icd::IdMint<uint64_t> sync_tokens_;
 
     friend struct GlIcdRootProbe;
 };

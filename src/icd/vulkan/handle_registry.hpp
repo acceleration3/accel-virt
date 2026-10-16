@@ -12,7 +12,9 @@
  * mixed from the kind, the host object and the connection, so wrapping the
  * command buffers of one allocation is not a walk of every handle per buffer.
  * Two objects whose keys meet - which a 64-bit mix makes rare - leave the
- * second out of the index, counted, and only then is a miss walked for. */
+ * second out of the index, counted, and only then is a miss walked for. A
+ * connection's instance, which every handle wrapped on it is made through, is
+ * found by the connection in an index of its own. */
 #ifndef AV_ICD_HANDLE_REGISTRY_HPP
 #define AV_ICD_HANDLE_REGISTRY_HPP
 
@@ -50,7 +52,7 @@ public:
      * destroyed handle and a handle of another kind are not one. */
     LoaderHandle *made(void *pointer, LoaderHandle::Kind kind) const;
     /* The `index`th live handle of `kind` made through `parent`, in the order
-     * the pool keeps them, or null past the last. */
+     * they were made, or null past the last. */
     LoaderHandle *child(const LoaderHandle &parent, LoaderHandle::Kind kind, uint32_t index) const;
     /* The live instance on `connection`, or null. */
     LoaderHandle *instance_of(const Connection *connection) const;
@@ -78,11 +80,14 @@ private:
     bool          parent_fits(LoaderHandle::Kind kind, const Connection *connection, LoaderHandle *parent) const;
     bool          unique(const LoaderHandle &handle) const;
     uint64_t      key_of(LoaderHandle::Kind kind, uint64_t host, const Connection *connection) const;
+    uint64_t      address_of(const Connection *connection) const;
     /* `handle` out of the index, or out of the count of those it left out. */
     void          unindex(const LoaderHandle &handle);
 
     HandleTree<LoaderHandle>             tree_;
     KeyedSlots<uint64_t, LoaderHandle *> index_;
+    /* Each connection's instance, by the connection's address. */
+    KeyedSlots<uint64_t, LoaderHandle *> instances_;
     /* Live handles the index has no entry for. */
     uint32_t                             unindexed_;
 

@@ -100,14 +100,6 @@ bool LoaderHandle::names(Kind kind, uint64_t host, const Connection *connection)
     return kind_ == kind && host_ == host && connection_ == connection;
 }
 
-bool LoaderHandle::descends_from(const LoaderHandle &ancestor) const
-{
-    AV_SCOPE("LoaderHandle::descends_from");
-    for (const LoaderHandle *above = parent_; above != nullptr; above = above->parent_)
-        if (above == &ancestor) return true;
-    return false;
-}
-
 bool LoaderHandle::invariants_hold() const
 {
     AV_SCOPE("LoaderHandle::invariants_hold");

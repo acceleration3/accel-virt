@@ -47,8 +47,6 @@ public:
     LoaderHandle *parent() const;
     /* Whether this is the object `host` names on `connection`, as a `kind`. */
     bool          names(Kind kind, uint64_t host, const Connection *connection) const;
-    /* Whether `ancestor` is on the chain of parents above this. */
-    bool          descends_from(const LoaderHandle &ancestor) const;
     /* Takes `batch`, made in `batches`, as the batch this command buffer's
      * commands record into. */
     void          record_into(ObjectPool<CommandBatch> &batches, CommandBatch &batch);

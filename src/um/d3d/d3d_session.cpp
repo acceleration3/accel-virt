@@ -19,7 +19,7 @@ D3dSession::D3dSession(Kmt &kmt, BlockSource &memory, LogSink &log, uint64_t are
     : memory_(memory), log_(log), lock_(), connection_(kmt),
       channel_(memory, log, "avumd: ",
                icd::ChannelShape(SubApi::d3d, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_size), lock_),
-      stream_(), slices_lock_(), timeline_(), slices_(), slice_store_bytes_(slice_store_size), slice_store_(nullptr), query_results_(), contexts_(memory), members_(0u), next_id_(0u),
+      stream_(), slices_lock_(), timeline_(), slices_(), slice_store_bytes_(slice_store_size), slice_store_(nullptr), query_results_(), contexts_(memory), members_(0u), ids_(),
       select_command_(select_command), flush_command_(flush_command)
 {
     AV_SCOPE("D3dSession::D3dSession");
@@ -180,9 +180,7 @@ void D3dSession::close()
 uint32_t D3dSession::next_id()
 {
     AV_SCOPE("D3dSession::next_id");
-    uint32_t id = __atomic_add_fetch(&next_id_, 1u, __ATOMIC_RELAXED);
-    while (id == 0u) id = __atomic_add_fetch(&next_id_, 1u, __ATOMIC_RELAXED);
-    return id;
+    return ids_.next();
 }
 
 d3d::D3dCommandStream &D3dSession::stream()
