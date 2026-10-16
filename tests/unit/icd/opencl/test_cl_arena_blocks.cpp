@@ -12,6 +12,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "icd/opencl/cl_arena_blocks.hpp"
 
 #include <cstdint>
@@ -20,10 +21,10 @@ using av::clicd::ClArenaBlocks;
 
 namespace av::icd {
 
-/* A count past the rows: the table's own invariant, which the blocks' folds in. */
+/* Two blocks over the same bytes: the table's own invariant, which the
+ * blocks' folds in. */
 struct RangeTableProbe {
-    template <std::uint32_t Max>
-    static void overcount(RangeTable<Max> &table) { table.count_ = Max + 1u; }
+    static void overlap(RangeTable &table) { table.ranges_.at(1u) = table.ranges_.at(0u); }
 };
 
 }  // namespace av::icd
@@ -46,7 +47,7 @@ struct ClArenaBlocksProbe {
      * still placed - blocks over memory that is gone. */
     static void blocks_without_an_arena(ClArenaBlocks &blocks)
     { blocks.base_ = nullptr; blocks.bytes_ = 0u; }
-    static void rows_past_the_table(ClArenaBlocks &blocks) { icd::RangeTableProbe::overcount(blocks.blocks_); }
+    static void rows_past_the_table(ClArenaBlocks &blocks) { icd::RangeTableProbe::overlap(blocks.blocks_); }
 };
 
 }  // namespace av::clicd
@@ -54,17 +55,19 @@ struct ClArenaBlocksProbe {
 namespace {
 
 alignas(4096) std::uint8_t arena[64u * 4096u];
-/* Room for a block in every row, so a table that refuses is full by its rows. */
-alignas(4096) std::uint8_t roomy[(ClArenaBlocks::max_blocks + 8u) * 4096u];
+/* Room for twice the 1024 blocks a context's table once held. */
+constexpr std::uint32_t    many = 2048u;
+alignas(4096) std::uint8_t roomy[many * 4096u];
 
 /* The lock every test's blocks hold: nothing else takes it. */
 av::LockTrace           trace;
 av::RecordingThreadLock lock(trace, 'B');
+av::MockPlatform        platform;
 
 }  // namespace
 
 TEST(cl_arena_blocks, lends_nothing_until_it_is_given_an_arena)
-{ ClArenaBlocks blocks(lock);
+{ ClArenaBlocks blocks(platform, lock);
   std::uint64_t offset = 0xEEu;
   CHECK(!blocks.ready());
   /* No arena: every buffer is the staged path, and nothing is handed out. */
@@ -75,7 +78,7 @@ TEST(cl_arena_blocks, lends_nothing_until_it_is_given_an_arena)
   CHECK(blocks.invariants_hold()); }
 
 TEST(cl_arena_blocks, a_block_is_the_arena_s_own_memory_at_the_offset_it_answered)
-{ ClArenaBlocks blocks(lock);
+{ ClArenaBlocks blocks(platform, lock);
   blocks.lend(arena, sizeof arena);
   CHECK(blocks.ready());
   std::uint64_t first = 0xEEu;
@@ -96,7 +99,7 @@ TEST(cl_arena_blocks, a_block_is_the_arena_s_own_memory_at_the_offset_it_answere
   CHECK(blocks.invariants_hold()); }
 
 TEST(cl_arena_blocks, reading_past_a_block_or_outside_every_block_answers_nothing)
-{ ClArenaBlocks blocks(lock);
+{ ClArenaBlocks blocks(platform, lock);
   blocks.lend(arena, sizeof arena);
   std::uint64_t taken = 0u;
   CHECK(blocks.take(128u, taken));
@@ -111,7 +114,7 @@ TEST(cl_arena_blocks, reading_past_a_block_or_outside_every_block_answers_nothin
   CHECK(blocks.invariants_hold()); }
 
 TEST(cl_arena_blocks, a_block_given_back_is_handed_out_again)
-{ ClArenaBlocks blocks(lock);
+{ ClArenaBlocks blocks(platform, lock);
   blocks.lend(arena, sizeof arena);
   std::uint64_t first = 0u;
   std::uint64_t second = 0u;
@@ -143,7 +146,7 @@ TEST(cl_arena_blocks, a_block_given_back_is_handed_out_again)
   CHECK(blocks.invariants_hold()); }
 
 TEST(cl_arena_blocks, an_arena_with_no_room_refuses_rather_than_overlapping_what_is_live)
-{ ClArenaBlocks blocks(lock);
+{ ClArenaBlocks blocks(platform, lock);
   /* Two pages, so the third block of a page has nowhere to go. */
   blocks.lend(arena, 2u * 4096u);
   std::uint64_t first = 0u;
@@ -158,7 +161,7 @@ TEST(cl_arena_blocks, an_arena_with_no_room_refuses_rather_than_overlapping_what
   CHECK(blocks.invariants_hold());
 
   /* A block larger than the whole arena is refused whatever is live. */
-  ClArenaBlocks empty(lock);
+  ClArenaBlocks empty(platform, lock);
   empty.lend(arena, 2u * 4096u);
   std::uint64_t huge = 0xEEu;
   CHECK(!empty.take(3u * 4096u, huge));
@@ -168,7 +171,7 @@ TEST(cl_arena_blocks, an_arena_with_no_room_refuses_rather_than_overlapping_what
   CHECK(empty.invariants_hold()); }
 
 TEST(cl_arena_blocks, a_block_of_nothing_is_not_a_block)
-{ ClArenaBlocks blocks(lock);
+{ ClArenaBlocks blocks(platform, lock);
   blocks.lend(arena, sizeof arena);
   std::uint64_t offset = 0xEEu;
   CHECK(!blocks.take(0u, offset));
@@ -176,21 +179,40 @@ TEST(cl_arena_blocks, a_block_of_nothing_is_not_a_block)
   CHECK_EQ(blocks.live(), 0u);
   CHECK(blocks.invariants_hold()); }
 
-TEST(cl_arena_blocks, the_table_being_full_refuses_rather_than_forgetting_one)
-{ ClArenaBlocks blocks(lock);
+/* Affinity keeps hundreds of small host-accessible buffers alive: only the
+ * arena's bytes bound how many are backed here, never a count of rows. */
+TEST(cl_arena_blocks, backs_a_block_on_every_page_of_the_arena)
+{ ClArenaBlocks blocks(platform, lock);
   blocks.lend(roomy, sizeof roomy);
   std::uint64_t offset = 0u;
-  for (std::uint32_t index = 0u; index < ClArenaBlocks::max_blocks; ++index)
+  for (std::uint32_t index = 0u; index < many; ++index) {
       CHECK(blocks.take(16u, offset));
-  CHECK_EQ(blocks.live(), ClArenaBlocks::max_blocks);
+      CHECK_EQ(offset, std::uint64_t{index} * 4096u);
+  }
+  CHECK_EQ(blocks.live(), many);
   std::uint64_t one_more = 0xEEu;
   CHECK(!blocks.take(16u, one_more));
   CHECK_EQ(one_more, 0xEEu);
-  CHECK_EQ(blocks.live(), ClArenaBlocks::max_blocks);
+  CHECK(blocks.at(std::uint64_t{many - 1u} * 4096u, 16u) == roomy + std::uint64_t{many - 1u} * 4096u);
+  CHECK(blocks.invariants_hold()); }
+
+/* With no memory for the block's row the buffer is staged instead. */
+TEST(cl_arena_blocks, no_memory_for_a_row_refuses_and_keeps_every_block)
+{ ClArenaBlocks blocks(platform, lock);
+  blocks.lend(roomy, sizeof roomy);
+  std::uint64_t offset = 0u;
+  for (std::uint32_t index = 0u; index < 8u; ++index) CHECK(blocks.take(16u, offset));
+  platform.fail_allocation_at(1u);
+  std::uint64_t refused = 0xEEu;
+  CHECK(!blocks.take(16u, refused));
+  CHECK_EQ(refused, 0xEEu);
+  CHECK_EQ(blocks.live(), 8u);
+  CHECK(blocks.take(16u, offset));
+  CHECK_EQ(offset, 8u * 4096u);
   CHECK(blocks.invariants_hold()); }
 
 TEST(cl_arena_blocks, a_new_arena_forgets_every_block_of_the_old_one)
-{ ClArenaBlocks blocks(lock);
+{ ClArenaBlocks blocks(platform, lock);
   blocks.lend(arena, sizeof arena);
   std::uint64_t taken = 0u;
   CHECK(blocks.take(128u, taken));
@@ -208,7 +230,7 @@ TEST(cl_arena_blocks, a_new_arena_forgets_every_block_of_the_old_one)
  * on its own arena, because one broken state would mask the next. */
 TEST(cl_arena_blocks, the_invariant_catches_the_states_it_is_there_to_catch)
 { const auto broken = [](void (*corrupt)(ClArenaBlocks &)) {
-      ClArenaBlocks blocks(lock);
+      ClArenaBlocks blocks(platform, lock);
       blocks.lend(arena, sizeof arena);
       std::uint64_t first = 0u;
       std::uint64_t second = 0u;
@@ -224,7 +246,7 @@ TEST(cl_arena_blocks, the_invariant_catches_the_states_it_is_there_to_catch)
   CHECK(!broken(ClArenaBlocksProbe::rows_past_the_table)); }
 
 TEST(cl_arena_blocks, a_read_of_no_bytes_names_nothing)
-{ ClArenaBlocks blocks(lock);
+{ ClArenaBlocks blocks(platform, lock);
   blocks.lend(arena, sizeof arena);
   std::uint64_t taken = 0u;
   CHECK(blocks.take(128u, taken));
@@ -238,7 +260,7 @@ TEST(cl_arena_blocks, a_read_of_no_bytes_names_nothing)
  * are taken and given back by transfers on every application thread, and by
  * buffers made and released on others. */
 TEST(cl_arena_blocks, every_call_holds_the_lock_and_lets_it_go)
-{ ClArenaBlocks       blocks(lock);
+{ ClArenaBlocks       blocks(platform, lock);
   const std::uint32_t before = lock.acquisitions();
   blocks.lend(arena, sizeof arena);
   std::uint64_t offset = 0u;

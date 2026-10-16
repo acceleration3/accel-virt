@@ -37,11 +37,13 @@ cl_int ClIcdRoot::program_devices(ClObject &context, cl_uint num_devices, const 
     return CL_SUCCESS;
 }
 
-cl_int ClIcdRoot::program_list(ClObject &context, cl_uint count, const cl_program *programs, uint64_t *into)
+cl_int ClIcdRoot::program_list(ClObject &context, cl_uint count, const cl_program *programs, ClHostNumbers &room,
+                               uint64_t *&into)
 {
     AV_SCOPE("ClIcdRoot::program_list");
     if ((programs == nullptr) != (count == 0u)) return CL_INVALID_VALUE;
-    if (count > max_linked) return CL_OUT_OF_RESOURCES;
+    into = room.room(count);
+    if (into == nullptr) return CL_OUT_OF_HOST_MEMORY;
     for (cl_uint index = 0u; index < count; ++index) {
         ClObject *const named = judged(programs[index], ClObject::Kind::program);
         if (named == nullptr || named->context() != context.context()) return CL_INVALID_PROGRAM;
@@ -231,8 +233,9 @@ cl_int ClIcdRoot::compile_program(cl_program program, cl_uint num_devices, const
     if (!notify.valid() || (num_headers != 0u && header_names == nullptr)) return CL_INVALID_VALUE;
     const cl_int devices = program_devices(*held, num_devices, device_list);
     if (devices != CL_SUCCESS) return devices;
-    uint64_t     host_headers[max_linked] = {};
-    const cl_int listed = program_list(*held, num_headers, headers, host_headers);
+    ClHostNumbers host_headers_room(memory_);
+    uint64_t     *host_headers = nullptr;
+    const cl_int listed = program_list(*held, num_headers, headers, host_headers_room, host_headers);
     if (listed != CL_SUCCESS) return listed;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
@@ -255,8 +258,9 @@ cl_program ClIcdRoot::link_program(cl_context context, cl_uint num_devices, cons
     }
     cl_int judgement = !notify.valid() || num_inputs == 0u ? CL_INVALID_VALUE : CL_SUCCESS;
     if (judgement == CL_SUCCESS) judgement = program_devices(*held, num_devices, device_list);
-    uint64_t host_inputs[max_linked] = {};
-    if (judgement == CL_SUCCESS) judgement = program_list(*held, num_inputs, inputs, host_inputs);
+    ClHostNumbers host_inputs_room(memory_);
+    uint64_t     *host_inputs = nullptr;
+    if (judgement == CL_SUCCESS) judgement = program_list(*held, num_inputs, inputs, host_inputs_room, host_inputs);
     ClientTransport *const wire = wire_of(*held);
     if (judgement == CL_SUCCESS && wire == nullptr) judgement = CL_OUT_OF_RESOURCES;
     if (judgement != CL_SUCCESS) {
@@ -495,10 +499,13 @@ cl_int ClIcdRoot::set_kernel_exec_info(cl_kernel kernel, cl_kernel_exec_info nam
     if (name != CL_KERNEL_EXEC_INFO_SVM_PTRS) return CL_INVALID_VALUE;
     if (value == nullptr || bytes == 0u || bytes % sizeof(void *) != 0u) return CL_INVALID_VALUE;
     const size_t count = bytes / sizeof(void *);
-    if (count > max_linked) return CL_OUT_OF_RESOURCES;
+    /* No list of pointers a process could hold is longer. */
+    if (count > 0x3FFFFFFFu) return CL_INVALID_VALUE;
     /* Each the host address of the allocation it is in, as a pointer
      * argument crosses; one inside none is the application's mistake. */
-    uint64_t hosts[max_linked] = {};
+    ClHostNumbers   hosts_room(memory_);
+    uint64_t *const hosts = hosts_room.room(static_cast<uint32_t>(count));
+    if (hosts == nullptr) return CL_OUT_OF_HOST_MEMORY;
     for (size_t index = 0u; index < count; ++index) {
         const void *pointer = nullptr;
         __builtin_memcpy(&pointer, static_cast<const uint8_t *>(value) + index * sizeof pointer, sizeof pointer);

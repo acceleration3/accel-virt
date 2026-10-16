@@ -6,6 +6,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "icd/opencl/cl_arena_blocks.hpp"
 #include "icd/opencl/cl_staging_block.hpp"
 
@@ -20,11 +21,12 @@ alignas(4096) std::uint8_t arena[8u << 20];
 
 av::LockTrace           trace;
 av::RecordingThreadLock lock(trace, 'B');
+av::MockPlatform        platform;
 
 }  // namespace
 
 TEST(cl_staging_block, a_transfer_the_arena_has_room_for_is_staged_whole_in_pages)
-{ ClArenaBlocks blocks(lock);
+{ ClArenaBlocks blocks(platform, lock);
   blocks.lend(arena, sizeof arena);
   { ClStagingBlock staging(blocks);
     CHECK(staging.take((3u << 20) + 1u, ClStagingBlock::least));
@@ -41,7 +43,7 @@ TEST(cl_staging_block, a_transfer_the_arena_has_room_for_is_staged_whole_in_page
 /* More than `most` is `most`: the arena backs buffers too, and one transfer
  * must leave them room. */
 TEST(cl_staging_block, a_transfer_larger_than_most_takes_most)
-{ ClArenaBlocks blocks(lock);
+{ ClArenaBlocks blocks(platform, lock);
   blocks.lend(arena, sizeof arena);
   ClStagingBlock staging(blocks);
   CHECK(staging.take(ClStagingBlock::most + 1u, ClStagingBlock::least));
@@ -54,7 +56,7 @@ TEST(cl_staging_block, a_transfer_larger_than_most_takes_most)
 /* A crowded arena lends what it can, halving the ask, and never less than
  * `least`. */
 TEST(cl_staging_block, a_crowded_arena_lends_half_and_half_again_down_to_least)
-{ ClArenaBlocks blocks(lock);
+{ ClArenaBlocks blocks(platform, lock);
   blocks.lend(arena, 1u << 20);
   { ClStagingBlock staging(blocks);
     CHECK(staging.take(3u << 20, ClStagingBlock::least));
@@ -77,13 +79,13 @@ TEST(cl_staging_block, a_crowded_arena_lends_half_and_half_again_down_to_least)
 
 /* Not worth a block: less than `least`, and anything at all with no arena. */
 TEST(cl_staging_block, a_small_transfer_or_no_arena_is_not_staged)
-{ ClArenaBlocks blocks(lock);
+{ ClArenaBlocks blocks(platform, lock);
   blocks.lend(arena, sizeof arena);
   { ClStagingBlock staging(blocks);
     CHECK(!staging.take(ClStagingBlock::least - 1u, ClStagingBlock::least));
     CHECK(!staging.take(0u, ClStagingBlock::least));
     CHECK(staging.take(ClStagingBlock::least, ClStagingBlock::least)); }
-  ClArenaBlocks none(lock);
+  ClArenaBlocks none(platform, lock);
   ClStagingBlock staging(none);
   CHECK(!staging.take(1u << 20, ClStagingBlock::least));
   CHECK_EQ(none.live(), 0u); }
@@ -93,7 +95,7 @@ TEST(cl_staging_block, a_small_transfer_or_no_arena_is_not_staged)
  * whole, in one page, and a crowded arena is halved down to that floor. A
  * transfer of nothing is never staged. */
 TEST(cl_staging_block, a_caller_s_own_floor_stages_a_small_transfer)
-{ ClArenaBlocks blocks(lock);
+{ ClArenaBlocks blocks(platform, lock);
   blocks.lend(arena, sizeof arena);
   { ClStagingBlock staging(blocks);
     CHECK(!staging.take(0u, 1u));
@@ -102,7 +104,7 @@ TEST(cl_staging_block, a_caller_s_own_floor_stages_a_small_transfer)
     CHECK(staging.at() == arena); }
   { ClStagingBlock staging(blocks);
     CHECK(!staging.take(1000u, 1001u)); }
-  ClArenaBlocks crowded(lock);
+  ClArenaBlocks crowded(platform, lock);
   crowded.lend(arena, 8192u);
   std::uint64_t held = 0u;
   CHECK(crowded.take(4096u, held));

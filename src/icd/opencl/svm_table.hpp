@@ -8,10 +8,15 @@
  * is sent. The device bounds-checks it again when it arrives, because a guest
  * is not to be believed either.
  *
- * The mirrors come from the process heap and are this table's to free. */
+ * The mirrors come from the process heap and are this table's to free, as
+ * many as the application allocates: each kept by its base, and the bases
+ * kept sorted, so a pointer finds the allocation it is inside by a binary
+ * search. */
 #ifndef AV_CLICD_SVM_TABLE_HPP
 #define AV_CLICD_SVM_TABLE_HPP
 
+#include "core/support/growable_array.hpp"
+#include "core/support/keyed_slots.hpp"
 #include "icd/opencl/svm_allocation.hpp"
 
 #include <stddef.h>
@@ -28,19 +33,15 @@ struct SvmTableProbe;
 
 class SvmTable {
 public:
-    /* A context holding more shared allocations than this has had enough; the
-     * refusal lands on clSVMAlloc, which an application can see. */
-    static constexpr uint32_t max_allocations = 256u;
-
     explicit SvmTable(BlockSource &memory);
     ~SvmTable();
     SvmTable(const SvmTable &) = delete;
     SvmTable &operator=(const SvmTable &) = delete;
 
     /* Takes a mirror for what the host allocated at `host_base`, and answers
-     * it - what the application is handed. Null when there is no room, when
-     * the mirror cannot be had, for a host base of zero, and for no bytes at
-     * all. */
+     * it - what the application is handed. Null when there is no memory for
+     * the mirror or its row, for a host base of zero, and for no bytes at
+     * all; the refusal lands on clSVMAlloc, which an application can see. */
     void *take(uint64_t host_base, size_t bytes);
     /* Gives back what the application passed to clSVMFree, answering the host
      * address to free; 0 for a pointer that is not the base of a live
@@ -65,9 +66,15 @@ public:
 private:
     friend struct SvmTableProbe;
 
-    BlockSource  &memory_;
-    SvmAllocation allocations_[max_allocations];
-    uint32_t      live_;
+    uint64_t key_of(const void *address) const;
+    /* The row of the last base at or below `key` in bases_, or bases_.size(). */
+    uint32_t row_below(uint64_t key) const;
+
+    BlockSource                         &memory_;
+    /* Each allocation by the base of its mirror. */
+    KeyedSlots<uint64_t, SvmAllocation>  allocations_;
+    /* Every mirror's base, ascending. */
+    GrowableArray<uint64_t>              bases_;
 };
 
 }  // namespace av::clicd

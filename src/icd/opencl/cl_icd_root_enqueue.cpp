@@ -34,8 +34,9 @@ cl_int ClIcdRoot::settle(ClientTransport &wire, ClObject &queue, const ClWaitLis
     AV_SCOPE("ClIcdRoot::settle");
     GuestClContext *const context = queue.context();
     if (context == nullptr) return CL_INVALID_COMMAND_QUEUE;
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     const uint32_t kept = waits.blocks() ? waits.count() : without_unset_user_events(wire, waits, listed);
     if (kept == 0u) return drain_unless_idle(wire, queue);
@@ -119,8 +120,9 @@ cl_int ClIcdRoot::enqueue_copy_image_to_buffer(cl_command_queue queue, cl_mem im
     if (origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t                 produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
@@ -145,8 +147,9 @@ cl_int ClIcdRoot::enqueue_copy_buffer_to_image(cl_command_queue queue, cl_mem bu
     if (origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t                 produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
@@ -169,8 +172,9 @@ cl_int ClIcdRoot::enqueue_fill_image(cl_command_queue queue, cl_mem image, const
     if (colour == nullptr || origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t                 produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
@@ -188,9 +192,9 @@ cl_int ClIcdRoot::enqueue_migrate(cl_command_queue queue, cl_uint count, const c
     ClObject *const held = busied(queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     if (count == 0u || objects == nullptr) return CL_INVALID_VALUE;
-    /* The handles live on this call's stack, as a wait list's do. */
-    if (count > max_waited) return CL_OUT_OF_RESOURCES;
-    uint64_t named[max_waited] = {};
+    ClHostNumbers   named_room(memory_);
+    uint64_t *const named = named_room.room(count);
+    if (named == nullptr) return CL_OUT_OF_HOST_MEMORY;
     for (cl_uint index = 0u; index < count; ++index) {
         ClObject *const object = judged(objects[index], ClObject::Kind::mem);
         if (object == nullptr) return CL_INVALID_MEM_OBJECT;
@@ -199,8 +203,9 @@ cl_int ClIcdRoot::enqueue_migrate(cl_command_queue queue, cl_uint count, const c
     }
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t                 produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
@@ -477,8 +482,9 @@ cl_int ClIcdRoot::svm_memcpy(cl_command_queue queue, cl_bool blocking, void *to,
     GuestClContext *const  context = held->context();
     ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     /* An address inside an allocation, with the copy's whole extent inside it
      * too - the host judges the same and would refuse it otherwise. */
@@ -539,8 +545,9 @@ cl_int ClIcdRoot::svm_mem_fill(cl_command_queue queue, void *pointer, const void
         return CL_INVALID_VALUE;
     ClientTransport *const wire = context->wire();
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t                 produced = 0u;
     icd::UnansweredTransport unanswered(*wire);

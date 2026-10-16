@@ -33,7 +33,7 @@ public:
         platform, device, context, command_queue, program, mem, sampler, kernel, event
     };
 
-    ClObject(const cl_icd_dispatch &table, Kind kind, uint64_t wire, GuestClContext *context,
+    ClObject(const cl_icd_dispatch &table, BlockSource &memory, Kind kind, uint64_t wire, GuestClContext *context,
              ClObject *parent);
     ClObject(const ClObject &) = delete;
     ClObject &operator=(const ClObject &) = delete;
@@ -135,7 +135,7 @@ private:
     uint64_t               ordinal_;
     /* One each for the type, the flags, the size, the offset and whether it
      * uses shared memory: none is longer than a word. */
-    ClInfoAnswers<5u, sizeof(uint64_t)> fixed_;
+    ClInfoAnswers<sizeof(uint64_t)> fixed_;
 };
 
 }  // namespace av::clicd

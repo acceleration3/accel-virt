@@ -6,7 +6,7 @@
 
 namespace av::clicd {
 
-ClDevices::ClDevices(Kmt &kmt) : kmt_(kmt), devices_(), count_(0u), left_out_(0u), learnt_(false)
+ClDevices::ClDevices(BlockSource &memory, Kmt &kmt) : memory_(memory), kmt_(kmt), devices_(), count_(0u), left_out_(0u), learnt_(false)
 {
     AV_SCOPE("ClDevices::ClDevices");
 }
@@ -31,7 +31,7 @@ void ClDevices::learn(const AvgpuAdapters &adapters)
             continue;
         }
         /* Storage past count_ is empty, so the construct cannot be refused. */
-        static_cast<void>(devices_[count_].construct(kmt_, luid));
+        static_cast<void>(devices_[count_].construct(memory_, kmt_, luid));
         ++count_;
     }
 }

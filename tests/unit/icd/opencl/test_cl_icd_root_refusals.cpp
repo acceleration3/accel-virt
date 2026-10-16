@@ -803,6 +803,15 @@ TEST(cl_icd_root_refusals, an_open_that_fails_writes_no_count_it_was_not_given)
 namespace {
 
 /* How many buffers must exist before the next one needs a new chunk. */
+/* One arena-backed buffer made first, so the arena's rows are there before
+ * the table is counted, and so a second backed buffer allocates nothing. */
+bool back_one(ClIcdRig &rig, const Opened &opened)
+{
+    rig.host().cl_handle(0x6500u, CL_SUCCESS);
+    return rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, 256u, nullptr) !=
+           nullptr;
+}
+
 std::uint32_t buffers_until_the_table_grows(ClIcdRig &rig, const Opened &opened)
 {
     for (std::uint32_t made = 0u; made < 200u; ++made) {
@@ -827,6 +836,7 @@ TEST(cl_icd_root_refusals, an_arena_backed_buffer_the_guest_cannot_keep_gives_it
     Opened   opened(rig);
     CHECK(opened.made());
     if (!opened.made()) return;
+    CHECK(back_one(rig, opened));
     until = buffers_until_the_table_grows(rig, opened);
     CHECK(until != 0u); }
   if (until == 0u) return;
@@ -835,6 +845,7 @@ TEST(cl_icd_root_refusals, an_arena_backed_buffer_the_guest_cannot_keep_gives_it
   Opened   opened(rig);
   CHECK(opened.made());
   if (!opened.made()) return;
+  CHECK(back_one(rig, opened));
   for (std::uint32_t made = 0u; made < until; ++made) {
       rig.host().cl_handle(0x7000u + made, CL_SUCCESS);
       CHECK(rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE, 256u, nullptr) !=

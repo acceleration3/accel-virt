@@ -6,8 +6,8 @@
  * the destruction they are about is the ICD's own - the moment its object
  * table lets go of the object, which is after the host was told. The API
  * says the callbacks run in the reverse of the order they were registered in,
- * and that a registration may fail for want of memory, which is what the
- * fixed room answers past it.
+ * and that a registration may fail for want of memory, which is the only
+ * thing that refuses one.
  *
  * The owner calls every method under the lock its object table releases
  * under, so the callbacks due for an object are taken in the same hold that
@@ -17,11 +17,16 @@
 #ifndef AV_CLICD_CL_DESTRUCTOR_CALLBACKS_HPP
 #define AV_CLICD_CL_DESTRUCTOR_CALLBACKS_HPP
 
+#include "core/support/growable_array.hpp"
 #include "core/support/status.hpp"
 
 #include <CL/cl.h>
 
 #include <stdint.h>
+
+namespace av {
+class BlockSource;
+}  // namespace av
 
 namespace av::clicd {
 
@@ -30,8 +35,6 @@ public:
     using MemCallback = void(CL_CALLBACK *)(cl_mem object, void *user_data);
     using ContextCallback = void(CL_CALLBACK *)(cl_context object, void *user_data);
 
-    /* Registrations kept at once, over every object of the process. */
-    static constexpr uint32_t max_rows = 256u;
     /* Objects one release can destroy: the object and each one above it it
      * alone held, which the object kinds bound. */
     static constexpr uint32_t max_gone = 8u;
@@ -48,27 +51,30 @@ public:
     /* The callbacks one release made due, held until its lock is let go. */
     class Due {
     public:
-        Due();
+        explicit Due(BlockSource &memory);
         Due(const Due &) = delete;
         Due &operator=(const Due &) = delete;
 
         /* Each, in the order take put them. */
         void     run() const;
         uint32_t count() const;
+        /* Callbacks due that there was no memory to hold until the lock was
+         * let go: they never run. */
+        uint32_t lost() const;
 
     private:
         friend class ClDestructorCallbacks;
 
-        Row      rows_[max_rows];
-        uint32_t count_;
+        GrowableArray<Row> rows_;
+        uint32_t           lost_;
     };
 
-    ClDestructorCallbacks();
+    explicit ClDestructorCallbacks(BlockSource &memory);
     ClDestructorCallbacks(const ClDestructorCallbacks &) = delete;
     ClDestructorCallbacks &operator=(const ClDestructorCallbacks &) = delete;
 
-    /* Kept for `object`, whose handle the callback is handed; no_memory past
-     * max_rows. */
+    /* Kept for `object`, whose handle the callback is handed; no_memory when
+     * there is no memory to keep it. */
     [[nodiscard]] Status keep(cl_mem object, MemCallback callback, void *user_data);
     [[nodiscard]] Status keep(cl_context object, ContextCallback callback, void *user_data);
 
@@ -84,8 +90,7 @@ private:
     [[nodiscard]] Status keep_row(const Row &row);
     bool                 names_gone(const Row &row, const void *const *gone, uint32_t count) const;
 
-    Row      rows_[max_rows];
-    uint32_t count_;
+    GrowableArray<Row> rows_;
 };
 
 }  // namespace av::clicd

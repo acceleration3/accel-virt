@@ -17,6 +17,7 @@
 #ifndef AV_CLICD_GUEST_CL_CONTEXT_HPP
 #define AV_CLICD_GUEST_CL_CONTEXT_HPP
 
+#include "core/support/keyed_slots.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "guest/transport/kmt_blob_arena.hpp"
@@ -81,11 +82,6 @@ public:
      * Affinity does - fills the rest, and a transfer that finds no room goes
      * inline, a gapped tile read a row per round trip. */
     static constexpr uint64_t staging_reserve = uint64_t{8} << 20u;
-    /* Mappings one context may hold at once. An application that maps more
-     * buffers than this at the same time is told so at the map. Affinity
-     * keeps a small buffer mapped for each of its tiles while a document is
-     * open - more than 64 for a new, empty one. */
-    static constexpr uint32_t max_mappings = 4096u;
 
     /* `blocks_lock` is the arena blocks' own (ClArenaBlocks). */
     GuestClContext(icd::IcdConnection &connection, BlockSource &memory, icd::ThreadLock &send_lock,
@@ -177,6 +173,9 @@ public:
     /* The mapping `pointer` answers, or null for a pointer no live mapping
      * returned. */
     MappedRegion    *mapping_at(const void *pointer);
+    /* A region no live mapping holds, made when every one is held; null when
+     * there is no memory for one. */
+    MappedRegion    *free_mapping();
     /* Gives one back, freeing the staged block. */
     void             give_back_mapping(MappedRegion &region);
     /* Gives back every mapping of `buffer`, which is going: an application
@@ -207,7 +206,10 @@ private:
     SvmTable                             svm_;
     ClExternalMemory                     external_;
     ClD3d11Objects                       d3d11_;
-    MappedRegion                         mappings_[max_mappings];
+    /* As many mappings as the context has held at once - Affinity keeps a
+     * small buffer mapped for each tile of an open document - each at an
+     * address that holds while it lives, and reused once given back. */
+    KeyedSlots<uint32_t, MappedRegion>   mappings_;
     ClPropertyList                       properties_;
     ClContextNotify                      notify_;
     State                                state_;

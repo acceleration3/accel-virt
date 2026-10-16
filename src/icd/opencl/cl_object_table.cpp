@@ -7,7 +7,7 @@
 namespace av::clicd {
 
 ClObjectTable::ClObjectTable(BlockSource &memory, const cl_icd_dispatch &table, icd::ThreadLock &lock)
-    : tree_(memory), table_(table), lock_(lock)
+    : memory_(memory), tree_(memory), table_(table), lock_(lock)
 {
     AV_SCOPE("ClObjectTable::ClObjectTable");
 }
@@ -26,7 +26,7 @@ Status ClObjectTable::make(ClObject::Kind kind, uint64_t wire, GuestClContext *c
      * a context unbounded. */
     if (parent != nullptr && !tree_.parent_fits(kind, parent)) return Status::invalid_parameter;
     ClObject    *made = nullptr;
-    const Status created = tree_.make(made, table_, kind, wire, context, parent);
+    const Status created = tree_.make(made, table_, memory_, kind, wire, context, parent);
     if (created != Status::ok) return created;
     if (parent != nullptr) parent->adopt();
     object = made;

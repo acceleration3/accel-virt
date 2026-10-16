@@ -18,6 +18,7 @@
 #ifndef AV_CLICD_CL_EVENT_WATCHER_HPP
 #define AV_CLICD_CL_EVENT_WATCHER_HPP
 
+#include "core/support/growable_array.hpp"
 #include "icd/common/service_thread.hpp"
 #include "icd/opencl/cl_event_owner.hpp"
 #include "icd/opencl/cl_watched_event.hpp"
@@ -31,6 +32,7 @@ class LogSink;
 }  // namespace av
 
 namespace av {
+class BlockSource;
 class ClientTransport;
 class StateWriter;
 }  // namespace av
@@ -46,9 +48,6 @@ struct ClEventWatcherProbe;
 
 class ClEventWatcher final : public icd::ServiceLoop {
 public:
-    /* Events one process may be waiting on at once. Past this a registration
-     * is refused, which is a call the application can see fail. */
-    static constexpr uint32_t max_registrations = 256u;
     /* Events still running that one turn asks about before it pauses. Each
      * ask is a round trip over the context's one transport, which every
      * application thread shares: Affinity registers a callback on every
@@ -69,15 +68,17 @@ public:
     /* `lock` is the ICD's: the table is written by application threads and
      * read by the watcher's own, so both hold it while they touch a row -
      * and never while a callback runs or the host is asked. */
-    ClEventWatcher(icd::ServiceThread &thread, LogSink &log, icd::ThreadLock &lock, ClEventOwner &owner);
+    ClEventWatcher(BlockSource &memory, icd::ServiceThread &thread, LogSink &log, icd::ThreadLock &lock,
+                   ClEventOwner &owner);
     ~ClEventWatcher();
     ClEventWatcher(const ClEventWatcher &) = delete;
     ClEventWatcher &operator=(const ClEventWatcher &) = delete;
 
     /* What clSetEventCallback registers. `event` is the object the
      * application holds, and `wire` the number the host knows it by; the
-     * transport is the one its context sends on. CL_OUT_OF_RESOURCES when
-     * there is no room, CL_INVALID_VALUE for a callback of nothing.
+     * transport is the one its context sends on. CL_OUT_OF_HOST_MEMORY when
+     * there is no memory for its row, CL_INVALID_VALUE for a callback of
+     * nothing.
      *
      * The caller has already taken the reference this gives back through the
      * owner; a refusal here leaves it to the caller to drop.
@@ -135,17 +136,33 @@ private:
     /* Runs `asked`'s callback if the row at `slot` is still that
      * registration, and answers whether it ran. */
     bool deliver(uint32_t slot, const ClWatchedEvent &asked, cl_int status);
-    /* Sets `oldest[slot]` for the registrations a turn may ask about, and
-     * answers whether every registration is driven. */
-    bool mark_oldest(bool *oldest);
+    /* Marks the registrations a turn may ask about, and answers whether
+     * every registration is driven. With the lock held. */
+    bool mark_oldest();
 
     icd::ServiceThread &thread_;
     LogSink       &log_;
     icd::ThreadLock    &lock_;
     ClEventOwner       &owner_;
-    ClWatchedEvent      registrations_[max_registrations];
-    /* Whether each row's context is one the driver wakes. */
-    bool                driven_[max_registrations];
+    struct Row {
+        ClWatchedEvent registration_;
+        /* Whether the row's context is one the driver wakes. */
+        bool           driven_;
+        /* Whether this turn may ask about it. */
+        bool           oldest_;
+    };
+
+    /* The oldest registered event a turn has met of one queue. */
+    struct QueueOldest {
+        const ClObject *queue_;
+        uint32_t        row_;
+    };
+
+    /* As many as the application has registered at once, reused once free:
+     * rows only grow, so a row number holds while the lock is let go. */
+    GrowableArray<Row>         rows_;
+    /* A turn's queues, kept so a turn allocates only past the most yet. */
+    GrowableArray<QueueOldest> queues_;
     uint32_t            held_;
     uint64_t            delivered_;
     /* The slot the next turn starts asking from. */

@@ -30,6 +30,7 @@
 #include "icd/common/shared_handles.hpp"
 #include "icd/opencl/cl_blocking_wait.hpp"
 #include "icd/opencl/cl_destructor_callbacks.hpp"
+#include "icd/opencl/cl_host_numbers.hpp"
 #include "icd/opencl/cl_devices.hpp"
 #include "icd/opencl/cl_dispatch_table.hpp"
 #include "icd/opencl/cl_event_owner.hpp"
@@ -81,24 +82,12 @@ struct ClIcdRootProbe;
 
 class ClIcdRoot final : public StateReporter, public ClEventOwner {
 public:
-    /* Events one clWaitForEvents may name. A wait allocates nothing, so the
-     * handles live on its stack and this is what bounds them; an application
-     * asking for more is told, which is a refusal it can see. */
-    static constexpr cl_uint max_waited = 64u;
-    /* Programs one clLinkProgram may name, and headers one clCompileProgram
-     * may: their host numbers live on the calling thread's stack. */
-    static constexpr cl_uint max_linked = 64u;
     /* Room for the host's CL_DEVICE_EXTENSIONS while it is intersected with
      * the policy. It lives on the asking thread's stack, so it is bounded
      * here rather than allocated; the longest list any host driver answers is
      * a few hundred bytes, and a host whose list will not fit is a host this
      * cannot confirm a single extension against, which is its own answer. */
     static constexpr size_t  host_extensions_bytes = 4096u;
-    /* The host's device answers kept (ClInfoAnswers), keyed by the device
-     * they are about: more than the properties an application asks of two
-     * devices, each as long as the longest - the extension list - so every
-     * one the host gives is kept. */
-    static constexpr uint32_t device_answers = 96u;
 
     /* `objects_lock` is the object table's own (ClObjectTable): every entry
      * point looks its arguments up there without `lock`. `blocks_lock` is
@@ -743,11 +732,12 @@ private:
      * was asked for: a marker in the queue, which is complete as soon as the
      * host looks. CL_SUCCESS with nothing made when `event` is null. */
     cl_int           marker_event(ClientTransport &wire, ClObject &queue, cl_event *event);
-    /* The host's numbers for an application's wait list, into `into` (room for
-     * max_waited): CL_INVALID_EVENT_WAIT_LIST for a list the API refuses or an
-     * event of another context, CL_OUT_OF_RESOURCES past max_waited. */
-    cl_int           wait_list(GuestClContext &context, cl_uint count, const cl_event *events,
-                               uint64_t *into);
+    /* The host's numbers for an application's wait list, into `into`, which
+     * points into `room`: CL_INVALID_EVENT_WAIT_LIST for a list the API
+     * refuses or an event of another context, CL_OUT_OF_HOST_MEMORY for one
+     * there is no memory to hold. */
+    cl_int           wait_list(GuestClContext &context, cl_uint count, const cl_event *events, ClHostNumbers &room,
+                               uint64_t *&into);
     /* The share name of the OpenGL context `list` names, into `share`: 0 for a
      * list naming none, CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR for one that
      * names a context this process's OpenGL ICD cannot vouch for. */
@@ -760,10 +750,12 @@ private:
      * the context's one device; CL_INVALID_VALUE or CL_INVALID_DEVICE
      * otherwise. */
     cl_int           program_devices(ClObject &context, cl_uint num_devices, const cl_device_id *device_list);
-    /* The host's numbers for `count` programs of `context`, into `into` (room
-     * for max_linked): CL_INVALID_VALUE for a list the API refuses,
-     * CL_INVALID_PROGRAM for one not a program of `context`. */
-    cl_int           program_list(ClObject &context, cl_uint count, const cl_program *programs, uint64_t *into);
+    /* The host's numbers for `count` programs of `context`, into `into`,
+     * which points into `room`: CL_INVALID_VALUE for a list the API refuses,
+     * CL_INVALID_PROGRAM for one not a program of `context`,
+     * CL_OUT_OF_HOST_MEMORY for one there is no memory to hold. */
+    cl_int           program_list(ClObject &context, cl_uint count, const cl_program *programs, ClHostNumbers &room,
+                                  uint64_t *&into);
     /* CL_PROGRAM_BINARIES into the application's pointers. */
     cl_int           program_binaries(ClientTransport &wire, ClObject &program, size_t value_bytes, void *value,
                                       size_t *size_ret);
@@ -851,7 +843,9 @@ private:
     icd::ThreadLock       &blocks_lock_;
     ClEventWatcher         watcher_;
     ClBlockingWait         waits_;
-    ClInfoAnswers<device_answers, host_extensions_bytes> device_answers_;
+    /* The host's device answers, keyed by the device they are about, each
+     * as long as the longest - the extension list. */
+    ClInfoAnswers<host_extensions_bytes> device_answers_;
     ClPendingReads         reads_;
     ClRefusalLog           refusals_;
     /* Under lock_, as the object releases that make them due are. */

@@ -5,7 +5,8 @@
 
 namespace av::clicd {
 
-ClArenaBlocks::ClArenaBlocks(icd::ThreadLock &lock) : lock_(lock), base_(nullptr), bytes_(0u), blocks_(alignment)
+ClArenaBlocks::ClArenaBlocks(BlockSource &memory, icd::ThreadLock &lock)
+    : lock_(lock), base_(nullptr), bytes_(0u), blocks_(memory, alignment)
 {
     AV_SCOPE("ClArenaBlocks::ClArenaBlocks");
 }

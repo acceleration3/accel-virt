@@ -4,7 +4,7 @@
 
 namespace av::clicd {
 
-ClDestructorCallbacks::Due::Due() : rows_{}, count_(0u)
+ClDestructorCallbacks::Due::Due(BlockSource &memory) : rows_(memory, Pool::paged), lost_(0u)
 {
     AV_SCOPE("ClDestructorCallbacks::Due::Due");
 }
@@ -12,8 +12,7 @@ ClDestructorCallbacks::Due::Due() : rows_{}, count_(0u)
 void ClDestructorCallbacks::Due::run() const
 {
     AV_SCOPE("ClDestructorCallbacks::Due::run");
-    for (uint32_t index = 0u; index < count_; ++index) {
-        const Row &row = rows_[index];
+    for (const Row &row : rows_) {
         if (row.mem_ != nullptr)
             row.mem_(static_cast<cl_mem>(const_cast<void *>(row.object_)), row.user_data_);
         else
@@ -24,10 +23,16 @@ void ClDestructorCallbacks::Due::run() const
 uint32_t ClDestructorCallbacks::Due::count() const
 {
     AV_SCOPE("ClDestructorCallbacks::Due::count");
-    return count_;
+    return rows_.size();
 }
 
-ClDestructorCallbacks::ClDestructorCallbacks() : rows_{}, count_(0u)
+uint32_t ClDestructorCallbacks::Due::lost() const
+{
+    AV_SCOPE("ClDestructorCallbacks::Due::lost");
+    return lost_;
+}
+
+ClDestructorCallbacks::ClDestructorCallbacks(BlockSource &memory) : rows_(memory, Pool::paged)
 {
     AV_SCOPE("ClDestructorCallbacks::ClDestructorCallbacks");
 }
@@ -48,9 +53,7 @@ Status ClDestructorCallbacks::keep_row(const Row &row)
 {
     AV_SCOPE("ClDestructorCallbacks::keep_row");
     if (row.object_ == nullptr || (row.mem_ == nullptr && row.context_ == nullptr)) return Status::invalid_parameter;
-    if (count_ == max_rows) return Status::no_memory;
-    rows_[count_++] = row;
-    return Status::ok;
+    return rows_.append(row);
 }
 
 bool ClDestructorCallbacks::names_gone(const Row &row, const void *const *gone, uint32_t count) const
@@ -68,29 +71,29 @@ void ClDestructorCallbacks::take(const void *const *gone, uint32_t count, Due &d
     /* Object by object in the order they went - a buffer before the context
      * it held - and each object's latest registered first. */
     for (uint32_t object = 0u; object < count; ++object) {
-        for (uint32_t index = count_; index > 0u; --index) {
-            if (rows_[index - 1u].object_ == gone[object]) due.rows_[due.count_++] = rows_[index - 1u];
+        for (uint32_t index = rows_.size(); index > 0u; --index) {
+            if (rows_.at(index - 1u).object_ != gone[object]) continue;
+            if (due.rows_.append(rows_.at(index - 1u)) != Status::ok) due.lost_++;
         }
     }
     uint32_t kept = 0u;
-    for (uint32_t index = 0u; index < count_; ++index) {
-        if (!names_gone(rows_[index], gone, count)) rows_[kept++] = rows_[index];
+    for (uint32_t index = 0u; index < rows_.size(); ++index) {
+        if (!names_gone(rows_.at(index), gone, count)) rows_.at(kept++) = rows_.at(index);
     }
-    count_ = kept;
+    rows_.truncate(kept);
 }
 
 uint32_t ClDestructorCallbacks::kept() const
 {
     AV_SCOPE("ClDestructorCallbacks::kept");
-    return count_;
+    return rows_.size();
 }
 
 bool ClDestructorCallbacks::invariants_hold() const
 {
     AV_SCOPE("ClDestructorCallbacks::invariants_hold");
-    if (count_ > max_rows) return false;
-    for (uint32_t index = 0u; index < count_; ++index) {
-        const Row &row = rows_[index];
+    if (!rows_.invariants_hold()) return false;
+    for (const Row &row : rows_) {
         /* Exactly one callback, of the kind its registration named. */
         if (row.object_ == nullptr || (row.mem_ == nullptr) == (row.context_ == nullptr)) return false;
     }

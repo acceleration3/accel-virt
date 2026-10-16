@@ -19,6 +19,7 @@
 #include <stdint.h>
 
 namespace av {
+class BlockSource;
 class Kmt;
 class StateWriter;
 }  // namespace av
@@ -31,7 +32,7 @@ class GuestClContext;
 class ClDevice {
 public:
     /* On the avgpu adapter whose LUID is `luid`. */
-    ClDevice(Kmt &kmt, uint64_t luid);
+    ClDevice(BlockSource &memory, Kmt &kmt, uint64_t luid);
     ClDevice(const ClDevice &) = delete;
     ClDevice &operator=(const ClDevice &) = delete;
 

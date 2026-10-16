@@ -5,6 +5,7 @@
 #ifndef AV_CLICD_CL_DEVICES_HPP
 #define AV_CLICD_CL_DEVICES_HPP
 
+#include "guest/kmt/avgpu_adapters.hpp"
 #include "core/support/object_storage.hpp"
 #include "icd/opencl/cl_device.hpp"
 
@@ -12,6 +13,7 @@
 
 namespace av {
 class AvgpuAdapters;
+class BlockSource;
 class Kmt;
 class StateWriter;
 }  // namespace av
@@ -24,9 +26,9 @@ class GuestClContext;
 class ClDevices {
 public:
     /* One per avgpu adapter, of which a guest has one per host GPU. */
-    static constexpr uint32_t max_devices = 8u;
+    static constexpr uint32_t max_devices = AvgpuAdapters::max_adapters;
 
-    explicit ClDevices(Kmt &kmt);
+    ClDevices(BlockSource &memory, Kmt &kmt);
     ~ClDevices();
     ClDevices(const ClDevices &) = delete;
     ClDevices &operator=(const ClDevices &) = delete;
@@ -49,6 +51,7 @@ public:
     bool invariants_hold() const;
 
 private:
+    BlockSource &memory_;
     Kmt                    &kmt_;
     ObjectStorage<ClDevice> devices_[max_devices];
     uint32_t                count_;

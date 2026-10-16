@@ -9,8 +9,10 @@
 
 namespace av::clicd {
 
-ClEventWatcher::ClEventWatcher(icd::ServiceThread &thread, LogSink &log, icd::ThreadLock &lock, ClEventOwner &owner)
-    : thread_(thread), log_(log), lock_(lock), owner_(owner), registrations_(), driven_(), held_(0u), delivered_(0u), next_(0u)
+ClEventWatcher::ClEventWatcher(BlockSource &memory, icd::ServiceThread &thread, LogSink &log, icd::ThreadLock &lock,
+                               ClEventOwner &owner)
+    : thread_(thread), log_(log), lock_(lock), owner_(owner), rows_(memory, Pool::paged), queues_(memory, Pool::paged),
+      held_(0u), delivered_(0u), next_(0u)
 {
     AV_SCOPE("ClEventWatcher::ClEventWatcher");
 }
@@ -28,18 +30,18 @@ cl_int ClEventWatcher::watch(ClObject *event, uint64_t wire, ClientTransport *wi
                              cl_int status_wanted, ClWatchedEvent::Notify notify, void *user_data, bool driven)
 {
     AV_SCOPE("ClEventWatcher::watch");
+    ClWatchedEvent registration;
+    if (!registration.take(event, wire, wire_of_context, status_wanted, notify, user_data)) return CL_INVALID_VALUE;
     lock_.acquire();
     uint32_t slot = 0u;
-    while (slot < max_registrations && registrations_[slot].held()) ++slot;
-    if (slot == max_registrations) {
+    while (slot < rows_.size() && rows_.at(slot).registration_.held()) ++slot;
+    const Row row{registration, driven, false};
+    if (slot < rows_.size()) {
+        rows_.at(slot) = row;
+    } else if (rows_.append(row) != Status::ok) {
         lock_.release();
-        return CL_OUT_OF_RESOURCES;
+        return CL_OUT_OF_HOST_MEMORY;
     }
-    if (!registrations_[slot].take(event, wire, wire_of_context, status_wanted, notify, user_data)) {
-        lock_.release();
-        return CL_INVALID_VALUE;
-    }
-    driven_[slot] = driven;
     ++held_;
     lock_.release();
     /* The thread starts with the first registration, so a process that never
@@ -52,7 +54,7 @@ cl_int ClEventWatcher::watch(ClObject *event, uint64_t wire, ClientTransport *wi
         thread_.wake();
     } else if (started != Status::ok) {
         lock_.acquire();
-        registrations_[slot].give_up();
+        rows_.at(slot).registration_.give_up();
         --held_;
         lock_.release();
         log_.write("avcl: no thread to watch events on");
@@ -118,62 +120,60 @@ bool ClEventWatcher::turn()
         thread_.rest();
         return true;
     }
-    bool oldest[max_registrations] = {};
-    const bool driven = mark_oldest(oldest);
+    lock_.acquire();
+    const bool     driven = mark_oldest();
+    const uint32_t rows = rows_.size();
+    lock_.release();
     uint32_t asks = 0u;
     bool     ran = false;
     uint32_t step = 0u;
-    for (; step < max_registrations && asks < asks_per_turn; ++step) {
-        const uint32_t slot = (next_ + step) % max_registrations;
-        if (!oldest[slot]) continue;
+    for (; step < rows && asks < asks_per_turn; ++step) {
+        const uint32_t slot = (next_ + step) % rows;
         lock_.acquire();
-        const ClWatchedEvent asked = registrations_[slot];
+        const Row asked = rows_.at(slot);
         lock_.release();
-        if (!asked.held()) continue;
+        if (!asked.oldest_ || !asked.registration_.held()) continue;
         cl_int status = CL_QUEUED;
-        if (!completed(asked, status)) {
+        if (!completed(asked.registration_, status)) {
             ++asks;
             continue;
         }
-        if (deliver(slot, asked, status)) ran = true;
+        if (deliver(slot, asked.registration_, status)) ran = true;
     }
-    next_ = (next_ + step) % max_registrations;
-    if (!ran) thread_.pause(driven && step == max_registrations);
+    next_ = rows == 0u ? 0u : (next_ + step) % rows;
+    if (!ran) thread_.pause(driven && step == rows);
     return true;
 }
 
 /* Each queue's registration with the lowest place on it, and every one of no
  * queue. A queue's events are few next to the table, so the queues seen are a
- * short list searched as the table is walked. */
-bool ClEventWatcher::mark_oldest(bool *oldest)
+ * short list searched as the table is walked; one there is no memory to list
+ * is marked as it is met, which only asks about it sooner than it needs. */
+bool ClEventWatcher::mark_oldest()
 {
     AV_SCOPE("ClEventWatcher::mark_oldest");
-    const ClObject *queues[max_registrations] = {};
-    uint32_t        best[max_registrations] = {};
-    uint32_t        seen = 0u;
-    bool            driven = true;
-    lock_.acquire();
-    for (uint32_t slot = 0u; slot < max_registrations; ++slot) {
-        const ClWatchedEvent &row = registrations_[slot];
-        if (!row.held()) continue;
-        driven = driven && driven_[slot];
-        const ClObject *const event = row.event();
+    queues_.truncate(0u);
+    bool driven = true;
+    for (uint32_t slot = 0u; slot < rows_.size(); ++slot) {
+        Row &row = rows_.at(slot);
+        row.oldest_ = false;
+        if (!row.registration_.held()) continue;
+        driven = driven && row.driven_;
+        const ClObject *const event = row.registration_.event();
         const ClObject *const queue = event->parent();
         if (queue == nullptr || queue->kind() != ClObject::Kind::command_queue || event->ordinal() == 0u) {
-            oldest[slot] = true;
+            row.oldest_ = true;
             continue;
         }
         uint32_t known = 0u;
-        while (known < seen && queues[known] != queue) ++known;
-        if (known == seen) {
-            queues[seen] = queue;
-            best[seen++] = slot;
-        } else if (event->ordinal() < registrations_[best[known]].event()->ordinal()) {
-            best[known] = slot;
+        while (known < queues_.size() && queues_.at(known).queue_ != queue) ++known;
+        if (known == queues_.size()) {
+            if (queues_.append(QueueOldest{queue, slot}) != Status::ok) row.oldest_ = true;
+        } else if (event->ordinal() < rows_.at(queues_.at(known).row_).registration_.event()->ordinal()) {
+            queues_.at(known).row_ = slot;
         }
     }
-    lock_.release();
-    for (uint32_t known = 0u; known < seen; ++known) oldest[best[known]] = true;
+    for (const QueueOldest &oldest : queues_) rows_.at(oldest.row_).oldest_ = true;
     return driven;
 }
 
@@ -185,10 +185,10 @@ bool ClEventWatcher::deliver(uint32_t slot, const ClWatchedEvent &asked, cl_int 
      * callback that releases its own event, or the context it belongs to, is
      * releasing something this is no longer holding. */
     lock_.acquire();
-    const bool still = registrations_[slot].held() && registrations_[slot].event() == asked.event() &&
-                       registrations_[slot].wire() == asked.wire();
+    ClWatchedEvent &row = rows_.at(slot).registration_;
+    const bool      still = row.held() && row.event() == asked.event() && row.wire() == asked.wire();
     if (still) {
-        registrations_[slot].give_up();
+        row.give_up();
         --held_;
         ++delivered_;
     }
@@ -211,11 +211,9 @@ bool ClEventWatcher::deliver(uint32_t slot, const ClWatchedEvent &asked, cl_int 
 void ClEventWatcher::forget_context(const ClientTransport *wire_of_context)
 {
     AV_SCOPE("ClEventWatcher::forget_context");
-    for (uint32_t slot = 0u; slot < max_registrations; ++slot) {
-        if (!registrations_[slot].held() || registrations_[slot].transport() != wire_of_context) {
-            continue;
-        }
-        registrations_[slot].give_up();
+    for (Row &row : rows_) {
+        if (!row.registration_.held() || row.registration_.transport() != wire_of_context) continue;
+        row.registration_.give_up();
         --held_;
     }
 }
@@ -245,13 +243,12 @@ void ClEventWatcher::report(StateWriter &writer) const
 bool ClEventWatcher::invariants_hold() const
 {
     AV_SCOPE("ClEventWatcher::invariants_hold");
-    if (held_ > max_registrations) return false;
     uint32_t held = 0u;
-    for (uint32_t slot = 0u; slot < max_registrations; ++slot) {
-        if (!registrations_[slot].invariants_hold()) return false;
-        if (registrations_[slot].held()) ++held;
+    for (const Row &row : rows_) {
+        if (!row.registration_.invariants_hold()) return false;
+        if (row.registration_.held()) ++held;
     }
-    return held == held_;
+    return held == held_ && rows_.invariants_hold() && queues_.invariants_hold();
 }
 
 }  // namespace av::clicd

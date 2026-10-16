@@ -21,6 +21,10 @@
 
 #include <stdint.h>
 
+namespace av {
+class BlockSource;
+}  // namespace av
+
 namespace av::icd {
 class ThreadLock;
 }  // namespace av::icd
@@ -31,15 +35,10 @@ struct ClArenaBlocksProbe;
 
 class ClArenaBlocks {
 public:
-    /* Buffers one context may have backed by its arena at once. Affinity
-     * keeps hundreds of small host-accessible buffers alive and maps each
-     * every frame; past this each is staged, and its map and unmap are a
-     * read and a write over the wire. */
-    static constexpr uint32_t max_blocks = 1024u;
     /* What every block's offset and length are a whole number of. */
     static constexpr uint64_t alignment = 4096u;
 
-    explicit ClArenaBlocks(icd::ThreadLock &lock);
+    ClArenaBlocks(BlockSource &memory, icd::ThreadLock &lock);
     ClArenaBlocks(const ClArenaBlocks &) = delete;
     ClArenaBlocks &operator=(const ClArenaBlocks &) = delete;
 
@@ -49,8 +48,8 @@ public:
     bool ready() const;
 
     /* An offset with room for `bytes`, or false with `offset` untouched: for
-     * no arena, a block of nothing, a table with no row left, and an arena
-     * with no gap big enough. The caller stages that buffer instead. */
+     * no arena, a block of nothing, no memory for its row, and an arena with
+     * no gap big enough. The caller stages that buffer instead. */
     [[nodiscard]] bool take(uint64_t bytes, uint64_t &offset);
     /* Forgets the block at `offset`. An offset no block holds is ignored. */
     void               give_back(uint64_t offset);
@@ -70,7 +69,7 @@ private:
     uint8_t                         *base_;
     uint64_t                         bytes_;
     /* The blocks, first fit over the arena (RangeTable). */
-    icd::RangeTable<max_blocks>      blocks_;
+    icd::RangeTable                  blocks_;
 };
 
 }  // namespace av::clicd

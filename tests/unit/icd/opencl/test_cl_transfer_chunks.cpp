@@ -6,6 +6,7 @@
 #include "harness/icd/cl_transfer_host.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "icd/opencl/cl_arena_blocks.hpp"
 #include "icd/opencl/cl_buffer_rect.hpp"
 #include "icd/opencl/cl_image_region.hpp"
@@ -30,8 +31,9 @@ constexpr std::uint64_t queue = 0x6500u;
 
 av::LockTrace           trace;
 av::RecordingThreadLock lock(trace, 'B');
+av::MockPlatform        platform;
 /* A context with no arena, whose transfers all go inline. */
-ClArenaBlocks inline_only(lock);
+ClArenaBlocks inline_only(platform, lock);
 constexpr std::size_t   element = ClTransferHost::element_bytes;
 
 /* Memory of the application's, filled with a marker a transfer must not leave
@@ -446,7 +448,7 @@ namespace {
 class Arena {
 public:
     Arena(ClTransferHost &host, std::size_t bytes)
-        : memory_(static_cast<std::uint8_t *>(std::aligned_alloc(4096u, bytes))), blocks_(lock)
+        : memory_(static_cast<std::uint8_t *>(std::aligned_alloc(4096u, bytes))), blocks_(platform, lock)
     {
         blocks_.lend(memory_, bytes);
         host.lend(memory_, bytes);

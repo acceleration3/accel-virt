@@ -19,8 +19,8 @@ GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memo
       link_(connection), gl_share_(0u), wakes_(false),
       channel_(memory, log, "avcl: ", icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes),
                send_lock),
-      blocks_(blocks_lock), staging_(blocks_lock),
-      svm_(memory), external_(handles, memory, log), d3d11_(memory), mappings_(), properties_(), notify_(), state_(State::created)
+      blocks_(memory, blocks_lock), staging_(memory, blocks_lock),
+      svm_(memory), external_(handles, memory, log), d3d11_(memory), mappings_(memory, Pool::paged), properties_(), notify_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
 }
@@ -117,7 +117,7 @@ void GuestClContext::teardown()
     wakes_ = false;
     /* A buffer released with a mapping live keeps the mapping's memory until
      * the unmap, so the blocks go here rather than with the buffer. */
-    for (uint32_t slot = 0u; slot < max_mappings; ++slot) give_back_mapping(mappings_[slot]);
+    mappings_.for_each([this](uint32_t, MappedRegion &region) { give_back_mapping(region); });
     svm_.give_back_all();
     /* Before the transport goes, and only while it can still carry a release:
      * the device counts this context as a holder of every object it opened,
@@ -209,9 +209,8 @@ uint8_t *GuestClContext::take_mapping(uint64_t buffer, uint64_t host, size_t off
 {
     AV_SCOPE("GuestClContext::take_mapping");
     if (buffer == 0u || host == 0u || bytes == 0u) return nullptr;
-    uint32_t slot = 0u;
-    while (slot < max_mappings && mappings_[slot].held()) ++slot;
-    if (slot == max_mappings) return nullptr;
+    MappedRegion *const region = free_mapping();
+    if (region == nullptr) return nullptr;
     uint8_t *const block = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
     if (block == nullptr) return nullptr;
     /* A write-invalidate map is never read from the host, and a read may
@@ -219,7 +218,7 @@ uint8_t *GuestClContext::take_mapping(uint64_t buffer, uint64_t host, size_t off
      * so it reads zeros, never what the heap last held there. OpenGL's
      * staged maps do the same (BufferMapping). */
     __builtin_memset(block, 0, bytes);
-    mappings_[slot].take(buffer, host, offset, bytes, flags, block, MappedRegion::Memory::staged);
+    region->take(buffer, host, offset, bytes, flags, block, MappedRegion::Memory::staged);
     return block;
 }
 
@@ -230,14 +229,13 @@ uint8_t *GuestClContext::take_image_mapping(uint64_t image, const size_t *origin
     const ClImageRegion layout(origin, region, 0u, 0u, element_bytes);
     if (image == 0u || !layout.valid()) return nullptr;
     const size_t bytes = layout.slice_pitch() * layout.slices();
-    uint32_t     slot = 0u;
-    while (slot < max_mappings && mappings_[slot].held()) ++slot;
-    if (slot == max_mappings) return nullptr;
+    MappedRegion *const mapping = free_mapping();
+    if (mapping == nullptr) return nullptr;
     uint8_t *const block = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
     if (block == nullptr) return nullptr;
     __builtin_memset(block, 0, bytes);
-    mappings_[slot].take(image, 0u, 0u, bytes, flags, block, MappedRegion::Memory::staged);
-    mappings_[slot].place_in_image(origin, region, element_bytes);
+    mapping->take(image, 0u, 0u, bytes, flags, block, MappedRegion::Memory::staged);
+    mapping->place_in_image(origin, region, element_bytes);
     return block;
 }
 
@@ -246,15 +244,14 @@ MappedRegion *GuestClContext::take_shared_mapping(uint64_t buffer, uint64_t host
 {
     AV_SCOPE("GuestClContext::take_shared_mapping");
     if (buffer == 0u || host == 0u || bytes == 0u || at == nullptr) return nullptr;
-    uint32_t slot = 0u;
-    while (slot < max_mappings && mappings_[slot].held()) ++slot;
-    if (slot == max_mappings) return nullptr;
+    MappedRegion *const region = free_mapping();
+    if (region == nullptr) return nullptr;
     /* Not staged: no block was allocated for it, so none is freed with it,
      * and the unmap has nothing to write back. The flags are the map's, but
      * they change nothing here - what a write through this mapping reaches
      * is the buffer itself. */
-    mappings_[slot].take(buffer, host, offset, bytes, 0u, at, MappedRegion::Memory::shared);
-    return &mappings_[slot];
+    region->take(buffer, host, offset, bytes, 0u, at, MappedRegion::Memory::shared);
+    return region;
 }
 
 uint8_t *GuestClContext::take_application_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,
@@ -262,20 +259,29 @@ uint8_t *GuestClContext::take_application_mapping(uint64_t buffer, uint64_t host
 {
     AV_SCOPE("GuestClContext::take_application_mapping");
     if (buffer == 0u || host == 0u || bytes == 0u || at == nullptr) return nullptr;
-    uint32_t slot = 0u;
-    while (slot < max_mappings && mappings_[slot].held()) ++slot;
-    if (slot == max_mappings) return nullptr;
-    mappings_[slot].take(buffer, host, offset, bytes, flags, at, MappedRegion::Memory::application);
+    MappedRegion *const region = free_mapping();
+    if (region == nullptr) return nullptr;
+    region->take(buffer, host, offset, bytes, flags, at, MappedRegion::Memory::application);
     return at;
 }
 
 MappedRegion *GuestClContext::mapping_at(const void *pointer)
 {
     AV_SCOPE("GuestClContext::mapping_at");
-    for (uint32_t slot = 0u; slot < max_mappings; ++slot) {
-        if (mappings_[slot].answers(pointer)) return &mappings_[slot];
-    }
+    for (uint32_t slot = mappings_.next_live(0u); slot != mappings_.no_slot; slot = mappings_.next_live(slot + 1u))
+        if (mappings_.at(slot)->answers(pointer)) return mappings_.at(slot);
     return nullptr;
+}
+
+MappedRegion *GuestClContext::free_mapping()
+{
+    AV_SCOPE("GuestClContext::free_mapping");
+    for (uint32_t slot = mappings_.next_live(0u); slot != mappings_.no_slot; slot = mappings_.next_live(slot + 1u))
+        if (!mappings_.at(slot)->held()) return mappings_.at(slot);
+    /* Regions are never erased, so the next slot is a key no region has. */
+    uint32_t slot = 0u;
+    if (mappings_.insert(mappings_.slots(), MappedRegion(), slot) != Status::ok) return nullptr;
+    return mappings_.at(slot);
 }
 
 void GuestClContext::give_back_mapping(MappedRegion &region)
@@ -290,11 +296,11 @@ uint32_t GuestClContext::give_back_mappings_of(uint64_t buffer)
 {
     AV_SCOPE("GuestClContext::give_back_mappings_of");
     uint32_t given = 0u;
-    for (uint32_t slot = 0u; slot < max_mappings; ++slot) {
-        if (!mappings_[slot].held() || mappings_[slot].buffer() != buffer) continue;
-        give_back_mapping(mappings_[slot]);
+    mappings_.for_each([this, buffer, &given](uint32_t, MappedRegion &region) {
+        if (!region.held() || region.buffer() != buffer) return;
+        give_back_mapping(region);
         ++given;
-    }
+    });
     return given;
 }
 
@@ -302,9 +308,7 @@ uint32_t GuestClContext::mappings() const
 {
     AV_SCOPE("GuestClContext::mappings");
     uint32_t held = 0u;
-    for (uint32_t slot = 0u; slot < max_mappings; ++slot) {
-        if (mappings_[slot].held()) ++held;
-    }
+    mappings_.for_each([&held](uint32_t, const MappedRegion &region) { held += region.held() ? 1u : 0u; });
     return held;
 }
 
@@ -326,17 +330,18 @@ bool GuestClContext::invariants_hold() const
 {
     AV_SCOPE("GuestClContext::invariants_hold");
     if (!svm_.invariants_hold() || !external_.invariants_hold() || !d3d11_.invariants_hold()) return false;
-    for (uint32_t slot = 0u; slot < max_mappings; ++slot) {
-        if (!mappings_[slot].invariants_hold()) return false;
+    const uint32_t slots = mappings_.slots();
+    for (uint32_t slot = 0u; slot < slots; ++slot) {
+        const MappedRegion *const region = mappings_.at(slot);
+        if (region == nullptr || !region->invariants_hold()) return false;
         /* No two live mappings answer the same pointer: an unmap would then
          * have two mappings to choose between. */
-        for (uint32_t other = slot + 1u; other < max_mappings; ++other) {
-            if (mappings_[slot].held() && mappings_[other].held() &&
-                mappings_[slot].at() == mappings_[other].at()) {
-                return false;
-            }
+        for (uint32_t other = slot + 1u; other < slots && region->held(); ++other) {
+            const MappedRegion *const second = mappings_.at(other);
+            if (second != nullptr && second->held() && region->at() == second->at()) return false;
         }
     }
+    if (!mappings_.invariants_hold()) return false;
     /* The channel and the lock around it are opened together and torn down
      * together, so one without the other is a make or a teardown that
      * stopped halfway. */

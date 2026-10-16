@@ -84,6 +84,7 @@ private:
     /* `object` and its subtree destroyed; the caller holds the lock. */
     void destroy_held(ClObject &object);
 
+    BlockSource              &memory_;
     icd::HandleTree<ClObject> tree_;
     const cl_icd_dispatch    &table_;
     icd::ThreadLock          &lock_;

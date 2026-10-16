@@ -6,8 +6,8 @@
 
 namespace av::clicd {
 
-ClDevice::ClDevice(Kmt &kmt, uint64_t luid)
-    : luid_(luid), connection_(kmt, luid), report_(luid), extensions_(reported_extensions, reported_extension_count),
+ClDevice::ClDevice(BlockSource &memory, Kmt &kmt, uint64_t luid)
+    : luid_(luid), connection_(memory, kmt, luid), report_(luid), extensions_(reported_extensions, reported_extension_count),
       object_(nullptr)
 {
     AV_SCOPE("ClDevice::ClDevice");

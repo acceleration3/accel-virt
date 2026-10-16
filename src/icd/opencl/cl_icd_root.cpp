@@ -75,10 +75,10 @@ ClIcdRoot::ClIcdRoot(BlockSource &memory, Kmt &kmt, icd::ThreadLock &lock,
                      D3d11Bridge &d3d11,
                      ClIcdBinding &binding)
     : lock_(lock), log_(log), gl_share_(gl_share), d3d_adapters_(d3d_adapters), d3d11_(d3d11), binding_(binding), dispatch_(), platform_(),
-      objects_(memory, dispatch_.table(), objects_lock), kmt_(kmt), devices_(kmt),
+      objects_(memory, dispatch_.table(), objects_lock), kmt_(kmt), devices_(memory, kmt),
       shared_handles_(kmt, lock, memory), contexts_(memory), memory_(memory), send_lock_(send_lock), blocks_lock_(blocks_lock),
-      watcher_(watcher_thread, log, lock, *this), waits_(kmt, watcher_), device_answers_(), reads_(), refusals_(memory, log),
-      destructor_callbacks_()
+      watcher_(memory, watcher_thread, log, lock, *this), waits_(kmt, watcher_), device_answers_(memory), reads_(), refusals_(memory, log),
+      destructor_callbacks_(memory)
 {
     AV_SCOPE("ClIcdRoot::ClIcdRoot");
     /* The table is this ICD's entries where it has them and the generated
@@ -780,9 +780,10 @@ cl_int ClIcdRoot::release(void *object, ClObject::Kind kind)
          * the host held on it go now. */
         static_cast<void>(contexts_.destroy(freed));
     }
-    ClDestructorCallbacks::Due due;
+    ClDestructorCallbacks::Due due(memory_);
     destructor_callbacks_.take(gone, went, due);
     lock_.release();
+    if (due.lost() != 0u) refusals_.note_failure("a destructor callback, for want of memory", CL_OUT_OF_HOST_MEMORY);
     /* After the host let go and the context's transport went, as a driver
      * calls them once the object's memory is gone, and with no lock held: a
      * callback may release or make another object. */
@@ -1120,8 +1121,9 @@ cl_int ClIcdRoot::enqueue_kernel(cl_command_queue queue, cl_kernel kernel, cl_ui
     if (named == nullptr) return CL_INVALID_KERNEL;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t     produced = 0u;
     /* An event is the host's to name, so only a launch that wants none goes
@@ -1154,8 +1156,9 @@ cl_int ClIcdRoot::enqueue_external(cl_command_queue queue, cl_uint count, const 
         if (context_of(*named) != context) return CL_INVALID_CONTEXT;
         if (!context->external().answered(named->wire())) return CL_INVALID_MEM_OBJECT;
     }
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     if (event == nullptr && waits.count() == 0u) return CL_SUCCESS;
     ClientTransport *const wire = context->wire();
@@ -1190,8 +1193,9 @@ cl_int ClIcdRoot::enqueue_read(cl_command_queue queue, cl_mem buffer, cl_bool bl
     if (into == nullptr) return CL_INVALID_VALUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     /* A non-blocking read may not fetch here: the API says the application's
      * memory is undefined until the event completes, and the bytes do not
@@ -1545,8 +1549,9 @@ cl_int ClIcdRoot::svm_map(cl_command_queue queue, cl_bool blocking, cl_map_flags
     const uint64_t         host = context->svm().host_address_of(pointer);
     ClientTransport *const wire = context->wire();
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     /* A blocking map the host would block on behind the list; waited for
      * here instead, and the map sent behind nothing. */
@@ -1595,8 +1600,9 @@ cl_int ClIcdRoot::svm_unmap(cl_command_queue queue, void *pointer, cl_event *eve
     const uint64_t         host = context->svm().host_address_of(pointer);
     ClientTransport *const wire = context->wire();
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     /* Where what the application wrote would go back; see svm_map for why it
      * does not yet. */
@@ -1670,9 +1676,11 @@ cl_int ClIcdRoot::wait_for_events(cl_uint count, const cl_event *events)
     if (count == 0u || events == nullptr) return CL_INVALID_VALUE;
     /* Every event of one wait belongs to one context, because that is where a
      * transport is; the API says as much (CL_INVALID_CONTEXT otherwise). */
-    uint64_t         handles[max_waited] = {};
-    GuestClContext  *context = nullptr;
-    const cl_uint    waited = count < max_waited ? count : max_waited;
+    ClHostNumbers   handles_room(memory_);
+    uint64_t *const handles = handles_room.room(count);
+    if (handles == nullptr) return CL_OUT_OF_HOST_MEMORY;
+    GuestClContext *context = nullptr;
+    const cl_uint   waited = count;
     for (cl_uint index = 0u; index < waited; ++index) {
         ClObject *const held = judged(events[index], ClObject::Kind::event);
         if (held == nullptr) return CL_INVALID_EVENT;
@@ -1680,7 +1688,6 @@ cl_int ClIcdRoot::wait_for_events(cl_uint count, const cl_event *events)
         if (held->context() != context) return CL_INVALID_CONTEXT;
         handles[index] = held->wire();
     }
-    if (count > max_waited) return CL_OUT_OF_RESOURCES;
     ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     /* clWaitForEvents has no timeout, so the wait is unbounded - but every
@@ -2136,8 +2143,9 @@ cl_int ClIcdRoot::enqueue_copy_buffer(cl_command_queue queue, cl_mem from, cl_me
     if (source == nullptr || target == nullptr) return CL_INVALID_MEM_OBJECT;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t     produced = 0u;
     /* As a launch: waiting for the answer of a copy that wants no event would
@@ -2165,8 +2173,9 @@ cl_int ClIcdRoot::enqueue_fill_buffer(cl_command_queue queue, cl_mem buffer, con
     if (pattern == nullptr || pattern_bytes == 0u) return CL_INVALID_VALUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t     produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
@@ -2193,8 +2202,9 @@ cl_int ClIcdRoot::enqueue_copy_image(cl_command_queue queue, cl_mem from, cl_mem
     if (from_origin == nullptr || to_origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t     produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
@@ -2461,8 +2471,9 @@ cl_int ClIcdRoot::enqueue_copy_buffer_rect(cl_command_queue queue, cl_mem from, 
     if (from_origin == nullptr || to_origin == nullptr || region == nullptr) return CL_INVALID_VALUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    uint64_t     listed[max_waited] = {};
-    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed);
+    ClHostNumbers listed_room(memory_);
+    uint64_t     *listed = nullptr;
+    const cl_int judged_list = wait_list(*held->context(), waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
     uint64_t                 produced = 0u;
     icd::UnansweredTransport unanswered(*wire);
@@ -2531,12 +2542,13 @@ cl_int ClIcdRoot::supported_image_formats(cl_context context, cl_mem_flags flags
                                                        formats, room, num_formats);
 }
 
-cl_int ClIcdRoot::wait_list(GuestClContext &context, cl_uint count, const cl_event *events,
-                            uint64_t *into)
+cl_int ClIcdRoot::wait_list(GuestClContext &context, cl_uint count, const cl_event *events, ClHostNumbers &room,
+                            uint64_t *&into)
 {
     AV_SCOPE("ClIcdRoot::wait_list");
     if ((count == 0u) != (events == nullptr)) return CL_INVALID_EVENT_WAIT_LIST;
-    if (count > max_waited) return CL_OUT_OF_RESOURCES;
+    into = room.room(count);
+    if (into == nullptr) return CL_OUT_OF_HOST_MEMORY;
     for (cl_uint index = 0u; index < count; ++index) {
         ClObject *const held = judged(events[index], ClObject::Kind::event);
         if (held == nullptr || held->context() != &context) return CL_INVALID_EVENT_WAIT_LIST;
@@ -2554,8 +2566,9 @@ cl_int ClIcdRoot::enqueue_point(PointCommand command, cl_command_queue queue, cl
     GuestClContext *const context = held->context();
     ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    uint64_t     handles[max_waited] = {};
-    const cl_int listed = wait_list(*context, count, events, handles);
+    ClHostNumbers handles_room(memory_);
+    uint64_t     *handles = nullptr;
+    const cl_int listed = wait_list(*context, count, events, handles_room, handles);
     if (listed != CL_SUCCESS) return listed;
     uint64_t     produced = 0u;
     const cl_int placed = command(*wire, held->wire(), count, count != 0u ? handles : nullptr,
@@ -2741,16 +2754,18 @@ cl_int ClIcdRoot::enqueue_gl_objects(GlObjectsCommand command, cl_command_queue 
     ClientTransport *const wire = context != nullptr ? context->wire() : nullptr;
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     if (count != 0u && objects == nullptr) return CL_INVALID_VALUE;
-    if (count > max_waited) return CL_OUT_OF_RESOURCES;
-    uint64_t named[max_waited] = {};
+    ClHostNumbers   named_room(memory_);
+    uint64_t *const named = named_room.room(count);
+    if (named == nullptr) return CL_OUT_OF_HOST_MEMORY;
     for (cl_uint index = 0u; index < count; index++) {
         ClObject *const object = judged(objects[index], ClObject::Kind::mem);
         if (object == nullptr) return CL_INVALID_MEM_OBJECT;
         if (context_of(*object) != context) return CL_INVALID_CONTEXT;
         named[index] = object->wire();
     }
-    uint64_t     handles[max_waited] = {};
-    const cl_int listed = wait_list(*context, waits, events, handles);
+    ClHostNumbers handles_room(memory_);
+    uint64_t     *handles = nullptr;
+    const cl_int listed = wait_list(*context, waits, events, handles_room, handles);
     if (listed != CL_SUCCESS) return listed;
     uint64_t     produced = 0u;
     const cl_int placed = command(*wire, held->wire(), count, count != 0u ? named : nullptr, waits,

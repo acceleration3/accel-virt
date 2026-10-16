@@ -8,15 +8,16 @@
  * host gave was a round trip under the lock all of them share. Here the first
  * answer is kept and every later one is the guest's own.
  *
- * Entries are only ever added, so a reader takes no lock: a writer claims a
- * slot, fills it and only then marks it ready, and a reader skips any slot not
- * yet ready. Two threads keeping the same answer at once keep it twice, which
- * costs a slot and answers the same. A table that is full keeps nothing more,
- * and an answer longer than `Bytes` is never kept: both are asked of the host
- * every time, as before. */
+ * Entries are only ever added, so a reader takes no lock (ClaimedRows): a
+ * reader passes any entry not yet written. Two threads keeping the same
+ * answer at once keep it twice, which costs an entry and answers the same.
+ * As many are kept as there are answers; one longer than `Bytes`, or one
+ * there is no memory for, is never kept and is asked of the host every time,
+ * as before. */
 #ifndef AV_CLICD_CL_INFO_ANSWERS_HPP
 #define AV_CLICD_CL_INFO_ANSWERS_HPP
 
+#include "core/support/claimed_rows.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/opencl/cl_info_request.hpp"
 
@@ -25,12 +26,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
+namespace av {
+class BlockSource;
+}  // namespace av
+
 namespace av::clicd {
 
-template <uint32_t Entries, size_t Bytes>
+template <size_t Bytes>
 class ClInfoAnswers {
 public:
-    ClInfoAnswers();
+    explicit ClInfoAnswers(BlockSource &memory);
     ClInfoAnswers(const ClInfoAnswers &) = delete;
     ClInfoAnswers &operator=(const ClInfoAnswers &) = delete;
 
@@ -38,7 +43,7 @@ public:
      * gives one, with `result` what the call returns; false when none is kept. */
     [[nodiscard]] bool answer(uint64_t object, uint32_t name, const ClInfoRequest &asked, cl_int &result) const;
     /* Keeps the `bytes` at `value` as that answer: nothing for one longer than
-     * `Bytes` or a table already full. */
+     * `Bytes` or one there is no memory for. */
     void               keep(uint64_t object, uint32_t name, const void *value, size_t bytes);
     uint32_t           kept() const;
 
@@ -47,60 +52,47 @@ private:
         uint64_t object_;
         uint32_t name_;
         uint32_t bytes_;
-        bool     ready_;
         uint8_t  value_[Bytes];
     };
 
-    Entry    entries_[Entries];
-    uint32_t claimed_;
+    ClaimedRows<Entry> entries_;
 };
 
-template <uint32_t Entries, size_t Bytes>
-ClInfoAnswers<Entries, Bytes>::ClInfoAnswers() : entries_(), claimed_(0u)
+template <size_t Bytes>
+ClInfoAnswers<Bytes>::ClInfoAnswers(BlockSource &memory) : entries_(memory, Pool::paged)
 {
     AV_SCOPE("ClInfoAnswers::ClInfoAnswers");
 }
 
-template <uint32_t Entries, size_t Bytes>
-bool ClInfoAnswers<Entries, Bytes>::answer(uint64_t object, uint32_t name, const ClInfoRequest &asked,
-                                           cl_int &result) const
+template <size_t Bytes>
+bool ClInfoAnswers<Bytes>::answer(uint64_t object, uint32_t name, const ClInfoRequest &asked, cl_int &result) const
 {
     AV_SCOPE("ClInfoAnswers::answer");
-    const uint32_t claimed = __atomic_load_n(&claimed_, __ATOMIC_ACQUIRE);
-    for (uint32_t index = 0u; index < claimed; ++index) {
-        const Entry &entry = entries_[index];
-        if (!__atomic_load_n(&entry.ready_, __ATOMIC_ACQUIRE)) continue;
-        if (entry.object_ != object || entry.name_ != name) continue;
-        result = asked.give(entry.value_, entry.bytes_);
-        return true;
-    }
-    return false;
+    const Entry *const entry =
+        entries_.find_if([object, name](const Entry &kept) { return kept.object_ == object && kept.name_ == name; });
+    if (entry == nullptr) return false;
+    result = asked.give(entry->value_, entry->bytes_);
+    return true;
 }
 
-template <uint32_t Entries, size_t Bytes>
-void ClInfoAnswers<Entries, Bytes>::keep(uint64_t object, uint32_t name, const void *value, size_t bytes)
+template <size_t Bytes>
+void ClInfoAnswers<Bytes>::keep(uint64_t object, uint32_t name, const void *value, size_t bytes)
 {
     AV_SCOPE("ClInfoAnswers::keep");
     if (bytes > Bytes) return;
-    /* Claimed one at a time, so a table that is full stays exactly full and
-     * the count never runs past it however many keep after. */
-    uint32_t slot = __atomic_load_n(&claimed_, __ATOMIC_ACQUIRE);
-    do {
-        if (slot >= Entries) return;
-    } while (!__atomic_compare_exchange_n(&claimed_, &slot, slot + 1u, true, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE));
-    Entry &entry = entries_[slot];
+    Entry entry{};
     entry.object_ = object;
     entry.name_ = name;
     entry.bytes_ = static_cast<uint32_t>(bytes);
     __builtin_memcpy(entry.value_, value, bytes);
-    __atomic_store_n(&entry.ready_, true, __ATOMIC_RELEASE);
+    static_cast<void>(entries_.append(entry));
 }
 
-template <uint32_t Entries, size_t Bytes>
-uint32_t ClInfoAnswers<Entries, Bytes>::kept() const
+template <size_t Bytes>
+uint32_t ClInfoAnswers<Bytes>::kept() const
 {
     AV_SCOPE("ClInfoAnswers::kept");
-    return __atomic_load_n(&claimed_, __ATOMIC_ACQUIRE);
+    return entries_.claimed();
 }
 
 }  // namespace av::clicd
