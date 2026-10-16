@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "proto/client/client_blob_arena.hpp"
+#include "proto/submission/published_slot_layout.hpp"
 
 namespace av {
 
@@ -36,9 +37,10 @@ Status KmtBlobArena::open(uint64_t bytes)
     bytes_ = size;
     /* The host writes the word only once it publishes one: zero is what an
      * older host leaves, which the context reads as "ask instead". */
-    volatile unsigned char *const word = memory_.view() + size - error_word_bytes;
-    for (uint64_t at = 0u; at < error_word_bytes; at++) word[at] = 0u;
-    transport_.blobs().lend(memory_.view(), static_cast<size_t>(size - error_word_bytes));
+    const PublishedSlotLayout     tail(size);
+    volatile unsigned char *const word = memory_.view() + tail.error_word();
+    for (uint64_t at = 0u; at < PublishedSlotLayout::error_word_bytes; at++) word[at] = 0u;
+    transport_.blobs().lend(memory_.view(), static_cast<size_t>(tail.error_word()));
     return Status::ok;
 }
 
@@ -82,7 +84,8 @@ uint64_t KmtBlobArena::host_errors() const
 {
     AV_SCOPE("KmtBlobArena::host_errors");
     if (bytes_ == 0u) return 0u;
-    const auto *const word = reinterpret_cast<const volatile uint64_t *>(memory_.view() + bytes_ - error_word_bytes);
+    const auto *const word =
+        reinterpret_cast<const volatile uint64_t *>(memory_.view() + PublishedSlotLayout(bytes_).error_word());
     return __atomic_load_n(word, __ATOMIC_ACQUIRE);
 }
 

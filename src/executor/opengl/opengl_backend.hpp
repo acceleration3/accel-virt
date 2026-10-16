@@ -11,7 +11,7 @@
 #include "core/log/driver_log.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/guest_region.hpp"
-#include "executor/opengl/gl_error_tally.hpp"
+#include "proto/submission/gl_error_word.hpp"
 #include "executor/session_backend.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "executor/opengl/sync_tokens.hpp"
@@ -126,7 +126,7 @@ private:
     GlPackBuffer    pack_;
     SyncTokens  fences_;
     GuestRegion region_;
-    GlErrorTally errors_;
+    GlErrorWord  errors_;
     uint32_t    resolved_;
     uint64_t    ran_;
     bool        lost_;

@@ -8,6 +8,7 @@
 #include "executor/imported_blob.hpp"
 #include "proto/generated/opengl/gl_command_names.h"
 #include "proto/generated/opengl/gl_dispatch_server.h"
+#include "proto/submission/published_slot_layout.hpp"
 
 #include <stdio.h>
 #include <string.h>
@@ -234,9 +235,9 @@ void OpenGlBackend::publish_errors()
         if (error == gl_context_lost) lost_ = true;
         errors_.record(error);
     }
-    if (region_.length() < sizeof(uint64_t)) return;
     /* A region without the word has nobody reading it. */
-    static_cast<void>(region_.publish(region_.length() - sizeof(uint64_t), errors_.word()));
+    const PublishedSlotLayout tail(region_.length());
+    if (tail.holds_tail()) static_cast<void>(region_.publish(tail.error_word(), errors_.word()));
 }
 
 bool OpenGlBackend::lose_device()

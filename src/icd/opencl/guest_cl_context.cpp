@@ -9,6 +9,7 @@
 #include "core/log/log_sink.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/submission/published_slot_layout.hpp"
 
 namespace av::clicd {
 
@@ -105,7 +106,7 @@ Status GuestClContext::build(uint32_t gl_share)
      * and so not the page that holds it, since blocks are whole pages. */
     const uint64_t buffers = channel_.arena_bytes() - staging_reserve;
     blocks_.lend(channel_.arena_view(), buffers);
-    staging_.lend(channel_.arena_view() + buffers, staging_reserve - KmtBlobArena::error_word_bytes);
+    staging_.lend(channel_.arena_view() + buffers, staging_reserve - PublishedSlotLayout::error_word_bytes);
     log_.write("avcl: buffers map through the blob arena; no copy");
     return Status::ok;
 }

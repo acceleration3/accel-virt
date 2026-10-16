@@ -7,16 +7,14 @@
 #ifndef AV_GLICD_REPORTED_GL_ERRORS_HPP
 #define AV_GLICD_REPORTED_GL_ERRORS_HPP
 
+#include "proto/submission/gl_error_word.hpp"
+
 #include <stdint.h>
 
 namespace av::glicd {
 
 class ReportedGlErrors {
 public:
-    static constexpr uint32_t first_error = 0x0500u; /* GL_INVALID_ENUM */
-    static constexpr uint32_t kinds = 7u;
-    static constexpr uint64_t published = uint64_t{0x80} << 56u;
-
     ReportedGlErrors();
 
     /* Whether a host published `word`: one without the marker is a host that
@@ -27,7 +25,7 @@ public:
     uint32_t take(uint64_t word);
 
 private:
-    uint8_t reported_[kinds];
+    uint8_t reported_[GlErrorWord::kinds];
 };
 
 }  // namespace av::glicd

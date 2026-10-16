@@ -12,17 +12,18 @@ ReportedGlErrors::ReportedGlErrors() : reported_{}
 bool ReportedGlErrors::readable(uint64_t word) const
 {
     AV_SCOPE("ReportedGlErrors::readable");
-    return (word & published) != 0u;
+    return GlErrorWord(word).published();
 }
 
 uint32_t ReportedGlErrors::take(uint64_t word)
 {
     AV_SCOPE("ReportedGlErrors::take");
-    for (uint32_t kind = 0u; kind < kinds; kind++) {
-        const auto count = static_cast<uint8_t>(word >> (8u * kind));
+    const GlErrorWord published(word);
+    for (uint32_t kind = 0u; kind < GlErrorWord::kinds; kind++) {
+        const uint8_t count = published.count(kind);
         if (count == reported_[kind]) continue;
         reported_[kind] = count;
-        return first_error + kind;
+        return GlErrorWord::first_error + kind;
     }
     return 0u;
 }
