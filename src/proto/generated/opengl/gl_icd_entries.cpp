@@ -1126,13 +1126,6 @@ GLsync APIENTRY Wrap_glFenceSync(GLenum condition, GLbitfield flags) {
     return reinterpret_cast<GLsync>(static_cast<uintptr_t>(::av::glproto::av_glFenceSync(*av_t, condition, flags)));
 }
 
-void APIENTRY Wrap_glFinish(void) {
-    AV_SCOPE("glFinish");
-    auto* av_t = ::av::glicd::wire();
-    if (av_t == nullptr) return;
-    ::av::glproto::av_glFinish(*av_t);
-}
-
 void APIENTRY Wrap_glFramebufferParameteri(GLenum target, GLenum pname, GLint param) {
     AV_SCOPE("glFramebufferParameteri");
     auto* av_t = ::av::glicd::wire();

@@ -2,13 +2,14 @@
  * execution status of each event in a list, asked once a round with a
  * non-blocking clGetEventInfo, so no host worker is ever held. The host does
  * not block, so this pauses between rounds itself (ClBlockingWait says why):
- * back to back for the first millisecond; past it, on a context the driver
+ * back to back for the first millisecond (PollPause); past it, on a context the driver
  * wakes, until the host's callback on the first event still outstanding wakes
  * the context, a slice at most; elsewhere a millisecond's sleep. */
 #ifndef AV_CLICD_CL_EVENTS_PROBE_HPP
 #define AV_CLICD_CL_EVENTS_PROBE_HPP
 
 #include "icd/common/completion_probe.hpp"
+#include "icd/common/poll_pause.hpp"
 
 #include <CL/cl.h>
 
@@ -25,10 +26,6 @@ class ClEventWatcher;
 
 class ClEventsProbe final : public icd::CompletionProbe {
 public:
-    /* How long a wait asks back to back before it pauses: a second's
-     * fraction, 1 ms. */
-    static constexpr uint64_t spin_per_second = 1000u;
-
     /* `events`, `count` of them, asked through `wire`; `driven`: their
      * context is one the driver wakes, through `watcher`. Each round counts
      * in `rounds`, each raise asked of the host in `raises`. */
@@ -46,14 +43,12 @@ public:
 
 private:
     ClientTransport &wire_;
-    Kmt             &kmt_;
+    icd::PollPause   polls_;
     ClEventWatcher  &watcher_;
     const uint64_t  *events_;
     uint32_t         count_;
     uint64_t        &rounds_;
     uint64_t        &raises_;
-    uint64_t         frequency_;
-    uint64_t         started_;
     /* Whether the driver's wake ends a pause, and what it had reached when
      * the last round began. */
     bool             woken_by_driver_;

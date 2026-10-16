@@ -167,6 +167,10 @@ public:
                                        uint64_t timeout);
     VkResult           wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *info, uint64_t timeout);
     VkResult           queue_wait_idle(VkQueue queue);
+    /* vkGetQueryPoolResults; one that waits (VK_QUERY_RESULT_WAIT_BIT) polls
+     * the host until every query is available (QueryWaitProbe). */
+    VkResult           query_pool_results(VkDevice device, VkQueryPool pool, uint32_t first, uint32_t count,
+                                          size_t size, void *data, VkDeviceSize stride, VkQueryResultFlags flags);
     VkResult           device_wait_idle(VkDevice device);
     /* Signals what an application gave vkAcquireNextImageKHR, on the first
      * queue `device` handed out: an empty submission that signals `semaphore`

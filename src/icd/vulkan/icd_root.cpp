@@ -28,6 +28,7 @@
 #include "icd/vulkan/physical_device_view.hpp"
 #include "icd/common/host_completion_wait.hpp"
 #include "icd/vulkan/fence_wait_probe.hpp"
+#include "icd/vulkan/query_wait_probe.hpp"
 #include "icd/vulkan/semaphore_wait_probe.hpp"
 #include "icd/common/sliced_wait.hpp"
 #include "icd/common/thread_lock.hpp"
@@ -93,6 +94,7 @@ const Entry        local_rows[] = {
     {"vkWaitSemaphores", reinterpret_cast<PFN_vkVoidFunction>(&local_vkWaitSemaphores), Level::device},
     {"vkWaitSemaphoresKHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkWaitSemaphores), Level::device},
     {"vkQueueWaitIdle", reinterpret_cast<PFN_vkVoidFunction>(&local_vkQueueWaitIdle), Level::device},
+    {"vkGetQueryPoolResults", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetQueryPoolResults), Level::device},
     {"vkDeviceWaitIdle", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDeviceWaitIdle), Level::device},
     {"vkDestroyInstance", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroyInstance), Level::instance},
     {"vkEnumeratePhysicalDevices", reinterpret_cast<PFN_vkVoidFunction>(&local_vkEnumeratePhysicalDevices),
@@ -1703,6 +1705,27 @@ VkResult IcdRoot::wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *in
     if (lost(*made->connection(), "vkWaitSemaphores")) return VK_ERROR_DEVICE_LOST;
     SemaphoreWaitProbe probe(made->connection()->transport(), device, info);
     HostCompletionWait wait(kmt_, timeout);
+    static_cast<void>(wait.run(probe));
+    return probe.result();
+}
+
+/* A wait for query results is a wait on host work with no timeout of its own:
+ * it never passes (SlicedWait::forever), but no host call it makes blocks. */
+VkResult IcdRoot::query_pool_results(VkDevice device, VkQueryPool pool, uint32_t first, uint32_t count, size_t size,
+                                     void *data, VkDeviceSize stride, VkQueryResultFlags flags)
+{
+    AV_SCOPE("IcdRoot::query_pool_results");
+    LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
+    if (made == nullptr) {
+        log_.write("avvk: vkGetQueryPoolResults on a device this driver did not make");
+        return VK_ERROR_DEVICE_LOST;
+    }
+    if (lost(*made->connection(), "vkGetQueryPoolResults")) return VK_ERROR_DEVICE_LOST;
+    ClientTransport &transport = made->connection()->transport();
+    if ((flags & VK_QUERY_RESULT_WAIT_BIT) == 0u)
+        return vkproto::av_vkGetQueryPoolResults(transport, device, pool, first, count, size, data, stride, flags);
+    QueryWaitProbe     probe(transport, kmt_, device, pool, first, count, size, data, stride, flags);
+    HostCompletionWait wait(kmt_, SlicedWait::forever);
     static_cast<void>(wait.run(probe));
     return probe.result();
 }

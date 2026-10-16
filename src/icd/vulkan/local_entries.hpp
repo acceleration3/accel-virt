@@ -78,6 +78,9 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkWaitForFences(VkDevice device, uint32_t f
 VKAPI_ATTR VkResult VKAPI_CALL local_vkWaitSemaphores(VkDevice device, const VkSemaphoreWaitInfo *pWaitInfo,
                                                       uint64_t timeout);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkQueueWaitIdle(VkQueue queue);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetQueryPoolResults(VkDevice device, VkQueryPool queryPool, uint32_t firstQuery,
+                                                           uint32_t queryCount, size_t dataSize, void *pData,
+                                                           VkDeviceSize stride, VkQueryResultFlags flags);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkDeviceWaitIdle(VkDevice device);
 /* Not Vulkan's: the probe's forced fault. Device level, so vkGetDeviceProcAddr
  * answers the driver's own pointer: a loader reaches a physical-device or

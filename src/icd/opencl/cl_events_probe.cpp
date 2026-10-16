@@ -1,7 +1,6 @@
 #include "icd/opencl/cl_events_probe.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "guest/kmt/kmt.hpp"
 #include "icd/opencl/cl_event_watcher.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
 
@@ -9,8 +8,8 @@ namespace av::clicd {
 
 ClEventsProbe::ClEventsProbe(ClientTransport &wire, Kmt &kmt, ClEventWatcher &watcher, const uint64_t *events,
                              uint32_t count, bool driven, uint64_t &rounds, uint64_t &raises)
-    : wire_(wire), kmt_(kmt), watcher_(watcher), events_(events), count_(count), rounds_(rounds), raises_(raises),
-      frequency_(0u), started_(kmt.performance_counter(frequency_)), woken_by_driver_(driven && watcher.attend()),
+    : wire_(wire), polls_(kmt), watcher_(watcher), events_(events), count_(count), rounds_(rounds), raises_(raises),
+      woken_by_driver_(driven && watcher.attend()),
       seen_(0u), pending_(0u), raising_(0u), answer_(CL_SUCCESS)
 {
     AV_SCOPE("ClEventsProbe::ClEventsProbe");
@@ -64,8 +63,7 @@ bool ClEventsProbe::ask(uint64_t)
 void ClEventsProbe::pause(uint64_t slice)
 {
     AV_SCOPE("ClEventsProbe::pause");
-    uint64_t unused = 0u;
-    if (frequency_ != 0u && kmt_.performance_counter(unused) - started_ < frequency_ / spin_per_second) return;
+    if (polls_.spinning()) return;
     if (woken_by_driver_ && events_[pending_] != raising_) {
         raising_ = events_[pending_];
         ++raises_;
@@ -75,7 +73,7 @@ void ClEventsProbe::pause(uint64_t slice)
         watcher_.await_woken(seen_, slice);
         return;
     }
-    kmt_.sleep_briefly();
+    polls_.rest();
 }
 
 cl_int ClEventsProbe::answer() const

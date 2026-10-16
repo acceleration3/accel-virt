@@ -2096,6 +2096,10 @@ HANDWRITTEN = {
     # it, and a poll that crosses the wire cannot be answered until the
     # server has drained everything queued in front of it.
     "glClientWaitSync",
+    # A finish is a wait on the host with no timeout, and a host call that
+    # blocks past TdrDelay has the adapter reset: the ICD fences, waits for
+    # the fence a slice at a time (HostCompletionWait) and deletes it.
+    "glFinish",
     # Created out of a blob where the host will allow it, so that a
     # coherent mapping of it needs no write-backs at all. Immutable
     # storage cannot be respecified, so this is the only moment it can

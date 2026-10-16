@@ -598,6 +598,24 @@ uint32_t ManualCalls::client_wait_sync(void *sync, uint32_t flags, uint64_t time
     return probe.result();
 }
 
+/* Three round trips where a forwarded glFinish was one, so that no host
+ * call blocks past TdrDelay. A fence the host would not make leaves the plain
+ * finish, which is what there was before. */
+void ManualCalls::finish()
+{
+    AV_SCOPE("ManualCalls::finish");
+    static constexpr uint32_t gl_sync_gpu_commands_complete = 0x9117u;
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    ClientTransport &wire = *context->wire();
+    const uint64_t   fence = glproto::av_glFenceSync(wire, gl_sync_gpu_commands_complete, 0u);
+    if (fence == 0u) return glproto::av_glFinish(wire);
+    SyncWaitProbe           probe(wire, fence, SyncWaitProbe::gl_sync_flush_commands_bit);
+    icd::HostCompletionWait wait(kmt_, icd::SlicedWait::forever);
+    static_cast<void>(wait.run(probe));
+    glproto::av_glDeleteSync(wire, fence);
+}
+
 /* The host's debug messages are not carried back yet: the callback is kept
  * for the pointer query and never called. */
 void ManualCalls::debug_message_callback(void *callback, const void *user)

@@ -186,6 +186,15 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkWaitSemaphores(VkDevice device, const VkS
     return icd_binding.root().wait_semaphores(device, pWaitInfo, timeout);
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetQueryPoolResults(VkDevice device, VkQueryPool queryPool, uint32_t firstQuery,
+                                                           uint32_t queryCount, size_t dataSize, void *pData,
+                                                           VkDeviceSize stride, VkQueryResultFlags flags)
+{
+    AV_SCOPE("local_vkGetQueryPoolResults");
+    return icd_binding.root().query_pool_results(device, queryPool, firstQuery, queryCount, dataSize, pData, stride,
+                                                 flags);
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL local_vkQueueWaitIdle(VkQueue queue)
 {
     AV_SCOPE("local_vkQueueWaitIdle");

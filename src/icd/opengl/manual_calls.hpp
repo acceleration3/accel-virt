@@ -191,6 +191,9 @@ public:
     void draw_buffer(uint32_t buffer);
     void read_buffer(uint32_t buffer);
     uint32_t client_wait_sync(void *sync, uint32_t flags, uint64_t timeout);
+    /* glFinish as a fence the host signals once everything before it has
+     * run, waited for a slice at a time, and deleted. */
+    void     finish();
     void debug_message_callback(void *callback, const void *user);
     void link_program(uint32_t program);
     void delete_program(uint32_t program);
