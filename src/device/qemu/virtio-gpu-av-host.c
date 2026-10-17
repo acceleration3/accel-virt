@@ -276,19 +276,35 @@ static int av_alias_guest_run(void *opaque, void *run, uint64_t size, void *at)
     return mmap(at, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, offset) == MAP_FAILED;
 }
 
-/* `size` bytes copied from `run` into a fresh mapping of `fd` at `offset`,
- * which then replaces the mapping at `run` (MAP_FIXED): KVM follows through
- * its MMU notifiers, as it does for av_place_in_hostmem. */
-static int av_move_run(void *run, uint64_t size, int fd, off_t offset)
+/* `size` bytes of the dma-buf `fd` from `offset`, mapped where the kernel
+ * chooses. nvidia-drm maps a dma-buf only from its first page - it finds the
+ * object by the mapping's exact start (drm_vma_offset_exact_lookup_locked), so
+ * any other offset is EINVAL - so the dma-buf is mapped from its start and the
+ * head before `offset` dropped, which every exporter takes. */
+static void *av_map_dmabuf_part(int fd, uint64_t size, uint64_t offset)
 {
-    void *staging = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, offset);
+    char *whole = mmap(NULL, offset + size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
-    if (staging == MAP_FAILED) {
+    if (whole == MAP_FAILED) {
+        return NULL;
+    }
+    if (offset) {
+        munmap(whole, offset);
+    }
+    return whole + offset;
+}
+
+/* What `run` holds copied into `staging`, whose mapping then replaces the one
+ * at `run` (MREMAP_FIXED): KVM follows through its MMU notifiers, as it does
+ * for av_place_in_hostmem. The staging mapping is gone either way. */
+static int av_move_run(void *run, uint64_t size, void *staging)
+{
+    memcpy(staging, run, size);
+    if (mremap(staging, size, size, MREMAP_MAYMOVE | MREMAP_FIXED, run) == MAP_FAILED) {
+        munmap(staging, size);
         return 1;
     }
-    memcpy(staging, run, size);
-    munmap(staging, size);
-    return mmap(run, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, offset) == MAP_FAILED;
+    return 0;
 }
 
 /* RAM with no file behind it could never be given back, so it is refused
@@ -297,22 +313,28 @@ static int av_overlay_guest_run(void *opaque, void *run, uint64_t size, int fd, 
 {
     int ram_fd;
     off_t ram_offset;
+    void *staging;
 
-    if (av_ram_file(run, size, &ram_fd, &ram_offset)) {
+    if (av_ram_file(run, size, &ram_fd, &ram_offset) || !(staging = av_map_dmabuf_part(fd, size, offset))) {
         return 1;
     }
-    return av_move_run(run, size, fd, (off_t)offset);
+    return av_move_run(run, size, staging);
 }
 
 static int av_restore_guest_run(void *opaque, void *run, uint64_t size)
 {
     int ram_fd;
     off_t ram_offset;
+    void *staging;
 
     if (av_ram_file(run, size, &ram_fd, &ram_offset)) {
         return 1;
     }
-    return av_move_run(run, size, ram_fd, ram_offset);
+    staging = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, ram_fd, ram_offset);
+    if (staging == MAP_FAILED) {
+        return 1;
+    }
+    return av_move_run(run, size, staging);
 }
 
 static void av_release_range(void *opaque, void *base, uint64_t size)

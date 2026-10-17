@@ -224,10 +224,15 @@ GPU memory where they are: the device lays a source allocation under them.
    (`HostVisibleBlob::create_over`). The device allocates the memory as for
    any host blob and refuses memory the host does not map write-back
    (`HostBlobTable::create_over_guest`). For each run of a piece it copies
-   what the RAM holds into the allocation at the run's offset and maps the
-   dma-buf over the run's RAM in QEMU's address space with `MAP_FIXED`
-   (`GuestPageOverlay`, `Host::overlay_guest_run`); KVM follows through its
-   MMU notifiers, as it does for the hostmem window. The guest's page tables
+   what the RAM holds into the allocation at the run's offset and moves that
+   part of the dma-buf's mapping over the run's RAM in QEMU's address space
+   with `mremap(MREMAP_FIXED)` (`GuestPageOverlay`,
+   `Host::overlay_guest_run`); KVM follows through its MMU notifiers, as it
+   does for the hostmem window. The dma-buf is mapped from its first page and
+   the part before the run's offset dropped, because nvidia-drm maps a
+   dma-buf only from its start: it finds the object by the mapping's exact
+   first page, so an `mmap` at any other offset is `EINVAL` and every run but
+   a lending's first was refused. The guest's page tables
    do not change: the process's pointer, its write watch and every other view
    of those frames now reach the host GPU's memory.
 4. **The context imports it** with `IMPORT_BLOB`, as any host blob: the API
