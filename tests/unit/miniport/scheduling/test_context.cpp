@@ -5,6 +5,7 @@
 #include "miniport/memory/aperture_segment.hpp"
 #include "miniport/scheduling/context.hpp"
 #include "proto/escape/follow_record.hpp"
+#include "proto/escape/release_record.hpp"
 #include "miniport/scheduling/device.hpp"
 #include "proto/escape/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
@@ -49,7 +50,7 @@ TEST(context_report_to, answers_the_context_info_and_the_handle)
   CHECK_EQ(request.ContextInfoDmaBufferSize, 0x10000u);
   CHECK_EQ(request.ContextInfoDmaBufferSegmentSet, av::ApertureSegment::segment_set);
   /* An ordinary context may carry a FollowRecord with each packet. */
-  CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, av::FollowRecord::encoded_size);
+  CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, av::ReleaseRecord::encoded_size);
   CHECK_EQ(request.ContextInfoAllocationListSize, 256u);
   CHECK_EQ(request.ContextInfoPatchLocationListSize, 1024u);
   CHECK_EQ(request.ContextInfoReserved, 0u);

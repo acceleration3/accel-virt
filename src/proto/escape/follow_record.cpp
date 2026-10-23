@@ -42,8 +42,8 @@ Status FollowRecord::encode(uint8_t *bytes, size_t capacity) const
 Status FollowRecord::decode(const uint8_t *bytes, size_t length)
 {
     AV_SCOPE("FollowRecord::decode");
-    if (length != encoded_size) return Status::malformed;
-    WireReader     reader(bytes, length);
+    if (length < encoded_size) return Status::malformed;
+    WireReader     reader(bytes, encoded_size);
     const uint32_t found_magic = reader.read_u32();
     const uint32_t ring = reader.read_u32();
     const uint64_t fence = reader.read_u64();

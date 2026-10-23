@@ -155,9 +155,9 @@ TEST(buffer_slice_device, a_buffer_on_a_slice_reads_what_the_guest_wrote_when_th
     CHECK(store != 0u);
 
     constexpr std::uint32_t mapped = 10u, early = 11u, late = 12u;
-    CHECK(av_d3d_CreateResource(wire, mapped, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u));
-    CHECK(av_d3d_CreateResource(wire, early, buffer_desc(usage_default, 0u, 0u), 0u));
-    CHECK(av_d3d_CreateResource(wire, late, buffer_desc(usage_default, 0u, 0u), 0u));
+    CHECK(av_d3d_CreateResource(wire, mapped, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u, 0u, 0u));
+    CHECK(av_d3d_CreateResource(wire, early, buffer_desc(usage_default, 0u, 0u), 0u, 0u, 0u));
+    CHECK(av_d3d_CreateResource(wire, late, buffer_desc(usage_default, 0u, 0u), 0u, 0u, 0u));
 
     /* Recorded first, written after: the copy reads what is there when the
      * GPU runs it. */
@@ -248,8 +248,8 @@ TEST(buffer_slice_device, each_misuse_of_a_bind_removes_a_healthy_device)
         av::D3dLoopback &wire = session.wire();
         const std::uint64_t store = wire.open_memory(upload, store_bytes);
         CHECK(store != 0u);
-        CHECK(av_d3d_CreateResource(wire, dynamic, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u));
-        CHECK(av_d3d_CreateResource(wire, fixed, buffer_desc(usage_default, bind_vertex, 0u), 0u));
+        CHECK(av_d3d_CreateResource(wire, dynamic, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u, 0u, 0u));
+        CHECK(av_d3d_CreateResource(wire, fixed, buffer_desc(usage_default, bind_vertex, 0u), 0u, 0u, 0u));
         ResourceDesc image = {};
         image.dimension = 3u;
         image.width = 64u;
@@ -258,7 +258,7 @@ TEST(buffer_slice_device, each_misuse_of_a_bind_removes_a_healthy_device)
         image.mip_levels = 1u;
         image.format = 87u;
         image.sample_count = 1u;
-        CHECK(av_d3d_CreateResource(wire, texture, image, 0u));
+        CHECK(av_d3d_CreateResource(wire, texture, image, 0u, 0u, 0u));
         CHECK(av_d3d_BindBufferSlice(wire, dynamic, store, first_slice, buffer_bytes));
         CHECK_EQ(session.finish(), 0u);
         misuse(wire, store);
@@ -281,7 +281,7 @@ TEST(buffer_slice_device, a_store_that_cannot_be_imported_refuses_every_bind_aft
     alignas(4096) static std::uint8_t unexported[store_bytes];
     av::LocalImport lost(unexported, sizeof unexported, 99u);
     CHECK(session.backend().adopt(lost.blob()));
-    CHECK(av_d3d_CreateResource(wire, dynamic, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u));
+    CHECK(av_d3d_CreateResource(wire, dynamic, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u, 0u, 0u));
     CHECK(av_d3d_BindBufferSlice(wire, dynamic, lost.blob().wire_handle(), 0u, buffer_bytes));
     CHECK_EQ(session.finish(), driver_internal_error);
     /* A second device of the session, healthy, binds to a store that is. */
@@ -290,7 +290,7 @@ TEST(buffer_slice_device, a_store_that_cannot_be_imported_refuses_every_bind_aft
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(wire, 2u, 0u, 0u, &hresult, &level));
     CHECK(av_d3d_SelectDevice11(wire, 2u));
-    CHECK(av_d3d_CreateResource(wire, dynamic + 1u, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u));
+    CHECK(av_d3d_CreateResource(wire, dynamic + 1u, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u, 0u, 0u));
     CHECK_EQ(session.finish(), 0u);
     CHECK(av_d3d_BindBufferSlice(wire, dynamic + 1u, store, 0u, buffer_bytes));
     CHECK_EQ(session.finish(), driver_internal_error);
@@ -313,8 +313,8 @@ TEST(buffer_slice_device, a_buffer_on_a_store_that_goes_is_given_storage_of_its_
     const std::uint64_t store = wire.open_memory(upload, store_bytes);
     CHECK(store != 0u);
     constexpr std::uint32_t mapped = 10u, copy = 11u, shader = 12u;
-    CHECK(av_d3d_CreateResource(wire, mapped, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u));
-    CHECK(av_d3d_CreateResource(wire, copy, buffer_desc(usage_default, 0u, 0u), 0u));
+    CHECK(av_d3d_CreateResource(wire, mapped, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u, 0u, 0u));
+    CHECK(av_d3d_CreateResource(wire, copy, buffer_desc(usage_default, 0u, 0u), 0u, 0u, 0u));
     /* An object that is no resource at all, beside them. */
     CHECK(av_d3d_CreateShader(wire, shader, 0u, triangle_vs::inputs_count, triangle_vs::inputs,
                               triangle_vs::outputs_count, triangle_vs::outputs, 0u, nullptr, 0u, nullptr, 0u, nullptr,
@@ -381,7 +381,7 @@ TEST(buffer_slice_device, a_draw_reads_vertices_and_constants_from_slices)
     target.format = 87u;
     target.sample_count = 1u;
     target.bind_flags = 0x20u;
-    CHECK(av_d3d_CreateResource(wire, 1u, target, 0u));
+    CHECK(av_d3d_CreateResource(wire, 1u, target, 0u, 0u, 0u));
     ViewDesc rtv = {};
     rtv.resource = 1u;
     rtv.format = 87u;
@@ -398,11 +398,11 @@ TEST(buffer_slice_device, a_draw_reads_vertices_and_constants_from_slices)
     vb.usage = usage_dynamic;
     vb.bind_flags = bind_vertex;
     vb.cpu_access = cpu_write;
-    CHECK(av_d3d_CreateResource(wire, 3u, vb, 0u));
+    CHECK(av_d3d_CreateResource(wire, 3u, vb, 0u, 0u, 0u));
     ResourceDesc cb = vb;
     cb.width = 16u;
     cb.bind_flags = 0x4u;
-    CHECK(av_d3d_CreateResource(wire, 4u, cb, 0u));
+    CHECK(av_d3d_CreateResource(wire, 4u, cb, 0u, 0u, 0u));
     std::memcpy(wire.memory(store, first_slice), vertices, sizeof vertices);
     std::memcpy(wire.memory(store, second_slice), tint, sizeof tint);
     CHECK(av_d3d_BindBufferSlice(wire, 3u, store, first_slice, 256u));

@@ -14,8 +14,8 @@ constexpr const char *unrestored = "virtio-gpu-av: a lent guest run could not be
 
 }  // namespace
 
-GuestPageOverlay::GuestPageOverlay(Host &host, LentPages &lent)
-    : host_(host), lent_(lent), runs_(host, Pool::paged), covered_(0u)
+GuestPageOverlay::GuestPageOverlay(BlockSource &blocks, LentPages &lent, GuestRamLending &owner)
+    : lent_(lent), owner_(owner), runs_(blocks, Pool::paged), extents_(blocks, Pool::paged), covered_(0u)
 {
     AV_SCOPE("GuestPageOverlay::GuestPageOverlay");
 }
@@ -23,13 +23,13 @@ GuestPageOverlay::GuestPageOverlay(Host &host, LentPages &lent)
 GuestPageOverlay::~GuestPageOverlay()
 {
     AV_SCOPE("GuestPageOverlay::~GuestPageOverlay");
-    restore();
 }
 
-Status GuestPageOverlay::add(ControlRequest &request, size_t offset, uint32_t entries, int fd, uint64_t size)
+Status GuestPageOverlay::add(Host &host, ControlRequest &request, size_t offset, uint32_t entries, int fd,
+                             uint64_t size)
 {
     AV_SCOPE("GuestPageOverlay::add");
-    host_.require_main_loop("GuestPageOverlay::add");
+    host.require_main_loop("GuestPageOverlay::add");
     /* A list shorter than it says is refused before any of it is laid. */
     uint8_t entry[entry_size] = {};
     if (entries == 0u || request.read(offset + size_t{entries - 1u} * entry_size, entry, sizeof entry) != sizeof entry)
@@ -39,61 +39,66 @@ Status GuestPageOverlay::add(ControlRequest &request, size_t offset, uint32_t en
         WireReader     reader(entry, sizeof entry);
         const uint64_t address = reader.read_u64();
         const uint64_t length = reader.read_u32();
-        const Status   laid = lay_entry(address, length, fd, size);
+        const Status   laid = lay_entry(host, address, length, fd, size);
         if (laid != Status::ok) return laid;
     }
     return Status::ok;
 }
 
 /* An entry may cross a region boundary, which QEMU maps as two runs. */
-Status GuestPageOverlay::lay_entry(uint64_t address, uint64_t length, int fd, uint64_t size)
+Status GuestPageOverlay::lay_entry(Host &host, uint64_t address, uint64_t length, int fd, uint64_t size)
 {
     AV_SCOPE("GuestPageOverlay::lay_entry");
     if (length == 0u || address + length < address || address % page_size != 0u || length % page_size != 0u ||
         length > size - covered_)
         return Status::invalid_parameter;
-    const Status claimed = lent_.claim(address, length);
+    if (extents_.reserve(extents_.size() + 1u) != Status::ok) return Status::no_memory;
+    const Status claimed = lent_.claim(address, length, owner_);
     if (claimed != Status::ok) return claimed;
+    const uint64_t first = address;
+    const uint64_t whole = length;
     while (length != 0u) {
         uint64_t    mapped = length;
         bool        direct = false;
-        void *const pointer = host_.map_guest(address, mapped, direct);
+        void *const pointer = host.map_guest(address, mapped, direct);
         Status      status = pointer == nullptr || mapped == 0u ? Status::not_found : Status::ok;
-        if (status == Status::ok) status = direct ? lay_run(pointer, mapped, address, fd) : Status::not_supported;
+        if (status == Status::ok) status = direct ? lay_run(host, pointer, mapped, address, fd) : Status::not_supported;
         if (status != Status::ok) {
-            if (pointer != nullptr) host_.unmap_guest(pointer, mapped);
+            if (pointer != nullptr) host.unmap_guest(pointer, mapped);
             lent_.release(address, length);
             return status;
         }
         address += mapped;
         length -= mapped;
     }
+    static_cast<void>(extents_.append(Extent{first, whole}));
     return Status::ok;
 }
 
 /* Room for the record is made first: a run laid and not recorded could never
  * be restored. */
-Status GuestPageOverlay::lay_run(void *pointer, uint64_t length, uint64_t address, int fd)
+Status GuestPageOverlay::lay_run(Host &host, void *pointer, uint64_t length, uint64_t address, int fd)
 {
     AV_SCOPE("GuestPageOverlay::lay_run");
     if (runs_.reserve(runs_.size() + 1u) != Status::ok) return Status::no_memory;
-    const Status overlaid = host_.overlay_guest_run(pointer, length, fd, covered_);
+    const Status overlaid = host.overlay_guest_run(pointer, length, fd, covered_);
     if (overlaid != Status::ok) return overlaid;
     static_cast<void>(runs_.append(Run{pointer, length, address}));
     covered_ += length;
     return Status::ok;
 }
 
-void GuestPageOverlay::restore()
+void GuestPageOverlay::restore(Host &host)
 {
     AV_SCOPE("GuestPageOverlay::restore");
     for (uint32_t index = runs_.size(); index-- != 0u;) {
         const Run &run = runs_.at(index);
-        if (host_.restore_guest_run(run.pointer_, run.length_) != Status::ok) host_.log(unrestored);
-        host_.unmap_guest(run.pointer_, run.length_);
+        if (host.restore_guest_run(run.pointer_, run.length_) != Status::ok) host.log(unrestored);
+        host.unmap_guest(run.pointer_, run.length_);
         lent_.release(run.address_, run.length_);
     }
     runs_.clear();
+    extents_.clear();
     covered_ = 0u;
 }
 
@@ -109,6 +114,24 @@ uint32_t GuestPageOverlay::runs() const
     return runs_.size();
 }
 
+uint32_t GuestPageOverlay::extents() const
+{
+    AV_SCOPE("GuestPageOverlay::extents");
+    return extents_.size();
+}
+
+uint64_t GuestPageOverlay::extent_address(uint32_t index) const
+{
+    AV_SCOPE("GuestPageOverlay::extent_address");
+    return extents_.at(index).address_;
+}
+
+uint64_t GuestPageOverlay::extent_length(uint32_t index) const
+{
+    AV_SCOPE("GuestPageOverlay::extent_length");
+    return extents_.at(index).length_;
+}
+
 /* The bytes laid are the runs' sum, and every laid page is lent. */
 bool GuestPageOverlay::invariants_hold() const
 {
@@ -118,7 +141,7 @@ bool GuestPageOverlay::invariants_hold() const
         sum += run.length_;
         if (!lent_.lent(run.address_)) return false;
     }
-    return runs_.invariants_hold() && sum == covered_;
+    return runs_.invariants_hold() && extents_.invariants_hold() && sum == covered_;
 }
 
 }  // namespace av

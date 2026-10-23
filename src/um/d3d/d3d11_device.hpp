@@ -33,15 +33,17 @@
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/upload_sink.hpp"
-#include "um/d3d/reentrant_call_lock.hpp"
+#include "icd/d3d/reentrant_call_lock.hpp"
+#include "um/common/windows_calling_thread.hpp"
 #include "um/common/srw_lock.hpp"
 #include "um/d3d/d3d_call_trace.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
-#include "um/d3d/kernel_context_gate.hpp"
+#include "um/d3d/present_order.hpp"
+#include "um/d3d/allocation_lender.hpp"
+#include "um/d3d/cross_adapter_waits.hpp"
 #include "um/d3d/kernel_device.hpp"
 #include "um/d3d/d3d11_records.hpp"
 #include "um/d3d/watched_shadows.hpp"
-#include "um/d3d/batch_follower.hpp"
 #include "um/common/performance_clock.hpp"
 #include "um/d3d/presented_allocations.hpp"
 
@@ -230,6 +232,16 @@ private:
      * window. It gets a host texture of its own, refreshed from the guest's
      * pages at each present wherever they changed. */
     bool open_guest_surface(ResourceRecord &resource, const D3D10DDIARG_OPENRESOURCE &args);
+    /* Whether the runtime asks for a texture two adapters' devices share as
+     * rows (D3DWDDM1_3DDI_RESOURCE_MISC_CROSS_ADAPTER): the kernel then makes
+     * it of pages the host lays its memory under, and the other adapter's
+     * device opens the very pages. */
+    bool is_cross_adapter(const D3D11DDIARG_CREATERESOURCE &args, const ResourceRecord &resource) const;
+    /* The allocation the other adapter's device made, opened here: its pages
+     * lent, the texture made over them (a cross-adapter allocation arrives
+     * with the layout the kernel gave it). False for an allocation that is
+     * not one; then error is set when it was one and could not be opened. */
+    bool open_cross_adapter(ResourceRecord &resource, const D3D10DDIARG_OPENRESOURCE &args);
     void refresh_guest_surfaces();
     void refresh_bound_guest_surfaces(const D3D10DDI_HSHADERRESOURCEVIEW *views, UINT count);
     void refresh_guest_surface(ResourceRecord &resource);
@@ -297,6 +309,8 @@ private:
     D3D10DDI_HRTDEVICE     runtime_;
     D3D10DDI_HRTCORELAYER  core_layer_;
     d3d::KernelDevice                           kernel_;
+    /* Lends the pages of a cross-adapter resource's allocation to the host. */
+    d3d::AllocationLender                       lender_;
     PerformanceClock                            clock_;
     d3d::PresentedAllocations                   allocations_;
     const D3D11DDI_CORELAYER_DEVICECALLBACKS   *core_;
@@ -312,14 +326,16 @@ private:
     SrwLock                               recording_lock_;
     /* The runtime answers some calls by calling the same device back on the
      * same thread (a rotate asks it to bind its state again). */
-    ReentrantCallLock                     calls_;
+    WindowsCallingThread                  caller_;
+    SrwLock                               call_mutex_;
+    d3d::ReentrantCallLock                 calls_;
     ObjectStorage<d3d::D3dCommandStream>  recording_;
     ObjectStorage<d3d::CommandRecording>  recorded_;
     HANDLE    context_;
-    ObjectStorage<d3d::BatchFollower> follower_;
-    /* What the session's transport waits for after this device's flip-model
-     * present (KmtTransport::hold): the kernel context's queue. */
-    ObjectStorage<d3d::KernelContextGate> gate_;
+    ObjectStorage<d3d::PresentOrder> present_order_;
+    /* Holds the transport behind the kernel context once the device shares a
+     * cross-adapter resource (CrossAdapterWaits). */
+    ObjectStorage<d3d::CrossAdapterWaits> waits_;
     uint32_t  feature_level_;
     /* Every window surface DWM opened on this device. */
     GrowableArray<ResourceRecord *> guest_surfaces_;

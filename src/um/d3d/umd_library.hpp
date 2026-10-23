@@ -12,6 +12,7 @@
 #include "um/common/driver_seams.hpp"
 #include "um/common/lazy_driver.hpp"
 #include "um/common/srw_lock.hpp"
+#include "um/common/windows_calling_thread.hpp"
 #include "um/trace/process_trace.hpp"
 
 namespace av {
@@ -46,6 +47,7 @@ private:
         Seams &operator=(const Seams &) = delete;
         DriverSeams   process;
         SrwLock       lock;
+        WindowsCallingThread caller;
         UmdDrivers    driver;
         d3d::UmdRoot  root;
     };

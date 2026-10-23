@@ -63,6 +63,11 @@ public:
      * the CPU's sake - GFX12 compresses the rest of its VRAM, and an OpenCL
      * buffer over it read the compressed bytes - then as memory_type does. */
     uint32_t           raw_memory_type(uint32_t allowed) const;
+    /* Of `allowed`, memory in system RAM the GPU reaches over the bus: host
+     * visible and not device local (GTT on a discrete GPU), where another
+     * GPU can open it as a dma-buf; VK_MAX_MEMORY_TYPES when there is none,
+     * which allocate_exportable refuses: VRAM is no stand-in. */
+    uint32_t           system_memory_type(uint32_t allowed) const;
     /* The device's memory types and heaps: none before it is loaded. */
     void                  memory_properties(VkPhysicalDeviceMemoryProperties &answer) const;
     /* `size` bytes of `type`, exportable as a dma-buf and dedicated to

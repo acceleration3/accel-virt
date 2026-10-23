@@ -7,7 +7,7 @@
 namespace av {
 
 D3dShareState::D3dShareState(ShareOrigin origin)
-    : resource_(nullptr), view_(nullptr), shown_(nullptr), writes_(0u), opens_(0u), origin_(origin)
+    : resource_(nullptr), view_(nullptr), shown_(nullptr), writes_(0u), opens_(0u), origin_(origin), presented_(false), told_(false)
 {
     AV_SCOPE("D3dShareState::D3dShareState");
 }
@@ -57,11 +57,22 @@ void D3dShareState::keep_shown(IUnknown *copy, D3dRetired &retired)
     shown_ = referenced(copy);
 }
 
-IUnknown *D3dShareState::open()
+void D3dShareState::expect_shown()
+{
+    AV_SCOPE("D3dShareState::expect_shown");
+    presented_ = true;
+}
+
+IUnknown *D3dShareState::open(bool &live_of_presented)
 {
     AV_SCOPE("D3dShareState::open");
+    live_of_presented = false;
     IUnknown *const opened = shown_ != nullptr ? shown_ : view();
     if (opened == nullptr) return nullptr;
+    if (shown_ == nullptr && presented_ && !told_) {
+        told_ = true;
+        live_of_presented = true;
+    }
     opens_++;
     return referenced(opened);
 }

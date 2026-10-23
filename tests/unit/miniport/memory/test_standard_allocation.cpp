@@ -125,22 +125,48 @@ TEST(standard_allocation_describe, an_existing_heap_is_a_cpu_visible_row_of_its_
   CHECK_STATUS(request.describe(platform), Status::ok);
   CHECK_EQ(surface.Pitch, 0x30000u);
   const AllocationDescriptor descriptor = request.descriptor();
-  CHECK(descriptor.kind() == AllocationKind::gdi);
+  CHECK(descriptor.kind() == AllocationKind::cross_adapter);
   CHECK(descriptor.cpu_visible());
   CHECK(descriptor.size() == 0x30000u);
   CHECK_EQ(descriptor.layout().pitch(), 0x30000u);
   CHECK_EQ(descriptor.layout().height(), 1u);
-  /* No bytes, more than a row, or a format: not an existing heap. */
-  const D3dkmdtGdiSurfaceDataRecord refused[] = {
-      {0u, 1u, 0, 7, 0u, 0xEEu}, {0x1000u, 2u, 0, 7, 0u, 0xEEu}, {0x1000u, 1u, a8r8g8b8, 7, 0u, 0xEEu}};
+  /* No bytes, or more than a row with no format: not an existing heap. */
+  const D3dkmdtGdiSurfaceDataRecord refused[] = {{0u, 1u, 0, 7, 0u, 0xEEu}, {0x1000u, 2u, 0, 7, 0u, 0xEEu}};
   for (D3dkmdtGdiSurfaceDataRecord heap : refused) {
       CHECK_STATUS(Request(gdi, &heap).describe(platform), Status::invalid_parameter);
       CHECK_EQ(heap.Pitch, 0xEEu);
   } }
 
+/* Affinity's textures: any size, in dxgkrnl's pitch and height - 1249x805 is
+ * 5120 bytes a row and 808 rows, 1010 pages; the descriptor keeps the real
+ * height. */
+TEST(standard_allocation_describe, a_cross_adapter_texture_has_dxgkrnls_pitch_and_pages)
+{ MockPlatform platform;
+  D3dkmdtGdiSurfaceDataRecord surface = {1249u, 805u, a8r8g8b8, 7, 0u, 0xEEu};
+  Request request(gdi, &surface);
+  CHECK_STATUS(request.describe(platform), Status::ok);
+  CHECK_EQ(surface.Pitch, 5120u);
+  const AllocationDescriptor descriptor = request.descriptor();
+  CHECK(descriptor.kind() == AllocationKind::cross_adapter);
+  CHECK(descriptor.cpu_visible());
+  CHECK(descriptor.size() == 1010u * 4096u);
+  CHECK_EQ(descriptor.layout().width(), 1249u);
+  CHECK_EQ(descriptor.layout().height(), 805u);
+  CHECK_EQ(descriptor.layout().format(), 21u);
+  CHECK_EQ(descriptor.layout().pitch(), 5120u);
+  D3dkmdtGdiSurfaceDataRecord narrow = {1056u, 16u, a8r8g8b8, 7, 0u, 0xEEu};
+  CHECK_STATUS(Request(gdi, &narrow).describe(platform), Status::ok);
+  CHECK_EQ(narrow.Pitch, 4224u);
+  D3dkmdtGdiSurfaceDataRecord wide = {100u, 100u, 113, 7, 0u, 0xEEu};
+  CHECK_STATUS(Request(gdi, &wide).describe(platform), Status::ok);
+  CHECK_EQ(wide.Pitch, 896u);
+  D3dkmdtGdiSurfaceDataRecord unknown = {16u, 16u, r5g6b5, 7, 0u, 0xEEu};
+  CHECK_STATUS(Request(gdi, &unknown).describe(platform), Status::invalid_parameter);
+  CHECK_EQ(unknown.Pitch, 0xEEu); }
+
 TEST(standard_allocation_describe, refuses_what_it_cannot_describe)
 { MockPlatform platform;
-  const std::int32_t unsupported_gdi[] = {0, 4, 5, 7, 8, 9};
+  const std::int32_t unsupported_gdi[] = {0, 4, 5, 8, 9};
   for (std::int32_t type : unsupported_gdi) {
       D3dkmdtGdiSurfaceDataRecord surface = {16u, 16u, a8r8g8b8, type, 0u, 0u};
       CHECK_STATUS(Request(gdi, &surface).describe(platform), Status::invalid_parameter);

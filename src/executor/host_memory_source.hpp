@@ -54,9 +54,23 @@ public:
     void                 free(uint32_t domain, uint64_t key);
     /* Main loop. Every key of `domain` let go: the device is going. */
     void                 free_domain(uint32_t domain);
-    /* Any thread. The live memory under `key` in `domain`, held for an import
-     * until release; null for none. */
+    /* Main loop. Every alias this source holds let go, the references they
+     * held given back to the sources that allocated the memory. The library
+     * closes with this first of every source, before any is destroyed: a
+     * source destroyed first would take with it memory another still names. */
+    void                 release_aliases();
+    /* Main loop. `key` in `domain` made to name the memory `from_key` names
+     * in `from_domain` of `from`, another GPU's source or this one: the very
+     * memory, held for `key` (with a reference of `from`'s) until free, however
+     * `from_key` goes. Described in `memory` with no descriptor. not_found for
+     * no such memory, conflict for a key already live, no_memory. */
+    [[nodiscard]] Status alias(uint32_t domain, uint64_t key, HostMemorySource &from, uint32_t from_domain,
+                               uint64_t from_key, AvHostMemory &memory);
+    /* Any thread. The live memory under `key` in `domain`, an alias's
+     * included, held for an import until release; null for none. */
     SourceMemory        *acquire(uint32_t domain, uint64_t key);
+    /* One reference let go, given back to the source that allocated the
+     * memory, whichever one's key it was acquired by. */
     void                 release(SourceMemory &memory);
     /* Any thread. The host memory types the source allocates: host-visible,
      * coherent and exportable. */
@@ -88,11 +102,23 @@ private:
      * `refused`, or memory_types. */
     uint32_t      first_type(uint32_t among, VkMemoryPropertyFlags wanted, VkMemoryPropertyFlags refused) const;
     SourceMemory *find(uint32_t domain, uint64_t key);
+    /* The memory an alias under `key` in `domain` names, with the alias's own
+     * reference still held; null for none. The lock is held. */
+    SourceMemory *aliased(uint32_t domain, uint64_t key);
+
     /* One reference let go, under the lock; the memory freed with the last. */
     void          let_go(SourceMemory &memory);
 
     MemoryExporter              &exporter_;
+    /* A key of this source's that names memory another source allocated. */
+    struct Alias {
+        uint32_t      domain_;
+        uint64_t      key_;
+        SourceMemory *memory_;
+    };
+
     ObjectPool<SourceMemory>     memories_;
+    ObjectPool<Alias>            aliases_;
     /* Mutable: a dump, which reads but never waits, takes it too. */
     mutable PosixLock            lock_;
     /* The GPU's types as last read, which were asked of the exporter, which

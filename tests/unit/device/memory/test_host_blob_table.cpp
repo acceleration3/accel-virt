@@ -6,6 +6,7 @@
 #include "core/trace/state_writer.hpp"
 #include "device/abi/av_executor.h"
 #include "device/memory/host_blob_owners.hpp"
+#include "device/memory/guest_ram_lendings.hpp"
 #include "device/memory/host_blob_table.hpp"
 #include "harness/context/recording_context_plane.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -401,14 +402,74 @@ TEST(host_blob_table_adopt, lays_a_live_write_back_blob_over_the_pages_named)
   char            bytes[512] = {};
   av::StateWriter writer(bytes, sizeof bytes);
   fixture.table().report(writer);
-  CHECK(std::strstr(writer.dump(), "adopted=4096") != nullptr);
+  CHECK(std::strstr(writer.dump(), "lent=true lender=true") != nullptr);
   CHECK_STATUS(fixture.table().release(first), Status::ok);
   CHECK_EQ(fixture.host().overlaid_bytes(), 0u);
-  /* Memory the library maps write-combined is given back. */
+  /* Memory the library maps write-combined is given back, as the first piece
+   * is laid: a blob is made before its pages are known. */
   fixture.plane().answer_caching(AV_MEMORY_WRITE_COMBINED);
-  CHECK_STATUS(fixture.table().create_over_guest(first, context, readback, page), Status::not_supported);
-  CHECK(!fixture.table().contains(first));
+  CHECK_STATUS(fixture.table().create_over_guest(first, context, readback, page), Status::ok);
+  CHECK_STATUS(fixture.table().adopt(first, request, 32u, 1u), Status::not_supported);
+  CHECK_EQ(fixture.plane().freed_count(), 2u);
+  CHECK_STATUS(fixture.table().release(first), Status::ok);
   CHECK_STATUS(fixture.table().create_over_guest(first - 1u, context, readback, page), Status::not_found); }
+
+/* Two adapters' devices lend the same pages: the second finds them lent whole
+ * and holds the lending, its blob naming the lender's memory in its executor
+ * instead of memory of its own; the pages go back once both blobs are gone. */
+TEST(host_blob_table_adopt, a_second_device_lending_the_same_pages_joins_the_first_ones_lending)
+{ MockHost host;
+  host.add_guest_ram(0x100000u, 0x10000u);
+  host.set_hostmem_size(16u * page);
+  av::GuestRamLendings lendings(host);
+  RecordingContextPlane first_plane;
+  RecordingContextPlane second_plane;
+  HostBlobTable         first_table(host);
+  HostBlobTable         second_table(host);
+  first_table.share_lendings(lendings);
+  second_table.share_lendings(lendings);
+  CHECK_STATUS(first_table.initialize(first_plane), Status::ok);
+  CHECK_STATUS(second_table.initialize(second_plane), Status::ok);
+  const HostMemoryRequest readback(HostMemoryRequest::Kind::readback, 0u);
+  std::uint8_t entries[32u + 16u] = {};
+  const std::uint64_t address = 0x102000u;
+  const std::uint32_t length = 0x1000u;
+  std::memcpy(entries + 32u, &address, sizeof address);
+  std::memcpy(entries + 40u, &length, sizeof length);
+  av::MockRequest    mock(entries, sizeof entries);
+  av::ControlRequest request(host, &mock);
+  CHECK_STATUS(first_table.create_over_guest(first, context, readback, page), Status::ok);
+  CHECK_STATUS(first_table.adopt(first, request, 32u, 1u), Status::ok);
+  CHECK_EQ(first_plane.memory_allocations(), 1u);
+  AvHostMemory lender_memory = {-1, AV_MEMORY_WRITE_BACK, page};
+  second_plane.alias_as(lender_memory);
+  CHECK_STATUS(second_table.create_over_guest(first, context + 1u, readback, page), Status::ok);
+  CHECK_STATUS(second_table.adopt(first, request, 32u, 1u), Status::ok);
+  /* No memory of its own: an alias of the first device's, and one overlay. */
+  CHECK_EQ(second_plane.memory_allocations(), 0u);
+  CHECK_EQ(second_plane.aliases(), 1u);
+  CHECK(second_plane.last_alias().lender == &first_plane && second_plane.last_alias().lender_key == first);
+  CHECK_EQ(host.overlaid_bytes(), page);
+  CHECK_EQ(lendings.live(), 1u);
+  /* The lender releases first: the pages stay under the lending. */
+  CHECK_STATUS(first_table.release(first), Status::ok);
+  CHECK_EQ(host.overlaid_bytes(), page);
+  CHECK_STATUS(second_table.release(first), Status::ok);
+  CHECK_EQ(host.overlaid_bytes(), 0u);
+  CHECK_EQ(lendings.live(), 0u);
+  /* The memory of a joiner is judged: an executor that refuses the alias
+   * leaves the blob waiting, and the pages with their lender. */
+  CHECK_STATUS(first_table.create_over_guest(first, context, readback, page), Status::ok);
+  CHECK_STATUS(first_table.adopt(first, request, 32u, 1u), Status::ok);
+  RecordingContextPlane refusing;
+  HostBlobTable         third_table(host);
+  third_table.share_lendings(lendings);
+  CHECK_STATUS(third_table.initialize(refusing), Status::ok);
+  CHECK_STATUS(third_table.create_over_guest(first, context + 2u, readback, page), Status::ok);
+  CHECK_STATUS(third_table.adopt(first, request, 32u, 1u), Status::no_memory);
+  CHECK_EQ(lendings.live(), 1u);
+  CHECK_STATUS(first_table.release(first), Status::ok);
+  CHECK_EQ(lendings.live(), 0u); }
 
 TEST(host_blob_table, reports_every_blob_and_where_it_is)
 { Fixture fixture;

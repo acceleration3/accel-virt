@@ -1,5 +1,6 @@
 #include "icd/opengl/front_buffer.hpp"
 
+#include "core/support/bgra_rows.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av::glicd {
@@ -57,21 +58,16 @@ bool FrontBuffer::read(int32_t x, int32_t y, int32_t width, int32_t height, uint
     const uint64_t right = static_cast<uint64_t>(x) + static_cast<uint64_t>(width);
     const uint64_t top = static_cast<uint64_t>(y) + static_cast<uint64_t>(height);
     if (right > width_ || top > height_) return false;
-    uint8_t *const out = static_cast<uint8_t *>(pixels);
-    const bool     swapped = format == gl_rgba;
-    for (uint32_t row = 0u; row < static_cast<uint32_t>(height); row++) {
-        const uint8_t *const from = pixels_ + (static_cast<uint64_t>(y) + row) * width_ * bytes_per_pixel +
-                                    static_cast<uint64_t>(x) * bytes_per_pixel;
-        uint8_t *const to = out + static_cast<uint64_t>(row) * static_cast<uint32_t>(width) * bytes_per_pixel;
-        for (uint32_t pixel = 0u; pixel < static_cast<uint32_t>(width); pixel++) {
-            /* The frame is BGRA; GL_RGBA asks for the two ends swapped. */
-            to[pixel * bytes_per_pixel + 0u] = from[pixel * bytes_per_pixel + (swapped ? 2u : 0u)];
-            to[pixel * bytes_per_pixel + 1u] = from[pixel * bytes_per_pixel + 1u];
-            to[pixel * bytes_per_pixel + 2u] = from[pixel * bytes_per_pixel + (swapped ? 0u : 2u)];
-            to[pixel * bytes_per_pixel + 3u] = from[pixel * bytes_per_pixel + 3u];
-        }
-    }
-    return true;
+    const uint64_t pitch = uint64_t{width_} * bytes_per_pixel;
+    uint64_t frame_bytes = 0u;
+    if (__builtin_mul_overflow(pitch, uint64_t{height_}, &frame_bytes) || frame_bytes > SIZE_MAX) return false;
+    const uint64_t offset = static_cast<uint64_t>(y) * pitch + static_cast<uint64_t>(x) * bytes_per_pixel;
+    const BgraRows from(pixels_ + static_cast<size_t>(offset), frame_bytes - offset, pitch);
+    const uint64_t line = static_cast<uint64_t>(width) * bytes_per_pixel;
+    BgraRows to(static_cast<uint8_t *>(pixels), line * static_cast<uint32_t>(height), line);
+    return to.copy_from(from, static_cast<uint32_t>(width), static_cast<uint32_t>(height),
+                        format == gl_rgba ? BgraRows::Channels::red_blue_swapped : BgraRows::Channels::unchanged) ==
+           Status::ok;
 }
 
 bool FrontBuffer::invariants_hold() const

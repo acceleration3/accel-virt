@@ -21,26 +21,32 @@ namespace av::d3d {
 
 class KernelContextGate final : public PublishGate {
 public:
-    KernelContextGate(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device, HANDLE context, KeyedLog &lines);
+    /* The wait gives up after `bound_ms`: a present waits for DWM to give
+     * the buffer back, which is longer than any frame DWM composes and short
+     * enough that a buffer nobody gives back costs a stutter; a device
+     * sharing a cross-adapter resource waits on every publish for its own
+     * waits, which only a few milliseconds may be allowed. */
+    KernelContextGate(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device, HANDLE context, KeyedLog &lines,
+                      DWORD bound_ms);
     ~KernelContextGate();
     KernelContextGate(const KernelContextGate &) = delete;
     KernelContextGate &operator=(const KernelContextGate &) = delete;
 
     void pass() override;
+    /* How many passes ran out of time and went on without the wait. */
+    uint32_t stalled() const;
 
 private:
     [[nodiscard]] HRESULT make_fence();
     [[nodiscard]] HRESULT signal_and_wait();
     [[nodiscard]] HRESULT await_signalled();
 
-    /* Longer than any frame DWM composes, short enough that a buffer nobody
-     * gives back - a window nobody composes - costs a stutter and not a hang. */
-    static constexpr DWORD bound_ms = 1000u;
-
     const D3DDDI_DEVICECALLBACKS &kernel_;
     HANDLE                        device_;
     HANDLE                        context_;
     KeyedLog                     &lines_;
+    DWORD                         bound_ms_;
+    uint32_t                      stalled_;
     D3DKMT_HANDLE                 fence_;
     const volatile uint64_t      *reached_;
     uint64_t                      signalled_;

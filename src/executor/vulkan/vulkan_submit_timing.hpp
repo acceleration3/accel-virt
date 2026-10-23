@@ -8,6 +8,8 @@
 #ifndef AV_DEVICE_EXECUTOR_VULKAN_SUBMIT_TIMING_HPP
 #define AV_DEVICE_EXECUTOR_VULKAN_SUBMIT_TIMING_HPP
 
+#include "executor/monotonic_clock.hpp"
+
 #include <vulkan/vulkan.h>
 
 #include <stdint.h>
@@ -40,9 +42,9 @@ private:
 
     void     harvest();
     void     report();
-    uint64_t now() const;
 
     DriverLog       &lines_;
+    MonotonicClock   clock_;
     bool             enabled_;
     VkDevice         device_;
     VkQueue          queue_;

@@ -18,6 +18,9 @@ namespace {
 
 /* The private data a texture made here carries: its ExportableImage. */
 constexpr GUID image_data = {0x5e1b7c42, 0x93d0, 0x4f6a, {0x8c, 0x2e, 0x71, 0x0b, 0xd4, 0x96, 0x3a, 0x58}};
+/* The private data a texture carries once a consumer on another GPU asked
+ * for its copy in system memory: its SystemMemoryTwin. */
+constexpr GUID twin_data = {0x2f9d4a16, 0x7be3, 0x4c81, {0x95, 0x0a, 0xe3, 0x6c, 0x18, 0xb7, 0x4d, 0x20}};
 /* From drm_fourcc.h. */
 constexpr uint64_t drm_format_mod_linear = 0u;
 constexpr uint64_t drm_format_mod_invalid = 0x00ffffffffffffffull;
@@ -27,7 +30,7 @@ constexpr uint32_t most_tilings = 16u;
 }  // namespace
 
 ExportableImages::ExportableImages(DxvkVulkanDevice &vulkan, DriverLog &lines)
-    : vulkan_(vulkan), heap_(), images_(heap_), retired_(0u), lines_(lines)
+    : vulkan_(vulkan), heap_(), images_(heap_), twins_(heap_), twin_refused_(false), retired_(0u), lines_(lines)
 {
     AV_SCOPE("ExportableImages::ExportableImages");
 }
@@ -228,6 +231,26 @@ bool ExportableImages::export_image(ID3D11Texture2D *texture, AvExportedImage &i
     return true;
 }
 
+bool ExportableImages::export_twin(ID3D11Texture2D *texture, AvExportedImage &image)
+{
+    AV_SCOPE("ExportableImages::export_twin");
+    image = AvExportedImage{-1, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
+    SystemMemoryTwin *twin = twin_of(texture);
+    if (twin == nullptr) twin = make_twin(texture);
+    if (twin != nullptr && twin->describe(image)) return true;
+    image.reserved = AV_EXPORT_UNAVAILABLE;
+    return false;
+}
+
+bool ExportableImages::refresh_twin(ID3D11DeviceContext4 *context, ID3D11Texture2D *texture, uint64_t writes)
+{
+    AV_SCOPE("ExportableImages::refresh_twin");
+    SystemMemoryTwin *const twin = twin_of(texture);
+    if (twin == nullptr) return false;
+    twin->copy_from(context, texture, writes);
+    return true;
+}
+
 void ExportableImages::collect()
 {
     AV_SCOPE("ExportableImages::collect");
@@ -238,15 +261,24 @@ void ExportableImages::collect()
         const_cast<ExportableImage &>(image).free();
         return true;
     });
+    twins_.destroy_if([](const SystemMemoryTwin &twin) {
+        if (!twin.retired()) return false;
+        const_cast<SystemMemoryTwin &>(twin).free();
+        return true;
+    });
 }
 
 void ExportableImages::release()
 {
     AV_SCOPE("ExportableImages::release");
-    if (images_.live() == 0u) return;
+    if (images_.live() == 0u && twins_.live() == 0u) return;
     vulkan_.idle();
     images_.destroy_if([](const ExportableImage &image) {
         const_cast<ExportableImage &>(image).free();
+        return true;
+    });
+    twins_.destroy_if([](const SystemMemoryTwin &twin) {
+        const_cast<SystemMemoryTwin &>(twin).free();
         return true;
     });
     __atomic_store_n(&retired_, 0u, __ATOMIC_RELEASE);
@@ -268,6 +300,7 @@ void ExportableImages::report(StateWriter &writer) const
     writer.open("exportable_images", 0u);
     writer.number("live", images_.live());
     writer.number("retired", waiting);
+    writer.number("twins", twins_.live());
     writer.number("blocks", heap_.live());
     writer.close();
 }
@@ -285,6 +318,45 @@ ExportableImage *ExportableImages::image_of(ID3D11Texture2D *texture)
      * hold's: it is their only base. */
     ExportableImage *const image = images_.find(static_cast<void *>(held));
     return image != nullptr && !image->retired() ? image : nullptr;
+}
+
+SystemMemoryTwin *ExportableImages::twin_of(ID3D11Texture2D *texture)
+{
+    AV_SCOPE("ExportableImages::twin_of");
+    if (texture == nullptr) return nullptr;
+    IUnknown *held = nullptr;
+    UINT      size = sizeof held;
+    if (FAILED(texture->GetPrivateData(twin_data, &size, &held)) || held == nullptr) return nullptr;
+    held->Release();
+    SystemMemoryTwin *const twin = twins_.find(static_cast<void *>(held));
+    return twin != nullptr && !twin->retired() ? twin : nullptr;
+}
+
+/* The reasons are the GPU's: no host-visible system memory type, no linear
+ * image of the format, or DXVK would not wrap one. A texture that is refused
+ * once is refused each time, and the consumer is told at once
+ * (AV_EXPORT_UNAVAILABLE) rather than asked to wait. */
+SystemMemoryTwin *ExportableImages::make_twin(ID3D11Texture2D *texture)
+{
+    AV_SCOPE("ExportableImages::make_twin");
+    collect();
+    SystemMemoryTwin *made = nullptr;
+    const bool        recorded = twins_.create(made, *this) == Status::ok;
+    const bool        held =
+        recorded && made->make(vulkan_, texture) &&
+        SUCCEEDED(texture->SetPrivateDataInterface(twin_data,
+                                                   reinterpret_cast<IUnknown *>(static_cast<TextureHold *>(made))));
+    if (held) return made;
+    if (recorded) {
+        made->free();
+        static_cast<void>(twins_.destroy(made));
+    }
+    if (!twin_refused_) {
+        twin_refused_ = true;
+        lines_.write("a shared texture has no copy in system memory for a consumer on another GPU: no host-visible "
+                     "system memory type, no linear image of its format, or DXVK would not wrap one");
+    }
+    return nullptr;
 }
 
 ExportableImage *ExportableImages::record()

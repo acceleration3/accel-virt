@@ -43,8 +43,12 @@ public:
     void      keep_shown(IUnknown *copy, D3dRetired &retired);
     /* What a Direct3D session opening the share gets - the flip copy, else
      * the view - with a reference of the caller's, counted as an open; null
-     * when there is neither. */
-    IUnknown *open();
+     * when there is neither. `live_of_presented` is set the first time that
+     * hands out the live buffer of a presented share. */
+    IUnknown *open(bool &live_of_presented);
+    /* The share is a buffer a present will show: it is opened as the flip
+     * copy or not at all, and a first open that finds none is reported once. */
+    void      expect_shown();
 
     /* Every reference retired: the share is freed. */
     void      retire_all(D3dRetired &retired);
@@ -71,6 +75,8 @@ private:
     uint64_t    writes_;
     uint64_t    opens_;
     ShareOrigin origin_;
+    bool        presented_;
+    bool        told_;
 };
 
 }  // namespace av

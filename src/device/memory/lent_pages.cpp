@@ -1,11 +1,10 @@
 #include "device/memory/lent_pages.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "device/host/host.hpp"
 
 namespace av {
 
-LentPages::LentPages(Host &host) : pages_(host, Pool::paged)
+LentPages::LentPages(BlockSource &blocks) : pages_(blocks, Pool::paged)
 {
     AV_SCOPE("LentPages::LentPages");
 }
@@ -16,9 +15,16 @@ bool LentPages::lent(uint64_t address) const
     return pages_.find(address / page_size) != nullptr;
 }
 
+GuestRamLending *LentPages::owner_of(uint64_t address) const
+{
+    AV_SCOPE("LentPages::owner_of");
+    GuestRamLending *const *const found = pages_.find(address / page_size);
+    return found != nullptr ? *found : nullptr;
+}
+
 /* Every page is judged, and room made for all of them, before any is marked:
  * a claim is whole or nothing. */
-Status LentPages::claim(uint64_t address, uint64_t bytes)
+Status LentPages::claim(uint64_t address, uint64_t bytes, GuestRamLending &owner)
 {
     AV_SCOPE("LentPages::claim");
     const uint64_t first = address / page_size;
@@ -29,7 +35,7 @@ Status LentPages::claim(uint64_t address, uint64_t bytes)
         pages_.reserve(pages_.count() + static_cast<uint32_t>(pages)) != Status::ok)
         return Status::no_memory;
     uint32_t slot = 0u;
-    for (uint64_t page = first; page < first + pages; page++) static_cast<void>(pages_.insert(page, 0u, slot));
+    for (uint64_t page = first; page < first + pages; page++) static_cast<void>(pages_.insert(page, &owner, slot));
     return Status::ok;
 }
 

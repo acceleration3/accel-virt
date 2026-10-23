@@ -54,9 +54,14 @@ and timeline fds through their own extensions.
 ## Threads
 
 There is one submission point per queue, the library's own, and work is
-submitted under that library's lock. Nothing spins. Work across devices is
+submitted under that library's lock. On the GPU path, work across devices is
 ordered by GPU semaphores and timelines, not by a CPU wait. No thread is
 added to copy bytes.
+
+Callers of `ComposeOrder::presented` hold the shared Direct3D 11 device lock
+while inserting its timeline wait. Inserting the wait first flushes DXVK's
+immediate context; the queue's submission lock alone does not serialize that
+flush with DWM or other sessions recording into the same context.
 
 ## What crosses on the GPU now
 
@@ -65,13 +70,28 @@ added to copy bytes.
     compositor made, and Direct3D 11 imports the same memory as the shared
     primary.
   - Direct3D 11's queue waits on the timeline before it reads the primary.
-  - Without a compositor the flip crosses through the CPU, as before
-    (`flip_on_cpu`).
+  - Before the next copy overwrites a primary, Direct3D 11 flushes its previous
+    readers and signals a reverse timeline, which Direct3D 9's queue waits on.
+    The Direct3D 11 device lock covers this signal, the writer submission and
+    the forward wait, so no reader slips between the two halves of the handoff.
+  - Without usable GPU interop the flip crosses through the CPU
+    (`flip_on_cpu`). It captures the current frame through `D3d9FramePool`,
+    waits for that frame with `PollBudget`, and only then uploads it to
+    Direct3D 11. It never substitutes a previous frame. The wait has a
+    five-second deadline and holds no Direct3D 11 device lock; an unreadable
+    frame fails the present command instead of silently leaving an old one.
 - **An OpenCL image over a Direct3D 11 texture** (docs/d3d11-sharing.md,
   stage 2). The texture's twin is shared memory that OpenCL opens as an image
   in place. Acquire and release are copies on Direct3D's GPU.
 
 ## Windowed presents, as measured
+
+The guest's D3D9 and D3D11 devices share `PresentOrder`: the kernel present
+follows the host batch through `BatchFollower`, and a successful flip/primary
+present holds later host work behind `KernelContextGate` until the runtime's
+context waits have completed. D3D11 uses that reuse gate for flip-model buffers;
+D3D9 now uses it for primary allocations too. Blt snapshots retain their
+independent surface/point identity and do not acquire the reuse gate.
 
 These measurements were made in a Windows 11 guest, with a windowed
 blt-model test in Direct3D 9 and in Direct3D 11.

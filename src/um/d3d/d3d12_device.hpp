@@ -36,6 +36,7 @@
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/pipeline_library_blob.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
+#include "um/d3d/allocation_lender.hpp"
 #include "um/d3d/batch_follower.hpp"
 #include "um/d3d/d3d_call_trace.hpp"
 #include "um/d3d/d3d12_ddi.hpp"
@@ -138,7 +139,6 @@ private:
                                            ResourceRecord &resource);
     /* Where the application's pages behind an existing heap's allocation
      * are: null when the kernel will not say. */
-    void                    *existing_pages(D3DKMT_HANDLE allocation);
     HRESULT                  make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, const D3D12DDI_CLEAR_VALUES *clear,
                                            HeapRecord &heap, uint64_t offset, ResourceRecord &resource);
     /* A record of `desc`, stamped with a new id and no heap. */
@@ -185,6 +185,8 @@ private:
     /* The kernel thunks, which lock an existing heap's allocation to learn
      * whose pages it is. */
     const D3DDDI_DEVICECALLBACKS                  *kernel_;
+    /* Lends a kernel allocation's pages to the host: an existing heap's. */
+    d3d::AllocationLender                          lender_;
     /* How a queue's context waits for the work the ring carried. */
     ObjectStorage<d3d::BatchFollower>     follower_;
     /* The kernel allocations shown surfaces own, paged on D3D12Core's queue. */

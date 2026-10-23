@@ -406,22 +406,6 @@ HRESULT D3d12Device::open_heap_and_resource(const D3D12DDIARG_OPENHEAP_0003 *arg
                          *static_cast<ResourceRecord *>(handle.pDrvPrivate));
 }
 
-void *D3d12Device::existing_pages(D3DKMT_HANDLE allocation)
-{
-    AV_SCOPE("D3d12Device::existing_pages");
-    if (kernel_ == nullptr || kernel_->pfnLockCb == nullptr) return nullptr;
-    D3DDDICB_LOCK lock = {};
-    lock.hAllocation = allocation;
-    if (FAILED(kernel_->pfnLockCb(runtime_.handle, &lock))) return nullptr;
-    /* The pages stay the application's whether locked or not: the lock only
-     * says where they are. */
-    D3DDDICB_UNLOCK unlock = {};
-    unlock.NumAllocations = 1u;
-    unlock.phAllocations = &allocation;
-    if (kernel_->pfnUnlockCb != nullptr) static_cast<void>(kernel_->pfnUnlockCb(runtime_.handle, &unlock));
-    return lock.pData;
-}
-
 HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRecord &heap, ResourceRecord &resource)
 {
     AV_SCOPE("D3d12Device::open_existing");
@@ -430,20 +414,18 @@ HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRe
     if (opened.pPrivateDriverData == nullptr ||
         described.decode(static_cast<const uint8_t *>(opened.pPrivateDriverData), opened.PrivateDriverDataSize) !=
             Status::ok ||
-        described.kind() != AllocationKind::gdi || !described.cpu_visible() || described.layout().height() != 1u) {
+        described.kind() != AllocationKind::cross_adapter || !described.cpu_visible() || described.layout().height() != 1u ||
+        described.layout().format() != 0u) {
         unsupported("pfnOpenHeapAndResource of a shared heap");
         return E_NOTIMPL;
     }
-    void *const pages = existing_pages(opened.hAllocation);
-    if (pages == nullptr) return E_INVALIDARG;
     heap = HeapRecord{};
     stamp(heap.header, HeapRecord::tag, next_id());
     heap.type = heap_readback;
     heap.size = described.size();
     heap.address = addresses_.reserve(heap.size);
     if (heap.address == 0u) return E_OUTOFMEMORY;
-    const HostMemoryRequest readback(HostMemoryRequest::Kind::readback, 0u);
-    if (session_.adopt_memory(pages, heap.size, readback, heap.memory) != Status::ok) {
+    if (lender_.lend(opened.hAllocation, heap.size, heap.memory) != Status::ok) {
         lines_.write("the device took no existing heap's pages");
         return E_OUTOFMEMORY;
     }

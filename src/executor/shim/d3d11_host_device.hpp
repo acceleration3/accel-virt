@@ -138,6 +138,10 @@ public:
      * own stream. False for an id not shared, or a copy the device will not
      * make. */
     [[nodiscard]] bool      show(uint32_t domain, uint64_t id, ID3D11Texture2D *presented);
+    /* The flip copy of `id`, made when the buffer is, so a compositor that
+     * opens the key before the first present gets it and never the live
+     * buffer (D3dShareState::open). */
+    [[nodiscard]] bool      prepare_shown(uint32_t domain, uint64_t id, ID3D11Texture2D *presented);
     /* Under the lock: what a session opening `id` gets (HostShares::
      * open_resource), with a reference the caller owns; null for none. A
      * Direct3D 12 resource is made a texture of DXVK's over the same memory
@@ -167,13 +171,15 @@ public:
     /* The surface shared as `surface` as its own memory, a dma-buf the caller
      * owns, for a process outside QEMU (ExportableImages::export_image).
      * False for a surface nothing shares, or one made over memory no other
-     * API can open. Takes the lock. */
-    [[nodiscard]] bool export_surface(uint32_t domain, uint64_t surface, AvExportedImage &image);
+     * API can open. With AV_EXPORT_OTHER_GPU in `flags`, the surface's copy in
+     * system memory instead (ExportableImages::export_twin). Takes the lock. */
+    [[nodiscard]] bool export_surface(uint32_t domain, uint64_t surface, uint32_t flags, AvExportedImage &image);
     /* The copies into `surface` the host has run (HostShares::writes) and a
      * sync_file, the caller's, that signals once the GPU is done with them
      * (DxvkVulkanDevice::sync_file). False for a surface nothing shares, or a
-     * device that makes no sync_file. Takes the lock. */
-    [[nodiscard]] bool sync_surface(uint32_t domain, uint64_t surface, uint64_t &writes, int &fd);
+     * device that makes no sync_file. With AV_EXPORT_OTHER_GPU in `flags` the
+     * surface is first copied into its twin, which must have been exported. Takes the lock. */
+    [[nodiscard]] bool sync_surface(uint32_t domain, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd);
     /* Under the lock a session's command already holds: subresource
      * `subresource` of `source` staged for the present engine
      * (D3d11FramePool::stage); null when no frame is free. */
@@ -199,6 +205,9 @@ public:
      * reference the caller owns; the descriptor is the texture's once it is
      * made. */
     ID3D11Texture2D   *adopt_exportable(OwnedFd &descriptor, const D3D11_TEXTURE2D_DESC1 &desc);
+    /* Under the lock: the dma-buf `descriptor`, memory laid out as rows
+     * `pitch` bytes apart from its start (lent pages), as a texture. */
+    ID3D11Texture2D   *adopt_rows(OwnedFd &descriptor, const D3D11_TEXTURE2D_DESC1 &desc, uint32_t pitch);
     /* Under the lock: the row pitch of the linear image make_rows made
      * `texture` over (ExportableImages::row_pitch). */
     [[nodiscard]] bool exportable_pitch(ID3D11Texture2D *texture, uint32_t &pitch);
@@ -271,6 +280,7 @@ private:
      * Direct3D 12 resource made its view, kept with the share, the first time
      * - with the reference `found` came with; null for none. */
     IUnknown          *viewed(uint32_t domain, uint64_t id, IUnknown *found);
+    ID3D11Texture2D   *made_shown(uint32_t domain, uint64_t id, ID3D11Texture2D *presented);
     /* Under the lock: what retire_shares does. */
     void               retire_locked();
     /* The shared texture copied into staging_, queued, under the lock. */

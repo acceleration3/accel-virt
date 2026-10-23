@@ -1,4 +1,6 @@
 #include "executor/d3d/d3d_backend.hpp"
+#include "proto/resources/mip_extent.hpp"
+#include "proto/resources/subresource_layout.hpp"
 
 #include "executor/executor_log.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
@@ -17,7 +19,7 @@
 #include "proto/d3d/resource_misc.hpp"
 #include "proto/resources/pitched_extent.hpp"
 #include "executor/import_table.hpp"
-#include "executor/poll_budget.hpp"
+#include "core/platform/poll_budget.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
@@ -334,6 +336,42 @@ ID3D11Texture2D *D3dBackend::shareable(const D3D11_TEXTURE2D_DESC &texture, uint
     return misc.rows() ? device11_->make_rows(described) : device11_->make_tiled(described);
 }
 
+ID3D11Texture2D *D3dBackend::lent_texture(const D3D11_TEXTURE2D_DESC &texture, uint64_t memory, uint32_t row_pitch)
+{
+    AV_SCOPE("D3dBackend::lent_texture");
+    const SourceMemory *const backing = imports_ != nullptr ? imports_->named(memory) : nullptr;
+    /* Every number came off the wire: the rows must be at least a row of
+     * texels apart, and the last of them end inside the memory - an image
+     * the host GPU is made to read past its memory faults it. */
+    const uint64_t row_bytes = uint64_t{texture.Width} * DxgiFormatLayout(static_cast<uint32_t>(texture.Format)).element_bytes();
+    if (backing == nullptr || texture.MipLevels != 1u || texture.ArraySize != 1u || texture.SampleDesc.Count != 1u ||
+        texture.Height == 0u || row_bytes == 0u || row_pitch < row_bytes ||
+        uint64_t{texture.Height - 1u} * row_pitch + row_bytes > backing->size()) {
+        LogLine(lines_).text("a lent texture names no memory that holds it: handle ").hex(memory, 16u).write();
+        return nullptr;
+    }
+    OwnedFd descriptor;
+    if (!backing->share(descriptor)) return nullptr;
+    D3D11_TEXTURE2D_DESC1 described = {};
+    described.Width = texture.Width;
+    described.Height = texture.Height;
+    described.MipLevels = 1u;
+    described.ArraySize = 1u;
+    described.Format = texture.Format;
+    described.SampleDesc = {1u, 0u};
+    described.Usage = texture.Usage;
+    described.BindFlags = texture.BindFlags;
+    ID3D11Texture2D *const made = device11_->adopt_rows(descriptor, described, row_pitch);
+    if (made == nullptr)
+        LogLine(lines_)
+            .text("the host would not make a lent texture of format ")
+            .number(static_cast<uint32_t>(texture.Format))
+            .text(" pitch ")
+            .number(row_pitch)
+            .write();
+    return made;
+}
+
 /* A shared texture's memory, as the dma-buf OpenGL and Vulkan import. The
  * Direct3D 11 lock a batch holds is held across this command too; one that
  * arrives on its own takes it. */
@@ -430,11 +468,12 @@ bool D3dBackend::extent_of(ID3D11Resource *resource, uint32_t subresource, uint3
     } else {
         return false;
     }
-    if (subresource >= mips * layers) return false;
-    const uint32_t mip = subresource % mips;
-    width = width >> mip == 0u ? 1u : width >> mip;
-    height = height >> mip == 0u ? 1u : height >> mip;
-    depth = depth >> mip == 0u ? 1u : depth >> mip;
+    const SubresourceLayout subresources(mips, layers, 1u);
+    if (!subresources.holds(subresource)) return false;
+    const MipExtent extent(width, height, depth, subresources.mip_of(subresource));
+    width = static_cast<uint32_t>(extent.width());
+    height = extent.height();
+    depth = extent.depth();
     return true;
 }
 
@@ -732,7 +771,8 @@ bool D3dBackend::on_DestroyObject(uint32_t id)
 
 /* ---------------------------------------------------------------- creation */
 
-bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &desc, uint64_t shared_key)
+bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &desc, uint64_t shared_key,
+                                   uint64_t memory, uint32_t row_pitch)
 {
     AV_SCOPE("D3dBackend::on_CreateResource");
     if (!has_device() || !DxgiFormatLayout(desc.format).known() || (desc.bind_flags & ~known_bind_flags) != 0u) return false;
@@ -776,8 +816,11 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
                                               desc.bind_flags,
                                               0u,
                                               misc};
-        ID3D11Texture2D *out = shareable(texture, desc.misc_flags);
-        result = out != nullptr ? S_OK : device->CreateTexture2D(&texture, nullptr, &out);
+        ID3D11Texture2D *out = memory != 0u ? lent_texture(texture, memory, row_pitch) : shareable(texture, desc.misc_flags);
+        /* Memory the guest named is the texture's or nothing: another
+         * texture would not be the pages the other adapter reads. */
+        if (memory != 0u) result = out != nullptr ? S_OK : E_FAIL;
+        else result = out != nullptr ? S_OK : device->CreateTexture2D(&texture, nullptr, &out);
         made = out;
     } else if (desc.dimension == dimension_texture3d) {
         if (desc.width > 2048u || desc.height > 2048u || desc.depth_or_array > 2048u) return false;
@@ -814,6 +857,16 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
             .number(static_cast<uint32_t>(published))
             .write();
     if (published == Status::ok) describe_shared_image(shared_key, made);
+    if (published == Status::ok && ResourceMisc(desc.misc_flags).presented() &&
+        desc.dimension == dimension_texture2d) {
+        /* A compositor may open the key before the first present: it must
+         * find the copy a present refreshes, never the live buffer. */
+        ID3D11Texture2D *texture = nullptr;
+        if (SUCCEEDED(made->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)))) {
+            static_cast<void>(device11_->prepare_shown(shares_->domain(), shared_key, texture));
+            texture->Release();
+        }
+    }
     return true;
 }
 

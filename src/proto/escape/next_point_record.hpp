@@ -19,12 +19,20 @@ class NextPointRecord {
 public:
     static constexpr size_t   encoded_size = 16u;
     static constexpr uint32_t magic = 0x004E5641u;   /* "AVN" */
+    static constexpr uint32_t withdraw_magic = 0x004A5641u;   /* "AVJ": "AVW" is HostWindowRecord's */
+    static constexpr uint32_t pages_magic = 0x00555641u;   /* "AVU": "AVP" is the present records' */
+
+    /* What the record says of the point: name it for the next present, take
+     * back one named for a present that never reached the kernel, or say the
+     * next present reads the allocation's pages (the host staged nothing). */
+    enum class Action : uint8_t { name, withdraw, pages };
 
     NextPointRecord();
-    NextPointRecord(uint64_t surface, uint32_t point);
+    NextPointRecord(uint64_t surface, uint32_t point, Action action = Action::name);
 
     uint64_t surface() const;
     uint32_t point() const;
+    Action   action() const;
 
     /* too_large for less room than the record. */
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
@@ -35,6 +43,7 @@ public:
 private:
     uint64_t surface_;
     uint32_t point_;
+    Action   action_;
 };
 
 }  // namespace av

@@ -1,11 +1,11 @@
-#include "executor/poll_budget.hpp"
+#include "core/platform/poll_budget.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "executor/host_clock.hpp"
+#include "core/platform/poll_clock.hpp"
 
 namespace av {
 
-PollBudget::PollBudget(HostClock &clock, uint64_t spin_nanoseconds, uint64_t pause_nanoseconds,
+PollBudget::PollBudget(PollClock &clock, uint64_t spin_nanoseconds, uint64_t pause_nanoseconds,
                        uint64_t deadline_nanoseconds)
     : clock_(clock), spin_nanoseconds_(spin_nanoseconds), pause_nanoseconds_(pause_nanoseconds),
       deadline_nanoseconds_(deadline_nanoseconds), started_(0u), polled_(false), expired_(false)

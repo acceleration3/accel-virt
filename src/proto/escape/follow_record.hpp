@@ -27,6 +27,9 @@ public:
     uint64_t fence() const;
 
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
+    /* `length` may exceed the record: dxgkrnl hands a packet the private data
+     * of the context's size, which is room for the largest record a context
+     * carries (ReleaseRecord). The record is the prefix, judged by its magic. */
     /* Unchanged unless ok. */
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 

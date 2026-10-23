@@ -43,6 +43,17 @@ public:
     /* Main loop. The memory under `key` let go; an import still holding it
      * keeps it until the import goes. */
     virtual void                 free_memory(uint64_t key) = 0;
+    /* Main loop. Memory under `key` that is the memory `lender_key` names in
+     * `lender`'s executor (a plane of another adapter's device): the
+     * lender's, not a copy of it, described in `memory` with no descriptor.
+     * It is held for `key` until free_memory whatever becomes of the
+     * lender's. no_memory for any refusal, and always in renderer mode, where
+     * the executors are in processes of their own. */
+    [[nodiscard]] virtual Status alias_memory(uint64_t key, const ContextPlane &lender, uint64_t lender_key,
+                                              AvHostMemory &memory) = 0;
+    /* The domain this plane's memory is in, as `lender` names it to another
+     * plane; 0 for none. */
+    virtual uint32_t             memory_domain() const = 0;
 
     /* invalid_parameter for id 0, conflict for a live id, no_space when full. */
     [[nodiscard]] virtual Status create(uint32_t id) = 0;
@@ -92,10 +103,10 @@ public:
      * process outside QEMU here (docs/external-export.md), and the one
      * shared as `surface` exported as its own memory, or the copies into it
      * counted with a sync_file for them (ExecutorLibrary::export_surface,
-     * sync_surface). Every descriptor answered is the caller's. */
+     * sync_surface); `flags` are AV_EXPORT_*. Every descriptor answered is the caller's. */
     virtual bool exports_surfaces() const = 0;
-    virtual bool export_surface(const uint8_t *gpu_uuid, uint64_t surface, AvExportedImage &image) = 0;
-    virtual bool sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint64_t &writes, int &fd) = 0;
+    virtual bool export_surface(const uint8_t *gpu_uuid, uint64_t surface, uint32_t flags, AvExportedImage &image) = 0;
+    virtual bool sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd) = 0;
 
     virtual void report(StateWriter &writer) = 0;
     virtual bool invariants_hold() const = 0;

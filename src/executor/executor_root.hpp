@@ -71,6 +71,12 @@ public:
     [[nodiscard]] Status allocate_memory(uint32_t domain, uint64_t key, uint64_t size, uint32_t request,
                                          AvHostMemory &memory);
     void                 free_memory(uint32_t domain, uint64_t key);
+    /* `key` in `domain` made to name the memory `from_key` names in
+     * `from_domain` - the other adapter's device's lending of the same pages,
+     * on its own GPU - described in `memory` (HostMemorySource::alias): no_memory
+     * for a domain not open or any refusal. Main loop. */
+    [[nodiscard]] Status alias_memory(uint32_t domain, uint64_t key, uint32_t from_domain, uint64_t from_key,
+                                      AvHostMemory &memory);
     /* The image shared as `id` in `domain`, copied into an exportable image. */
     bool     export_image(uint32_t domain, uint64_t id, AvExportedImage &image);
     /* A display head's planes composed into one exported image
@@ -89,8 +95,8 @@ public:
      * process outside QEMU (D3d11HostDevice::export_surface), and the copies
      * into it the host has run with a sync_file for them
      * (D3d11HostDevice::sync_surface). Any thread. */
-    bool     export_surface(uint32_t domain, uint64_t surface, AvExportedImage &image);
-    bool     sync_surface(uint32_t domain, uint64_t surface, uint64_t &writes, int &fd);
+    bool     export_surface(uint32_t domain, uint64_t surface, uint32_t flags, AvExportedImage &image);
+    bool     sync_surface(uint32_t domain, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd);
 
     /* A session for one context of `sub_api` in the domain `options` names, on
      * that domain's GPU, or null: for a sub-API that GPU does not run, for a

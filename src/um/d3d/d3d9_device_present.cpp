@@ -27,7 +27,7 @@ namespace av::d3d9 {
 HRESULT D3d9Device::follow_host()
 {
     AV_SCOPE("D3d9Device::follow_host");
-    return follower_.constructed() ? follower_.object().follow(context_) : E_FAIL;
+    return present_order_.constructed() ? present_order_.object().follow() : E_FAIL;
 }
 
 /* The runtime flushes before every present, and before it waits on anything
@@ -127,19 +127,39 @@ HRESULT D3d9Device::publish_point(D3d9Resource &resource, uint32_t index)
     if (!d3d9proto::av_d3d9_PresentPoint9(wire(), id, subresource, resource.shared_key, point) ||
         wire().flush() != Status::ok)
         return lost(__func__);
-    uint8_t      record[NextPointRecord::encoded_size] = {};
-    const Status named = NextPointRecord(resource.shared_key, point).encode(record, sizeof record) ==
-                                 Status::ok
-                             ? session_.escape(record, sizeof record)
-                             : Status::invalid_parameter;
-    if (named == Status::ok) return S_OK;
+    const Status named = send_point(resource, point, NextPointRecord::Action::name);
+    if (named == Status::ok) {
+        resource.named_point = point;
+        return S_OK;
+    }
     if (lines_.first("a Direct3D 9 point the miniport refused", static_cast<int64_t>(named)))
         LogLine(lines_)
             .text("the miniport took no point for a Direct3D 9 present, status ")
             .number(static_cast<uint32_t>(named))
             .text("; its frames are read back")
             .write();
+    /* A miniport that took points before reads the pages only when told this
+     * present has none: its absence of a point would keep the window's last
+     * frame instead. */
+    static_cast<void>(send_point(resource, 0u, NextPointRecord::Action::pages));
     return publish(resource, index);
+}
+
+Status D3d9Device::send_point(const D3d9Resource &resource, uint32_t point, NextPointRecord::Action action)
+{
+    AV_SCOPE("D3d9Device::send_point");
+    uint8_t record[NextPointRecord::encoded_size] = {};
+    if (NextPointRecord(resource.shared_key, point, action).encode(record, sizeof record) != Status::ok)
+        return Status::invalid_parameter;
+    return session_.escape(record, sizeof record);
+}
+
+void D3d9Device::withdraw_point(D3d9Resource &resource)
+{
+    AV_SCOPE("D3d9Device::withdraw_point");
+    if (resource.named_point == 0u) return;
+    static_cast<void>(send_point(resource, resource.named_point, NextPointRecord::Action::withdraw));
+    resource.named_point = 0u;
 }
 
 /* Fullscreen: the primary dxgkrnl scans out from now on, with the host's
@@ -208,12 +228,19 @@ HRESULT D3d9Device::present(const D3DDDIARG_PRESENT *args)
         return published;
     }
     const HRESULT followed = follow_host();
-    if (FAILED(followed)) return followed;
+    if (FAILED(followed)) {
+        withdraw_point(*source);
+        return followed;
+    }
     D3DDDICB_PRESENT present = {};
     present.hSrcAllocation = source->allocation;
     present.hDstAllocation = destination == nullptr ? 0u : destination->allocation;
     present.hContext = context_;
-    const HRESULT presented = kernel_.present(present);
+    const HRESULT presented = present_order_.object().submitted(kernel_.present(present),
+        source->allocation_resource != nullptr ? d3d::PresentOrder::Reuse::after_context
+                                               : d3d::PresentOrder::Reuse::immediate);
+    if (FAILED(presented)) withdraw_point(*source);
+    source->named_point = 0u;
     trace("presented", static_cast<uint32_t>(presented), static_cast<uint32_t>(clock_.microseconds() - began), 0u, 0u);
     return presented;
 }

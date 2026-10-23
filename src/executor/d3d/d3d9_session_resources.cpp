@@ -11,6 +11,7 @@
 #include "executor/d3d/frame_stager.hpp"
 #include "executor/d3d/staged_frame.hpp"
 #include "proto/resources/surface_point.hpp"
+#include "proto/resources/subresource_layout.hpp"
 #include "proto/d3d/d3d9_format_layout.hpp"
 
 #include <string.h>
@@ -199,9 +200,10 @@ bool D3d9Session::write_level(uint32_t texture, uint32_t subresource, const d3d9
     IDirect3DBaseTexture9 *const base = flat != nullptr ? static_cast<IDirect3DBaseTexture9 *>(flat) : cube;
     if (base == nullptr) return false;
     const uint32_t levels = base->GetLevelCount();
-    const uint32_t level = subresource % levels;
-    const uint32_t face = subresource / levels;
-    if (face >= (cube != nullptr ? cube_faces : 1u)) return false;
+    const SubresourceLayout subresources(levels, cube != nullptr ? cube_faces : 1u, 1u);
+    if (!subresources.holds(subresource)) return false;
+    const uint32_t level = subresources.mip_of(subresource);
+    const uint32_t face = subresources.layer_of(subresource);
     D3DSURFACE_DESC desc = {};
     if (FAILED(flat != nullptr ? flat->GetLevelDesc(level, &desc) : cube->GetLevelDesc(level, &desc))) return false;
     const D3d9FormatLayout layout(static_cast<uint32_t>(desc.Format));
@@ -467,7 +469,7 @@ bool D3d9Session::on_PresentPoint9(uint32_t surface_id, uint32_t subresource, ui
     if (point == 0u && key != 0u) {
         const Status shown = flips_.flip(device(), source, key);
         if (shown != Status::ok && shown != Status::not_supported) lines_.note_hex("a primary's flip was not shared, key", key, 16u);
-        return true;
+        return shown == Status::ok || shown == Status::not_supported;
     }
     if (surfaces_ == nullptr || host_ == nullptr) return true;
     PresentedSurface presented(*host_, device(), source);

@@ -34,6 +34,9 @@ public:
     [[nodiscard]] Status allocate_memory(uint32_t context, uint64_t key, uint64_t size, uint32_t request,
                                          AvHostMemory &memory) override;
     void                 free_memory(uint64_t key) override;
+    [[nodiscard]] Status alias_memory(uint64_t key, const ContextPlane &lender, uint64_t lender_key,
+                                      AvHostMemory &memory) override;
+    uint32_t             memory_domain() const override;
 
     [[nodiscard]] Status create(uint32_t id) override;
     [[nodiscard]] Status destroy(uint32_t id) override;
@@ -60,8 +63,8 @@ public:
     bool map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) override;
     void unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) override;
     bool exports_surfaces() const override;
-    bool export_surface(const uint8_t *gpu_uuid, uint64_t surface, AvExportedImage &image) override;
-    bool sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint64_t &writes, int &fd) override;
+    bool export_surface(const uint8_t *gpu_uuid, uint64_t surface, uint32_t flags, AvExportedImage &image) override;
+    bool sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd) override;
 
     void report(StateWriter &writer) override;
     bool invariants_hold() const override;

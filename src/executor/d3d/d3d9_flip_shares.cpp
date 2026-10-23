@@ -1,6 +1,7 @@
 #include "executor/d3d/d3d9_flip_shares.hpp"
 
 #include "core/support/scope_exit.hpp"
+#include "core/platform/poll_budget.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/owned_fd.hpp"
 #include "executor/sharing/session_shares.hpp"
@@ -40,13 +41,12 @@ D3D11_TEXTURE2D_DESC1 shared_texture_desc(uint32_t width, uint32_t height, uint3
 }  // namespace
 
 D3d9FlipShares::D3d9FlipShares(BlockSource &blocks)
-    : device11_(nullptr), shares_(nullptr), lanes_(blocks), lane_of_(blocks, Pool::paged), flips_(0u)
+    : device11_(nullptr), shares_(nullptr), lanes_(blocks), lane_of_(blocks, Pool::paged), flips_(0u), cpu_frames_(), clock_()
 {
     AV_SCOPE("D3d9FlipShares::D3d9FlipShares");
     for (Primary &primary : primaries_) {
         primary.texture_ = nullptr;
         primary.lane_ = nullptr;
-        for (Copy &copy : primary.copies_) copy = Copy{nullptr, nullptr, 0u};
         primary.key_ = primary.used_ = 0u;
         primary.device_ = nullptr;
         primary.width_ = primary.height_ = primary.format_ = 0u;
@@ -77,21 +77,27 @@ Status D3d9FlipShares::flip(IDirect3DDevice9 *device, IDirect3DSurface9 *source,
     if (desc.Format != D3DFMT_X8R8G8B8 && desc.Format != D3DFMT_A8R8G8B8) return Status::not_supported;
     Primary *const shown = primary(device, key, desc.Width, desc.Height, static_cast<uint32_t>(desc.Format));
     if (shown == nullptr) return Status::no_memory;
-    const Status flipped = shown->lane_ != nullptr ? flip_on_gpu(*shown, source) : flip_on_cpu(*shown, source);
+    const Status flipped = shown->lane_ != nullptr ? flip_on_gpu(*shown, source)
+        : flip_on_cpu(*shown, source, desc.MultiSampleType != D3DMULTISAMPLE_NONE);
     if (flipped == Status::ok) shown->used_ = ++flips_;
     return flipped;
 }
 
-/* The copy goes on the Direct3D 9 device's queue behind the frame; Direct3D
- * 11's queue waits for it before anything it runs after - DWM's composition,
- * the scanout's export - reads the texture. */
+/* Direct3D 9 waits for previous readers before overwriting the shared image;
+ * Direct3D 11 waits for that write before recording new readers. */
 Status D3d9FlipShares::flip_on_gpu(Primary &shown, IDirect3DSurface9 *source)
 {
     AV_SCOPE("D3d9FlipShares::flip_on_gpu");
     Lane         &lane = *shown.lane_;
     VkImage       image = VK_NULL_HANDLE;
     VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    if (!lane.vulkan_.surface_image(source, image, layout) ||
+    /* Keep other readers out between releasing the previous frame and
+     * publishing the new writer's wait on the shared Direct3D 11 queue. */
+    device11_->lock(nullptr);
+    ScopeExit unlock([this] { device11_->unlock(); });
+    if (!device11_->vulkan().signal(lane.consumed_, lane.order_.next()) ||
+        !lane.vulkan_.work().wait(lane.reusable_, lane.order_.next()) ||
+        !lane.vulkan_.surface_image(source, image, layout) ||
         !lane.vulkan_.work().copy(image, layout, shown.adopted_.image(), shown.width_, shown.height_,
                                   lane.signalled_, lane.order_.next()) ||
         !lane.order_.presented())
@@ -100,55 +106,29 @@ Status D3d9FlipShares::flip_on_gpu(Primary &shown, IDirect3DSurface9 *source)
     return Status::ok;
 }
 
-/* A flip writes what is finished and queues its own copy: nothing here waits
- * for the GPU unless both of a primary's copies are still in flight. */
-Status D3d9FlipShares::flip_on_cpu(Primary &shown, IDirect3DSurface9 *source)
+Status D3d9FlipShares::flip_on_cpu(Primary &shown, IDirect3DSurface9 *source, bool multisampled)
 {
     AV_SCOPE("D3d9FlipShares::flip_on_cpu");
-    device11_->lock(nullptr);
-    ScopeExit unlock([this] { device11_->unlock(); });
-    write_finished(shown, false);
-    Copy *const copy = free_copy(shown);
-    if (FAILED(shown.device_->GetRenderTargetData(source, copy->staging_))) return Status::invalid_state;
-    copy->copied_->Issue(D3DISSUE_END);
-    copy->flip_ = flips_ + 1u;
-    return Status::ok;
-}
-
-/* Under the Direct3D 11 lock. A copy the GPU has not finished is left for a
- * later flip, unless `wait` asks for the oldest, whose finishing then frees
- * a slot. */
-void D3d9FlipShares::write_finished(Primary &primary, bool wait)
-{
-    AV_SCOPE("D3d9FlipShares::write_finished");
-    for (;;) {
-        Copy *oldest = nullptr;
-        for (Copy &copy : primary.copies_)
-            if (copy.flip_ != 0u && (oldest == nullptr || copy.flip_ < oldest->flip_)) oldest = &copy;
-        if (oldest == nullptr) return;
-        HRESULT done = oldest->copied_->GetData(nullptr, 0u, D3DGETDATA_FLUSH);
-        while (wait && done == S_FALSE) done = oldest->copied_->GetData(nullptr, 0u, D3DGETDATA_FLUSH);
-        if (done == S_FALSE) return;
-        wait = false;
-        oldest->flip_ = 0u;
-        D3DLOCKED_RECT locked = {};
-        if (FAILED(done) || FAILED(oldest->staging_->LockRect(&locked, nullptr, D3DLOCK_READONLY))) continue;
-        device11_->context()->UpdateSubresource(primary.texture_, 0u, nullptr, locked.pBits,
-                                                static_cast<UINT>(locked.Pitch), 0u);
-        oldest->staging_->UnlockRect();
-        shares_->written(primary.key_);
+    StagedFrame *const frame = cpu_frames_.stage(shown.device_, source, shown.width_, shown.height_,
+                                                shown.format_, multisampled);
+    if (frame == nullptr) return Status::invalid_state;
+    ScopeExit release([frame] { frame->release(); });
+    constexpr uint64_t pause_nanoseconds = 50000u;
+    constexpr uint64_t deadline_nanoseconds = 5000000000u;
+    PollBudget polls(clock_, 0u, pause_nanoseconds, deadline_nanoseconds);
+    AvFrameView view = {};
+    while (polls.next()) {
+        const StagedFrame::Reading reading = frame->read(view);
+        if (reading == StagedFrame::Reading::failed) return Status::invalid_state;
+        if (reading != StagedFrame::Reading::mapped) continue;
+        device11_->lock(nullptr);
+        ScopeExit unlock([this] { device11_->unlock(); });
+        if (device11_->lost() || device11_->context() == nullptr) return Status::invalid_state;
+        device11_->context()->UpdateSubresource(shown.texture_, 0u, nullptr, view.pixels, view.row_pitch, 0u);
+        shares_->written(shown.key_);
+        return Status::ok;
     }
-}
-
-D3d9FlipShares::Copy *D3d9FlipShares::free_copy(Primary &primary)
-{
-    AV_SCOPE("D3d9FlipShares::free_copy");
-    for (Copy &copy : primary.copies_)
-        if (copy.flip_ == 0u) return &copy;
-    write_finished(primary, true);
-    for (Copy &copy : primary.copies_)
-        if (copy.flip_ == 0u) return &copy;
-    return &primary.copies_[0];
+    return Status::invalid_state;
 }
 
 /* A device's lane is connected once: a device DXVK gives no interop, or a GPU
@@ -174,10 +154,14 @@ D3d9FlipShares::Lane *D3d9FlipShares::connect(IDirect3DDevice9 *device, Lane &la
     AV_SCOPE("D3d9FlipShares::connect");
     OwnedFd for_d3d9;
     OwnedFd for_d3d11;
+    OwnedFd for_reuse;
     bool    connected = lane.vulkan_.connect(device) && lane.timeline_.make_exportable(compositor.table()) &&
                         lane.timeline_.export_fd(for_d3d9) &&
                         lane.signalled_.import_fd(lane.vulkan_.table(), for_d3d9) && lane.timeline_.export_fd(for_d3d11);
     if (connected) connected = lane.order_.connect(*device11_, for_d3d11);
+    if (connected) connected = lane.consumed_.make_exportable(device11_->vulkan().table()) &&
+                               lane.consumed_.export_fd(for_reuse) &&
+                               lane.reusable_.import_fd(lane.vulkan_.table(), for_reuse);
     if (connected) return &lane;
     close_lane(lane);
     lane.refused_ = true;
@@ -191,6 +175,8 @@ void D3d9FlipShares::close_lane(Lane &lane)
     AV_SCOPE("D3d9FlipShares::close_lane");
     lane.order_.release();
     lane.vulkan_.work().idle();
+    lane.reusable_.release();
+    lane.consumed_.release();
     lane.signalled_.release();
     lane.vulkan_.release();
     lane.timeline_.release();
@@ -256,14 +242,7 @@ bool D3d9FlipShares::make_on_cpu(Primary &made)
     device11_->lock(nullptr);
     made.texture_ = device11_->make_tiled(desc);
     device11_->unlock();
-    if (made.texture_ == nullptr) return false;
-    for (Copy &copy : made.copies_)
-        if (FAILED(made.device_->CreateOffscreenPlainSurface(made.width_, made.height_,
-                                                             static_cast<D3DFORMAT>(made.format_),
-                                                             D3DPOOL_SYSTEMMEM, &copy.staging_, nullptr)) ||
-            FAILED(made.device_->CreateQuery(D3DQUERYTYPE_EVENT, &copy.copied_)))
-            return false;
-    return true;
+    return made.texture_ != nullptr;
 }
 
 void D3d9FlipShares::forget(Primary &primary)
@@ -273,11 +252,6 @@ void D3d9FlipShares::forget(Primary &primary)
         device11_->lock(nullptr);
         primary.texture_->Release();
         device11_->unlock();
-    }
-    for (Copy &copy : primary.copies_) {
-        if (copy.staging_ != nullptr) copy.staging_->Release();
-        if (copy.copied_ != nullptr) copy.copied_->Release();
-        copy = Copy{nullptr, nullptr, 0u};
     }
     /* A copy may still be writing the image: it is done before the image
      * goes. */
@@ -297,6 +271,7 @@ void D3d9FlipShares::forget_device(IDirect3DDevice9 *device)
     if (device11_ == nullptr) return;
     for (Primary &primary : primaries_)
         if (primary.device_ == device) forget(primary);
+    cpu_frames_.clear();
     Lane *going = nullptr;
     if (!lane_of_.take(reinterpret_cast<uintptr_t>(device), going)) return;
     close_lane(*going);
@@ -308,6 +283,7 @@ void D3d9FlipShares::release()
     AV_SCOPE("D3d9FlipShares::release");
     if (device11_ == nullptr) return;
     for (Primary &primary : primaries_) forget(primary);
+    cpu_frames_.clear();
     lane_of_.for_each([this](uint64_t, Lane *lane) { close_lane(*lane); });
     lane_of_.clear();
     lanes_.destroy_all();

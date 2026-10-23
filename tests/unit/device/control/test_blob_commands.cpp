@@ -182,8 +182,9 @@ TEST(blob_commands_create, an_adopted_blob_lies_over_the_pages_attached_to_it_un
   first[5] = 0x5Au;
   CHECK_EQ(fixture.send(create_adopted(host_blob, 0x3000u)), ok_nodata);
   CHECK(fixture.host_blobs().owns(context, host_blob));
-  CHECK_EQ(fixture.plane().last_memory().request, static_cast<std::uint32_t>(readback));
+  /* The memory is made as the first piece of pages is laid. */
   CHECK_EQ(fixture.send(attach(host_blob, ram + 0x3000u, 0x1000u)), ok_nodata);
+  CHECK_EQ(fixture.plane().last_memory().request, static_cast<std::uint32_t>(readback));
   CHECK_EQ(fixture.send(attach(host_blob, ram + 0x8000u, 0x2000u)), ok_nodata);
   CHECK_EQ(fixture.host().overlaid_bytes(), 0x3000u);
   /* What the guest held came along: the page reads the same through RAM. */
@@ -220,14 +221,14 @@ TEST(blob_commands_create, an_adoption_the_protocol_or_the_memory_does_not_allow
   }
   { Fixture refused;
     refused.plane().refuse_memory_at(1u);
-    CHECK_EQ(refused.send(create_adopted(host_blob, 0x1000u)), err_out_of_memory);
-    CHECK_EQ(refused.host_blobs().live(), 0u); }
+    CHECK_EQ(refused.send(create_adopted(host_blob, 0x1000u)), ok_nodata);
+    CHECK_EQ(refused.send(attach(host_blob, ram + 0x3000u, 0x1000u)), err_out_of_memory); }
   /* The guest maps its own pages write-back: memory the host maps
    * write-combined cannot lie under them, and goes back. */
   Fixture combined;
   combined.plane().answer_caching(AV_MEMORY_WRITE_COMBINED);
-  CHECK_EQ(combined.send(create_adopted(host_blob, 0x1000u)), err_invalid_parameter);
-  CHECK_EQ(combined.host_blobs().live(), 0u);
+  CHECK_EQ(combined.send(create_adopted(host_blob, 0x1000u)), ok_nodata);
+  CHECK_EQ(combined.send(attach(host_blob, ram + 0x3000u, 0x1000u)), err_unspec);
   CHECK_EQ(combined.plane().freed_count(), 1u); }
 
 /* ATTACH_BACKING is the base class's but for a host blob; for one, a piece

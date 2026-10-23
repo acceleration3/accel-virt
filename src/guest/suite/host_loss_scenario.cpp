@@ -61,7 +61,7 @@ Status HostLossScenario::draw(KmtTransport &transport, uint32_t device)
     view.dimension = rtv_texture2d;
     const d3dproto::Float4 colour = {{0.25f, 0.5f, 0.75f, 1.0f}};
     uint32_t               hresult = 1u;
-    if (!d3dproto::av_d3d_CreateResource(transport, target_id, target, 0u) ||
+    if (!d3dproto::av_d3d_CreateResource(transport, target_id, target, 0u, 0u, 0u) ||
         !d3dproto::av_d3d_CreateRenderTargetView(transport, view_id, view) ||
         !d3dproto::av_d3d_ClearRenderTargetView(transport, view_id, colour) ||
         !d3dproto::av_d3d_Finish11(transport, &hresult))

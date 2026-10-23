@@ -58,13 +58,13 @@ The dead D3D12 host fence family is deleted (baeab76c).
 | M3.3 Published results | done | baeab76c, 9f786491, b644fbcc | Step 4 (published status per API) not done; it was optional |
 | M3.4 GPU timeline | done | e47a1d94 | |
 | M3.5 Locked reply window | done | daf849b7 | Done by the ordered transport |
-| M3.6 Host polls and wake | done | fadc6200, 8e6dc92b | DXVK patch 0009 gives D3D11 its wake. Deferred: clock reads in `opencl_backend.cpp`, `vulkan_submit_timing.cpp` |
+| M3.6 Host polls and wake | done | fadc6200, 8e6dc92b; working tree | DXVK patch 0009 gives D3D11 its wake. OpenCL pacing and Vulkan submit timing now read `MonotonicClock` too |
 | M4.1 Arena carving | done | 08f5ab17 | OpenCL staging stays a span of its own: a lease taken outside a command could be retired by another thread's batch |
 | M4.2 Transfer piece sizing | done | a81fadce | |
 | M4.3 Pitched extent, row copier | done | ff07ab41 | |
 | M4.4 Staged CPU maps | done | 1aa55c45 | D3D9's lock state is not folded: a field per subresource, and its unlock needs D3D9's own ranges |
 | M4.5 Buffer slices beyond D3D11 | skipped | | Not a consolidation: it needs new host work (a D3D9 wire command and DXVK patch, a real OpenGL `gpu_progress`) and GPU checks |
-| M4.6 `BgraRows` | not done | | Stopped after the logging sweep at the user's request |
+| M4.6 `BgraRows` | done | working tree | GL front-buffer reads, GL/Vulkan's present queue, D3D11 readback and the device's present copier use the same bounded row conversion |
 | M5.1 One DXGI format row | done | 17bcd08d | |
 | M5.2 `FourCc` | done | 2fc25587 | |
 | M5.3 Presentable format | done | 679a4867 | |
@@ -86,14 +86,14 @@ The dead D3D12 host fence family is deleted (baeab76c).
 | M8.2 Adapter facts, memory, caps | done | d6756429, 52b3c79d, 260b034b, 07dd38e6 | |
 | M8.3 Link generations | done | aa2312b8 | |
 | M8.4 Extensions, version capping | done | 5a12cf5e, 9ebb7ce0 | `VK_EXT_external_memory_host` and `GL_AMD_pinned_memory` stay unreported until a test names them |
-| M8.5 Host D3D loss and renewal | done | 6e2f40d3 | Deferred: `VulkanBackend::lose_device` through `VulkanDeviceTable` |
+| M8.5 Host D3D loss and renewal | done | 6e2f40d3 | The current `VulkanBackend::lose_device` already calls its adopting device's `VulkanDeviceTable::lose` |
 | M8.6 Error spelling | not done | | Checked: about 13 sites, each `no_memory ? <API's OOM> : <its own error>`; no switch copies to merge |
 | M9.1 Driver logging | done | 0337d6e3, 73f47ef9 | Not done: the QEMU device module still types `virtio-gpu-av:` at about 30 sites |
 | M9.2 Refused calls | done | 9832b460, a0d32fcb | |
 | M9.3 Lock-free rows | done | 7e7730e7 | `ClaimedRows` |
-| M9.4 One lock contract | partly | 49dbba89, cff6320a, 2c9c15e3, 5ae27870, 5ca0522b | `CallingThread` and `ReentrantCallLock` over `ThreadLock&` are parked on `w5-logs-beyond-scope` (21c4620c) |
+| M9.4 One lock contract | done | 49dbba89, cff6320a, 2c9c15e3, 5ae27870, 5ca0522b; working tree | `CallingThread` names GL and D3D callers through one Windows implementation. D3D9/11's `ReentrantCallLock` is portable over `ThreadLock&` and `CallingThread&` |
 | M9.5 Settings | partly | 6990c3b8 | Host settings read once per root are parked on `w5-logs-beyond-scope` (b2c192ea) |
-| M9.6 D3D call trace, clock | done | 9faf2594 | One clock contract for guest and host is parked on `w5-logs-beyond-scope` (e2ccddf8) |
+| M9.6 D3D call trace, clock | done | 9faf2594; working tree | `PollClock` and `PollBudget` now live in core/platform; `MonotonicClock` and `PerformanceClock` implement the same contract, used by host polls and D3D9/11 guest residency waits |
 | M9.7 FNV-1a | done | b5e4a00e | |
 | M9.8 Driver seams | done | 2f1b76e8 | |
 
@@ -110,6 +110,10 @@ The dead D3D12 host fence family is deleted (baeab76c).
 
 ### Verification
 
+The follow-up working-tree changes below are implementation-only, on the user's
+instruction: no unit-test or fuzz updates. The verification results following
+this paragraph describe the committed waves, not a new GPU run.
+
 - Every commit above builds the production targets, and `tools/check_design.py`
   and `tools/scope_marks.py` pass.
 - Unit tests were not updated during this work, on the user's order, and many no
@@ -120,6 +124,53 @@ The dead D3D12 host fence family is deleted (baeab76c).
   `existing_heap` step, is fixed by 6d00ea9c, checked on that GPU alone.
 - Run `consolidated-4`, on the final code, passed every suite on both AMD GPUs.
   Its accel half (Iris Xe, RTX 3070 Ti) went unread: the host was down.
+
+### Follow-up consolidation
+
+- `BgraRows` owns a pitched pixel span, validates both rectangles before any
+  write and supports unaligned and exact in-place red/blue conversion without
+  touching row padding. Present scratch allocation and GL front-buffer offsets
+  also reject arithmetic that cannot be addressed.
+- `SortedSearch` owns a view of a growable array ordered by a numeric key. The
+  lower-bound, upper-bound, predecessor and exact-match searches are shared by
+  D3D12 GPU address translation, host OpenCL ranges, guest OpenCL SVM mirrors,
+  GL live and retired syncs, guest suballocation ranges, host blob placements
+  and the miniport's GPU virtual address space. It caches no array address,
+  allocates nothing and handles zero and all-ones keys. Overlap, retirement,
+  allocation and API-specific refusal policies remain with their owners.
+- Host OpenCL pacing and Vulkan submit timing use the existing `MonotonicClock`
+  instead of separate `clock_gettime` conversions. The shared `PollClock` /
+  `PollBudget` contract now serves host GPU polls and guest residency waits.
+- GL thread slots, D3D shared-row requests, call tracing and reentrant device
+  locks use `WindowsCallingThread`; trace-host thread identification stays
+  separate because calling traced driver code there would recurse.
+
+Follow-up verification: native production libraries (`av_core`, `av_device`,
+`av_executor`, `av_icd`, `av_gl_icd`, `av_cl_icd`, `av_d3d_umd`), x64 and x86
+Windows graphics DLLs and `avgpu.sys` build. `tools/check_design.py` and
+`tools/scope_marks.py` pass. No test or fuzz changes are included, and no new
+GPU matrix run is claimed.
+
+### Second follow-up: geometry and Direct3D present ordering
+
+- `MipExtent` replaces the repeated per-axis mip shifts in the D3D11 guest,
+  host D3D11, D3D12 copies and OpenCL's D3D11 sharing descriptions. Shifts past
+  a scalar's width are defined, and every mip dimension remains at least one.
+- `SubresourceLayout` shares mip/layer/plane numbering across those callers
+  and D3D9 cube/2D texture writes. Zero and overflowing subresource counts are
+  rejected before division or indexing. D3D12 keeps its own plane-count policy.
+- `PresentOrder` shares D3D9/11's host-batch follow and post-present reuse gate.
+  D3D9 primary allocations now use the same context ordering as D3D11 flips;
+  point-number delivery remains API-specific (D3D9 escape, D3D11 private data).
+- D3D9's CPU primary fallback no longer uploads an earlier completed flip. It
+  stages the current frame using the existing `D3d9FramePool`, waits within a
+  deadline outside the D3D11 device lock, and publishes that frame or fails.
+  This removes the separate delayed-copy ring and its unbounded busy wait.
+  `QueueWork::wait`, shared by D3D9 and D3D12 composition, now flushes the
+  borrowed runtime queue before inserting an external timeline wait, so the
+  wait cannot overtake commands still on its recording thread. The D3D9 GPU
+  image-copy path otherwise remains unchanged. These are code-level corrections,
+  not a claim that the reported game symptom has been reproduced or resolved.
 
 ---
 

@@ -40,7 +40,6 @@ private:
      * `pitch` apart: false for a row that starts past the surface, which also
      * keeps the product from wrapping - a surface is at most 2^46 bytes. */
     [[nodiscard]] bool   offset_of(uint64_t x, uint64_t y, uint32_t pitch, uint64_t length, uint64_t &offset) const;
-    void                 swap_red_and_blue(size_t pixels);
 
     WindowCursor              source_;
     WindowCursor              destination_;

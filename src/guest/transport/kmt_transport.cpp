@@ -1,4 +1,5 @@
 #include "guest/transport/kmt_transport.hpp"
+#include "guest/transport/release_route.hpp"
 
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
@@ -34,7 +35,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, BlockSource &memory, Sub
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u),
       room_(staging != nullptr ? staging_bytes : 0u, reply_bytes), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
-      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), pending_(nullptr, 0u), answered_(false), answered_fence_(0u),
+      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_{}, route_(nullptr), standby_(nullptr), gates_busy_(0u), pending_(nullptr, 0u), answered_(false), answered_fence_(0u),
       decode_arena_(nullptr, 0u), blobs_(), spill_(memory), answer_(memory)
 {
     AV_SCOPE("KmtTransport::KmtTransport");
@@ -46,7 +47,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u),
       room_(staging != nullptr ? staging_bytes : 0u, reply_bytes), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
-      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_(nullptr), pending_(nullptr, 0u), answered_(false), answered_fence_(0u),
+      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_{}, route_(nullptr), standby_(nullptr), gates_busy_(0u), pending_(nullptr, 0u), answered_(false), answered_fence_(0u),
       decode_arena_(nullptr, 0u), blobs_(), spill_(), answer_()
 {
     AV_SCOPE("KmtTransport::KmtTransport");
@@ -226,6 +227,9 @@ Status KmtTransport::await_gpu(uint64_t fence)
 bool KmtTransport::kernel_waits_for(uint64_t fence) const
 {
     AV_SCOPE("KmtTransport::kernel_waits_for");
+    /* A routed transport's batches are no packet of its own context's and write
+     * no hardware queue's progress: only the fence page says when they ran. */
+    if (path_.releases()) return false;
     return !watch_.reads_page() || doorbell_.queue() != 0u || fence == newest_fence_;
 }
 
@@ -251,22 +255,99 @@ bool KmtTransport::record_carries(const GlContextOptions &options) const
     return decoded.decode(bytes, sizeof bytes) == Status::ok;
 }
 
+void KmtTransport::lock_gates()
+{
+    AV_SCOPE("KmtTransport::lock_gates");
+    while (__atomic_exchange_n(&gates_busy_, 1u, __ATOMIC_ACQUIRE) != 0u) {
+    }
+}
+
+void KmtTransport::unlock_gates()
+{
+    AV_SCOPE("KmtTransport::unlock_gates");
+    __atomic_store_n(&gates_busy_, 0u, __ATOMIC_RELEASE);
+}
+
 bool KmtTransport::ready_for_batch() const
 {
     AV_SCOPE("KmtTransport::ready_for_batch");
-    return held_ == nullptr && ring_.head() >= previous_end_;
+    for (PublishGate *const &held : held_)
+        if (__atomic_load_n(&held, __ATOMIC_ACQUIRE) != nullptr) return false;
+    return ring_.head() >= previous_end_;
 }
 
 void KmtTransport::hold(PublishGate &gate)
 {
     AV_SCOPE("KmtTransport::hold");
-    held_ = &gate;
+    PublishGate **free_slot = nullptr;
+    lock_gates();
+    for (PublishGate *&held : held_) {
+        if (held == &gate) {
+            unlock_gates();
+            return;
+        }
+        if (held == nullptr && free_slot == nullptr) free_slot = &held;
+    }
+    if (free_slot != nullptr) *free_slot = &gate;
+    unlock_gates();
+    if (free_slot == nullptr) gate.pass();
+}
+
+Status KmtTransport::release_by(ReleaseRoute &route)
+{
+    AV_SCOPE("KmtTransport::release_by");
+    if (!established() || faulted_ || !watch_.reads_page()) return watch_.reads_page() ? Status::invalid_state : Status::not_supported;
+    if (routed_by(route)) return Status::ok;
+    /* A second device of the session that shares rides the first's route, and
+     * takes it over when the first goes. */
+    if (route_ != nullptr) {
+        if (standby_ != nullptr) return Status::no_space;
+        standby_ = &route;
+        return Status::ok;
+    }
+    path_.release_through(&route, ring());
+    route_ = &route;
+    return Status::ok;
+}
+
+void KmtTransport::release_directly(const ReleaseRoute &route)
+{
+    AV_SCOPE("KmtTransport::release_directly");
+    if (standby_ == &route) standby_ = nullptr;
+    if (route_ != &route) return;
+    if (standby_ != nullptr) {
+        /* The same ring, in the same order: only the context the packets go on changes. */
+        route_ = standby_;
+        standby_ = nullptr;
+        path_.release_through(const_cast<ReleaseRoute *>(route_), ring());
+        return;
+    }
+    /* Whatever the route released is in the miniport's order: a batch
+     * published by the ways before it must not overtake one still held. */
+    if (established() && !faulted_) static_cast<void>(await_gpu(newest_fence_));
+    path_.release_through(nullptr, 0u);
+    route_ = nullptr;
+}
+
+bool KmtTransport::routed_by(const ReleaseRoute &route) const
+{
+    AV_SCOPE("KmtTransport::routed_by");
+    return route_ == &route || standby_ == &route;
+}
+
+bool KmtTransport::releases_by_packet() const
+{
+    AV_SCOPE("KmtTransport::releases_by_packet");
+    return path_.releases();
 }
 
 void KmtTransport::forget(const PublishGate &gate)
 {
     AV_SCOPE("KmtTransport::forget");
-    if (held_ == &gate) held_ = nullptr;
+    lock_gates();
+    for (PublishGate *&held : held_)
+        if (held == &gate) held = nullptr;
+    unlock_gates();
 }
 
 void KmtTransport::hold_in(uint8_t *block, size_t capacity)
@@ -417,7 +498,10 @@ void KmtTransport::teardown()
     faulted_ = false;
     /* A gate is its device's, which a transport torn down outlives no
      * longer; what was held was for the context that went. */
-    held_ = nullptr;
+    for (PublishGate *&held : held_) held = nullptr;
+    path_.release_through(nullptr, 0u);
+    route_ = nullptr;
+    standby_ = nullptr;
     pending_.clear();
     answered_ = false;
     spill_.release();
@@ -571,6 +655,7 @@ Status KmtTransport::wait_for_host(uint64_t fence)
 {
     AV_SCOPE("KmtTransport::wait_for_host");
     watch_.start();
+    if (path_.releases()) return wait_on_page(fence);
     for (;;) {
         const Status waited = doorbell_.queue() != 0u
                                   ? connection_.kmt().wait_for_hw_queue(connection_.device(),
@@ -578,6 +663,32 @@ Status KmtTransport::wait_for_host(uint64_t fence)
                                   : connection_.kmt().wait_for_context(connection_.device(), context_);
         if (waited == Status::ok || connection_.kmt().last_code() != wait_timed_out || !watch_.keeps_waiting())
             return waited;
+    }
+}
+
+/* A routed transport's batches are released by the scheduler, and the kernel
+ * has no object that is signaled when one has run: the fence page is read
+ * until it says so, for as long as the host is at work. A wait that outlasts a
+ * few seconds is told to the route once: a batch held behind a wait only the
+ * application's own thread satisfies later (a CPU signal, then a call that
+ * waits for the answer) looks the same. */
+Status KmtTransport::wait_on_page(uint64_t fence)
+{
+    AV_SCOPE("KmtTransport::wait_on_page");
+    uint64_t       frequency = 0u;
+    const uint64_t began = connection_.kmt().performance_counter(frequency);
+    bool           told = false;
+    CounterSpin    spin(connection_.kmt(), gpu_spin_us);
+    for (;;) {
+        if (gpu_completed() >= fence) return Status::ok;
+        if (!watch_.keeps_waiting()) return Status::invalid_state;
+        if (!told && route_ != nullptr &&
+            connection_.kmt().performance_counter(frequency) - began > frequency * slow_wait_seconds) {
+            told = true;
+            const_cast<ReleaseRoute *>(route_)->waited_long();
+        }
+        if (spin.lasts()) spin_once();
+        else connection_.kmt().sleep_briefly();
     }
 }
 
@@ -618,11 +729,18 @@ bool KmtTransport::room_for_fence()
 TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t length, uint64_t &fence)
 {
     AV_SCOPE("KmtTransport::publish_batch");
-    if (held_ != nullptr) {
-        PublishGate &gate = *held_;
-        held_ = nullptr;
-        gate.pass();
+    /* Taken out before any is passed: a gate that is passed may be asked to
+     * hold again, and the ones that stay are the ones to pass next time. */
+    PublishGate *passing[most_gates] = {};
+    uint32_t     passes = 0u;
+    lock_gates();
+    for (PublishGate *&held : held_) {
+        if (held == nullptr) continue;
+        passing[passes++] = held;
+        held = nullptr;
     }
+    unlock_gates();
+    for (uint32_t index = 0u; index < passes; index++) passing[index]->pass();
     /* Asynchronous batches open fences nobody waits on: a sender faster than
      * the host fills the fence window or the ring, and then waits for the
      * host to catch up rather than failing. */

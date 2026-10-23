@@ -60,10 +60,14 @@ src/km/         src/device/qemu, src/*/shim/      src/um/
 
 | Directory | Holds |
 |---|---|
-| `support/` | `Status`, `NtStatus`, `ObjectPool`/`ObjectStorage`, `GrowableArray`, `KeyedSlots` and `ClaimedRows` (storage for counts an application controls, see "Counts with no fixed bound"), `ScopeExit`, `Alignment`, `ByteRange`, `TextBuffer`, `RuntimeCall`, `SettingText` (how every knob's text is judged), `Fnv1aDigest`, `AV_UNTESTABLE` |
+| `support/` | `Status`, `NtStatus`, `ObjectPool`/`ObjectStorage`, `GrowableArray`, `KeyedSlots` and `ClaimedRows` (storage for counts an application controls, see "Counts with no fixed bound"), `SortedSearch` (ordered numeric-key lookups over growable rows), `BgraRows` (bounded pitched four-byte pixel copies and red/blue conversion), `ScopeExit`, `Alignment`, `ByteRange`, `TextBuffer`, `RuntimeCall`, `SettingText` (how every knob's text is judged), `Fnv1aDigest`, `AV_UNTESTABLE` |
 | `trace/` | `AV_SCOPE`, trace tables, event rings, crash and state dumps; `ReportGate`, how a state dump takes its root's `ThreadLock` without ever waiting on it |
 | `log/` | `DriverLog`, `KeyedLog`, `LogLine`, `LogSink`, `LogQueue`: the logging the host, the guest drivers and the kernel's debug port share |
 | `platform/` | the `Platform` contract the miniport runs on (implemented by `src/km` and `MockPlatform`), locks and their guards, lock ranks, `LogBudget`, `InvariantScope`; also `BlockSource` and `LockMarks`, which every binary uses, and `ThreadLock` with `ThreadLockHold`, the one lock contract for a binary's threads (the guest drivers' is `SrwLock`, the host binaries' `PosixLock`), in core so the device and the executor take the same one |
+
+`core/platform/PollClock` and `PollBudget` are also shared across binaries:
+host `MonotonicClock` and guest `PerformanceClock` implement the same time and
+pause contract. Bounded host polls and guest residency waits use that one budget.
 
 ## src/miniport - avgpu.sys's logic
 
@@ -91,7 +95,7 @@ Portable and freestanding; `src/km` is its Windows kernel shim.
 | `client/` | guest driver -> device | the contract generated guest code is written against: `ClientTransport`, `ClientBlobArena`, `SyncCallScope`, the ICD hooks |
 | `context/` | guest <-> device | context setup, capset info, GPU identity, device UUID, protocol version, sub-API, and the most av devices a VM has (`most_av_devices`, which bounds the guest's adapters) |
 | `submission/` | guest <-> device | rings, batches, command and reply headers, fence pages, blob imports, shared-object requests |
-| `resources/` | guest <-> device | allocation descriptors, shared-object records, surface and texel layouts, guest page lists, host memory requests (`HostMemoryRequest`) and host blob ids (`HostBlobId`) |
+| `resources/` | guest <-> device | allocation descriptors, shared-object records, surface and texel layouts; `MipExtent` (safe mip-level dimensions) and `SubresourceLayout` (mip/layer/plane numbering without count overflow); guest page lists, host memory requests (`HostMemoryRequest`) and host blob ids (`HostBlobId`) |
 | `dma/` | miniport -> device | the commands in DMA buffers: present and paging |
 | `pages/` | device -> miniport | pages the device writes: the clock page, vblank records, present progress |
 | `virtio_gpu/` | miniport <-> device | virtio-gpu control-queue requests and responses, and av's own |
@@ -130,9 +134,13 @@ Portable and freestanding; `src/km` is its Windows kernel shim.
 
 One `ContextSession` per guest context runs its API's commands on the host GPU.
 
+`PollBudget` and its clock contract live in `core/platform`, not the executor;
+only the host implementation, `MonotonicClock`, lives here. OpenCL kernel pacing
+and Vulkan submit timing read it too.
+
 | Directory | Holds |
 |---|---|
-| (root) | `ExecutorRoot`, `ContextSession`, `SessionBackend`, `ExecutorDomains`, host GPUs and APIs; `ExecutorLog`, the library's one sink - QEMU's stderr - and the `DriverLog` each part of it writes through (`virtio-gpu-av: <part>: `); `HostObjectRegistry`, the host objects one session's guest may name - by kind, with what each was made through and the references held on it - which every backend's commands are judged by and its shut-down releases; `DeviceTenants`, the sessions on one shared host device, woken when it is lost, and `HostDeviceRenewal`, which declares such a device lost and has it made again (`RenewableDevice`: Direct3D 11's and 12's); host memory (docs/host-memory.md): each GPU's `HostMemorySource`, its allocations (`SourceMemory`), the `MemoryExporter` contract it allocates through and what that answers (`ExportedMemory`); blob imports (`ImportedBlob`, `ImportTable`, which every backend finds the import a command names in) and `GuestRegion`, the import a Direct3D, OpenCL or OpenGL session adopts as its arena, and `PublishedSlots`, what the host publishes into that arena's tail for the guest to read without asking; `OwnedFd`, a descriptor of a host object - a dma-buf, an opaque memory or semaphore fd - held until an import or a caller takes it; the GPU clock hold; `PollBudget` (every bounded poll) on `HostClock`/`MonotonicClock`; `WakeSignal` and `EventfdWake`, which raises it when a Direct3D fence writes its eventfd |
+| (root) | `ExecutorRoot`, `ContextSession`, `SessionBackend`, `ExecutorDomains`, host GPUs and APIs; `ExecutorLog`, the library's one sink - QEMU's stderr - and the `DriverLog` each part of it writes through (`virtio-gpu-av: <part>: `); `HostObjectRegistry`, the host objects one session's guest may name - by kind, with what each was made through and the references held on it - which every backend's commands are judged by and its shut-down releases; `DeviceTenants`, the sessions on one shared host device, woken when it is lost, and `HostDeviceRenewal`, which declares such a device lost and has it made again (`RenewableDevice`: Direct3D 11's and 12's); host memory (docs/host-memory.md): each GPU's `HostMemorySource`, its allocations (`SourceMemory`), the `MemoryExporter` contract it allocates through and what that answers (`ExportedMemory`); blob imports (`ImportedBlob`, `ImportTable`, which every backend finds the import a command names in) and `GuestRegion`, the import a Direct3D, OpenCL or OpenGL session adopts as its arena, and `PublishedSlots`, what the host publishes into that arena's tail for the guest to read without asking; `OwnedFd`, a descriptor of a host object - a dma-buf, an opaque memory or semaphore fd - held until an import or a caller takes it; the GPU clock hold; `MonotonicClock`, the host implementation of core's `PollClock` used by `PollBudget` and API timing; `WakeSignal` and `EventfdWake`, which raises it when a Direct3D fence writes its eventfd |
 | `sharing/` | `HostShares`, every shared object of one GPU of every API by (domain, id), its `Share`s, their holders - one per session and what each import was made into - and index, and `SessionShares`, what one session reaches it through (docs/shared-surfaces.md §0); `D3dShares`, the Direct3D half over the same rows: each share's COM objects (`D3dShareState`) and the references let go of, waiting for the Direct3D 11 device's lock (`D3dRetired`) |
 | `vulkan/`, `opengl/`, `opencl/` | each API's backend and its tables |
 | `d3d/` | Direct3D 9, 11 and 12 sessions, DXBC, the present surfaces and frame pools; `WatchedBlocks`, the source a session's tables grow in, which tells a refusal for want of memory apart so the device is removed with `E_OUTOFMEMORY`; `FormatCapsRows`, every DXGI format as a host device answered it, which Direct3D 11's and 12's caps queries hand the guest in one reply; `D3d12PipelineCompiles`, the threads a Direct3D 12 session's pipelines compile on while it runs on |
@@ -159,6 +167,18 @@ One `ContextSession` per guest context runs its API's commands on the host GPU.
 | `um/avtest/`, `um/inspect/`, `um/probe/{vk,gl,cl,d3d}/` | the programs' Windows entry points |
 | `um/trace/` | the Windows trace hosts and crash handling |
 | `um/imports/`, `um/opencl_loader/`, `um/sample/` | import-library definitions; the Khronos loader's C runtime; a standalone D3D11 program |
+
+`icd/common/CallingThread` is the caller-identity contract shared by GL's thread
+slots and D3D's reentrant device locks. Its Windows implementation is
+`um/common/WindowsCallingThread`, also used by D3D's row requests and call trace.
+`ReentrantCallLock` lives in `icd/d3d`, over an injected `ThreadLock` and
+`CallingThread`; each D3D9/11 device owns the Windows SRW lock it uses.
+
+`um/d3d/PresentOrder` owns the batch follower and kernel-context reuse gate for
+both D3D9 and D3D11. It is created only after the session's transport opens and
+destroyed before that transport closes. Host D3D9 CPU primary flips use the same
+`D3d9FramePool` / `StagedFrame` snapshot mechanism as its blt presents, rather
+than a separate delayed-copy ring.
 
 ## Tests, tools, docs
 

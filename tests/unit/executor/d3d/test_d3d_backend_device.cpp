@@ -124,7 +124,7 @@ void make_triangle(av::D3dLoopback &wire, std::uint64_t shared_key = 0u)
     target.format = format_b8g8r8a8;
     target.sample_count = 1u;
     target.bind_flags = bind_render_target;
-    CHECK(av_d3d_CreateResource(wire, 1u, target, shared_key));
+    CHECK(av_d3d_CreateResource(wire, 1u, target, shared_key, 0u, 0u));
     ViewDesc rtv = {};
     rtv.resource = 1u;
     rtv.format = format_b8g8r8a8;
@@ -138,12 +138,12 @@ void make_triangle(av::D3dLoopback &wire, std::uint64_t shared_key = 0u)
     buffer.dimension = 1u;
     buffer.width = sizeof(vertices);
     buffer.bind_flags = bind_vertex;
-    CHECK(av_d3d_CreateResource(wire, 3u, buffer, 0u));
+    CHECK(av_d3d_CreateResource(wire, 3u, buffer, 0u, 0u, 0u));
     CHECK(av_d3d_UpdateSubresource(wire, 3u, 0u, 0u, Box{}, 0u, 0u, 0u, vertices, sizeof(vertices)));
     const float tint[4] = {0.5f, 0.5f, 0.5f, 1.0f};
     buffer.width = 16u;
     buffer.bind_flags = bind_constant;
-    CHECK(av_d3d_CreateResource(wire, 4u, buffer, 0u));
+    CHECK(av_d3d_CreateResource(wire, 4u, buffer, 0u, 0u, 0u));
     CHECK(av_d3d_UpdateSubresource(wire, 4u, 0u, 0u, Box{}, 0u, 0u, 0u, tint, sizeof(tint)));
 
     CHECK(av_d3d_CreateShader(wire, 5u, 0u, triangle_vs::inputs_count, triangle_vs::inputs, triangle_vs::outputs_count,
@@ -367,7 +367,7 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_streams_what_the_vertex_
     buffer.dimension = 1u;
     buffer.width = 3u * stride;
     buffer.bind_flags = 0x10u;   /* D3D11_BIND_STREAM_OUTPUT */
-    CHECK(av_d3d_CreateResource(wire, out, buffer, 0u));
+    CHECK(av_d3d_CreateResource(wire, out, buffer, 0u, 0u, 0u));
     bind_triangle(wire);
     CHECK(av_d3d_SetTopology(wire, 1u));   /* points */
     CHECK(av_d3d_SetShader(wire, stage_geometry, gs));
@@ -421,12 +421,12 @@ TEST(d3d_backend_device, a_shared_surface_outlives_its_creator_until_the_guest_r
     surface.format = format_b8g8r8a8;
     surface.sample_count = 1u;
     surface.bind_flags = bind_render_target;
-    CHECK(av_d3d_CreateResource(made, 1u, surface, key));
+    CHECK(av_d3d_CreateResource(made, 1u, surface, key, 0u, 0u));
     const std::uint32_t held = shares.live();
 
     ResourceDesc other = surface;
     other.width = size / 2u;
-    CHECK(av_d3d_CreateResource(opening, 9u, other, key));
+    CHECK(av_d3d_CreateResource(opening, 9u, other, key, 0u, 0u));
     CHECK_EQ(shares.live(), held);
     std::uint32_t found = 0u;
     ResourceDesc opened = {};
@@ -528,7 +528,7 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
     buffer.dimension = 1u;
     buffer.width = 64u;
     buffer.bind_flags = bind_vertex;
-    CHECK(av_d3d_CreateResource(wire, 20u, buffer, 0u));
+    CHECK(av_d3d_CreateResource(wire, 20u, buffer, 0u, 0u, 0u));
     CHECK_EQ(wire.refused(), 0u);
     /* A refusal with no device selected is the session's: nobody else to blame. */
     CHECK(!av_d3d_Draw(wire, 3u, 0u));
@@ -587,7 +587,7 @@ TEST(d3d_backend_device, a_present_point_stages_the_frame_the_commands_before_it
     unshared_texture.format = format_b8g8r8a8;
     unshared_texture.sample_count = 1u;
     unshared_texture.bind_flags = bind_render_target;
-    CHECK(av_d3d_CreateResource(wire, 9u, unshared_texture, 0u));
+    CHECK(av_d3d_CreateResource(wire, 9u, unshared_texture, 0u, 0u, 0u));
     CHECK(av_d3d_PresentPoint(wire, 9u, 0u, 0u));
     CHECK(av_d3d_PresentPoint(wire, 3u, 0u, 2u));   /* the vertex buffer, never shared */
     CHECK(!surfaces.map(av::SurfacePoint(shown, 2u), 0u, view));
@@ -629,7 +629,7 @@ TEST(d3d_backend_device, a_flip_of_a_shared_target_is_shown_through_its_copy)
     target.format = format_b8g8r8a8;
     target.sample_count = 1u;
     target.bind_flags = bind_render_target;
-    CHECK(av_d3d_CreateResource(wire, 1u, target, key));
+    CHECK(av_d3d_CreateResource(wire, 1u, target, key, 0u, 0u));
     IUnknown *copy = shares.shown(1u, key);
     CHECK(copy == nullptr);
     CHECK(av_d3d_PresentPoint(wire, 1u, 0u, 0u));
@@ -692,7 +692,7 @@ TEST(d3d_backend_device, what_the_host_has_no_memory_for_is_out_of_memory_to_the
         buffer.width = 64u;
         buffer.bind_flags = bind_vertex;
         for (std::uint32_t id = 100u; id < 200u && removed == 0u; id++) {
-            CHECK(av_d3d_CreateResource(wire, id, buffer, 0u));
+            CHECK(av_d3d_CreateResource(wire, id, buffer, 0u, 0u, 0u));
             CHECK(av_d3d_Finish11(wire, &removed));
         }
         CHECK_EQ(removed, out_of_memory);
@@ -716,7 +716,7 @@ TEST(d3d_backend_device, what_the_host_has_no_memory_for_is_out_of_memory_to_the
         target.format = format_b8g8r8a8;
         target.sample_count = 1u;
         target.bind_flags = bind_render_target;
-        CHECK(av_d3d_CreateResource(wire, 30u, target, 0u));
+        CHECK(av_d3d_CreateResource(wire, 30u, target, 0u, 0u, 0u));
         CHECK(av_d3d_Finish11(wire, &removed));
         CHECK_EQ(removed, 0u);
         platform.fail_allocation_at(1u);

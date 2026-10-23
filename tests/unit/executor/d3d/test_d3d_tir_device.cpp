@@ -395,9 +395,9 @@ public:
         texture.format = format_r32_uint;
         texture.sample_count = 1u;
         texture.bind_flags = bind_render_target;
-        CHECK(av_d3d_CreateResource(wire_, target_id, texture, 0u));
+        CHECK(av_d3d_CreateResource(wire_, target_id, texture, 0u, 0u, 0u));
         texture.bind_flags = bind_unordered_access;
-        CHECK(av_d3d_CreateResource(wire_, uav_texture_id, texture, 0u));
+        CHECK(av_d3d_CreateResource(wire_, uav_texture_id, texture, 0u, 0u, 0u));
         ViewDesc view = {};
         view.resource = target_id;
         view.format = format_r32_uint;
@@ -410,7 +410,7 @@ public:
         buffer.dimension = 1u;
         buffer.width = sizeof(WireVertex) * 3u * max_triangles;
         buffer.bind_flags = bind_vertex;
-        CHECK(av_d3d_CreateResource(wire_, vertices_id, buffer, 0u));
+        CHECK(av_d3d_CreateResource(wire_, vertices_id, buffer, 0u, 0u, 0u));
 
         CHECK(av_d3d_CreateShader(wire_, vs_id, 0u, tir_vs::inputs_count, tir_vs::inputs, tir_vs::outputs_count,
                                    tir_vs::outputs, 0u, nullptr, 0u, nullptr, 0u, nullptr, 0xffffffffu, tir_vs::tokens,

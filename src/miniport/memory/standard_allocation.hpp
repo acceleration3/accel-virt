@@ -1,10 +1,11 @@
 /* One DxgkDdiGetStandardAllocationDriverData request: the runtime creating a
  * primary, shadow, staging or GDI surface without a user-mode driver asks the
  * driver to describe it, and passes the description back to CreateAllocation.
- * An existing heap (D3D12's OpenExistingHeapFromAddress, a
- * D3DKMT_STANDARDALLOCATIONTYPE_EXISTINGHEAP allocation) arrives as a
- * cross-adapter GDI texture as wide as the heap's bytes, one row high, of no
- * format: dxgkrnl asks that of every driver for one. */
+ * A cross-adapter texture (two adapters' devices sharing row-major memory,
+ * Affinity's) and an existing heap (D3D12's OpenExistingHeapFromAddress, a
+ * D3DKMT_STANDARDALLOCATIONTYPE_EXISTINGHEAP allocation) both arrive as
+ * D3DKMDT_GDISURFACETYPE_TEXTURE_CROSSADAPTER; the heap is as wide as its
+ * bytes, one row high, of no format. */
 #ifndef AV_STANDARD_ALLOCATION_HPP
 #define AV_STANDARD_ALLOCATION_HPP
 
@@ -40,8 +41,9 @@ private:
     [[nodiscard]] Status describe_shadow(AllocationDescriptor &descriptor) const;
     [[nodiscard]] Status describe_staging(AllocationDescriptor &descriptor) const;
     [[nodiscard]] Status describe_gdi(AllocationDescriptor &descriptor) const;
-    /* The process's own pages, which the processor reads and writes. */
-    [[nodiscard]] Status describe_existing_heap(AllocationDescriptor &descriptor) const;
+    /* The process's own pages, which the processor reads and writes: a
+     * texture of any format the driver lays out, or a heap. */
+    [[nodiscard]] Status describe_cross_adapter(AllocationDescriptor &descriptor) const;
 
     Platform                                     &platform_;
     DxgkargGetStandardAllocationDriverDataRecord &request_;

@@ -92,6 +92,19 @@ void LocalContextPlane::free_memory(uint64_t key)
     library_.free_memory(key);
 }
 
+Status LocalContextPlane::alias_memory(uint64_t key, const ContextPlane &lender, uint64_t lender_key,
+                                       AvHostMemory &memory)
+{
+    AV_SCOPE("LocalContextPlane::alias_memory");
+    return library_.alias_memory(key, lender.memory_domain(), lender_key, memory);
+}
+
+uint32_t LocalContextPlane::memory_domain() const
+{
+    AV_SCOPE("LocalContextPlane::memory_domain");
+    return library_.domain();
+}
+
 Status LocalContextPlane::create(uint32_t id)
 {
     AV_SCOPE("LocalContextPlane::create");
@@ -196,16 +209,16 @@ bool LocalContextPlane::exports_surfaces() const
     return library_.available();
 }
 
-bool LocalContextPlane::export_surface(const uint8_t *, uint64_t surface, AvExportedImage &image)
+bool LocalContextPlane::export_surface(const uint8_t *, uint64_t surface, uint32_t flags, AvExportedImage &image)
 {
     AV_SCOPE("LocalContextPlane::export_surface");
-    return library_.export_surface(surface, image);
+    return library_.export_surface(surface, flags, image);
 }
 
-bool LocalContextPlane::sync_surface(const uint8_t *, uint64_t surface, uint64_t &writes, int &fd)
+bool LocalContextPlane::sync_surface(const uint8_t *, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd)
 {
     AV_SCOPE("LocalContextPlane::sync_surface");
-    return library_.sync_surface(surface, writes, fd);
+    return library_.sync_surface(surface, flags, writes, fd);
 }
 
 void LocalContextPlane::report(StateWriter &writer)

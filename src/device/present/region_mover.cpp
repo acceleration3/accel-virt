@@ -1,5 +1,6 @@
 #include "device/present/region_mover.hpp"
 
+#include "core/support/bgra_rows.hpp"
 #include "core/trace/function_scope.hpp"
 #include "proto/dma/present_region.hpp"
 #include "proto/virtio_gpu/present_copy_request.hpp"
@@ -43,7 +44,12 @@ Status RegionMover::move_row(uint64_t from, uint64_t to, uint64_t bytes)
         const size_t piece = bytes - done < sizeof chunk_ ? static_cast<size_t>(bytes - done) : sizeof chunk_;
         const Status read = blt ? source_.read(from + done, chunk, piece) : Status::ok;
         if (read != Status::ok) return read;
-        if (blt && request_.swaps_red_and_blue()) swap_red_and_blue(piece / PresentRegion::pixel_bytes);
+        if (blt && request_.swaps_red_and_blue()) {
+            BgraRows pixels(chunk, piece, piece);
+            const Status swapped = pixels.copy_from(pixels, static_cast<uint32_t>(piece / PresentRegion::pixel_bytes),
+                                                     1u, BgraRows::Channels::red_blue_swapped);
+            if (swapped != Status::ok) return swapped;
+        }
         const Status written = destination_.write(to + done, chunk, piece);
         if (written != Status::ok) return written;
         done += piece;
@@ -57,15 +63,6 @@ bool RegionMover::offset_of(uint64_t x, uint64_t y, uint32_t pitch, uint64_t len
     if (pitch == 0u || y > length / pitch) return false;
     offset = y * pitch + x * PresentRegion::pixel_bytes;
     return true;
-}
-
-void RegionMover::swap_red_and_blue(size_t pixels)
-{
-    AV_SCOPE("RegionMover::swap_red_and_blue");
-    for (size_t at = 0u; at < pixels; at++) {
-        const uint32_t pixel = chunk_[at];
-        chunk_[at] = (pixel & 0xFF00FF00u) | ((pixel >> 16u) & 0xFFu) | ((pixel & 0xFFu) << 16u);
-    }
 }
 
 }  // namespace av

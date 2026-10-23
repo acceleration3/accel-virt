@@ -160,6 +160,24 @@ Status GuestContext::tear_down()
     return Status::ok;
 }
 
+void GuestContext::fail()
+{
+    AV_SCOPE("GuestContext::fail");
+    platform_.require_irql_at_most(Irql::dispatch, "GuestContext::fail");
+    SpinLockGuard guard(lock_);
+    if (state_ == State::established) state_ = State::failed;
+}
+
+uint64_t GuestContext::next_begin() const
+{
+    AV_SCOPE("GuestContext::next_begin");
+    uint64_t       tail = submitter_.tail();
+    const uint8_t *ring = pages_.ring_view();
+    if (ring == nullptr) return tail;
+    const uint64_t header = __atomic_load_n(reinterpret_cast<const uint64_t *>(ring + 8u), __ATOMIC_ACQUIRE);
+    return header > tail ? header : tail;
+}
+
 void GuestContext::abandon()
 {
     AV_SCOPE("GuestContext::abandon");

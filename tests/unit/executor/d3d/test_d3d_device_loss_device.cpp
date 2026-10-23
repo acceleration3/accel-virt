@@ -112,7 +112,7 @@ void make_cleared_target(av::D3dLoopback &wire, std::uint32_t device, const Floa
     target.format = format_b8g8r8a8;
     target.sample_count = 1u;
     target.bind_flags = bind_render_target;
-    CHECK(av_d3d_CreateResource(wire, 1u, target, 0u));
+    CHECK(av_d3d_CreateResource(wire, 1u, target, 0u, 0u, 0u));
     ViewDesc rtv = {};
     rtv.resource = 1u;
     rtv.format = format_b8g8r8a8;
@@ -346,7 +346,7 @@ TEST(d3d_device_loss_device, what_was_shared_before_the_loss_opens_after_it)
     surface.sample_count = 1u;
     surface.bind_flags = bind_render_target;
     surface.misc_flags = misc_shared;
-    CHECK(av_d3d_CreateResource(made, 1u, surface, surface_key));
+    CHECK(av_d3d_CreateResource(made, 1u, surface, surface_key, 0u, 0u));
     ViewDesc rtv = {};
     rtv.resource = 1u;
     rtv.format = format_b8g8r8a8;
@@ -357,7 +357,7 @@ TEST(d3d_device_loss_device, what_was_shared_before_the_loss_opens_after_it)
     buffer.dimension = 1u;
     buffer.width = 256u;
     buffer.bind_flags = 0x8u;   /* shader resource */
-    CHECK(av_d3d_CreateResource(made, 3u, buffer, buffer_key));
+    CHECK(av_d3d_CreateResource(made, 3u, buffer, buffer_key, 0u, 0u));
     std::uint32_t texel = 0u;
     CHECK_EQ(read_target(made, texel), 0u);
     CHECK_EQ(texel, 0xff00ffffu);

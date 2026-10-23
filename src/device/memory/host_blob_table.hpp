@@ -18,7 +18,7 @@
 #include "device/memory/host_blob.hpp"
 #include "device/memory/host_blob_owners.hpp"
 #include "device/memory/hostmem_space.hpp"
-#include "device/memory/lent_pages.hpp"
+#include "device/memory/guest_ram_lendings.hpp"
 #include "proto/resources/host_blob_id.hpp"
 #include "proto/resources/host_memory_request.hpp"
 
@@ -52,15 +52,27 @@ public:
      * when the library allocated nothing or the host has no memory to keep
      * the blob in. */
     [[nodiscard]] Status create(uint32_t id, uint32_t context, HostMemoryRequest request, uint64_t size);
-    /* Main loop. create's blob, for laying over guest pages a process lent
-     * (docs/host-memory.md, "Application memory"): the guest's view of those
-     * pages is write-back, so memory the host maps any other way is let go of
-     * again and refused with not_supported. */
+    /* Main loop. A blob for laying over guest pages a process lent
+     * (docs/host-memory.md, "Application memory"), whose pages are not known
+     * yet: it makes no memory until the first of them is (adopt). The guest's
+     * view of those pages is write-back, so memory the host maps any other
+     * way is let go of again then and refused with not_supported. */
     [[nodiscard]] Status create_over_guest(uint32_t id, uint32_t context, HostMemoryRequest request, uint64_t size);
     /* Main loop. Blob `id` laid over the next `entries` runs of lent pages
-     * named at `offset` of `request` (HostBlob::adopt); not_found for no blob
-     * `id`. */
+     * named at `offset` of `request`. The first decides: pages another
+     * adapter's device has lent whole (the first at the same address, the
+     * same size) make this blob that lending's too - its memory is the
+     * lender's, aliased in the executor, and its later pieces must be the
+     * very ones the lender laid - and any other pages get memory made for
+     * them and laid under them (GuestRamLendings). not_found for no blob
+     * `id`; invalid_parameter for a piece that is not the lending's or not
+     * whole pages; not_supported for memory the host does not map write-back;
+     * no_memory; conflict for pages another lending holds. */
     [[nodiscard]] Status adopt(uint32_t id, ControlRequest &request, size_t offset, uint32_t entries);
+    /* Main loop, before any blob: the lendings this device shares with the
+     * others of its process. A table not given any has lendings of its own,
+     * shared with nobody. */
+    void                 share_lendings(GuestRamLendings &lendings);
     /* Main loop. Placed at `offset` of the hostmem region, and how it is
      * cached there (AV_MEMORY_*) in `caching`. not_found for no blob `id`;
      * invalid_parameter for an offset outside the region, over another
@@ -101,12 +113,16 @@ private:
     void            drop(uint32_t id);
     /* The same, and its memory freed back to the library. */
     void            destroy(uint32_t id);
+    /* A first piece for a blob that waits: the lending it joins or makes. */
+    [[nodiscard]] Status begin_lending(uint32_t id, HostBlob &blob, ControlRequest &request, size_t offset);
 
     Host                            &host_;
     ContextPlane                    *contexts_;
     HostmemSpace                     space_;
-    /* Every guest page a blob lies over, for every blob of the device. */
-    LentPages                        lent_;
+    /* Every guest page a blob lies over, for every blob of every device of
+     * the process: the table's own unless it was given the module's. */
+    GuestRamLendings                 own_lendings_;
+    GuestRamLendings                *lendings_;
     void                            *lock_;
     ObjectPool<HostBlob>             blobs_;
     KeyedSlots<uint32_t, HostBlob *> ids_;

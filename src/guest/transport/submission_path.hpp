@@ -22,6 +22,7 @@ namespace av {
 
 class GuestDoorbell;
 class Kmt;
+class ReleaseRoute;
 class TransportRing;
 struct SubmissionPathProbe;
 
@@ -46,6 +47,13 @@ public:
      * watching the ring takes it without waiting for the scheduler. */
     void     publish_before_kernel();
     uint64_t through_kernel() const;
+    /* From now on every batch is released by packet through `route`, whose
+     * packets name the ring `ring`: nothing here publishes the tail or rings
+     * a doorbell, which would let the device take a batch before the packet
+     * that releases it has run. A null route is the ways above again. */
+    void     release_through(ReleaseRoute *route, uint32_t ring);
+    bool     releases() const;
+    uint64_t through_release() const;
     /* Every batch submitted, whichever way it went. */
     uint64_t submitted() const;
 
@@ -60,6 +68,9 @@ private:
     uint64_t       kernel_submissions_;
     bool           publishes_tail_;
     uint64_t       user_submissions_;
+    ReleaseRoute  *route_;
+    uint32_t       route_ring_;
+    uint64_t       release_submissions_;
 
     friend struct SubmissionPathProbe;
 };

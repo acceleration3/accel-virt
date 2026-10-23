@@ -9,10 +9,11 @@
 
 #include "core/log/log_line.hpp"
 #include "core/platform/thread_lock_hold.hpp"
+#include "core/support/bgra_rows.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
-#include "executor/poll_budget.hpp"
+#include "core/platform/poll_budget.hpp"
 #include "executor/sharing/d3d_shares.hpp"
 #include "executor/sharing/host_shares.hpp"
 #include "core/trace/state_writer.hpp"
@@ -191,13 +192,15 @@ bool D3d11HostDevice::compose_planes(uint32_t domain, const AvScanoutPlane *plan
     return exports_.describe(slot, image);
 }
 
-bool D3d11HostDevice::export_surface(uint32_t domain, uint64_t surface, AvExportedImage &image)
+bool D3d11HostDevice::export_surface(uint32_t domain, uint64_t surface, uint32_t flags, AvExportedImage &image)
 {
     AV_SCOPE("D3d11HostDevice::export_surface");
     image = AvExportedImage{-1, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
     lock(nullptr);
     ID3D11Texture2D *const texture = usable() ? shared_texture(domain, surface) : nullptr;
-    const bool             exported = texture != nullptr && images_.export_image(texture, image);
+    const bool             exported = texture != nullptr && ((flags & AV_EXPORT_OTHER_GPU) != 0u
+                                                                 ? images_.export_twin(texture, image)
+                                                                 : images_.export_image(texture, image));
     if (texture != nullptr) texture->Release();
     unlock();
     return exported;
@@ -205,14 +208,22 @@ bool D3d11HostDevice::export_surface(uint32_t domain, uint64_t surface, AvExport
 
 /* The count is read under the lock every copy into the surface is made and
  * counted under, and the sync_file made before it is let go, so the sync_file
- * covers every copy the count says ran. */
-bool D3d11HostDevice::sync_surface(uint32_t domain, uint64_t surface, uint64_t &writes, int &fd)
+ * covers every copy the count says ran. For a consumer on another GPU the
+ * copy into the surface's twin is queued under the same lock, after every
+ * copy counted, so the sync_file covers that copy too. */
+bool D3d11HostDevice::sync_surface(uint32_t domain, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd)
 {
     AV_SCOPE("D3d11HostDevice::sync_surface");
     writes = 0u;
     fd = -1;
     lock(nullptr);
-    const bool synced = usable() && D3dShares(*shares_).writes(domain, surface, writes) && vulkan_.sync_file(fd);
+    bool synced = usable() && D3dShares(*shares_).writes(domain, surface, writes);
+    if (synced && (flags & AV_EXPORT_OTHER_GPU) != 0u) {
+        ID3D11Texture2D *const texture = shared_texture(domain, surface);
+        synced = texture != nullptr && images_.refresh_twin(context_, texture, writes);
+        if (texture != nullptr) texture->Release();
+    }
+    synced = synced && vulkan_.sync_file(fd);
     unlock();
     return synced;
 }
@@ -301,22 +312,16 @@ bool D3d11HostDevice::drain(const D3D11_TEXTURE2D_DESC &wanted, uint8_t *pixels,
     }
     const uint32_t columns = wanted.Width < width ? wanted.Width : width;
     const uint32_t rows = wanted.Height < height ? wanted.Height : height;
-    const bool swap = wanted.Format == DXGI_FORMAT_R8G8B8A8_UNORM || wanted.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB ||
-                      wanted.Format == DXGI_FORMAT_R8G8B8A8_TYPELESS;
-    for (uint32_t row = 0u; row < rows; row++) {
-        const uint8_t *from = static_cast<const uint8_t *>(mapped.pData) + static_cast<size_t>(row) * mapped.RowPitch;
-        uint8_t *to = pixels + static_cast<size_t>(row) * stride;
-        __builtin_memcpy(to, from, static_cast<size_t>(columns) * 4u);
-        if (!swap) continue;
-        for (uint32_t column = 0u; column < columns; column++) {
-            const uint8_t red = to[column * 4u];
-            to[column * 4u] = to[column * 4u + 2u];
-            to[column * 4u + 2u] = red;
-        }
-    }
+    const BgraRows::Channels channels =
+        wanted.Format == DXGI_FORMAT_R8G8B8A8_UNORM || wanted.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB ||
+                wanted.Format == DXGI_FORMAT_R8G8B8A8_TYPELESS
+            ? BgraRows::Channels::red_blue_swapped : BgraRows::Channels::unchanged;
+    const BgraRows from(static_cast<const uint8_t *>(mapped.pData), uint64_t{mapped.RowPitch} * rows, mapped.RowPitch);
+    BgraRows to(pixels, uint64_t{stride} * height, stride);
+    const Status copied = to.copy_from(from, columns, rows, channels);
     context_->Unmap(staging_, 0u);
     unlock();
-    return true;
+    return copied == Status::ok;
 }
 
 bool D3d11HostDevice::opened() const
@@ -510,6 +515,18 @@ bool D3d11HostDevice::show(uint32_t domain, uint64_t id, ID3D11Texture2D *presen
 {
     AV_SCOPE("D3d11HostDevice::show");
     if (device_ == nullptr || context_ == nullptr || presented == nullptr) return false;
+    ID3D11Texture2D *const copy = made_shown(domain, id, presented);
+    if (copy == nullptr) return false;
+    context_->CopyResource(copy, presented);
+    copy->Release();
+    return true;
+}
+
+/* The flip copy of `id`, made like `presented` when there is none yet; with a
+ * reference of the caller's, null when it cannot be made. */
+ID3D11Texture2D *D3d11HostDevice::made_shown(uint32_t domain, uint64_t id, ID3D11Texture2D *presented)
+{
+    AV_SCOPE("D3d11HostDevice::made_shown");
     ID3D11Texture2D *copy = nullptr;
     IUnknown *const  held = D3dShares(*shares_).shown(domain, id);
     if (held != nullptr) {
@@ -523,24 +540,41 @@ bool D3d11HostDevice::show(uint32_t domain, uint64_t id, ID3D11Texture2D *presen
         desc.BindFlags = (desc.BindFlags & D3D11_BIND_RENDER_TARGET) | D3D11_BIND_SHADER_RESOURCE;
         desc.CPUAccessFlags = 0u;
         desc.MiscFlags &= D3D11_RESOURCE_MISC_TEXTURECUBE;
-        if (FAILED(device_->CreateTexture2D(&desc, nullptr, &copy)) || copy == nullptr) return false;
+        if (FAILED(device_->CreateTexture2D(&desc, nullptr, &copy)) || copy == nullptr) return nullptr;
         const bool kept = D3dShares(*shares_).keep_shown(domain, id, copy);
         retire_locked();
         if (!kept) {
             copy->Release();
-            return false;
+            return nullptr;
         }
     }
-    context_->CopyResource(copy, presented);
-    copy->Release();
-    return true;
+    return copy;
 }
 
 IUnknown *D3d11HostDevice::open_shared(uint32_t domain, uint64_t id)
 {
     AV_SCOPE("D3d11HostDevice::open_shared");
     if (shares_ == nullptr) return nullptr;
-    return viewed(domain, id, D3dShares(*shares_).open_resource(domain, id));
+    bool            live = false;
+    IUnknown *const opened = D3dShares(*shares_).open_resource(domain, id, live);
+    if (live)
+        LogLine(lines_)
+            .text("surface ")
+            .hex(id, 16u)
+            .text(" is a presented buffer opened before its flip copy was made: the compositor reads the live buffer")
+            .write();
+    return viewed(domain, id, opened);
+}
+
+bool D3d11HostDevice::prepare_shown(uint32_t domain, uint64_t id, ID3D11Texture2D *presented)
+{
+    AV_SCOPE("D3d11HostDevice::prepare_shown");
+    if (device_ == nullptr || shares_ == nullptr || presented == nullptr) return false;
+    D3dShares(*shares_).expect_shown(domain, id);
+    ID3D11Texture2D *copy = made_shown(domain, id, presented);
+    if (copy == nullptr) return false;
+    copy->Release();
+    return true;
 }
 
 /* What a present showed of `id` - the copy its flip took - where one was, and
@@ -651,6 +685,13 @@ ID3D11Texture2D *D3d11HostDevice::adopt_exportable(OwnedFd &descriptor, const D3
 {
     AV_SCOPE("D3d11HostDevice::adopt_exportable");
     return images_.adopt(descriptor, desc);
+}
+
+ID3D11Texture2D *D3d11HostDevice::adopt_rows(OwnedFd &descriptor, const D3D11_TEXTURE2D_DESC1 &desc, uint32_t pitch)
+{
+    AV_SCOPE("D3d11HostDevice::adopt_rows");
+    constexpr uint64_t drm_format_mod_linear = 0u;
+    return images_.adopt(descriptor, desc, drm_format_mod_linear, 0u, pitch);
 }
 
 /* A swap chain buffer is one 2D image of one mip; what DWM makes of it is a

@@ -11,6 +11,7 @@
 #include "proto/escape/av_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/escape/follow_record.hpp"
+#include "proto/escape/release_record.hpp"
 #include "miniport/scheduling/context_table.hpp"
 #include "miniport/scheduling/device_table.hpp"
 #include "core/support/status.hpp"
@@ -207,7 +208,7 @@ TEST(context_table_create, a_context_with_no_private_data_is_not_av)
   CHECK(!fixture.contexts().find(request.hContext)->is_av());
   /* Room for a FollowRecord, so dxgkrnl hands every packet's private data on
    * (Adapter::submit_command_virtual). */
-  CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, av::FollowRecord::encoded_size); }
+  CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, av::ReleaseRecord::encoded_size); }
 
 /* Private data the size of a record but not a valid one is refused, and no
  * context is left behind. */

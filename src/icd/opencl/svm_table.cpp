@@ -1,6 +1,7 @@
 #include "icd/opencl/svm_table.hpp"
 
 #include "core/platform/block_source.hpp"
+#include "core/support/sorted_search.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 
@@ -27,14 +28,7 @@ uint64_t SvmTable::key_of(const void *address) const
 uint32_t SvmTable::row_below(uint64_t key) const
 {
     AV_SCOPE("SvmTable::row_below");
-    uint32_t low = 0u;
-    uint32_t high = bases_.size();
-    while (low < high) {
-        const uint32_t middle = low + (high - low) / 2u;
-        if (bases_.at(middle) <= key) low = middle + 1u;
-        else high = middle;
-    }
-    return low == 0u ? bases_.size() : low - 1u;
+    return SortedSearch<uint64_t>(bases_).at_or_below(key);
 }
 
 void *SvmTable::take(uint64_t host_base, size_t bytes)

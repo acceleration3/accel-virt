@@ -5,6 +5,8 @@
 #define AV_DEVICE_TABLE_HPP
 
 #include "miniport/memory/device_allocation.hpp"
+#include "miniport/memory/point_view.hpp"
+#include "proto/escape/next_point_record.hpp"
 #include "core/platform/mutex.hpp"
 #include "core/platform/platform.hpp"
 #include "miniport/scheduling/device.hpp"
@@ -50,7 +52,13 @@ public:
      * device of `process`, the hKmdProcess CreateProcess answered
      * (NextPointRecord): invalid_parameter for no process, not_found where no
      * device of it has such an open. */
-    [[nodiscard]] Status name_point(void *process, uint64_t surface, uint32_t point);
+    [[nodiscard]] Status name_point(void *process, uint64_t surface, uint32_t point, NextPointRecord::Action action);
+    /* What a present of the allocation `handle` names reads of its points,
+     * under the table's lock the escapes naming them take; not_found for a
+     * handle this table did not open. */
+    [[nodiscard]] Status peek_point(void *handle, PointView &view);
+    /* The present of `handle` is done: every point waiting for it goes. */
+    void                 consume_point(void *handle);
     uint32_t             devices() const;
     uint32_t             opens() const;
 

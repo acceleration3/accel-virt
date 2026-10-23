@@ -8,8 +8,8 @@
 
 namespace av::d3d {
 
-PresentedAllocations::PresentedAllocations(KernelDevice &kernel, KeyedLog &lines, const Kmt &kmt)
-    : kernel_(kernel), lines_(lines), kmt_(kmt), paging_()
+PresentedAllocations::PresentedAllocations(KernelDevice &kernel, KeyedLog &lines, PollClock &clock)
+    : kernel_(kernel), lines_(lines), clock_(clock), paging_()
 {
     AV_SCOPE("PresentedAllocations::PresentedAllocations");
 }
@@ -35,7 +35,7 @@ HRESULT PresentedAllocations::make(KernelSurface &surface, HANDLE resource, D3DK
     /* An identity is asked for, which the miniport mints and dxgkrnl hands
      * whoever opens the surface: with none, nothing can open it. */
     if (surface.key() == 0u) lines_.once("the miniport minted no identity for a presented surface; nothing can open it");
-    if (!paging_.constructed()) static_cast<void>(paging_.construct(kernel_.callbacks(), kernel_.runtime(), kmt_));
+    if (!paging_.constructed()) static_cast<void>(paging_.construct(kernel_.callbacks(), kernel_.runtime(), clock_));
     const HRESULT resident = paging_.object().make_resident(allocation);
     if (FAILED(resident) && lines_.first("the kernel would not keep a presented surface resident", resident))
         LogLine(lines_)

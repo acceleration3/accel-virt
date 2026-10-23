@@ -266,6 +266,18 @@ uint32_t VulkanDeviceTable::raw_memory_type(uint32_t allowed) const
     return memory_type(allowed);
 }
 
+uint32_t VulkanDeviceTable::system_memory_type(uint32_t allowed) const
+{
+    AV_SCOPE("VulkanDeviceTable::system_memory_type");
+    for (uint32_t type = 0u; type < memory_.memoryTypeCount; type++) {
+        const VkMemoryPropertyFlags flags = memory_.memoryTypes[type].propertyFlags;
+        if ((allowed & (1u << type)) != 0u && (flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u &&
+            (flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == 0u)
+            return type;
+    }
+    return VK_MAX_MEMORY_TYPES;
+}
+
 void VulkanDeviceTable::memory_properties(VkPhysicalDeviceMemoryProperties &answer) const
 {
     AV_SCOPE("VulkanDeviceTable::memory_properties");

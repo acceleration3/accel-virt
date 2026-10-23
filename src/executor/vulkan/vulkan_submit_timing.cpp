@@ -4,8 +4,6 @@
 #include "core/trace/function_scope.hpp"
 #include "device/host/env_setting.hpp"
 
-#include <time.h>
-
 namespace av {
 
 namespace {
@@ -15,7 +13,7 @@ constexpr uint64_t nanoseconds_per_second = 1000000000u;
 }  // namespace
 
 VulkanSubmitTiming::VulkanSubmitTiming(DriverLog &lines)
-    : lines_(lines), enabled_(EnvSetting("AV_VK_SUBMIT_TIMING").on()), device_(VK_NULL_HANDLE), queue_(VK_NULL_HANDLE),
+    : lines_(lines), clock_(), enabled_(EnvSetting("AV_VK_SUBMIT_TIMING").on()), device_(VK_NULL_HANDLE), queue_(VK_NULL_HANDLE),
       pool_(VK_NULL_HANDLE), queries_(VK_NULL_HANDLE), begin_{}, end_{}, pending_{}, next_(0u), oldest_(0u),
       period_ns_(1.0), last_end_(0u), busy_ns_(0u), gap_ns_(0u), gaps_(0u), long_gaps_(0u), timed_(0u), window_started_(0u)
 {
@@ -60,7 +58,7 @@ void VulkanSubmitTiming::queue_made(VkPhysicalDevice physical, VkDevice device, 
         return;
     device_ = device;
     queue_ = queue;
-    window_started_ = now();
+    window_started_ = clock_.now_nanoseconds();
     lines_.note("timing queue family", family);
 }
 
@@ -93,18 +91,10 @@ void VulkanSubmitTiming::harvest()
     }
 }
 
-uint64_t VulkanSubmitTiming::now() const
-{
-    AV_SCOPE("VulkanSubmitTiming::now");
-    timespec clock = {};
-    clock_gettime(CLOCK_MONOTONIC, &clock);
-    return static_cast<uint64_t>(clock.tv_sec) * nanoseconds_per_second + static_cast<uint64_t>(clock.tv_nsec);
-}
-
 void VulkanSubmitTiming::report()
 {
     AV_SCOPE("VulkanSubmitTiming::report");
-    const uint64_t at = now();
+    const uint64_t at = clock_.now_nanoseconds();
     if (at - window_started_ < nanoseconds_per_second || timed_ == 0u) return;
     constexpr uint64_t ns_per_tenth_us = 100u;
     constexpr uint64_t tenth_percents_per_whole = 1000u;

@@ -96,6 +96,12 @@ void DxvkVulkanDevice::idle()
     work_.idle();
 }
 
+bool DxvkVulkanDevice::signal(const VulkanTimeline &timeline, uint64_t value)
+{
+    AV_SCOPE("DxvkVulkanDevice::signal");
+    return work_.signal(timeline, value);
+}
+
 /* DXVK submits from a thread of its own, after its CS thread has recorded:
  * the flush drains the CS thread, and its submission lock waits for its
  * submission queue to empty, so the empty batch here is submitted after all

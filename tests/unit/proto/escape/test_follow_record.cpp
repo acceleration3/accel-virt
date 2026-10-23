@@ -69,16 +69,18 @@ TEST(follow_record_decode, rejects_a_bad_magic_ring_zero_and_fence_zero_and_stay
   } }
 
 /* dxgkrnl hands every packet on an ordinary context private data of the size
- * the context reported; only exactly a record's length is one. */
-TEST(follow_record_decode, any_other_length_is_malformed)
+ * the context reported, room for the largest record it carries: a record is
+ * the prefix, and fewer bytes than a record are none. */
+TEST(follow_record_decode, a_shorter_length_is_malformed_and_a_longer_one_carries_the_prefix)
 { std::uint8_t bytes[FollowRecord::encoded_size + 1u] = {};
   CHECK_STATUS(FollowRecord(7u, 9u).encode(bytes, sizeof bytes), Status::ok);
   FollowRecord decoded;
   CHECK_STATUS(decoded.decode(bytes, FollowRecord::encoded_size - 1u), Status::malformed);
-  CHECK_STATUS(decoded.decode(bytes, FollowRecord::encoded_size + 1u), Status::malformed);
   CHECK_STATUS(decoded.decode(bytes, 0u), Status::malformed);
   CHECK_STATUS(decoded.decode(nullptr, FollowRecord::encoded_size), Status::malformed);
-  CHECK_EQ(decoded.ring(), 0u); }
+  CHECK_EQ(decoded.ring(), 0u);
+  CHECK_STATUS(decoded.decode(bytes, FollowRecord::encoded_size + 1u), Status::ok);
+  CHECK_EQ(decoded.ring(), 7u); }
 
 TEST(follow_record_encode, a_short_destination_is_too_large_and_untouched)
 { GuardedBuffer buffer(FollowRecord::encoded_size - 1u);

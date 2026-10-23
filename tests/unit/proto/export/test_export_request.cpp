@@ -32,7 +32,7 @@ TEST(export_request, encodes_at_the_documented_offsets_and_decodes_back)
   const ExportRequest sent(ExportOperation::sync, 0x1122334455667788ull, 0xA5A5000000000001ull);
   CHECK_STATUS(sent.encode(bytes, sizeof bytes), Status::ok);
   const std::uint8_t expected[ExportRequest::encoded_size] = {
-      0x41, 0x56, 0x58, 0x51, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x41, 0x56, 0x58, 0x51, 0x01, 0x00, 0x03, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
       0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0xA5, 0xA5};
   CHECK(std::memcmp(bytes, expected, sizeof bytes) == 0);
   ExportRequest read;
@@ -87,7 +87,7 @@ TEST(export_request, a_timing_carries_its_refresh_and_a_blank_at_the_documented_
   CHECK_EQ(sent.surface(), 0u);
   CHECK_STATUS(sent.encode(bytes, sizeof bytes), Status::ok);
   const std::uint8_t expected[ExportRequest::encoded_size] = {
-      0x41, 0x56, 0x58, 0x51, 0x01, 0x00, 0x02, 0x00, 0x05, 0x00, 0x00, 0x00, 0x80, 0x32, 0x02, 0x00,
+      0x41, 0x56, 0x58, 0x51, 0x01, 0x00, 0x03, 0x00, 0x05, 0x00, 0x00, 0x00, 0x80, 0x32, 0x02, 0x00,
       0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
   CHECK(std::memcmp(bytes, expected, sizeof bytes) == 0);
   ExportRequest read;
@@ -124,6 +124,29 @@ TEST(export_request, a_timing_the_clock_cannot_run_at_or_naming_no_moment_is_mal
   put_u32(bytes, 12u, 60000u);
   ExportRequest read;
   CHECK_STATUS(read.decode(bytes, sizeof bytes), Status::malformed); }
+
+/* Only an export and a sync may say the consumer imports on another GPU; no
+ * other flag exists. */
+TEST(export_request, the_other_gpu_flag_is_taken_by_an_export_and_a_sync_alone)
+{ struct Case {
+      ExportOperation operation;
+      std::uint32_t   flags;
+      Status          expected;
+  };
+  const Case cases[] = {{ExportOperation::export_surface, ExportRequest::other_gpu, Status::ok},
+                        {ExportOperation::sync, ExportRequest::other_gpu, Status::ok},
+                        {ExportOperation::export_surface, 2u, Status::malformed},
+                        {ExportOperation::release, ExportRequest::other_gpu, Status::malformed},
+                        {ExportOperation::hello, ExportRequest::other_gpu, Status::malformed},
+                        {ExportOperation::head, ExportRequest::other_gpu, Status::malformed}};
+  for (const Case &item : cases) {
+      std::uint8_t bytes[ExportRequest::encoded_size] = {};
+      CHECK_STATUS(ExportRequest(item.operation, item.operation == ExportOperation::hello ? 0u : 3u, 7u, item.flags)
+                       .encode(bytes, sizeof bytes), Status::ok);
+      ExportRequest read;
+      CHECK_STATUS(read.decode(bytes, sizeof bytes), item.expected);
+      CHECK_EQ(read.flags(), item.expected == Status::ok ? item.flags : 0u);
+      CHECK(read.imports_on_other_gpu() == (item.expected == Status::ok)); } }
 
 /* Another major is not this layout, whatever its bytes; another minor is. */
 TEST(export_request, another_major_is_not_supported_and_another_minor_is_read)
@@ -165,8 +188,9 @@ TEST(export_request_decode, survives_the_hostile_sweep)
   /* Free: the minor's 16 flips; the surface's 64, since 0x41 has two bits
    * set and no single flip makes it 0; the tag's 64; and of the operation's,
    * only bit 0, which makes export (2) sync (3) - another operation naming a
-   * surface. With the untouched request, 146 acceptances. */
-  const std::uint32_t acceptable = 16u + 64u + 64u + 1u + 1u;
+   * surface; and the flags word's bit 0, the other-GPU flag an export may
+   * carry. With the untouched request, 147 acceptances. */
+  const std::uint32_t acceptable = 16u + 64u + 64u + 1u + 1u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
 /* A head request names head N as N + 1, and only a head request has one. */

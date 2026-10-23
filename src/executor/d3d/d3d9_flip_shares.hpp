@@ -12,13 +12,13 @@
  * Direct3D 9 its interop, the texture is made over an image of the
  * compositor's, which the Direct3D 9 device imports too: a flip is a copy
  * recorded on the Direct3D 9 device's own queue, signalling a timeline that
- * Direct3D 11's queue waits on before it reads the texture - nothing crosses
- * the CPU, and nothing on it waits (D3d9VulkanLane, QueueWork).
+ * Direct3D 11's queue waits on before it reads the texture. A reverse timeline
+ * holds the next copy until Direct3D 11's previous reads finish - nothing
+ * crosses the CPU, and nothing on it waits (D3d9VulkanLane, QueueWork).
  *
- * Elsewhere each flip is read back on the Direct3D 9 device and written into
- * the texture on the Direct3D 11 one. That copy is never waited for where it
- * is made: a flip queues its frame's copy and writes the texture from an
- * earlier copy the GPU has finished, so what DWM sees is a frame behind.
+ * Elsewhere each flip uses D3d9FramePool to capture that frame, then waits
+ * within a deadline before uploading it on Direct3D 11. A previous frame is
+ * never substituted, and the Direct3D 11 lock is not held while waiting.
  *
  * Each device that flips has a lane of its own for as long as it lives, any
  * number of them; a lane that cannot be made for want of memory leaves its
@@ -31,13 +31,14 @@
 #include "core/support/status.hpp"
 #include "executor/shim/compose_order.hpp"
 #include "executor/shim/d3d9_vulkan_lane.hpp"
+#include "executor/shim/d3d9_frame_pool.hpp"
+#include "executor/monotonic_clock.hpp"
 #include "executor/shim/vulkan_image.hpp"
 #include "executor/shim/vulkan_timeline.hpp"
 
 #include <stdint.h>
 
 struct IDirect3DDevice9;
-struct IDirect3DQuery9;
 struct IDirect3DSurface9;
 struct ID3D11Texture2D;
 
@@ -53,8 +54,6 @@ public:
     /* The primaries a session shows at once: one a VidPn source, and the
      * ones a mode change leaves behind until the guest lets them go. */
     static constexpr uint32_t most_primaries = 8u;
-    /* Copies a primary read back on the CPU has in flight at once. */
-    static constexpr uint32_t copy_slots = 2u;
 
     explicit D3d9FlipShares(BlockSource &blocks);
     ~D3d9FlipShares();
@@ -83,15 +82,12 @@ private:
         D3d9VulkanLane vulkan_;
         VulkanTimeline timeline_;
         VulkanTimeline signalled_;
+        /* Direct3D 11's completed reads, imported on Direct3D 9. */
+        VulkanTimeline consumed_;
+        VulkanTimeline reusable_;
         ComposeOrder   order_;
         /* Asked once and refused: the device flips on the CPU. */
         bool             refused_;
-    };
-    struct Copy {
-        IDirect3DSurface9 *staging_;
-        IDirect3DQuery9   *copied_;
-        /* The flip it holds; 0 for none in flight. */
-        uint64_t           flip_;
     };
     struct Primary {
         uint64_t           key_;
@@ -103,8 +99,6 @@ private:
         Lane              *lane_;
         VulkanImage        image_;
         VulkanImage        adopted_;
-        /* On the CPU: the staging copies. */
-        Copy               copies_[copy_slots];
         uint32_t           width_;
         uint32_t           height_;
         uint32_t           format_;
@@ -125,12 +119,7 @@ private:
     [[nodiscard]] bool make_on_cpu(Primary &made);
     void     forget(Primary &primary);
     [[nodiscard]] Status flip_on_gpu(Primary &shown, IDirect3DSurface9 *source);
-    [[nodiscard]] Status flip_on_cpu(Primary &shown, IDirect3DSurface9 *source);
-    /* Every copy of `primary` the GPU has finished written into its texture,
-     * oldest first; with `wait`, the oldest in flight is waited for first. */
-    void     write_finished(Primary &primary, bool wait);
-    /* A copy not in flight, waiting for the oldest when both are. */
-    Copy    *free_copy(Primary &primary);
+    [[nodiscard]] Status flip_on_cpu(Primary &shown, IDirect3DSurface9 *source, bool multisampled);
 
     D3d11HostDevice *device11_;
     SessionShares   *shares_;
@@ -139,6 +128,8 @@ private:
     KeyedSlots<uint64_t, Lane *> lane_of_;
     Primary          primaries_[most_primaries];
     uint64_t         flips_;
+    D3d9FramePool    cpu_frames_;
+    MonotonicClock   clock_;
 };
 
 }  // namespace av

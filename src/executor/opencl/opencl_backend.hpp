@@ -24,6 +24,7 @@
 #include "executor/host_object_registry.hpp"
 #include "executor/opencl/host_svm_ranges.hpp"
 #include "executor/opencl/kernel_pacer.hpp"
+#include "executor/monotonic_clock.hpp"
 #include "executor/opencl/staging_bytes.hpp"
 #include "executor/session_backend.hpp"
 #include "executor/shim/host_heap.hpp"
@@ -426,6 +427,7 @@ private:
     ClReadAhead      read_ahead_;
     /* Rectangles read into the arena where the host will not read into it. */
     ClBouncedRect    bounced_;
+    MonotonicClock   clock_;
     KernelPacer      pacer_;
     /* The queue the group being gathered is on, retained while it is, and
      * the marker after the group being timed. */

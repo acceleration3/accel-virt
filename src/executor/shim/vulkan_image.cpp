@@ -78,8 +78,12 @@ bool VulkanImage::import_dma_buf(const VulkanDeviceTable &table, const VkImageCr
     AV_SCOPE("VulkanImage::import_dma_buf");
     if (!create(table, info)) return false;
     const VkMemoryRequirements needs = requirements();
+    /* The types this device would import the dma-buf as, where it can say:
+     * memory another GPU made is not importable as every type the image fits. */
+    const uint32_t importable = table.dma_buf_types(descriptor.fd());
+    const uint32_t allowed = needs.memoryTypeBits & (importable != 0u ? importable : ~0u);
     return bind_imported(descriptor, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, needs.size,
-                         table.memory_type(needs.memoryTypeBits));
+                         table.memory_type(allowed));
 }
 
 bool VulkanImage::export_dma_buf(OwnedFd &descriptor) const

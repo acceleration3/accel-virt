@@ -50,3 +50,18 @@ TEST(next_point_record, anything_else_is_malformed_and_changes_nothing)
   GuardedBuffer buffer(NextPointRecord::encoded_size - 1u);
   CHECK_STATUS(NextPointRecord(9u, 7u).encode(buffer.data(), buffer.size()), Status::too_large);
   CHECK(buffer.guards_intact()); }
+
+/* A point taken back, and "read my pages": other magics of the same record. */
+TEST(next_point_record, a_withdrawal_and_a_pages_record_round_trip_and_keep_their_rules)
+{ std::uint8_t bytes[NextPointRecord::encoded_size] = {};
+  CHECK_STATUS(NextPointRecord(9u, 4u, NextPointRecord::Action::withdraw).encode(bytes, sizeof bytes), Status::ok);
+  NextPointRecord read;
+  CHECK_STATUS(read.decode(bytes, sizeof bytes), Status::ok);
+  CHECK(read.action() == NextPointRecord::Action::withdraw && read.point() == 4u && read.surface() == 9u);
+  CHECK_STATUS(NextPointRecord(9u, 0u, NextPointRecord::Action::pages).encode(bytes, sizeof bytes), Status::ok);
+  CHECK_STATUS(read.decode(bytes, sizeof bytes), Status::ok);
+  CHECK(read.action() == NextPointRecord::Action::pages && read.point() == 0u);
+  CHECK_STATUS(NextPointRecord(9u, 3u, NextPointRecord::Action::pages).encode(bytes, sizeof bytes), Status::ok);
+  CHECK_STATUS(read.decode(bytes, sizeof bytes), Status::malformed);
+  CHECK_STATUS(NextPointRecord(9u, 0u, NextPointRecord::Action::name).encode(bytes, sizeof bytes), Status::ok);
+  CHECK_STATUS(read.decode(bytes, sizeof bytes), Status::malformed); }

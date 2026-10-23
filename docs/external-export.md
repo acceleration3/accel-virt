@@ -66,10 +66,11 @@ answers for the surfaces the guest shared.
 ## 3. Messages
 
 Little-endian, fixed size, one datagram each; each starts with a magic and a
-version. This document is version **1.2**. A device reads any minor of major 1
+version. This document is version **1.3**. A device reads any minor of major 1
 as this layout and answers a request of another major `not_supported`. A
 consumer should do the same with answers. Version 1.1 added timing (§4),
-and 1.2 head (§4); an older device answers each as a request it cannot read.
+1.2 head (§4) and 1.3 the other-GPU flag of export and sync (§4.2); an older
+device answers each as a request it cannot read.
 
 ### 3.1 Request (consumer -> device), 32 bytes
 
@@ -77,9 +78,9 @@ and 1.2 head (§4); an older device answers each as a request it cannot read.
 |--:|---|---|---|
 | 0 | u32 | magic | `AVXQ` = `0x51585641` |
 | 4 | u16 | major | 1 |
-| 6 | u16 | minor | 2 |
+| 6 | u16 | minor | 3 |
 | 8 | u32 | operation | 1 hello, 2 export, 3 sync, 4 release, 5 timing, 6 head |
-| 12 | u32 | reserved / refresh | 0; for timing, the consumer's display's refresh in millihertz, 1000 to 1000000 |
+| 12 | u32 | flags / refresh | 0; for export and sync, bit 0: the consumer imports on another GPU (§4.2), no other bit; for timing, the consumer's display's refresh in millihertz, 1000 to 1000000 |
 | 16 | u64 | surface / blank | the guest's shared id (§5); 0 for hello; for head, the head plus one, 1 to 16. For timing, a moment on the host's `CLOCK_MONOTONIC`, in ns and not 0, that the guest's display is to blank in phase with |
 | 24 | u64 | tag | the consumer's own; the answer carries it back |
 
@@ -93,7 +94,7 @@ the one connection.
 |--:|---|---|---|
 | 0 | u32 | magic | `AVXA` = `0x41585641` |
 | 4 | u16 | major | 1 |
-| 6 | u16 | minor | 1 |
+| 6 | u16 | minor | 3: the request minor the device reads |
 | 8 | u32 | operation | the request's; 0 for one that could not be read; `0x80` revoked (an event) |
 | 12 | u32 | status | 0 ok, 1 malformed, 2 not_supported, 3 not_found, 4 no_space, 5 unavailable |
 | 16 | u64 | surface | the request's (0 for hello, for timing and for one that could not be read); an event's surface |
@@ -167,6 +168,39 @@ or head and none otherwise. It is the consumer's to close.
   frame the guest composes reaches the consumer's compositor in time for the
   next one (remotewin's `DisplayLock`). With more than one consumer, the last
   to ask wins.
+
+### 4.2 Another GPU
+
+A consumer whose GPU is not the one hello names - a compositor on the
+integrated GPU while the guest's display runs on the discrete one - cannot
+open the surface's own memory: it is VRAM, in the discrete GPU's tiling. It
+sets bit 0 of the flags word in its export and in every sync of that surface,
+and is handed a twin instead, the standard PRIME way:
+
+- **export** with the flag answers the dma-buf of the surface's twin: an image
+  of the surface's size and format, linear (`DRM_FORMAT_MOD_LINEAR`, one plane
+  at offset 0, rows `stride` bytes apart), bound to dedicated memory of its own
+  that is host visible and not device local - system memory (GTT) the other
+  GPU opens over the bus. A GPU with no such memory type makes no twin: VRAM is
+  no stand-in. The twin can be made of any shared texture, whatever its image
+  was made as. It is made on the first ask and kept; an export again answers a
+  fresh descriptor of the same memory. `unavailable` (status 5) where no twin
+  can be made - no system memory type, no linear image of the format - which
+  a consumer takes as final; `not_found` only for a surface the device does
+  not share (the guest's batch making it may not have run yet).
+- **sync** with the flag first records a GPU copy surface -> twin, after every
+  copy into the surface the count covers, and the sync_file it answers covers
+  that copy too: the consumer reads the twin once the sync_file has
+  signalled, exactly as it reads the surface itself. A sync asked again at the
+  same count (a consumer waiting for the guest's copy to arrive) answers a
+  sync_file but copies nothing more. `not_found` for a surface whose twin was
+  not exported. The twin is refreshed by such syncs and by nothing else, so a
+  consumer reads it from a sync's fence on. A linear image carries no
+  metadata, so the copy needs no queue-family ownership hand-over.
+- The twin lives as long as the surface's texture on the host: it goes when
+  the guest lets go of the surface everywhere (the `revoked` event, §4),
+  whatever the connections hold. `release` lets go of the connection's hold
+  only. A consumer on the surface's own GPU sets no flag and is unaffected.
 
 ### 4.1 Which copy a sync covers
 
@@ -346,6 +380,7 @@ the width's) and at 2560x1440, and finds every texel where Direct3D put it.
 
 | Piece | Where |
 |---|---|
+| The twin (§4.2) | `SystemMemoryTwin`, held by the surface's texture as private data; `ExportableImages::export_twin`, `refresh_twin`; `VulkanDeviceTable::system_memory_type`; `AV_EXPORT_OTHER_GPU` in `export_surface` and `sync_surface`'s `flags` (ABI 24) |
 | The messages | `src/proto/export/`: `ExportRequest`, `ExportAnswer`, `ExportedLayout`, `ExportGreeting` |
 | Connections, their threads, revocation | `src/device/export/`: `ExportService`, `ExportConnection`, `ExportedGpu` |
 | The socket and its connections' I/O | the glue, `src/device/qemu/virtio-gpu-av-host.c`, through `AvHostOps` (`receive_export`, `send_export`, `shutdown_export`, `close_export`) and `av_device_export_accepted` |

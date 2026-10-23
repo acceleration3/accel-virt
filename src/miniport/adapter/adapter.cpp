@@ -48,6 +48,7 @@
 #include "proto/escape/trace_escape_record.hpp"
 #include "miniport/ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "miniport/ddi/dxgkarg_get_scan_line_record.hpp"
+#include "miniport/ddi/d3dkmdt_gdi_surface_data_record.hpp"
 #include "miniport/ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
 #include "miniport/ddi/dxgkarg_open_allocation_record.hpp"
 #include "miniport/ddi/dxgkarg_patch_record.hpp"
@@ -102,6 +103,8 @@
 #include "proto/virtio_gpu/gpu_request_writer.hpp"
 #include "proto/virtio_gpu/av_request_writer.hpp"
 #include "core/support/scope_exit.hpp"
+#include "proto/escape/release_record.hpp"
+#include "miniport/memory/point_view.hpp"
 #include "miniport/vidpn/cofunc_modality.hpp"
 #include "miniport/vidpn/path_transformation.hpp"
 #include "miniport/vidpn/vidpn_commit.hpp"
@@ -483,8 +486,16 @@ void Adapter::dpc_routine()
         platform_.log("avgpu: cursor queue harvest failed in the DPC");
     av_contexts_.serve(node_, hw_submissions_);
     if (harvest && presents_.constructed()) node_.finish(&presents_.object(), presents_.object().completed());
-    const uint32_t overdue = node_.release_overdue(now);
+    void        *overdue_owners[8] = {};
+    uint32_t     named = 0u;
+    const uint32_t overdue = node_.release_overdue(now, overdue_owners, 8u, &named);
     if (overdue != 0u && budget_.allows()) platform_.log("avgpu: a held packet passed its deadline and was let go");
+    /* A packet held for a batch that was never released is not one the host
+     * is slow over: its context is lost, which its process can see. */
+    bool lost_context = false;
+    for (uint32_t index = 0u; index < named; index++)
+        lost_context = av_contexts_.fault_if_held(overdue_owners[index]) || lost_context;
+    if (lost_context) av_contexts_.serve(node_, hw_submissions_);
     if (node_.complete(notification_) != Status::ok && budget_.allows())
         platform_.log("avgpu: a completion was refused in the DPC");
     if (hw_submissions_.complete(notification_) != Status::ok && budget_.allows())
@@ -786,7 +797,9 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
     if (magic == HostWindowRecord::magic) return window_chunk(*escape);
     if (magic == ContextViewsRecord::magic) return context_views(*escape);
     if (magic == WakeEventRecord::magic) return wake_event(*escape);
-    if (magic == NextPointRecord::magic) return next_point(*escape);
+    if (magic == NextPointRecord::magic || magic == NextPointRecord::withdraw_magic ||
+        magic == NextPointRecord::pages_magic)
+        return next_point(*escape);
     if (magic != TraceEscapeRecord::magic) return NtStatus(Status::not_supported).value();
     /* Only the adapter is named: the inspector opens no device. */
     const Status answered = TraceEscape(platform_, *this).answer(bytes, escape->PrivateDriverDataSize);
@@ -825,7 +838,8 @@ int32_t Adapter::next_point(const DxgkargEscapeRecord &escape)
         record.decode(static_cast<const uint8_t *>(escape.pPrivateDriverData), escape.PrivateDriverDataSize);
     const Status named = decoded != Status::ok
                              ? Status::invalid_parameter
-                             : devices_.name_point(escape.hKmdProcessHandle, record.surface(), record.point());
+                             : devices_.name_point(escape.hKmdProcessHandle, record.surface(), record.point(),
+                                                   record.action());
     if (named == Status::ok) return NtStatus(Status::ok).value();
     if (budget_.allows()) {
         char       bytes[128];
@@ -988,7 +1002,32 @@ int32_t Adapter::get_standard_allocation_driver_data(DxgkargGetStandardAllocatio
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t described = NtStatus(StandardAllocation(platform_, *request).describe()).value();
     log_status("avgpu: GetStandardAllocationDriverData", described);
+    if (described < 0) log_refused_gdi_surface(*request);
     return described;
+}
+
+void Adapter::log_refused_gdi_surface(const DxgkargGetStandardAllocationDriverDataRecord &request)
+{
+    AV_SCOPE("Adapter::log_refused_gdi_surface");
+    constexpr int32_t gdi_surface = 4;
+    if (request.StandardAllocationType != gdi_surface || request.pCreateSurfaceData == nullptr || !budget_.allows())
+        return;
+    const auto &surface = *static_cast<const D3dkmdtGdiSurfaceDataRecord *>(request.pCreateSurfaceData);
+    char        bytes[160];
+    TextBuffer  message(bytes, sizeof bytes);
+    message.append("avgpu: refused GDI surface: adapter ");
+    message.append_hex(luid_, 16u);
+    message.append(" width ");
+    message.append_decimal(surface.Width);
+    message.append(" height ");
+    message.append_decimal(surface.Height);
+    message.append(" format ");
+    message.append_decimal(static_cast<uint32_t>(surface.Format));
+    message.append(" type ");
+    message.append_decimal(static_cast<uint32_t>(surface.Type));
+    message.append(" flags 0x");
+    message.append_hex(surface.Flags, 8u);
+    platform_.log(message.text());
 }
 
 int32_t Adapter::open_allocation(void *device, DxgkargOpenAllocationRecord *request)
@@ -1571,6 +1610,12 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
     platform_.store_atomic(presents_made_, platform_.load_atomic(presents_made_) + 1u);   /* a lost race still moves it */
     const uint32_t first = request->MultipassOffset;
     const int32_t  presented = writing.present().value();
+    /* The points named for this present are done with whichever way it ended
+     * - moved, refused, a flip that moves nothing - once its last pass has
+     * run: left queued they would put the window a frame behind for good. */
+    ScopeExit forget_points([&] {
+        if (presented != more_dma_buffer) devices_.consume_point(PresentedAllocations(*request).source());
+    });
     /* The DMA buffer this wrote is executed on the host only for a context of
      * the av protocol; dxgkrnl's own presents are loopback-completed, so the
      * pixels the desktop presents move here (feature 046, FR-004). */
@@ -1618,8 +1663,18 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
     const PresentSurface written(destination->allocation().descriptor().layout(), destination->allocation().pages());
     const PresentSurface read(source != nullptr ? source->allocation().descriptor().layout() : SurfaceLayout(),
                               source != nullptr ? source->allocation().pages() : GuestPageList());
+    /* An allocation presented by points whose point has not been named yet
+     * holds an older frame in its pages (the last readback): blt'ing those
+     * would show it, so the window keeps its last frame. */
+    PointView points;
+    if (source != nullptr) static_cast<void>(devices_.peek_point(source_handle, points));
+    if (point_missing(request, source, points)) {
+        if (points.first_starvation)
+            platform_.log("avgpu: a present of a pointed surface has no point named: the window keeps its last frame");
+        return 0u;
+    }
     PresentTicket ticket(platform_, budget_, presents_.constructed() && present_ ? &presents_.object() : nullptr,
-                         immediate_mover(), image_of(request, source));
+                         immediate_mover(), image_of(request, source, points));
     PresentBlit   blit(platform_, ticket, source != nullptr ? &read : nullptr, written);
     const Rectangle into(request.DstRect.left, request.DstRect.top, request.DstRect.right, request.DstRect.bottom);
     const uint32_t  count = end - first;
@@ -1634,8 +1689,6 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
                                 destination->allocation().descriptor().kind(), from, into);
     }
     present_rows_ += blit.rows();
-    /* A point names one present, whichever pass of it ends it. */
-    if (source != nullptr && end == request.SubRectCnt) source->forget_point();
     return ticket.ticket();
 }
 
@@ -1644,7 +1697,8 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
  * a present from its pages, which is all such a device has. The surface is
  * the one the source allocation was minted as - the driver's private data
  * names only when, never what. */
-SurfacePoint Adapter::image_of(const DxgkargPresentRecord &request, const DeviceAllocation *source)
+SurfacePoint Adapter::image_of(const DxgkargPresentRecord &request, const DeviceAllocation *source,
+                               const PointView &points)
 {
     AV_SCOPE("Adapter::image_of");
     PresentPointRecord record;
@@ -1652,9 +1706,25 @@ SurfacePoint Adapter::image_of(const DxgkargPresentRecord &request, const Device
     if (record.decode(static_cast<const uint8_t *>(request.pPrivateDriverData), request.PrivateDriverDataSize) ==
         Status::ok)
         return SurfacePoint(source->allocation().shared_id(), record.point());
-    /* Named by escape where the present could carry none (NextPointRecord). */
-    if (source->point() == 0u) return SurfacePoint();
-    return SurfacePoint(source->allocation().shared_id(), source->point());
+    /* Named by escape where the present could carry none (NextPointRecord);
+     * a 0 is the process saying this present reads the pages. */
+    if (!points.queued || points.point == 0u) return SurfacePoint();
+    return SurfacePoint(source->allocation().shared_id(), points.point);
+}
+
+/* Whether `source` is presented by points - one was named for it once - and
+ * this present has none: neither in its private data nor queued. */
+bool Adapter::point_missing(const DxgkargPresentRecord &request, const DeviceAllocation *source,
+                            const PointView &points)
+{
+    AV_SCOPE("Adapter::point_missing");
+    if (source == nullptr || !points.pointed || !identity_.offers(CapsetInfo::feature_present_from_image))
+        return false;
+    PresentPointRecord record;
+    if (record.decode(static_cast<const uint8_t *>(request.pPrivateDriverData), request.PrivateDriverDataSize) ==
+        Status::ok)
+        return false;
+    return !points.queued;
 }
 
 PixelMover &Adapter::immediate_mover()
@@ -2176,10 +2246,16 @@ int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord 
     const bool   follows =
         !context->is_av() && follow.decode(static_cast<const uint8_t *>(request->pDmaBufferPrivateData),
                                             request->DmaBufferPrivateDataSize) == Status::ok;
+    ReleaseRecord release;
+    const bool    releases =
+        !context->is_av() && !follows &&
+        release.decode(static_cast<const uint8_t *>(request->pDmaBufferPrivateData),
+                       request->DmaBufferPrivateDataSize) == Status::ok;
     Status       status = Status::ok;
     const bool   presented = submit_present(*request, status, owner, awaited);
     if (!presented)
         status = context->is_av() ? submit_av(*request, awaited)
+                 : releases        ? submit_release(*context, release, request->SubmissionFenceId, owner, awaited)
                  : follows         ? submit_follow(*context, follow, request->SubmissionFenceId, owner, awaited)
                                    : node_.submit(request->SubmissionFenceId);
     if (status == Status::ok) {
@@ -2226,6 +2302,29 @@ Status Adapter::submit_follow(const Context &context, const FollowRecord &follow
     const Status queued = node_.submit(fence, followed, awaited);
     if (queued == Status::ok) av_contexts_.kick(followed);
     return queued;
+}
+
+/* A packet on an ordinary context that releases a batch its process wrote into
+ * the ring of one of its av contexts and did not publish: the scheduler hands
+ * it over once the waits queued on this context before it are satisfied, which
+ * is the order the work must reach the host in. The batch is published when
+ * every one before it in the ring is (ReleaseQueue), so a packet that came
+ * first for a later batch is held until the earlier one's packet has run; the
+ * packet itself completes when the host has run the batch, as a follow packet
+ * does. What the record says came from a process: the ring must be one of the
+ * process's own and the descriptor is judged against that ring. */
+Status Adapter::submit_release(const Context &context, const ReleaseRecord &release, uint32_t fence, void *&owner,
+                               uint64_t &awaited)
+{
+    AV_SCOPE("Adapter::submit_release");
+    Context *const released = contexts_.followed(context, release.ring());
+    if (released == nullptr) return Status::invalid_parameter;
+    owner = released;
+    uint64_t     batch_fence = 0u;
+    const Status published = av_contexts_.release_batch(released, release.batch(), batch_fence);
+    if (published != Status::ok) return published;
+    awaited = batch_fence;
+    return node_.submit(fence, released, awaited);
 }
 
 /* Checked before the context's own kind: a present's DMA buffer comes to any

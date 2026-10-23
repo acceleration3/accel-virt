@@ -176,7 +176,7 @@ TEST(d3d_backend, makes_nothing_before_the_guest_made_a_device)
   ResourceDesc opened = {};
   opened.width = 5u;
   std::uint32_t hresult = 9u;
-  CHECK(!backend.on_CreateResource(1u, resource, 0u));
+  CHECK(!backend.on_CreateResource(1u, resource, 0u, 0u, 0u));
   CHECK(!backend.on_OpenResource(2u, 0x51u, found, opened));
   CHECK_EQ(found, 0u);
   CHECK(opened.width == 0u);

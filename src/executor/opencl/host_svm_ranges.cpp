@@ -1,5 +1,6 @@
 #include "executor/opencl/host_svm_ranges.hpp"
 
+#include "core/support/sorted_search.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {
@@ -12,14 +13,7 @@ HostSvmRanges::HostSvmRanges(BlockSource &blocks) : ranges_(blocks, Pool::paged)
 uint32_t HostSvmRanges::above(uint64_t address) const
 {
     AV_SCOPE("HostSvmRanges::above");
-    uint32_t low = 0u;
-    uint32_t high = ranges_.size();
-    while (low < high) {
-        const uint32_t middle = low + (high - low) / 2u;
-        if (ranges_.at(middle).base_ <= address) low = middle + 1u;
-        else high = middle;
-    }
-    return low;
+    return SortedSearch<Range, &Range::base_>(ranges_).above(address);
 }
 
 Status HostSvmRanges::make_room()

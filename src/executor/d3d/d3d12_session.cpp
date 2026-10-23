@@ -11,7 +11,7 @@
 #include "executor/d3d/watched_blocks.hpp"
 #include "executor/d3d/d3d12_indirect_signature.hpp"
 #include "executor/d3d/d3d12_root_layout.hpp"
-#include "executor/poll_budget.hpp"
+#include "core/platform/poll_budget.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/surface_identity.hpp"

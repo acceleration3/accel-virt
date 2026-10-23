@@ -16,6 +16,13 @@ enum class AllocationKind : uint16_t {
      * blitted by the miniport or shared with another process, whose pages the
      * host's pixels are read back into (the Direct3D driver, avumd). */
     surface = 5u,
+    /* A row-major texture or heap two adapters' devices share
+     * (D3DKMDT_GDISURFACETYPE_TEXTURE_CROSSADAPTER, a shared-cross-adapter
+     * D3D12 heap): pitch and rows as dxgkrnl lays them out
+     * (CrossAdapterLayout), in the process's pages, which a host GPU reads
+     * where they are (docs/host-memory.md, "Application memory"). Made by the
+     * runtime without a user-mode driver as well as by one. */
+    cross_adapter = 6u,
     client = 16u,
     /* The page that names an av context: the one handle of a context a driver
      * resolves in the process that made it, so another context of that process

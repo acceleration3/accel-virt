@@ -1,0 +1,32 @@
+#include "harness/framework/test_registry.hpp"
+#include "proto/resources/cross_adapter_layout.hpp"
+
+using av::CrossAdapterLayout;
+
+/* Affinity's 1249x805 B8G8R8A8 texture: a 4996-byte row is 5120, and 805 rows
+ * are 808 - 1010 pages, where a packed 4996-byte pitch took 982. */
+TEST(cross_adapter_layout, a_texture_has_aligned_rows_and_an_aligned_height)
+{ const CrossAdapterLayout layout(1249u, 805u, 21u, 4u);
+  CHECK(layout.valid());
+  CHECK_EQ(layout.pitch(), 5120u);
+  CHECK(layout.bytes() == 1010u * 4096u);
+  CHECK_EQ(layout.surface().width(), 1249u);
+  CHECK_EQ(layout.surface().height(), 805u);
+  CHECK_EQ(layout.surface().pitch(), 5120u);
+  CHECK(layout.surface().bytes() <= layout.bytes());
+  CHECK_EQ(CrossAdapterLayout(1056u, 16u, 21u, 4u).pitch(), 4224u); }
+
+TEST(cross_adapter_layout, a_heap_is_one_row_of_its_bytes)
+{ const CrossAdapterLayout heap(0x30000u, 1u, 0u, 0u);
+  CHECK(heap.valid());
+  CHECK_EQ(heap.pitch(), 0x30000u);
+  CHECK(heap.bytes() == 0x30000u);
+  CHECK(!CrossAdapterLayout(0x1000u, 2u, 0u, 0u).valid());
+  CHECK(!CrossAdapterLayout(0u, 1u, 0u, 0u).valid()); }
+
+TEST(cross_adapter_layout, refuses_no_texels_and_sizes_past_32_bits)
+{ CHECK(!CrossAdapterLayout(0u, 16u, 21u, 4u).valid());
+  CHECK(!CrossAdapterLayout(16u, 0u, 21u, 4u).valid());
+  CHECK(!CrossAdapterLayout(16u, 16u, 21u, 0u).valid());
+  CHECK(!CrossAdapterLayout(0x40000000u, 1u, 21u, 4u).valid());
+  CHECK(!CrossAdapterLayout(0x10000u, 0x4000u, 21u, 4u).valid()); }

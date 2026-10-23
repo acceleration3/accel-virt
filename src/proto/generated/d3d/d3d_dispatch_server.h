@@ -37,7 +37,7 @@ public:
     virtual bool on_SelectDevice11(uint32_t device) = 0;
     virtual bool on_DestroyDevice11(uint32_t device) = 0;
     virtual bool on_RotateResources11(uint32_t count, const uint32_t* resources) = 0;
-    virtual bool on_CreateResource(uint32_t resource, const ResourceDesc& desc, uint64_t shared_key) = 0;
+    virtual bool on_CreateResource(uint32_t resource, const ResourceDesc& desc, uint64_t shared_key, uint64_t memory, uint32_t row_pitch) = 0;
     virtual bool on_OpenResource(uint32_t resource, uint64_t shared_key, uint32_t& found, ResourceDesc& desc) = 0;
     virtual bool on_CreateShaderResourceView(uint32_t view, const ViewDesc& desc) = 0;
     virtual bool on_CreateRenderTargetView(uint32_t view, const ViewDesc& desc) = 0;

@@ -1,5 +1,6 @@
 #include "executor/opengl/sync_tokens.hpp"
 
+#include "core/support/sorted_search.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {
@@ -52,14 +53,7 @@ Status SyncTokens::retire_oldest(void *&deleted)
 uint32_t SyncTokens::index_of(uint64_t token) const
 {
     AV_SCOPE("SyncTokens::index_of");
-    uint32_t low = 0u;
-    uint32_t high = live_.size();
-    while (low < high) {
-        const uint32_t middle = low + (high - low) / 2u;
-        if (live_.at(middle).token_ < token) low = middle + 1u;
-        else high = middle;
-    }
-    return low < live_.size() && live_.at(low).token_ == token ? low : live_.size();
+    return SortedSearch<Live, &Live::token_>(live_).exact(token);
 }
 
 void *SyncTokens::fence_for(uint64_t token) const

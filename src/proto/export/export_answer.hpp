@@ -24,7 +24,9 @@ public:
     static constexpr size_t   encoded_size = 64u;
     static constexpr uint32_t magic = 0x41585641u;   /* "AVXA" */
     static constexpr uint16_t major = 1u;
-    static constexpr uint16_t minor = 1u;
+    /* The request minor this device reads (ExportRequest::minor): a consumer
+     * that sends a newer one knows from the hello that its flags go unread. */
+    static constexpr uint16_t minor = 3u;
 
     /* A request that did not decode, refused as malformed. */
     ExportAnswer();

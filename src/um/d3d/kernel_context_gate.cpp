@@ -6,9 +6,16 @@
 
 namespace av::d3d {
 
+namespace {
+
+constexpr uint32_t stall_report_every = 100u;
+
+}  // namespace
+
 KernelContextGate::KernelContextGate(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device, HANDLE context,
-                                     KeyedLog &lines)
-    : kernel_(kernel), device_(device), context_(context), lines_(lines), fence_(0u), reached_(nullptr),
+                                     KeyedLog &lines, DWORD bound_ms)
+    : kernel_(kernel), device_(device), context_(context), lines_(lines), bound_ms_(bound_ms), stalled_(0u),
+      fence_(0u), reached_(nullptr),
       signalled_(0u), event_(nullptr), refused_()
 {
     AV_SCOPE("KernelContextGate::KernelContextGate");
@@ -29,11 +36,32 @@ void KernelContextGate::pass()
 {
     AV_SCOPE("KernelContextGate::pass");
     const HRESULT waited = signal_and_wait();
-    if (waited == S_OK || !refused_.first()) return;
+    if (waited == S_OK) return;
+    /* A wait that ran out is counted, and said at the first and every
+     * hundredth: the batch went on without the context's work done. */
+    if (waited == S_FALSE) {
+        stalled_++;
+        if (stalled_ == 1u || stalled_ % stall_report_every == 0u)
+            LogLine(lines_)
+                .text("a batch went to the host before its kernel context finished, after ")
+                .number(bound_ms_)
+                .text(" ms; ")
+                .number(stalled_)
+                .text(" so far")
+                .write();
+        return;
+    }
+    if (!refused_.first()) return;
     LogLine(lines_)
         .text("a batch went to the host without waiting for its kernel context ")
         .hex(static_cast<uint32_t>(waited), 8u)
         .write();
+}
+
+uint32_t KernelContextGate::stalled() const
+{
+    AV_SCOPE("KernelContextGate::stalled");
+    return stalled_;
 }
 
 HRESULT KernelContextGate::signal_and_wait()
@@ -90,7 +118,7 @@ HRESULT KernelContextGate::await_signalled()
     /* A wait that ran out earlier still sets the event when its own fence
      * arrives, so only the fence says this one's has. */
     for (;;) {
-        if (WaitForSingleObject(event_, bound_ms) != WAIT_OBJECT_0) return S_FALSE;
+        if (WaitForSingleObject(event_, bound_ms_) != WAIT_OBJECT_0) return S_FALSE;
         if (reached_ == nullptr || *reached_ >= signalled_) return S_OK;
     }
 }

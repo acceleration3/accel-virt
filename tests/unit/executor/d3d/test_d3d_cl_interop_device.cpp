@@ -123,7 +123,7 @@ void opened_by_opencl(std::uint32_t dxgi)
     shared.sample_count = 1u;
     shared.bind_flags = bind_shader_resource | bind_render_target;
     shared.misc_flags = misc_shared;
-    CHECK(av_d3d_CreateResource(wire, 1u, shared, key));
+    CHECK(av_d3d_CreateResource(wire, 1u, shared, key, 0u, 0u));
     /* Every texel its own bytes, so a pitch or an order OpenCL read the
      * memory with that Direct3D did not lay it out by moves them. */
     static std::uint8_t pattern[size * size * 4u];

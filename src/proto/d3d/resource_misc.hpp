@@ -22,6 +22,10 @@ public:
     static constexpr uint32_t shared_bit = 0x2u;
     /* Laid out as rows: above every bit D3D11 defines. */
     static constexpr uint32_t rows_bit = 0x80000000u;
+    /* A buffer a present will show - a swap chain's, a primary: the host makes
+     * the copy a compositor opens when it is created, so one never opens the
+     * live buffer the application is still drawing into. */
+    static constexpr uint32_t presented_bit = 0x40000000u;
 
     explicit ResourceMisc(uint32_t flags);
 
@@ -29,6 +33,8 @@ public:
     bool     shared() const;
     /* Shared and asked for as rows. */
     bool     rows() const;
+    /* Made to be presented. */
+    bool     presented() const;
 
 private:
     uint32_t flags_;

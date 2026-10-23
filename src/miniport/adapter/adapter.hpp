@@ -59,6 +59,8 @@ namespace av {
 
 class AdapterInfoQuery;
 class DeviceAllocation;
+class ReleaseRecord;
+struct PointView;
 
 class PresentSurface;
 class SurfacePoint;
@@ -317,7 +319,10 @@ private:
      * own shared id, at the point its private driver data names
      * (PresentPointRecord); naming nothing for a source the host holds no
      * surface of, or no point. */
-    SurfacePoint image_of(const DxgkargPresentRecord &request, const DeviceAllocation *source);
+    SurfacePoint image_of(const DxgkargPresentRecord &request, const DeviceAllocation *source,
+                          const PointView &points);
+    bool         point_missing(const DxgkargPresentRecord &request, const DeviceAllocation *source,
+                               const PointView &points);
     void log_refused_present(const DxgkargPresentRecord &request, bool operation_named);
     void log_unmoved_present(const char *why, const DxgkargPresentRecord &request, uint32_t sources,
                              uint32_t destinations);
@@ -390,6 +395,8 @@ private:
     [[nodiscard]] Status submit_av(const DxgkargSubmitCommandVirtualRecord &request, uint64_t &awaited);
     [[nodiscard]] Status submit_follow(const Context &context, const FollowRecord &follow, uint32_t fence,
                                        void *&owner, uint64_t &awaited);
+    [[nodiscard]] Status submit_release(const Context &context, const ReleaseRecord &release, uint32_t fence,
+                                        void *&owner, uint64_t &awaited);
     /* A present's packet: held on the node until the present engine finished
      * its ticket. Whether the private data named one of the queue's. */
     bool                 submit_present(const DxgkargSubmitCommandVirtualRecord &request, Status &status,
@@ -447,6 +454,10 @@ private:
      * Each line is a port write per byte, every one an exit that waits for
      * QEMU's main loop, and the thread that waits is the one presenting. */
     void                 log_failure(const char *step, int32_t status);
+    /* A GDI surface standard allocation refused: its whole description, which
+     * says what a runtime asks of this adapter (the format's space, the type,
+     * the flags) where the status alone cannot. */
+    void                 log_refused_gdi_surface(const DxgkargGetStandardAllocationDriverDataRecord &request);
     void                 log_allocation(const DxgkargCreateAllocationRecord &request, int32_t status);
     /* Which source dxgkrnl showed or hid. */
     void                 log_visibility(const DxgkargSetVidPnSourceVisibilityRecord &request, int32_t status);

@@ -752,8 +752,13 @@ generated server dispatch in `src/proto/generated/*/` over host API backends
   OpenCL cannot unregister a callback, a signal may arrive after the executor
   it names is destroyed: the `context` the device hands over lives as long as
   the device does, and a signal for a context that is gone is tolerated.
-- **Memory.** `allocate_memory`, `free_memory`, `import_blob`, `release_blob`
-  and `imported_handle` are the memory channel (docs/host-memory.md), below.
+- **Memory.** `allocate_memory`, `free_memory`, `alias_memory`, `import_blob`,
+  `release_blob` and `imported_handle` are the memory channel
+  (docs/host-memory.md), below. `alias_memory(domain, key, from_domain,
+  from_key)` (ABI 25) makes a key of one device's domain name the very memory
+  a key of another's names - on that domain's GPU, held until `free_memory`
+  whatever becomes of the other key - which is how guest pages two adapters'
+  devices both lend become one memory on the host.
 - **Shared objects** (feature 053). `share_object(executor, id, kind, size,
   wire_handle)`, `open_object(executor, id, kind, size, &wire_handle)` and
   `close_object(executor, id)` are the three transport commands above, run on
@@ -786,7 +791,18 @@ and holds it until `release_blob` or `destroy`, so memory the guest released
 while an import still has it lives until the import goes. Both run on the
 context's worker like `execute`. No guest page is ever handed to the library,
 and no import kind is negotiated: every import is the library's own
-allocation.
+allocation - or another domain's, aliased: an importer takes the memory type
+it imports a dma-buf as from its own device (the descriptor's types), not from
+the GPU that allocated it.
+
+**Allocation kinds** (`AllocationKind`, the private data of an allocation):
+`cross_adapter` (6) is a
+row-major texture, or a heap, two adapters' devices share
+(`D3DKMDT_GDISURFACETYPE_TEXTURE_CROSSADAPTER`): pitch and rows as dxgkrnl
+checks them (`CrossAdapterLayout`: 128-byte rows, a height of a multiple of
+four), in the process's own pages, with the real height in the descriptor.
+The Direct3D wire's `CreateResource` carries the name of the lent memory the
+texture is to be made over (`memory`, 0 for the host's own) and its row pitch.
 
 **What the guest is told is host visible** is what the memory source can
 serve. The executor answers `vkGetPhysicalDeviceMemoryProperties` (all three
@@ -990,7 +1006,7 @@ names that point here before the present. The miniport decodes it at
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
-| 0 | u32 | magic | `AVN` = `0x004E5641` |
+| 0 | u32 | magic | `AVN` = `0x004E5641` names a point; `AVJ` = `0x004A5641` withdraws the point of a present that failed; `AVU` = `0x00555641` asks for the pages for the next present (the point escape failed) |
 | 4 | u32 | point | not 0 |
 | 8 | u64 | surface | the shared id the allocation was minted as; not 0 |
 
@@ -1057,6 +1073,60 @@ the doorbell; the miniport completes the D3DKMT submission fence the process
 waits on from the fence-page interrupt (see Fence page). A reply-generating
 command's answer is in the reply slot before the fence completes, so a process
 that waited reads a finished answer.
+
+### Release by packet (user mode -> guest driver, in a packet's private data)
+
+A transport whose session holds a cross-adapter resource does not publish its
+own batches: the work must wait for the GPU waits the runtime queued on the
+device's kernel context, which only dxgkrnl orders. It writes each batch into
+the ring without publishing the tail or ringing a doorbell, and submits a
+packet on that kernel context (an ordinary context) whose private data is a
+release record: `u32 magic "AVR" (0x00525641)`, `u32 ring` (the av context's
+ring allocation handle, which must resolve in the submitting process), then the
+32-byte submission descriptor of the batch. dxgkrnl hands the miniport the
+packet once the waits queued before it are satisfied; the miniport decodes and
+judges the descriptor against the context's ring, publishes the batch and
+rings the doorbell, and the packet completes when the host has completed the
+batch's fence, as a follow packet does. The record is the prefix of the
+private data dxgkrnl hands over, which is the size of the context's room for
+it (40 bytes); fewer bytes, another magic, ring 0 or a bad descriptor and the
+packet is an ordinary one.
+
+Only a Direct3D 11 device with a cross-adapter resource releases this way; a
+Direct3D 12 device with a cross-adapter heap publishes as it always did and its
+work is unordered against the other adapter (a known gap, with the cross-queue
+limit below).
+
+The miniport publishes batches in ring order, the order beginning at the ring's
+tail when the first packet arrives: a packet whose predecessors are not yet
+released is held, at most 64 per context. A batch already released (a packet
+dxgkrnl submits again after a preemption) is accepted and does nothing. Once a
+context has released this way its kernel and hardware-queue submissions take
+the same turn. An order that cannot be whole - a batch overlapping one
+released, a full queue, a ring that refuses a batch - fails the context
+(everything queued on it finishes and its process is woken, as for a host
+fault); the packet itself is never refused, being asynchronous. A held batch
+whose packet reaches the 1.2 s park deadline likewise fails its context rather
+than completing early in silence. A device reset (timeout recovery) abandons
+every context and with it what was held; a process starts its order again with
+its next context.
+
+A transport without a fence page does not release by packet (the batch's
+completion could not be told from its packet's). One whose route has no
+context to put a packet on right now sends the batch through the kernel on its
+own context, still without publishing the tail itself, and it takes its turn in
+the same order. A synchronous call on a released transport waits on the fence
+page alone, and one that lasts several seconds is logged once: a batch held
+behind a wait the application satisfies from its own thread later, followed by
+a call that waits for the host's answer, is held for good (a known limit of the
+single publication order).
+
+The limit: a batch is published only after every one before it in the ring, so
+a wait on one queue for a fence that a later batch on another queue of the same
+transport signals cannot be satisfied (that later batch cannot be published
+past the earlier one, whose packet waits for the fence). The real fix is one
+av ring per kernel context (queue) - which is why Direct3D 12, with several
+queues on one session ring, is not released this way (docs/roadmap.md).
 
 ### Host window record (user mode -> guest driver, escape)
 

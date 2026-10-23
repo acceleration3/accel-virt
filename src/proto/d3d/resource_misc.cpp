@@ -21,4 +21,10 @@ bool ResourceMisc::rows() const
     return shared() && (flags_ & rows_bit) != 0u;
 }
 
+bool ResourceMisc::presented() const
+{
+    AV_SCOPE("ResourceMisc::presented");
+    return (flags_ & presented_bit) != 0u;
+}
+
 }  // namespace av

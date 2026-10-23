@@ -141,12 +141,32 @@ bool QueueWork::send(uint32_t slot, VkCommandBuffer buffer, const VulkanTimeline
     return true;
 }
 
+/* An empty signal follows all commands already recorded by the runtime. */
+bool QueueWork::signal(const VulkanTimeline &timeline, uint64_t value)
+{
+    AV_SCOPE("QueueWork::signal");
+    if (queue_ == nullptr || !timeline.made()) return false;
+    queue_->flush();
+    const VkSemaphore semaphore = timeline.semaphore();
+    const VkTimelineSemaphoreSubmitInfo values = {VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO, nullptr, 0u,
+                                                  nullptr, 1u, &value};
+    const VkSubmitInfo submitted = {VK_STRUCTURE_TYPE_SUBMIT_INFO, &values, 0u, nullptr, nullptr, 0u, nullptr, 1u,
+                                    &semaphore};
+    queue_->lock();
+    const bool sent = table_->submit(queue_->queue(), submitted);
+    queue_->unlock();
+    return sent;
+}
+
 /* The runtime submits from a thread of its own; holding its lock puts this
  * between two of its submissions, so everything it submits after waits. */
 bool QueueWork::wait(const VulkanTimeline &timeline, uint64_t value)
 {
     AV_SCOPE("QueueWork::wait");
     if (queue_ == nullptr || !timeline.made()) return false;
+    // The submission lock alone does not drain the runtime's recording thread:
+    // an external wait must not overtake commands already recorded for it.
+    queue_->flush();
     const VkSemaphore                   semaphore = timeline.semaphore();
     const VkPipelineStageFlags          stage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     const VkTimelineSemaphoreSubmitInfo values = {VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO, nullptr, 1u,

@@ -3,12 +3,14 @@
 #include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/guest_doorbell.hpp"
+#include "guest/transport/release_route.hpp"
+#include "proto/escape/release_record.hpp"
 #include "guest/transport/transport_ring.hpp"
 
 namespace av {
 
 SubmissionPath::SubmissionPath(Kmt &kmt, GuestDoorbell &doorbell, TransportRing &ring)
-    : kmt_(kmt), doorbell_(doorbell), ring_(ring), doorbell_submissions_(0u), kernel_submissions_(0u), publishes_tail_(false), user_submissions_(0u)
+    : kmt_(kmt), doorbell_(doorbell), ring_(ring), doorbell_submissions_(0u), kernel_submissions_(0u), publishes_tail_(false), user_submissions_(0u), route_(nullptr), route_ring_(0u), release_submissions_(0u)
 {
     AV_SCOPE("SubmissionPath::SubmissionPath");
 }
@@ -17,7 +19,20 @@ Status SubmissionPath::submit(uint32_t context, uint64_t dma_address, const uint
                               uint64_t fence)
 {
     AV_SCOPE("SubmissionPath::submit");
-    if (doorbell_.established()) {
+    if (route_ != nullptr) {
+        SubmissionDescriptor batch;
+        uint8_t              record[ReleaseRecord::encoded_size] = {};
+        if (batch.decode(descriptor, size) != Status::ok ||
+            ReleaseRecord(route_ring_, batch).encode(record, sizeof record) != Status::ok)
+            return Status::invalid_parameter;
+        const Status released = route_->release(record, sizeof record);
+        if (released == Status::ok) {
+            release_submissions_++;
+            return Status::ok;
+        }
+        if (released != Status::not_supported) return released;
+    }
+    if (route_ == nullptr && doorbell_.established()) {
         /* The tail is published before the store, because the store is what
          * tells the device to read it. */
         const Status published = ring_.publish_tail();
@@ -35,7 +50,7 @@ Status SubmissionPath::submit(uint32_t context, uint64_t dma_address, const uint
      * at all: the same batch at the same tail, through the kernel - and where
      * there is a hardware queue, through that, because a hardware-scheduled
      * context refuses D3DKMTSubmitCommand outright (research.md §13). */
-    if (publishes_tail_ && doorbell_.queue() == 0u) {
+    if (route_ == nullptr && publishes_tail_ && doorbell_.queue() == 0u) {
         const Status published = ring_.publish_tail();
         if (published != Status::ok) return published;
         /* The worker clears its flag before it looks at the tail a last time,
@@ -70,7 +85,26 @@ uint64_t SubmissionPath::through_doorbell() const
 uint64_t SubmissionPath::submitted() const
 {
     AV_SCOPE("SubmissionPath::submitted");
-    return doorbell_submissions_ + kernel_submissions_ + user_submissions_;
+    return doorbell_submissions_ + kernel_submissions_ + user_submissions_ + release_submissions_;
+}
+
+void SubmissionPath::release_through(ReleaseRoute *route, uint32_t ring)
+{
+    AV_SCOPE("SubmissionPath::release_through");
+    route_ = route;
+    route_ring_ = route != nullptr ? ring : 0u;
+}
+
+bool SubmissionPath::releases() const
+{
+    AV_SCOPE("SubmissionPath::releases");
+    return route_ != nullptr;
+}
+
+uint64_t SubmissionPath::through_release() const
+{
+    AV_SCOPE("SubmissionPath::through_release");
+    return release_submissions_;
 }
 
 uint64_t SubmissionPath::through_kernel() const
@@ -85,7 +119,7 @@ bool SubmissionPath::invariants_hold() const
     /* Every submission counted is a batch this process wrote into its ring,
      * whichever way it went: nothing is counted for a ring nothing was
      * published into. */
-    return (doorbell_submissions_ == 0u && kernel_submissions_ == 0u) || ring_.tail() != 0u;
+    return (doorbell_submissions_ == 0u && kernel_submissions_ == 0u && release_submissions_ == 0u) || ring_.tail() != 0u;
 }
 
 }  // namespace av

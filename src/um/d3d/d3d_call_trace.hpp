@@ -20,6 +20,7 @@
 #include "core/trace/function_scope.hpp"
 #include "um/common/file_log.hpp"
 #include "um/common/performance_clock.hpp"
+#include "um/common/windows_calling_thread.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 
 #include <stdint.h>
@@ -70,10 +71,11 @@ private:
     /* Whether this call is one to write, counting it either way. */
     bool     take();
     uint64_t microseconds() const;
-    uint32_t thread() const;
+    uint32_t thread();
 
     FileLog          file_;
     PerformanceClock clock_;
+    WindowsCallingThread caller_;
     bool     on_;
     uint64_t skip_;
     uint64_t count_;

@@ -26,7 +26,7 @@ bool ExecutorLibrary::complete(const AvExecutorOps &ops) const
 {
     AV_SCOPE("ExecutorLibrary::complete");
     return ops.sub_apis != nullptr && ops.open_domain != nullptr && ops.close_domain != nullptr &&
-           ops.allocate_memory != nullptr && ops.free_memory != nullptr && ops.create != nullptr && ops.destroy != nullptr && ops.execute != nullptr &&
+           ops.allocate_memory != nullptr && ops.free_memory != nullptr && ops.alias_memory != nullptr && ops.create != nullptr && ops.destroy != nullptr && ops.execute != nullptr &&
            ops.end_batch != nullptr && ops.poll != nullptr && ops.gpu_progress != nullptr &&
            ops.set_signal != nullptr && ops.import_blob != nullptr && ops.release_blob != nullptr &&
            ops.imported_handle != nullptr && ops.share_object != nullptr && ops.open_object != nullptr &&
@@ -82,6 +82,15 @@ void ExecutorLibrary::free_memory(uint64_t key) const
 {
     AV_SCOPE("ExecutorLibrary::free_memory");
     if (domain_ != 0u) ops_->free_memory(ops_->opaque, domain_, key);
+}
+
+Status ExecutorLibrary::alias_memory(uint64_t key, uint32_t from_domain, uint64_t from_key, AvHostMemory &memory) const
+{
+    AV_SCOPE("ExecutorLibrary::alias_memory");
+    if (domain_ == 0u || from_domain == 0u) return Status::no_memory;
+    memory = AvHostMemory{-1, 0u, 0u};
+    return ops_->alias_memory(ops_->opaque, domain_, key, from_domain, from_key, &memory) == 0u ? Status::ok
+                                                                                                : Status::no_memory;
 }
 
 AvExecutor *ExecutorLibrary::create(SubApi api, const AvContextOptions &options, AvExecutor *share) const
@@ -245,18 +254,20 @@ void ExecutorLibrary::unmap_frame(const SurfacePoint &frame) const
 
 /* What a library hands over is only believed as far as AV_EXECUTED: the
  * descriptor in an answer it did not execute is not looked at. */
-bool ExecutorLibrary::export_surface(uint64_t surface, AvExportedImage &image) const
+bool ExecutorLibrary::export_surface(uint64_t surface, uint32_t flags, AvExportedImage &image) const
 {
     AV_SCOPE("ExecutorLibrary::export_surface");
     image = AvExportedImage{-1, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
     if (domain_ == 0u) return false;
     AvExportedImage answered = {-1, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
-    if (ops_->export_surface(ops_->opaque, domain_, surface, &answered) != AV_EXECUTED) return false;
+    const uint32_t outcome = ops_->export_surface(ops_->opaque, domain_, surface, flags, &answered);
+    if (outcome == AV_EXPORT_UNAVAILABLE) image.reserved = AV_EXPORT_UNAVAILABLE;
+    if (outcome != AV_EXECUTED) return false;
     image = answered;
     return true;
 }
 
-bool ExecutorLibrary::sync_surface(uint64_t surface, uint64_t &writes, int &fd) const
+bool ExecutorLibrary::sync_surface(uint64_t surface, uint32_t flags, uint64_t &writes, int &fd) const
 {
     AV_SCOPE("ExecutorLibrary::sync_surface");
     writes = 0u;
@@ -264,7 +275,7 @@ bool ExecutorLibrary::sync_surface(uint64_t surface, uint64_t &writes, int &fd) 
     if (domain_ == 0u) return false;
     uint64_t counted = 0u;
     int      answered = -1;
-    if (ops_->sync_surface(ops_->opaque, domain_, surface, &counted, &answered) != AV_EXECUTED) return false;
+    if (ops_->sync_surface(ops_->opaque, domain_, surface, flags, &counted, &answered) != AV_EXECUTED) return false;
     writes = counted;
     fd = answered;
     return true;

@@ -79,7 +79,7 @@ bool AllocationDescriptor::is_valid() const
     AV_SCOPE("AllocationDescriptor::is_valid");
     const bool known_kind = kind_ == AllocationKind::shared_primary || kind_ == AllocationKind::shadow ||
                             kind_ == AllocationKind::staging || kind_ == AllocationKind::gdi ||
-                            kind_ == AllocationKind::surface ||
+                            kind_ == AllocationKind::surface || kind_ == AllocationKind::cross_adapter ||
                             kind_ == AllocationKind::client || kind_ == AllocationKind::context_ring;
     if (!known_kind || size_ == 0u) return false;
     if (layout_.bytes() > size_ || layout_.pitch() < layout_.width()) return false;

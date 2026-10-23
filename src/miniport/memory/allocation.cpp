@@ -106,7 +106,14 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * the host's present copy and GDI - unlike the reply slot a host GPU writes,
      * whose Cached mapping was reverted for resetting the GPU (b911e084). The
      * aperture segment is cache coherent, which is what Cached asks of it. */
-    const bool cached = kind == AllocationKind::staging;
+    /* A cross-adapter texture is lent to the host, which lays write-back
+     * memory under the process's own pages (docs/host-memory.md): the
+     * processor's mapping of it must be cached too. It stays in the implicit
+     * system memory segment, where the process's pages are. The one-row heap
+     * (an existing heap's allocation, of no format) keeps the flags it always
+     * had: only the texture is known to be accepted cached. */
+    const bool cached = kind == AllocationKind::staging ||
+                        (kind == AllocationKind::cross_adapter && descriptor_.layout().format() != 0u);
     info.Flags = (descriptor_.cpu_visible() ? flag_cpu_visible : 0u) | (cached ? flag_cached : 0u) |
                  (pinned ? flag_accessed_physically : 0u);
     info.AllocationPriority = priority_normal;

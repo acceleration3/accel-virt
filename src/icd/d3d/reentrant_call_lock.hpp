@@ -3,32 +3,39 @@
  * once - while a call that comes back into the same device on its own thread
  * (the runtime calling the driver from inside the driver's callback) holds it
  * already rather than waiting on itself. */
-#ifndef AV_UM_REENTRANT_CALL_LOCK_HPP
-#define AV_UM_REENTRANT_CALL_LOCK_HPP
-
-#include "um/common/srw_lock.hpp"
+#ifndef AV_D3D_REENTRANT_CALL_LOCK_HPP
+#define AV_D3D_REENTRANT_CALL_LOCK_HPP
 
 #include <stdint.h>
 
 namespace av {
+class ThreadLock;
+namespace icd {
+class CallingThread;
+}
+}  // namespace av
+
+namespace av::d3d {
 
 class ReentrantCallLock {
 public:
-    ReentrantCallLock();
+    ReentrantCallLock(ThreadLock &lock, icd::CallingThread &caller);
     ReentrantCallLock(const ReentrantCallLock &) = delete;
     ReentrantCallLock &operator=(const ReentrantCallLock &) = delete;
 
     void acquire();
     void release();
+    bool invariants_hold() const;
 
 private:
-    SrwLock  lock_;
+    ThreadLock &lock_;
+    icd::CallingThread &caller_;
     /* The thread holding it, 0 for none; read without the lock, by a thread
      * asking whether it is the one. */
     uint32_t owner_;
     uint32_t depth_;
 };
 
-}  // namespace av
+}  // namespace av::d3d
 
-#endif  // AV_UM_REENTRANT_CALL_LOCK_HPP
+#endif  // AV_D3D_REENTRANT_CALL_LOCK_HPP

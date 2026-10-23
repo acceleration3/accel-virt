@@ -155,12 +155,14 @@ bool av_d3d_RotateResources11(::av::ClientTransport& t, uint32_t count, const ui
     return t.send_async(kCmd_RotateResources11, b) == ::av::TransportResult::ok;
 }
 
-bool av_d3d_CreateResource(::av::ClientTransport& t, uint32_t resource, const ResourceDesc& desc, uint64_t shared_key) {
+bool av_d3d_CreateResource(::av::ClientTransport& t, uint32_t resource, const ResourceDesc& desc, uint64_t shared_key, uint64_t memory, uint32_t row_pitch) {
     AV_SCOPE("av_d3d_CreateResource");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(resource);
     b.write_pod(desc);
     b.write_pod<uint64_t>(shared_key);
+    b.write_pod<uint64_t>(memory);
+    b.write_pod<uint32_t>(row_pitch);
     return t.send_async(kCmd_CreateResource, b) == ::av::TransportResult::ok;
 }
 

@@ -1,5 +1,6 @@
 #include "executor/opengl/retired_sync_tokens.hpp"
 
+#include "core/support/sorted_search.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {
@@ -76,15 +77,8 @@ uint32_t RetiredSyncTokens::runs() const
 uint32_t RetiredSyncTokens::run_of(uint64_t token) const
 {
     AV_SCOPE("RetiredSyncTokens::run_of");
-    uint32_t low = 0u;
-    uint32_t high = runs_.size();
-    while (low < high) {
-        const uint32_t middle = low + (high - low) / 2u;
-        if (runs_.at(middle).first_ <= token) low = middle + 1u;
-        else high = middle;
-    }
-    if (low == 0u || token > runs_.at(low - 1u).last_) return runs_.size();
-    return low - 1u;
+    const uint32_t row = SortedSearch<Run, &Run::first_>(runs_).at_or_below(token);
+    return row != runs_.size() && token <= runs_.at(row).last_ ? row : runs_.size();
 }
 
 /* The oldest tokens are the likeliest to be signaled wherever they were

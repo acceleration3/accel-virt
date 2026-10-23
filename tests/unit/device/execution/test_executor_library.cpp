@@ -63,7 +63,7 @@ TEST(executor_library_accept, no_table_leaves_the_device_without_an_executor)
 /* The device and the library are built together: a table of another version,
  * or one missing any operation, is a build to fix, not one to serve. */
 TEST(executor_library_accept, another_abi_version_or_any_missing_operation_is_refused)
-{ for (std::uint32_t broken = 0u; broken <= 26u; broken++) {
+{ for (std::uint32_t broken = 0u; broken <= 27u; broken++) {
       MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
       AvExecutorOps  &table = ops.editable();
       switch (broken) {
@@ -72,6 +72,7 @@ TEST(executor_library_accept, another_abi_version_or_any_missing_operation_is_re
       case 2u: table.allocate_memory = nullptr; break;
       case 25u: table.free_memory = nullptr; break;
       case 26u: table.answer_part = nullptr; break;
+      case 27u: table.alias_memory = nullptr; break;
       case 3u: table.open_domain = nullptr; break;
       case 4u: table.close_domain = nullptr; break;
       case 5u: table.create = nullptr; break;
@@ -370,20 +371,20 @@ TEST(executor_library_surfaces, are_exported_and_synced_in_the_device_s_domain)
   AvExportedImage image = {9, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u};
   std::uint64_t   writes = 9u;
   int             fd = 9;
-  CHECK(!library.export_surface(0x51u, image));   /* no domain */
+  CHECK(!library.export_surface(0x51u, 0u, image));   /* no domain */
   CHECK_EQ(image.fd, -1);
-  CHECK(!library.sync_surface(0x51u, writes, fd));
+  CHECK(!library.sync_surface(0x51u, 0u, writes, fd));
   CHECK_EQ(writes, 0u);
   CHECK_EQ(fd, -1);
   CHECK_STATUS(library.open_domain(some_gpu), Status::ok);
-  CHECK(library.export_surface(0x51u, image));
+  CHECK(library.export_surface(0x51u, 0u, image));
   CHECK_EQ(image.fd, 5);
   CHECK_EQ(image.width, 64u);
-  CHECK(library.sync_surface(0x51u, writes, fd));
+  CHECK(library.sync_surface(0x51u, 0u, writes, fd));
   CHECK_EQ(writes, 3u);
   CHECK_EQ(fd, 6);
   CHECK_EQ(ops.last_domain(), library.domain());
-  CHECK(!library.export_surface(0x52u, image));
+  CHECK(!library.export_surface(0x52u, 0u, image));
   CHECK_EQ(image.fd, -1);
-  CHECK(!library.sync_surface(0x52u, writes, fd));
+  CHECK(!library.sync_surface(0x52u, 0u, writes, fd));
   CHECK_EQ(fd, -1); }

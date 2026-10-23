@@ -12,6 +12,10 @@
 
 #include <stdint.h>
 
+namespace av {
+class MipExtent;
+}
+
 namespace av::clicd {
 
 class D3d11Resource {
@@ -39,10 +43,7 @@ public:
     uint32_t depth_of(uint32_t subresource) const;
 
 private:
-    /* The mip level `subresource` is of. */
-    uint32_t mip_of(uint32_t subresource) const;
-    /* `extent` at `mip`, halved per level and never below one. */
-    uint32_t at_mip(uint32_t extent, uint32_t mip) const;
+    MipExtent extent_of(uint32_t subresource) const;
 
     Kind     kind_;
     uint32_t format_;

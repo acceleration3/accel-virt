@@ -185,6 +185,14 @@ void free_memory(void *, uint32_t domain, uint64_t key)
     library.root().free_memory(domain, key);
 }
 
+uint32_t alias_memory(void *, uint32_t domain, uint64_t key, uint32_t from_domain, uint64_t from_key,
+                      AvHostMemory *memory)
+{
+    AV_SCOPE("alias_memory");
+    if (memory == nullptr) return 1u;
+    return library.root().alias_memory(domain, key, from_domain, from_key, *memory) == av::Status::ok ? 0u : 1u;
+}
+
 uint32_t import_blob(void *, AvExecutor *executor, uint64_t blob_id, uint64_t memory_key)
 {
     AV_SCOPE("import_blob");
@@ -269,16 +277,18 @@ void unmap_frame(void *, uint32_t domain, uint64_t surface, uint32_t point)
     library.root().unmap_frame(domain, av::SurfacePoint(surface, point));
 }
 
-uint32_t export_surface(void *, uint32_t domain, uint64_t surface, AvExportedImage *image)
+uint32_t export_surface(void *, uint32_t domain, uint64_t surface, uint32_t flags, AvExportedImage *image)
 {
     AV_SCOPE("export_surface");
-    return image != nullptr && library.root().export_surface(domain, surface, *image) ? AV_EXECUTED : AV_UNKNOWN;
+    if (image == nullptr) return AV_UNKNOWN;
+    if (library.root().export_surface(domain, surface, flags, *image)) return AV_EXECUTED;
+    return image->reserved == AV_EXPORT_UNAVAILABLE ? AV_EXPORT_UNAVAILABLE : AV_UNKNOWN;
 }
 
-uint32_t sync_surface(void *, uint32_t domain, uint64_t surface, uint64_t *writes, int *fd)
+uint32_t sync_surface(void *, uint32_t domain, uint64_t surface, uint32_t flags, uint64_t *writes, int *fd)
 {
     AV_SCOPE("sync_surface");
-    return writes != nullptr && fd != nullptr && library.root().sync_surface(domain, surface, *writes, *fd)
+    return writes != nullptr && fd != nullptr && library.root().sync_surface(domain, surface, flags, *writes, *fd)
                ? AV_EXECUTED
                : AV_UNKNOWN;
 }
@@ -327,6 +337,7 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               close_domain,
                               allocate_memory,
                               free_memory,
+                              alias_memory,
                               create,
                               destroy,
                               execute,

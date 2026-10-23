@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstring>
 #include <dirent.h>
+#include <pthread.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -718,3 +719,107 @@ TEST(host_memory_source_invariants, hold_across_a_sequence_of_allocations_import
   CHECK_EQ(rig.source.live(), 0u);
   CHECK_EQ(rig.exporter.live(), 0u);
   CHECK_EQ(rig.exporter.misuses(), 0u); }
+
+/* The memory one adapter's device lent, named by the other adapter's device
+ * under a key of its own, on its own GPU's source: the very memory, whose
+ * references are counted by the source that allocated it, wherever they were
+ * taken and given back. The lender may let go first. */
+TEST(host_memory_source_alias, a_key_of_another_source_names_the_same_memory_until_the_last_reference)
+{ Rig lender;
+  Rig joiner;
+  lender.discrete();
+  joiner.discrete();
+  AvHostMemory memory = {};
+  CHECK_STATUS(lender.allocate(1u, readback, memory), Status::ok);
+  SourceMemory *const lent = lender.source.acquire(domain, 1u);
+  CHECK(lent != nullptr);
+  CHECK(joiner.source.acquire(2u, 5u) == nullptr);
+  AvHostMemory described = {};
+  CHECK_STATUS(joiner.source.alias(2u, 5u, lender.source, domain, 1u, described), Status::ok);
+  CHECK_EQ(described.fd, -1);
+  CHECK_EQ(described.size, page);
+  CHECK_EQ(described.caching, lent->caching());
+  /* A key past what the lender has, and a key the joiner has, are refused. */
+  CHECK_STATUS(joiner.source.alias(2u, 6u, lender.source, domain, 9u, described), Status::not_found);
+  CHECK_STATUS(joiner.source.alias(2u, 5u, lender.source, domain, 1u, described), Status::conflict);
+  SourceMemory *const seen = joiner.source.acquire(2u, 5u);
+  CHECK(seen == lent);
+  /* The lender lets go; the joiner's key still names it. */
+  lender.source.release(*lent);
+  lender.source.free(domain, 1u);
+  CHECK_EQ(lender.source.live(), 1u);
+  CHECK(joiner.source.acquire(2u, 5u) == seen);
+  /* References given back through either source reach the one that counts. */
+  joiner.source.release(*seen);
+  joiner.source.release(*seen);
+  CHECK_EQ(lender.source.live(), 1u);
+  joiner.source.free(2u, 5u);
+  CHECK_EQ(lender.source.live(), 0u);
+  CHECK_EQ(lender.exporter.live(), 0u);
+  CHECK(joiner.source.invariants_hold());
+  CHECK(lender.source.invariants_hold()); }
+
+TEST(host_memory_source_alias, a_closed_domain_lets_go_of_its_aliases)
+{ Rig lender;
+  Rig joiner;
+  lender.discrete();
+  joiner.discrete();
+  AvHostMemory memory = {};
+  CHECK_STATUS(lender.allocate(1u, readback, memory), Status::ok);
+  AvHostMemory described = {};
+  CHECK_STATUS(joiner.source.alias(2u, 5u, lender.source, domain, 1u, described), Status::ok);
+  lender.source.free(domain, 1u);
+  CHECK_EQ(lender.source.live(), 1u);
+  joiner.source.free_domain(2u);
+  CHECK_EQ(lender.source.live(), 0u);
+  CHECK(joiner.source.acquire(2u, 5u) == nullptr); }
+
+/* Two sources alias each other's memory (Affinity's two adapters, each the
+ * other's lender) and two workers take and give back references through them
+ * at once: no lock of one is held while another's is wanted, so this ends. */
+namespace {
+
+struct Hammer {
+    HostMemorySource *source;
+    std::uint32_t     domain;
+    std::uint64_t     key;
+};
+
+void *hammer(void *argument)
+{
+    const Hammer *const work = static_cast<const Hammer *>(argument);
+    for (std::uint32_t round = 0u; round < 20000u; round++) {
+        SourceMemory *const held = work->source->acquire(work->domain, work->key);
+        if (held != nullptr) work->source->release(*held);
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+TEST(host_memory_source_alias, sources_aliasing_each_others_memory_are_taken_from_two_threads_at_once)
+{ Rig first;
+  Rig second;
+  first.discrete();
+  second.discrete();
+  AvHostMemory memory = {};
+  AvHostMemory described = {};
+  CHECK_STATUS(first.allocate(1u, readback, memory, page, 1u), Status::ok);
+  CHECK_STATUS(second.allocate(1u, readback, memory, page, 2u), Status::ok);
+  CHECK_STATUS(second.source.alias(2u, 7u, first.source, 1u, 1u, described), Status::ok);
+  CHECK_STATUS(first.source.alias(1u, 7u, second.source, 2u, 1u, described), Status::ok);
+  Hammer one = {&second.source, 2u, 7u};
+  Hammer two = {&first.source, 1u, 7u};
+  pthread_t a;
+  pthread_t b;
+  CHECK_EQ(pthread_create(&a, nullptr, &hammer, &one), 0);
+  CHECK_EQ(pthread_create(&b, nullptr, &hammer, &two), 0);
+  pthread_join(a, nullptr);
+  pthread_join(b, nullptr);
+  first.source.release_aliases();
+  second.source.release_aliases();
+  first.source.free(1u, 1u);
+  second.source.free(2u, 1u);
+  CHECK_EQ(first.source.live(), 0u);
+  CHECK_EQ(second.source.live(), 0u);
+  CHECK(first.source.invariants_hold() && second.source.invariants_hold()); }

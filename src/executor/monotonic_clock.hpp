@@ -4,13 +4,13 @@
 #ifndef AV_MONOTONIC_CLOCK_HPP
 #define AV_MONOTONIC_CLOCK_HPP
 
-#include "executor/host_clock.hpp"
+#include "core/platform/poll_clock.hpp"
 
 #include <time.h>
 
 namespace av {
 
-class MonotonicClock final : public HostClock {
+class MonotonicClock final : public PollClock {
 public:
     MonotonicClock();
 

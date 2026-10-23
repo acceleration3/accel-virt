@@ -223,6 +223,7 @@ void AvContextTable::release(uint32_t slot)
     void *wake = nullptr;
     {
         SpinLockGuard locked(lock_);
+        releases_[slot].clear();
         names_[slot] = nullptr;
         orders_[slot] = 0u;
         wake = wakes_[slot];
@@ -474,9 +475,66 @@ Status AvContextTable::submit(void *context, const uint8_t *private_data, size_t
     SubmissionDescriptor submission;
     if (reader_.read(private_data, size, RingHeader(orders_[slot], 0u, 0u), submission) != Status::ok)
         return Status::invalid_parameter;
-    const Status status = bindings_[slot].object().submit(submission);
+    const Status status = releases_[slot].active() ? in_turn(slot, submission) : bindings_[slot].object().submit(submission);
     if (status == Status::ok) awaited = submission.fence_id();
     return status;
+}
+
+Status AvContextTable::release_batch(void *context, const SubmissionDescriptor &batch, uint64_t &awaited)
+{
+    AV_SCOPE("AvContextTable::release_batch");
+    platform_.require_irql_at_most(Irql::dispatch, "AvContextTable::release_batch");
+    awaited = 0u;
+    SpinLockGuard  locked(lock_);
+    const uint32_t slot = slot_of(context);
+    if (slot == no_slot || !live_[slot] || lost(slot)) return Status::invalid_parameter;
+    if (batch.validate_against(RingHeader(orders_[slot], 0u, 0u)) != Status::ok) return Status::invalid_parameter;
+    const Status status = in_turn(slot, batch);
+    if (status == Status::ok) awaited = batch.fence_id();
+    return status;
+}
+
+/* What is wrong with an order - a batch that overlaps one released, more held
+ * than a process could have in flight, a ring that refuses what it is handed -
+ * is a ring that will never be whole: the context is failed, which finishes
+ * everything queued on it and wakes its process, rather than leaving its
+ * packets to wait for a batch that cannot come. The packet that brought it
+ * here is an asynchronous one and is not refused. */
+Status AvContextTable::in_turn(uint32_t slot, const SubmissionDescriptor &batch)
+{
+    AV_SCOPE("AvContextTable::in_turn");
+    ReleaseQueue &queue = releases_[slot];
+    AvContextBinding &binding = bindings_[slot].object();
+    const ReleaseQueue::Turn turn = queue.arrive(batch, binding.next_begin());
+    if (turn == ReleaseQueue::Turn::held || turn == ReleaseQueue::Turn::released_already) return Status::ok;
+    if (turn == ReleaseQueue::Turn::refused || binding.submit(batch) != Status::ok) return lose(slot);
+    queue.released(batch);
+    SubmissionDescriptor next;
+    while (queue.next_held(next)) {
+        if (binding.submit(next) != Status::ok) return lose(slot);
+        queue.released(next);
+    }
+    return Status::ok;
+}
+
+Status AvContextTable::lose(uint32_t slot)
+{
+    AV_SCOPE("AvContextTable::lose");
+    bindings_[slot].object().fail();
+    releases_[slot].clear();
+    platform_.log("avgpu: a context's batches cannot be released in order: the context is lost");
+    return Status::ok;
+}
+
+bool AvContextTable::fault_if_held(void *context)
+{
+    AV_SCOPE("AvContextTable::fault_if_held");
+    platform_.require_irql_at_most(Irql::dispatch, "AvContextTable::fault_if_held");
+    SpinLockGuard  locked(lock_);
+    const uint32_t slot = slot_of(context);
+    if (slot == no_slot || !live_[slot] || releases_[slot].held() == 0u) return false;
+    static_cast<void>(lose(slot));
+    return true;
 }
 
 void AvContextTable::kick(void *context)
@@ -554,6 +612,10 @@ void AvContextTable::abandon_all()
             SpinLockGuard locked(lock_);
             if (!live_[slot]) continue;
             live_[slot] = false;
+            /* A reset leaves nothing held to be released: the contexts are
+             * gone with the device, and a process that makes another starts
+             * its order again. */
+            releases_[slot].clear();
             /* Nothing more is ever served on it. */
             if (wakes_[slot] != nullptr) platform_.signal_event(wakes_[slot]);
         }

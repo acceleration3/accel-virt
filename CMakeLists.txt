@@ -217,7 +217,7 @@ target_link_libraries(avd3d12samples_host PRIVATE ${CMAKE_DL_LIBS} Threads::Thre
 # No sanitizer or profile flags and hidden visibility: the archive exports only
 # av_device.h, and tools/build_qemu.sh links it into the virtio-gpu-av module
 # through the generated av_device.pc.
-# TextBuffer, ByteRange, SettingText (under EnvSetting) and Fnv1aDigest (a guest
+# BgraRows, TextBuffer, ByteRange, SettingText (under EnvSetting) and Fnv1aDigest (a guest
 # page list's fingerprint) are the core/support classes with a body the device
 # core uses, and DriverLog and LogLine the core/log ones; the trace table is
 # core/trace's, every function opens a scope on it, and every device lock marks
@@ -226,6 +226,7 @@ file(GLOB_RECURSE AV_DEVICE_SOURCES CONFIGURE_DEPENDS src/device/*.cpp src/proto
 list(APPEND AV_DEVICE_SOURCES src/core/platform/lock_marks.cpp src/core/platform/thread_lock_hold.cpp)
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_RECORD_ENTRY})
 list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp src/core/support/byte_range.cpp
+  src/core/support/bgra_rows.cpp
   src/core/support/setting_text.cpp src/core/support/fnv1a_digest.cpp
   src/core/log/driver_log.cpp src/core/log/log_line.cpp)
 # The renderer's own process code: it is linked into av-renderer, never into

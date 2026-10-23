@@ -62,7 +62,7 @@ TEST(export_answer, an_export_carries_its_layout_at_the_documented_offsets_and_o
   CHECK_EQ(sent.descriptors(), 1u);
   CHECK_STATUS(sent.encode(bytes, sizeof bytes), Status::ok);
   CHECK_EQ(u32_at(bytes, 0u), 0x41585641u);
-  CHECK_EQ(u32_at(bytes, 4u), 0x00010001u);   /* major 1, minor 1 */
+  CHECK_EQ(u32_at(bytes, 4u), 0x00030001u);   /* major 1, minor 3 */
   CHECK_EQ(u32_at(bytes, 8u), 2u);
   CHECK_EQ(u32_at(bytes, 12u), 0u);
   CHECK_EQ(u64_at(bytes, 16u), surface);

@@ -5,9 +5,16 @@
 
 namespace av {
 
-HostBlob::HostBlob(Host &host, LentPages &lent, uint32_t context, const AvHostMemory &memory)
+HostBlob::HostBlob(Host &host, uint32_t context, const AvHostMemory &memory)
     : host_(host), size_(memory.size), offset_(0u), context_(context), fd_(memory.fd), caching_(memory.caching),
-      mapped_(false), overlay_(host, lent)
+      mapped_(false), waiting_(false), lender_(false), request_(0u), laid_(0u), lending_(nullptr)
+{
+    AV_SCOPE("HostBlob::HostBlob");
+}
+
+HostBlob::HostBlob(Host &host, uint32_t context, uint64_t size, HostMemoryRequest request)
+    : host_(host), size_(size), offset_(0u), context_(context), fd_(-1), caching_(0u), mapped_(false),
+      waiting_(true), lender_(false), request_(request.encoded()), laid_(0u), lending_(nullptr)
 {
     AV_SCOPE("HostBlob::HostBlob");
 }
@@ -15,9 +22,8 @@ HostBlob::HostBlob(Host &host, LentPages &lent, uint32_t context, const AvHostMe
 HostBlob::~HostBlob()
 {
     AV_SCOPE("HostBlob::~HostBlob");
-    overlay_.restore();
     if (mapped_) host_.remove_from_hostmem(offset_, size_);
-    host_.close_descriptor(fd_);
+    if (fd_ >= 0) host_.close_descriptor(fd_);
 }
 
 uint32_t HostBlob::context() const
@@ -38,16 +44,51 @@ uint32_t HostBlob::caching() const
     return caching_;
 }
 
-Status HostBlob::adopt(ControlRequest &request, size_t offset, uint32_t entries)
+bool HostBlob::waiting() const
 {
-    AV_SCOPE("HostBlob::adopt");
-    return overlay_.add(request, offset, entries, fd_, size_);
+    AV_SCOPE("HostBlob::waiting");
+    return waiting_;
 }
 
-uint64_t HostBlob::adopted() const
+HostMemoryRequest HostBlob::request() const
 {
-    AV_SCOPE("HostBlob::adopted");
-    return overlay_.covered();
+    AV_SCOPE("HostBlob::request");
+    return HostMemoryRequest(request_);
+}
+
+void HostBlob::lend(GuestRamLending &lending, bool made_here, const AvHostMemory &memory)
+{
+    AV_SCOPE("HostBlob::lend");
+    lending_ = &lending;
+    lender_ = made_here;
+    waiting_ = false;
+    caching_ = memory.caching;
+    /* The lending owns the dma-buf that lies under the pages. */
+    fd_ = -1;
+}
+
+GuestRamLending *HostBlob::lending() const
+{
+    AV_SCOPE("HostBlob::lending");
+    return lending_;
+}
+
+bool HostBlob::lender() const
+{
+    AV_SCOPE("HostBlob::lender");
+    return lender_;
+}
+
+uint32_t HostBlob::entries_laid() const
+{
+    AV_SCOPE("HostBlob::entries_laid");
+    return laid_;
+}
+
+void HostBlob::laid(uint32_t entries)
+{
+    AV_SCOPE("HostBlob::laid");
+    laid_ += entries;
 }
 
 Status HostBlob::map(uint64_t offset)

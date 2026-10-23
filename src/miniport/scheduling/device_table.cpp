@@ -217,7 +217,7 @@ DeviceAllocation *DeviceTable::opened(void *handle)
     return opens_.find(handle);
 }
 
-Status DeviceTable::name_point(void *process, uint64_t surface, uint32_t point)
+Status DeviceTable::name_point(void *process, uint64_t surface, uint32_t point, NextPointRecord::Action action)
 {
     AV_SCOPE("DeviceTable::name_point");
     platform_.require_irql_at_most(Irql::passive, "DeviceTable::name_point");
@@ -227,8 +227,32 @@ Status DeviceTable::name_point(void *process, uint64_t surface, uint32_t point)
         return held.device().process() == process && held.allocation().shared_id() == surface;
     });
     if (open == nullptr) return Status::not_found;
-    open->name_point(point);
+    switch (action) {
+    case NextPointRecord::Action::name: open->name_point(point); break;
+    case NextPointRecord::Action::pages: open->name_point(0u); break;
+    case NextPointRecord::Action::withdraw: static_cast<void>(open->withdraw_point(point)); break;
+    }
     return Status::ok;
+}
+
+Status DeviceTable::peek_point(void *handle, PointView &view)
+{
+    AV_SCOPE("DeviceTable::peek_point");
+    platform_.require_irql_at_most(Irql::passive, "DeviceTable::peek_point");
+    MutexGuard              lock(mutex_);
+    DeviceAllocation *const open = handle != nullptr ? opens_.find(handle) : nullptr;
+    if (open == nullptr) return Status::not_found;
+    open->view(view);
+    return Status::ok;
+}
+
+void DeviceTable::consume_point(void *handle)
+{
+    AV_SCOPE("DeviceTable::consume_point");
+    platform_.require_irql_at_most(Irql::passive, "DeviceTable::consume_point");
+    MutexGuard              lock(mutex_);
+    DeviceAllocation *const open = handle != nullptr ? opens_.find(handle) : nullptr;
+    if (open != nullptr) open->forget_point();
 }
 
 Device *DeviceTable::find(void *device)

@@ -727,10 +727,26 @@ bool VulkanBackend::imports_nothing(const void *next) const
     return true;
 }
 
+/* The type the source's memory is imported as: the type it was allocated as
+ * when this device's driver would import its dma-buf as that (the guest asked
+ * for that type - HostMemoryRequest), and else the first that driver reports
+ * for the dma-buf: memory another adapter's device lent, allocated on another
+ * GPU, has a type index that is that GPU's. */
+uint32_t VulkanBackend::import_type(const SourceMemory &memory, int fd) const
+{
+    AV_SCOPE("VulkanBackend::import_type");
+    const uint32_t reported = adopting_->memory().dmabuf_types(fd);
+    /* A driver that cannot say reports none: the type it was allocated as. */
+    if (reported == 0u) return memory.memory_type();
+    if (memory.memory_type() < max_memory_types && (reported & (1u << memory.memory_type())) != 0u)
+        return memory.memory_type();
+    return first_memory_type(reported);
+}
+
 /* The source's memory, by its dma-buf, as memory of the type it was
- * allocated as: the guest asked for that type (HostMemoryRequest), and only
- * onto a device the guest has made, because device memory belongs to one.
- * Vulkan owns the descriptor once the import is made. */
+ * allocated as where that is the type this device would import it as, and
+ * only onto a device the guest has made, because device memory belongs to
+ * one. Vulkan owns the descriptor once the import is made. */
 bool VulkanBackend::adopt(const SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("VulkanBackend::adopt");
@@ -738,8 +754,10 @@ bool VulkanBackend::adopt(const SourceMemory &memory, uint64_t &handle)
     if (adopting_ == nullptr || !memory_import_) return false;
     OwnedFd  descriptor;
     uint64_t made = 0u;
-    if (!memory.share(descriptor) ||
-        !adopting_->memory().import_dmabuf(descriptor, memory.size(), memory.memory_type(), made))
+    if (!memory.share(descriptor)) return false;
+    const uint32_t type = import_type(memory, descriptor.fd());
+    if (type == max_memory_types ||
+        !adopting_->memory().import_dmabuf(descriptor, memory.size(), type, made))
         return false;
     if (!kept_on(*adopting_, made)) {
         adopting_->memory().release(made);

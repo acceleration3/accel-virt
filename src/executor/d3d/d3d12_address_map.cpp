@@ -1,5 +1,6 @@
 #include "executor/d3d/d3d12_address_map.hpp"
 
+#include "core/support/sorted_search.hpp"
 #include "core/trace/function_scope.hpp"
 
 namespace av {
@@ -12,13 +13,7 @@ D3d12AddressMap::D3d12AddressMap(BlockSource &blocks) : ranges_(blocks, Pool::pa
 uint32_t D3d12AddressMap::below(uint64_t guest) const
 {
     AV_SCOPE("D3d12AddressMap::below");
-    uint32_t low = 0u, high = ranges_.size();
-    while (low < high) {
-        const uint32_t middle = low + (high - low) / 2u;
-        if (ranges_.at(middle).guest_ <= guest) low = middle + 1u;
-        else high = middle;
-    }
-    return low == 0u ? ranges_.size() : low - 1u;
+    return SortedSearch<Range, &Range::guest_>(ranges_).at_or_below(guest);
 }
 
 Status D3d12AddressMap::insert(uint64_t guest, uint64_t size, uint64_t host, uint32_t id)

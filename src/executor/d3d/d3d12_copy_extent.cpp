@@ -2,13 +2,15 @@
 
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d_headers.hpp"
+#include "proto/resources/mip_extent.hpp"
+#include "proto/resources/subresource_layout.hpp"
 
 namespace av {
 
 namespace {
 
 /* A depth-stencil format's stencil is a second plane of subresources. */
-constexpr uint64_t most_planes = 2u;
+constexpr uint32_t most_planes = 2u;
 
 }  // namespace
 
@@ -23,19 +25,18 @@ D3d12CopyExtent::D3d12CopyExtent(const D3D12_TEXTURE_COPY_LOCATION &source, cons
     }
     const D3D12_RESOURCE_DESC desc = source.pResource->GetDesc();
     const bool                volume = desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D;
-    const uint64_t            mips = desc.MipLevels == 0u ? 1u : desc.MipLevels;
-    const uint64_t            layers = volume ? 1u : desc.DepthOrArraySize;
-    known_ = source.SubresourceIndex < mips * layers * most_planes;
+    const uint32_t            mips = desc.MipLevels == 0u ? 1u : desc.MipLevels;
+    const uint32_t            layers = volume ? 1u : desc.DepthOrArraySize;
+    const SubresourceLayout subresources(mips, layers, most_planes);
+    known_ = subresources.holds(source.SubresourceIndex);
     if (box != nullptr) {
         read_ = *box;
         return;
     }
-    const uint32_t mip = static_cast<uint32_t>(source.SubresourceIndex % mips);
-    const uint64_t width = desc.Width >> mip;
-    const uint32_t height = desc.Height >> mip;
-    const uint32_t depth = volume ? static_cast<uint32_t>(desc.DepthOrArraySize >> mip) : 1u;
-    read_ = d3d12proto::Box{0u, 0u, 0u, width == 0u ? 1u : static_cast<uint32_t>(width), height == 0u ? 1u : height,
-                            depth == 0u ? 1u : depth};
+    const MipExtent extent(desc.Width, desc.Height, volume ? desc.DepthOrArraySize : 1u,
+                            subresources.mip_of(source.SubresourceIndex));
+    if (extent.width() > UINT32_MAX) known_ = false;
+    read_ = d3d12proto::Box{0u, 0u, 0u, static_cast<uint32_t>(extent.width()), extent.height(), extent.depth()};
 }
 
 bool D3d12CopyExtent::known() const

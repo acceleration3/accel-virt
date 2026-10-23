@@ -33,7 +33,6 @@
 
 #include <CL/cl_ext.h>
 #include <string.h>
-#include <time.h>
 
 namespace av {
 
@@ -86,7 +85,7 @@ OpenClBackend::OpenClBackend(BlockSource &blocks, DriverLog &lines)
       vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
       direct_(blocks, vehicle_, renderbuffer_textures_), copied_(blocks, object_bytes_, renderbuffer_textures_),
       gl_(nullptr), reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(blocks),
-      svm_(blocks), mapped_(blocks), guest_(), arena_(guest_), imported_(nullptr), events_(blocks), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
+       svm_(blocks), mapped_(blocks), guest_(), arena_(guest_), imported_(nullptr), events_(blocks), clock_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
       lost_(false), lines_(lines)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
@@ -680,10 +679,8 @@ void OpenClBackend::pace(cl_command_queue queue)
     if (!pacer_.kernel()) return;
     cl_event marker = nullptr;
     if (!pacer_.timing() && ::clEnqueueMarkerWithWaitList(queue, 0u, nullptr, &marker) == CL_SUCCESS) {
-        timespec now = {};
-        clock_gettime(CLOCK_MONOTONIC, &now);
         marker_ = marker;
-        pacer_.time_from(static_cast<uint64_t>(now.tv_sec) * 1000000000u + static_cast<uint64_t>(now.tv_nsec));
+        pacer_.time_from(clock_.now_nanoseconds());
     }
     static_cast<void>(::clFlush(queue));
     pacer_.flushed();
@@ -699,9 +696,7 @@ void OpenClBackend::look_at_marker()
                          nullptr) == CL_SUCCESS &&
         status > CL_COMPLETE)
         return;
-    timespec now = {};
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    pacer_.timed(static_cast<uint64_t>(now.tv_sec) * 1000000000u + static_cast<uint64_t>(now.tv_nsec));
+    pacer_.timed(clock_.now_nanoseconds());
     static_cast<void>(::clReleaseEvent(static_cast<cl_event>(marker_)));
     marker_ = nullptr;
 }

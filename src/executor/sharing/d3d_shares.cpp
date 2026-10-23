@@ -18,13 +18,22 @@ Status D3dShares::publish_resource(uint32_t domain, uint64_t id, IUnknown *resou
                                     [resource](Share &share) { share.direct3d().keep_resource(resource); });
 }
 
-IUnknown *D3dShares::open_resource(uint32_t domain, uint64_t id)
+IUnknown *D3dShares::open_resource(uint32_t domain, uint64_t id, bool &live_of_presented)
 {
     AV_SCOPE("D3dShares::open_resource");
     IUnknown *opened = nullptr;
-    static_cast<void>(shares_.with_direct3d(
-        domain, id, [&opened](Share &share, D3dRetired &) { opened = share.direct3d().open(); }));
+    live_of_presented = false;
+    static_cast<void>(shares_.with_direct3d(domain, id, [&](Share &share, D3dRetired &) {
+        opened = share.direct3d().open(live_of_presented);
+    }));
     return opened;
+}
+
+void D3dShares::expect_shown(uint32_t domain, uint64_t id)
+{
+    AV_SCOPE("D3dShares::expect_shown");
+    static_cast<void>(
+        shares_.with_direct3d(domain, id, [](Share &share, D3dRetired &) { share.direct3d().expect_shown(); }));
 }
 
 IUnknown *D3dShares::resource(uint32_t domain, uint64_t id)

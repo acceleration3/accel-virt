@@ -18,15 +18,14 @@
 #include <stdint.h>
 
 namespace av {
-class Kmt;
+class PollClock;
 }  // namespace av
 
 namespace av::d3d11 {
 
 class PagingQueue {
 public:
-    /* Its patience is timed on `kmt`'s counter. */
-    PagingQueue(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device, const Kmt &kmt);
+    PagingQueue(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device, PollClock &clock);
     ~PagingQueue();
     PagingQueue(const PagingQueue &) = delete;
     PagingQueue &operator=(const PagingQueue &) = delete;
@@ -41,7 +40,7 @@ private:
 
     const D3DDDI_DEVICECALLBACKS &kernel_;
     HANDLE                        device_;
-    const Kmt                    &kmt_;
+    PollClock                    &clock_;
     D3DKMT_HANDLE                 queue_;
     const volatile uint64_t      *fence_;
 };

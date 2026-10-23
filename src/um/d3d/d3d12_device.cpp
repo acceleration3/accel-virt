@@ -43,7 +43,7 @@ uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 D3d12Device::D3d12Device(d3d::D3dSession &session, KeyedLog &log,
                          const D3d12HostCaps &caps,
                          void *const &list_table, d3d::D3dCallTrace &trace)
-    : session_(session), lines_(log), refused_(lines_), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), kernel_(nullptr), follower_(), residency_(), channel_(), addresses_(),
+    : session_(session), lines_(log), refused_(lines_), caps_(caps), list_table_(list_table), runtime_{}, core_(nullptr), kernel_(nullptr), lender_(session), follower_(), residency_(), channel_(), addresses_(),
       recorder_(*this), null_resource_{}, loss_(lines_), library_blob_(), trace_(trace),
       context_number_(trace.number_context())
 {
@@ -69,10 +69,12 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
     runtime_ = create.hRTDevice;
     core_ = create.p12UMCallbacks_0050;
     kernel_ = create.pKTCallbacks;
+    lender_.bind(create.pKTCallbacks, runtime_.handle);
     const HRESULT joined = session_.join(adapter);
     if (FAILED(joined)) return joined;
-    if (create.pKTCallbacks != nullptr)
+    if (create.pKTCallbacks != nullptr) {
         static_cast<void>(follower_.construct(*create.pKTCallbacks, runtime_.handle, session_.transport()));
+    }
     if (core_ != nullptr) static_cast<void>(residency_.construct(*core_, runtime_));
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), 0u));
     uint32_t hresult = 1u;

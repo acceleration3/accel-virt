@@ -1809,6 +1809,31 @@ TEST(kmt_transport, a_gate_forgotten_drops_its_own_hold_and_no_other)
   CHECK_EQ(other.passes(), 0u);
   transport.teardown(); }
 
+/* The transport holds several gates, each its owner's: each held one passes
+ * once, and a present's hold does not replace another's. */
+TEST(kmt_transport, several_held_gates_are_each_passed_once)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::d3d, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CountingGate first(fixture.kmt());
+  CountingGate second(fixture.kmt());
+  transport.hold(first);
+  transport.hold(second);
+  CHECK(!transport.ready_for_batch());
+  std::uint8_t framed[12u] = {};
+  const std::size_t length = frame_batch(framed, 0x10001u, 1u, false);
+  CHECK(send_framed(transport, framed, length) == TransportResult::ok);
+  CHECK_EQ(first.passes(), 1u);
+  CHECK_EQ(second.passes(), 1u);
+  CHECK(transport.ready_for_batch());
+  CHECK(send_framed(transport, framed, length) == TransportResult::ok);
+  CHECK_EQ(first.passes(), 1u);
+  CHECK_EQ(second.passes(), 1u);
+  transport.teardown(); }
+
 /* A gate is its device's: a transport torn down and set up again holds nothing. */
 TEST(kmt_transport, a_torn_down_transport_forgets_what_held_it)
 { Fixture fixture;

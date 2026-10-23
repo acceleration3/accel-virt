@@ -61,6 +61,9 @@ struct D3d9Resource {
     uint64_t             shared_key;
     /* Each present of the resource, counted from 1 (PresentPointRecord). */
     d3d::PresentCount    presents;
+    /* The point named to the miniport for the present in progress, 0 once
+     * that present went through or the name was taken back. */
+    uint32_t             named_point;
 };
 
 struct D3d9Query {

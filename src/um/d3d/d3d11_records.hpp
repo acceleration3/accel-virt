@@ -16,6 +16,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+namespace av {
+class HostAllocation;
+}  // namespace av
+
 namespace av::d3d11 {
 
 /* One resource. The shadow is guest memory the CPU maps: every subresource
@@ -65,6 +69,9 @@ struct ResourceRecord {
      * shadow of its own (shadow_local). */
     d3d::BufferSlices::Slice slice;
     uint32_t                 on_slice;
+    /* A cross-adapter texture's pages, lent to the host (AllocationLender), which
+     * the host made the texture over: released when the resource is destroyed. */
+    HostAllocation          *lent;
 };
 
 /* A view of any kind, a shader, an input layout, a state object, a sampler. */

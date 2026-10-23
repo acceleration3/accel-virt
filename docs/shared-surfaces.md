@@ -74,6 +74,47 @@ The facts below come from reading the code and from traces taken in the guest
 on 2026-09-30 and 2026-10-01: DxgKrnl ETW, the UMD and KMD logs, and probes
 under `tools/guest/probes/`.
 
+## 0.1 Cross-adapter textures
+
+A Direct3D 11 texture made with `D3DWDDM1_3DDI_RESOURCE_MISC_CROSS_ADAPTER`
+(Affinity's: two devices, one per avgpu adapter, the second opening what the
+first made) is not a `HostShares` row: its memory must be the very bytes both
+adapters' host textures read, row-major, so it is made over guest pages both
+lend (docs/host-memory.md, "One memory for two adapters"):
+
+- the creator's allocation is a `cross_adapter` kind (`KernelSurface`, pitch
+  and rows by `CrossAdapterLayout`) in the implicit system-memory segment,
+  CPU-visible and cached; the device lends its pages (`AllocationLender`) and
+  sends `CreateResource` with the name of the lent memory and its pitch, and
+  the host makes the texture an image over that memory's dma-buf as rows;
+- the opener's allocation is the one the *opener's* miniport described
+  (`StandardAllocation`, the same layout), arrives with no minted id, and
+  is opened by lending the same pages through its adapter (the device joins the
+  lending) and making its own texture over them, so a draw on one adapter
+  reads and writes the bytes the other sees;
+- ordering: the runtime orders the two devices' GPU work with a shared fence
+  and a wait it queues on the device's kernel context. Work is sent to the
+  host on a ring the kernel never sees, so the transport of a session that
+  shares such a resource releases every batch by packet instead of publishing
+  it (`CrossAdapterWaits`, protocol.md "Release by packet"): the packet is
+  queued on the kernel context the device submitted on, dxgkrnl runs it after
+  the waits queued before it, and the miniport publishes the batch then, in
+  ring order. There is no CPU wait and no timeout; a present's reuse wait is
+  on the same context, so it orders what follows the present without
+  `PresentOrder`'s gate. Transports that share nothing publish as before, and
+  so does a Direct3D 12 device with a cross-adapter heap: its work stays
+  unordered against the other adapter (a known gap).
+  The limit: a wait on one queue for a fence a later batch on another queue
+  of the same transport signals cannot be satisfied, because batches publish
+  in ring order. The real fix is one av ring per kernel context (queue), a
+  separate project (`docs/roadmap.md`). A synchronous call made while a
+  batch is held behind a wait only the application's own thread satisfies
+  later is held with it; one that waits several seconds is logged once.
+
+Not done: a vkd3d-proton path for `ALLOW_CROSS_ADAPTER` row-major textures
+(it refuses `ROW_MAJOR` and reports `CrossAdapterRowMajorTextureSupported`
+FALSE), and keyed-mutex sharing.
+
 ## 1. What happens today
 
 ### 1.1 The guest already has one identity

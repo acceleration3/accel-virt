@@ -1,4 +1,5 @@
 #include "icd/common/range_table.hpp"
+#include "core/support/sorted_search.hpp"
 
 #include "core/trace/function_scope.hpp"
 
@@ -36,14 +37,7 @@ bool RangeTable::gap(uint64_t bytes, uint64_t &offset, uint32_t &row) const
 uint32_t RangeTable::row_at_or_after(uint64_t offset) const
 {
     AV_SCOPE("RangeTable::row_at_or_after");
-    uint32_t low = 0u;
-    uint32_t high = ranges_.size();
-    while (low < high) {
-        const uint32_t middle = low + (high - low) / 2u;
-        if (ranges_.at(middle).offset_ < offset) low = middle + 1u;
-        else high = middle;
-    }
-    return low;
+    return SortedSearch<Range, &Range::offset_>(ranges_).at_or_after(offset);
 }
 
 Status RangeTable::place(uint64_t bytes, uint64_t &offset)

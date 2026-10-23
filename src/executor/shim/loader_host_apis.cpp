@@ -104,6 +104,10 @@ void LoaderHostApis::enumerate()
 void LoaderHostApis::close()
 {
     AV_SCOPE("LoaderHostApis::close");
+    /* Before any source goes: an alias holds a reference to memory of another
+     * source, whose exporter is still there to free it while all are. */
+    for (uint32_t i = 0u; i < count_; i++)
+        if (sources_[i].constructed()) sources_[i].object().release_aliases();
     for (uint32_t i = 0u; i < count_; i++) {
         gl_displays_[i].close();
         d3d12_devices_[i].object().close();

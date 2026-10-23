@@ -10,6 +10,17 @@
 
 namespace av {
 
+namespace {
+
+/* The request's flags as the executor's AV_EXPORT_* bits. */
+uint32_t executor_flags(const ExportRequest &request)
+{
+    AV_SCOPE("executor_flags");
+    return request.imports_on_other_gpu() ? AV_EXPORT_OTHER_GPU : 0u;
+}
+
+}  // namespace
+
 ExportedGpu::ExportedGpu(Host &host) : host_(host), contexts_(nullptr), heads_(nullptr), gpu_uuid_(nullptr), greeting_()
 {
     AV_SCOPE("ExportedGpu::ExportedGpu");
@@ -47,7 +58,8 @@ ExportAnswer ExportedGpu::export_surface(const ExportRequest &request, int &desc
     descriptor = -1;
     if (!exports()) return ExportAnswer(request, Status::invalid_state);
     AvExportedImage image = {-1, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
-    if (!contexts_->export_surface(gpu_uuid_, request.surface(), image)) return ExportAnswer(request, Status::not_found);
+    if (!contexts_->export_surface(gpu_uuid_, request.surface(), executor_flags(request), image))
+        return ExportAnswer(request, image.reserved == AV_EXPORT_UNAVAILABLE ? Status::invalid_state : Status::not_found);
     const ExportedLayout layout(image.width, image.height, image.fourcc, image.stride, image.offset, image.modifier);
     if (image.fd < 0 || !layout.describes_a_picture()) {
         if (image.fd >= 0) host_.close_export(image.fd);
@@ -67,7 +79,7 @@ ExportAnswer ExportedGpu::sync(const ExportRequest &request, int &descriptor) co
     if (!exports()) return ExportAnswer(request, Status::invalid_state);
     uint64_t writes = 0u;
     int      fence = -1;
-    if (!contexts_->sync_surface(gpu_uuid_, request.surface(), writes, fence) || fence < 0)
+    if (!contexts_->sync_surface(gpu_uuid_, request.surface(), executor_flags(request), writes, fence) || fence < 0)
         return ExportAnswer(request, Status::not_found);
     ExportAnswer answer(request, Status::ok);
     answer.count(writes);

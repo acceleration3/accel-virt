@@ -13,6 +13,8 @@
 #include "core/trace/state_reporter.hpp"
 #include "device/abi/av_device.h"
 #include "device/abi/av_executor.h"
+#include "device/host/process_block_source.hpp"
+#include "device/memory/guest_ram_lendings.hpp"
 #include "device/module/device_instance.hpp"
 #include "proto/context/av_device_count.hpp"
 
@@ -41,7 +43,15 @@ public:
     void                 report(StateWriter &writer) override;
 
 private:
-    ObjectStorage<DeviceInstance> slots_[max_devices] = {};
+    /* The lendings gone once no device is left to hold one. */
+    void release_lendings();
+
+    /* Made with the first device and gone with the last: what the devices of
+     * one process lend of the guest's RAM, which one device's lending may
+     * outlive that device in (GuestRamLending). */
+    ObjectStorage<ProcessBlockSource> blocks_;
+    ObjectStorage<GuestRamLendings>   lendings_;
+    ObjectStorage<DeviceInstance>     slots_[max_devices] = {};
 
     friend struct DeviceModuleProbe;
 };

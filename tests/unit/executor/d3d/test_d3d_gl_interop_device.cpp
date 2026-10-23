@@ -100,7 +100,7 @@ TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_t
     shared.sample_count = 1u;
     shared.bind_flags = bind_shader_resource | bind_render_target;
     shared.misc_flags = misc_shared;
-    CHECK(av_d3d_CreateResource(wire, 1u, shared, key));
+    CHECK(av_d3d_CreateResource(wire, 1u, shared, key, 0u, 0u));
     std::uint32_t handle_kind = 0u;
     int           fd = -1;
     CHECK(direct3d.export_object(AV_SHARED_MEMORY, 1u, handle_kind, fd));

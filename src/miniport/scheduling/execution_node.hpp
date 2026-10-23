@@ -40,9 +40,12 @@ public:
      * may take seconds over one batch (a pipeline compiled, a GPU that stalls),
      * and dxgkrnl calls a packet that long a hung engine and resets every
      * context on it. What the packet guarded completes a little early instead.
-     * Answers how many were let go. DISPATCH. */
+     * Answers how many were let go, and names up to `room` distinct
+     * owners of them in `owners` (how many in `named`) for the caller to ask
+     * whether the packet was really parked. DISPATCH. */
     static constexpr uint64_t park_deadline = 12000000u;   /* 1.2 s, in 100 ns */
-    uint32_t             release_overdue(uint64_t now);
+    uint32_t             release_overdue(uint64_t now, void **owners = nullptr, uint32_t room = 0u,
+                                         uint32_t *named = nullptr);
     /* The latest request wins; reported once nothing is queued. */
     [[nodiscard]] Status preempt(uint32_t fence);
     /* Completes and reports every queued fence that is done, then a preemption

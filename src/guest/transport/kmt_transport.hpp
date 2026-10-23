@@ -58,6 +58,7 @@ class ContextViewsRecord;
 
 class GuestConnection;
 class PublishGate;
+class ReleaseRoute;
 struct KmtTransportProbe;
 
 class KmtTransport final : public ClientTransport {
@@ -126,10 +127,31 @@ public:
     bool                 ready_for_batch() const;
     /* After a present that hands a buffer to another process: the next batch
      * written to the ring, whatever sends it, passes `gate` first, and until
-     * then no batch is ready (PublishGate). `gate` outlives that write. */
+     * then no batch is ready (PublishGate). `gate` outlives that write. A
+     * transport holds several gates at once, each its owner's and each passed
+     * once (a full set passes `gate` at once instead). The
+     * set is guarded on its own, for a few instructions at a time, since a
+     * device holds a gate after a present from a thread that does not hold the
+     * send lock; a gate that is going away must not be passed meanwhile, which
+     * its owner sees to (PresentOrder forgets it first). */
     void                 hold(PublishGate &gate);
-    /* `gate` is going away: a hold by it is dropped, one by another kept. */
+    /* `gate` is going away: what it held is dropped, what another holds kept. */
     void                 forget(const PublishGate &gate);
+    /* From now on every batch is released by packet through `route`
+     * (ReleaseRoute): for a session that holds a cross-adapter resource, whose
+     * work must wait for what the runtime queued on its kernel contexts, which
+     * only the scheduler can order. not_supported without a fence page - the
+     * batch's completion could not be told apart from its packet's -;
+     * invalid_state when not established. A second route is kept to take over
+     * when the first goes; no_space for a third. */
+    [[nodiscard]] Status release_by(ReleaseRoute &route);
+    /* `route` is going away: what it released has run (a wait for the newest
+     * batch, which faults the transport if it fails), and batches are
+     * published as they were. Nothing for another route. */
+    void                 release_directly(const ReleaseRoute &route);
+    bool                 releases_by_packet() const;
+    /* `route` is the one batches go through, or the one that takes over. */
+    bool                 routed_by(const ReleaseRoute &route) const;
     /* From now on what is sent asynchronously is held in `capacity` bytes at
      * `block`, the caller's, which outlives this: one batch goes when the
      * block cannot take another command, when a command asks for an answer
@@ -291,6 +313,8 @@ private:
     void                          spin_once() const;
     template <typename Arrived> bool arrives_eventually(Arrived arrived);
     [[nodiscard]] Status          wait_for_host(uint64_t fence);
+    [[nodiscard]] Status          wait_on_page(uint64_t fence);
+    static constexpr uint64_t     slow_wait_seconds = 3u;
     /* Whether the kernel can wait for `fence` alone: a queue's progress fence
      * can, and so can a context's wait for its newest batch; for an older one
      * the context's wait would wait for every batch after it too. */
@@ -330,7 +354,17 @@ private:
     uint64_t         fence_ends_[TransportFence::max_outstanding];
     bool             faulted_;
     /* What the next batch written waits for; null when nothing is held. */
-    PublishGate     *held_;
+    /* The gates the next batch passes, each dropped as it is passed. */
+    static constexpr uint32_t most_gates = 4u;
+    PublishGate     *held_[most_gates];
+    const ReleaseRoute *route_;
+    /* A second device of the session that shares: the route it rides when the first goes. */
+    const ReleaseRoute *standby_;
+    /* 1 while a thread is in the set; never held across a pass. */
+    uint32_t         gates_busy_;
+
+    void             lock_gates();
+    void             unlock_gates();
     /* The commands held for one batch; no block when nothing is held. */
     FramedBlock      pending_;
     /* A synchronous call was answered since the last end_call, and the

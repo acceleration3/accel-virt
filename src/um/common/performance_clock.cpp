@@ -38,4 +38,21 @@ uint64_t PerformanceClock::microseconds() const
     return now / frequency_ * microseconds_per_second + now % frequency_ * microseconds_per_second / frequency_;
 }
 
+uint64_t PerformanceClock::now_nanoseconds() const
+{
+    AV_SCOPE("PerformanceClock::now_nanoseconds");
+    constexpr uint64_t nanoseconds_per_second = 1000000000u;
+    const uint64_t now = ticks();
+    return now / frequency_ * nanoseconds_per_second + now % frequency_ * nanoseconds_per_second / frequency_;
+}
+
+void PerformanceClock::pause(uint64_t nanoseconds)
+{
+    AV_SCOPE("PerformanceClock::pause");
+    constexpr uint64_t nanoseconds_per_millisecond = 1000000u;
+    constexpr uint64_t most_finite_milliseconds = UINT32_MAX - 1u;
+    const uint64_t milliseconds = nanoseconds / nanoseconds_per_millisecond;
+    Sleep(static_cast<DWORD>(milliseconds < most_finite_milliseconds ? milliseconds : most_finite_milliseconds));
+}
+
 }  // namespace av

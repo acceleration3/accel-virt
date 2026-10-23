@@ -253,17 +253,17 @@ TEST(executor_root, a_surface_is_exported_only_through_the_domain_s_device)
   AvExportedImage image = {};
   std::uint64_t   writes = 5u;
   int             fd = 5;
-  CHECK(!root.export_surface(1u, 7u, image));
-  CHECK(!root.sync_surface(1u, 7u, writes, fd));
+  CHECK(!root.export_surface(1u, 7u, 0u, image));
+  CHECK(!root.sync_surface(1u, 7u, 0u, writes, fd));
   CHECK_STATUS(root.initialize(apis), Status::ok);
   const std::uint32_t on_intel = held.domain_of(intel);
   const std::uint32_t on_nvidia = held.domain_of(nvidia);
   MockSessionBackend  publisher;
   CHECK_STATUS(apis.shares(0u)->publish_resource(on_intel, 7u, &surface, ShareOrigin::d3d11, publisher),
                Status::ok);
-  CHECK(!root.export_surface(on_intel + 100u, 7u, image));
-  CHECK(!root.export_surface(on_nvidia, 7u, image));
-  CHECK(!root.export_surface(on_intel, 7u, image));
+  CHECK(!root.export_surface(on_intel + 100u, 7u, 0u, image));
+  CHECK(!root.export_surface(on_nvidia, 7u, 0u, image));
+  CHECK(!root.export_surface(on_intel, 7u, 0u, image));
   CHECK_EQ(image.fd, -1);
   CHECK(!root.export_image(on_intel, 7u, image));
   CHECK(!root.export_image(on_nvidia, 7u, image));
@@ -272,9 +272,9 @@ TEST(executor_root, a_surface_is_exported_only_through_the_domain_s_device)
   CHECK(!root.read_image(on_intel, 7u, pixels, 8u, 2u, 2u));
   CHECK(!root.read_image(on_nvidia, 7u, pixels, 8u, 2u, 2u));
   CHECK(!root.read_image(on_intel + 100u, 7u, pixels, 8u, 2u, 2u));
-  CHECK(!root.sync_surface(on_intel + 100u, 7u, writes, fd));
-  CHECK(!root.sync_surface(on_nvidia, 7u, writes, fd));
-  CHECK(!root.sync_surface(on_intel, 7u, writes, fd));
+  CHECK(!root.sync_surface(on_intel + 100u, 7u, 0u, writes, fd));
+  CHECK(!root.sync_surface(on_nvidia, 7u, 0u, writes, fd));
+  CHECK(!root.sync_surface(on_intel, 7u, 0u, writes, fd));
   CHECK_EQ(fd, -1);
   CHECK_EQ(writes, 0u);
   apis.shares(0u)->clear();

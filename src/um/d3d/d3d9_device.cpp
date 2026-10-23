@@ -53,12 +53,12 @@ uint32_t query_bytes(D3DDDIQUERYTYPE type)
 
 D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, KeyedLog &log, const D3d9HostCaps &caps,
                        d3d::UmdAdapter &adapter, d3d::D3dCallTrace &trace)
-    : session_(session), memory_(memory), lines_(log), refused_(lines_), loss_(lines_), caps_(caps), adapter_(adapter), lock_(), channel_(),
-      follower_(), resources_(memory), queries_(memory), blocks_(memory), recording_(nullptr), batch_(), shadow_(),
-      callbacks_{}, kernel_(), allocations_(kernel_, lines_, session_.kmt()), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
+    : session_(session), memory_(memory), lines_(log), refused_(lines_), loss_(lines_), caps_(caps), adapter_(adapter), caller_(), call_mutex_(), lock_(call_mutex_, caller_), channel_(),
+      present_order_(), resources_(memory), queries_(memory), blocks_(memory), recording_(nullptr), batch_(), shadow_(),
+      callbacks_{}, kernel_(), clock_(), allocations_(kernel_, lines_, clock_), context_(nullptr), viewport_{}, z_range_{0.0f, 1.0f}, scissor_{},
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
       user_index_bytes_(0u), bound_indices_(0u), vertex_ring_{}, index16_ring_{}, index32_ring_{},
-      readback_(nullptr), readback_bytes_(0u), trace_(trace), context_number_(trace.number_context()), clock_(),
+      readback_(nullptr), readback_bytes_(0u), trace_(trace), context_number_(trace.number_context()),
       call_began_(0u), busy_(0u), calls_(0u), draws_{}, rebased_(0u), null_shaders_(0u), written_(0u)
 {
     AV_SCOPE("D3d9Device::D3d9Device");
@@ -75,17 +75,18 @@ D3d9Device::~D3d9Device()
         release_resource(*left);
         static_cast<void>(resources_.destroy(left));
     }
-    if (channel_.constructed()) {
+    const bool joined = channel_.constructed();
+    if (joined) {
         const Ring *const rings[] = {&vertex_ring_, &index16_ring_, &index32_ring_};
         for (const Ring *ring : rings)
             if (ring->id != 0u) static_cast<void>(d3d9proto::av_d3d9_Destroy9(wire(), ring->id));
         static_cast<void>(channel_.object().close9());
         static_cast<void>(channel_.object().flush());
         channel_.destroy();
-        session_.leave();
     }
     if (readback_ != nullptr) memory_.release(readback_);
-    if (follower_.constructed()) follower_.destroy();
+    if (present_order_.constructed()) present_order_.destroy();
+    if (joined) session_.leave();
     kernel_.destroy_context(context_);
 }
 
@@ -101,12 +102,13 @@ HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVIC
     if (FAILED(context)) return context;
     const HRESULT joined = session_.join(kmt_adapter);
     if (FAILED(joined)) return joined;
-    static_cast<void>(follower_.construct(kernel_.callbacks(), kernel_.runtime(), session_.transport()));
+    static_cast<void>(present_order_.construct(kernel_.callbacks(), kernel_.runtime(), context_, session_.transport(), lines_));
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), session_.next_id()));
     uint32_t hresult = 1u;
     if (!channel_.object().open9(hresult) || hresult != 0u) {
         lines_.write("the host made no Direct3D 9 device");
         channel_.destroy();
+        present_order_.destroy();
         session_.leave();
         return E_FAIL;
     }

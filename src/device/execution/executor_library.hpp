@@ -42,6 +42,11 @@ public:
      * domain, or when it allocated nothing. */
     [[nodiscard]] Status allocate_memory(uint64_t key, uint64_t size, uint32_t request, AvHostMemory &memory) const;
     void                 free_memory(uint64_t key) const;
+    /* `key` in this device's domain made to name the memory `from_key` names
+     * in `from_domain` (AvExecutorOps::alias_memory), described in `memory`:
+     * no_memory for any refusal. */
+    [[nodiscard]] Status alias_memory(uint64_t key, uint32_t from_domain, uint64_t from_key,
+                                      AvHostMemory &memory) const;
 
     /* An executor in this device's domain, made with `options` and sharing
      * `share`'s objects (null: none); null without a library or a domain,
@@ -99,9 +104,9 @@ public:
     void unmap_frame(const SurfacePoint &frame) const;
     /* A shared surface handed to a process outside QEMU, and the copies into
      * it with a sync_file for them: false, with nothing handed over, without
-     * a domain or for a surface the library does not know. Any thread. */
-    bool export_surface(uint64_t surface, AvExportedImage &image) const;
-    bool sync_surface(uint64_t surface, uint64_t &writes, int &fd) const;
+     * a domain or for a surface the library does not know. `flags` are AV_EXPORT_*. Any thread. */
+    bool export_surface(uint64_t surface, uint32_t flags, AvExportedImage &image) const;
+    bool sync_surface(uint64_t surface, uint32_t flags, uint64_t &writes, int &fd) const;
 
     /* Every sub-API this device knows: what a capset offers before the library
      * that answers the real mask has been asked. */

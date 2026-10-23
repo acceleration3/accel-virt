@@ -382,6 +382,12 @@ void free_memory(void *, std::uint32_t domain, std::uint64_t key)
     pthread_mutex_unlock(&memories_lock);
 }
 
+/* One domain's memory is not another's here: the echo library has one GPU. */
+std::uint32_t alias_memory(void *, std::uint32_t, std::uint64_t, std::uint32_t, std::uint64_t, AvHostMemory *)
+{
+    return 1u;
+}
+
 std::uint32_t import_blob(void *, AvExecutor *handle, std::uint64_t blob_id, std::uint64_t memory_key)
 {
     Executor *const executor = executor_of(handle);
@@ -493,7 +499,7 @@ void release_shared(void *, std::uint32_t, std::uint64_t object_id)
     pthread_mutex_unlock(&released_lock);
 }
 
-std::uint32_t export_surface(void *, std::uint32_t, std::uint64_t surface, AvExportedImage *image)
+std::uint32_t export_surface(void *, std::uint32_t, std::uint64_t surface, std::uint32_t, AvExportedImage *image)
 {
     constexpr std::uint32_t stride = surface_edge * 4u;
     constexpr std::size_t   bytes = std::size_t{stride} * surface_edge;
@@ -513,7 +519,7 @@ std::uint32_t export_surface(void *, std::uint32_t, std::uint64_t surface, AvExp
     return AV_EXECUTED;
 }
 
-std::uint32_t sync_surface(void *, std::uint32_t, std::uint64_t surface, std::uint64_t *writes, int *fd)
+std::uint32_t sync_surface(void *, std::uint32_t, std::uint64_t surface, std::uint32_t, std::uint64_t *writes, int *fd)
 {
     if (writes == nullptr || fd == nullptr || surface_released(surface)) return AV_UNKNOWN;
     *fd = eventfd(1u, EFD_CLOEXEC);
@@ -529,6 +535,7 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               close_domain,
                               allocate_memory,
                               free_memory,
+                              alias_memory,
                               create,
                               destroy,
                               execute,

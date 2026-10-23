@@ -33,15 +33,25 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
      * and hands whoever opens the resource: the key the host shares it under,
      * and the id the driver releases once every process has let go of it -
      * which is how long the host keeps the surface. */
-    d3d::KernelSurface surface = primary ? d3d::KernelSurface(resource.width, resource.height, resource.format,
-                                                              ScanoutTarget(create.pPrimaryDesc->VidPnSourceId,
-                                                                            mode->RefreshRate.Numerator,
-                                                                            mode->RefreshRate.Denominator))
-                                         : d3d::KernelSurface(resource.width, resource.height, resource.format);
+    const bool across = is_cross_adapter(create, resource);
+    d3d::KernelSurface surface =
+        primary ? d3d::KernelSurface(resource.width, resource.height, resource.format,
+                                     ScanoutTarget(create.pPrimaryDesc->VidPnSourceId, mode->RefreshRate.Numerator,
+                                                   mode->RefreshRate.Denominator))
+        : across ? d3d::KernelSurface(d3d::SharedWith::another_adapter, resource.width, resource.height, resource.format)
+                 : d3d::KernelSurface(resource.width, resource.height, resource.format);
     if (surface.make() != Status::ok) return E_INVALIDARG;
     D3DKMT_HANDLE allocation = 0u;
     const HRESULT made = allocations_.make(surface, runtime.handle, allocation);
     if (FAILED(made)) return made;
+    /* The pages the other adapter's device is lent too, when it opens this
+     * allocation: the host makes one memory of them. */
+    if (across && lender_.lend(allocation, surface.bytes(), resource.lent) != Status::ok) {
+        kernel_.deallocate(allocation, runtime.handle);
+        lines_.write("the device took no cross-adapter texture's pages");
+        return E_OUTOFMEMORY;
+    }
+    if (across && waits_.constructed()) waits_.object().shares();
     resource.shared_key = surface.key();
     resource.allocation = allocation;
     resource.allocation_owned = 1u;
@@ -165,12 +175,9 @@ HRESULT D3d11Device::present_to_kernel(ResourceRecord &source, ResourceRecord *d
     present.hContext = context_;
     present.PrivateDriverDataSize = named ? static_cast<UINT>(sizeof record) : 0u;
     present.pPrivateDriverData = named ? record : nullptr;
-    const HRESULT presented = dxgi_->pfnPresentCb(runtime_.handle, &present);
-    /* The buffer drawn next comes back from DWM through a wait the runtime
-     * queues on the context after this returns; what this device records
-     * from here on must not reach the host before it. */
-    if (SUCCEEDED(presented) && source.present_model == d3d::SwapChainBuffer::Model::flip && gate_.constructed())
-        session_.transport().hold(gate_.object());
+    const HRESULT presented = present_order_.object().submitted(dxgi_->pfnPresentCb(runtime_.handle, &present),
+        source.present_model != d3d::SwapChainBuffer::Model::blt
+            ? d3d::PresentOrder::Reuse::after_context : d3d::PresentOrder::Reuse::immediate);
     /* The runtime turns a refused present into a removed device without
      * saying why; the answer is only ever seen here. */
     if (FAILED(presented) && present_refused_.first()) {
@@ -204,7 +211,7 @@ void D3d11Device::log_present(const char *what, uint32_t value, const ResourceRe
 HRESULT D3d11Device::follow_host()
 {
     AV_SCOPE("D3d11Device::follow_host");
-    const HRESULT followed = follower_.constructed() ? follower_.object().follow(context_) : E_FAIL;
+    const HRESULT followed = present_order_.constructed() ? present_order_.object().follow() : E_FAIL;
     if (SUCCEEDED(followed) || !follow_refused_.first()) return followed;
     LogLine(lines_)
         .text("the kernel refused the packet that waits for the host ")
@@ -277,7 +284,7 @@ HRESULT D3d11Device::stage_planes(const Plane *planes, UINT count, D3DKMT_HANDLE
         const HRESULT staged = stage_plane(source, plane.SubResourceIndex);
         if (FAILED(staged)) return staged;
         allocations[index] = source.allocation;
-        flipped = flipped || source.present_model == d3d::SwapChainBuffer::Model::flip;
+        flipped = flipped || source.present_model != d3d::SwapChainBuffer::Model::blt;
     }
     return S_OK;
 }
@@ -313,10 +320,9 @@ HRESULT D3d11Device::present_multiplane_overlay1(DXGI1_6_1_DDI_ARG_PRESENTMULTIP
     present.pDXGIContext = args->pDXGIContext;
     present.PresentPlaneCount = args->PresentPlaneCount;
     present.ppPresentPlanes = plane_list;
-    const HRESULT presented = dxgi_->pfnPresentMultiplaneOverlay1Cb(runtime_.handle, &present);
-    /* As present_to_kernel: what is drawn next waits for DWM to give the
-     * buffer back. */
-    if (SUCCEEDED(presented) && flipped && gate_.constructed()) session_.transport().hold(gate_.object());
+    const HRESULT presented = present_order_.object().submitted(
+        dxgi_->pfnPresentMultiplaneOverlay1Cb(runtime_.handle, &present),
+        flipped ? d3d::PresentOrder::Reuse::after_context : d3d::PresentOrder::Reuse::immediate);
     if (FAILED(presented) && present_refused_.first())
         LogLine(lines_).text("the kernel refused a multiplane present ").hex(static_cast<uint32_t>(presented), 8u).write();
     return presented;
@@ -343,8 +349,9 @@ HRESULT D3d11Device::present_multiplane_overlay(DXGI_DDI_ARG_PRESENTMULTIPLANEOV
     present.AllocationInfoCount = args->PresentPlaneCount;
     const HRESULT followed = follow_host();
     if (FAILED(followed)) return followed;
-    const HRESULT presented = dxgi_->pfnPresentMultiplaneOverlayCb(runtime_.handle, &present);
-    if (SUCCEEDED(presented) && flipped && gate_.constructed()) session_.transport().hold(gate_.object());
+    const HRESULT presented = present_order_.object().submitted(
+        dxgi_->pfnPresentMultiplaneOverlayCb(runtime_.handle, &present),
+        flipped ? d3d::PresentOrder::Reuse::after_context : d3d::PresentOrder::Reuse::immediate);
     if (FAILED(presented) && present_refused_.first())
         LogLine(lines_).text("the kernel refused a multiplane present ").hex(static_cast<uint32_t>(presented), 8u).write();
     return presented;
@@ -358,10 +365,12 @@ HRESULT D3d11Device::blt(DXGI_DDI_ARG_BLT *args)
     /* A stretch is copied at the destination's size from the source's corner:
      * DXGI asks for one only when a mode does not match its buffers. */
     const d3dproto::Box region = {0u, 0u, 0u, args->DstRight - args->DstLeft, args->DstBottom - args->DstTop, 1u};
-    return d3dproto::av_d3d_CopySubresourceRegion(wire(), to.stamp.id(), args->DstSubresource, args->DstLeft, args->DstTop, 0u,
-                                                   from.stamp.id(), args->SrcSubresource, 1u, region, 0u)
-               ? S_OK
-               : E_OUTOFMEMORY;
+    if (!d3dproto::av_d3d_CopySubresourceRegion(wire(), to.stamp.id(), args->DstSubresource, args->DstLeft, args->DstTop, 0u,
+                                                from.stamp.id(), args->SrcSubresource, 1u, region, 0u))
+        return E_OUTOFMEMORY;
+    /* A blt into a primary changes what the scanout shows, which it reads
+     * from the copy a present refreshes. */
+    return show_flip(to, args->DstSubresource);
 }
 
 HRESULT D3d11Device::blt1(DXGI_DDI_ARG_BLT1 *args)
@@ -370,10 +379,12 @@ HRESULT D3d11Device::blt1(DXGI_DDI_ARG_BLT1 *args)
     const ResourceRecord &to = record(args->hDstResource);
     const ResourceRecord &from = record(args->hSrcResource);
     const d3dproto::Box region = {args->SrcLeft, args->SrcTop, 0u, args->SrcRight, args->SrcBottom, 1u};
-    return d3dproto::av_d3d_CopySubresourceRegion(wire(), to.stamp.id(), args->DstSubresource, args->DstLeft, args->DstTop, 0u,
-                                                   from.stamp.id(), args->SrcSubresource, 1u, region, 0u)
-               ? S_OK
-               : E_OUTOFMEMORY;
+    if (!d3dproto::av_d3d_CopySubresourceRegion(wire(), to.stamp.id(), args->DstSubresource, args->DstLeft, args->DstTop, 0u,
+                                                from.stamp.id(), args->SrcSubresource, 1u, region, 0u))
+        return E_OUTOFMEMORY;
+    /* A blt into a primary changes what the scanout shows, which it reads
+     * from the copy a present refreshes. */
+    return show_flip(to, args->DstSubresource);
 }
 
 /* Each resource takes what the one after it was - its texture on the host,
@@ -426,6 +437,10 @@ HRESULT D3d11Device::set_display_mode(DXGI_DDI_ARG_SETDISPLAYMODE *args)
     ResourceRecord &resource = record(args->hResource);
     const HRESULT published = publish(resource, args->SubResourceIndex);
     if (FAILED(published)) return published;
+    /* The scanout reads the copy a present refreshes (show_flip): the mode
+     * set is the first thing shown of this buffer, so it is copied now rather
+     * than left black until the first flip. */
+    if (FAILED(show_flip(resource, args->SubResourceIndex)) || wire().flush() != Status::ok) return lost(__func__);
     D3DDDICB_SETDISPLAYMODE mode = {};
     mode.hPrimaryAllocation = resource.allocation;
     const HRESULT set = kernel_.set_display_mode(mode);
@@ -443,6 +458,67 @@ HRESULT D3d11Device::query_resource_residency(DXGI_DDI_ARG_QUERYRESOURCERESIDENC
 }  // namespace av::d3d11
 
 namespace av::d3d11 {
+
+bool D3d11Device::is_cross_adapter(const D3D11DDIARG_CREATERESOURCE &args, const ResourceRecord &resource) const
+{
+    AV_SCOPE("D3d11Device::is_cross_adapter");
+    return (args.MiscFlags & D3DWDDM1_3DDI_RESOURCE_MISC_CROSS_ADAPTER) != 0u &&
+           (args.MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u && args.pPrimaryDesc == nullptr &&
+           resource.dimension == D3D10DDIRESOURCE_TEXTURE2D && resource.mips == 1u && resource.layers == 1u &&
+           args.SampleDesc.Count <= 1u;
+}
+
+bool D3d11Device::open_cross_adapter(ResourceRecord &resource, const D3D10DDIARG_OPENRESOURCE &args)
+{
+    AV_SCOPE("D3d11Device::open_cross_adapter");
+    if (args.NumAllocations == 0u || args.pOpenAllocationInfo2 == nullptr) return false;
+    const D3DDDI_OPENALLOCATIONINFO2 &opened = args.pOpenAllocationInfo2[0];
+    AllocationDescriptor descriptor;
+    if (opened.pPrivateDriverData == nullptr ||
+        descriptor.decode(static_cast<const uint8_t *>(opened.pPrivateDriverData), opened.PrivateDriverDataSize) !=
+            Status::ok ||
+        descriptor.kind() != AllocationKind::cross_adapter || descriptor.layout().format() == 0u)
+        return false;
+    const SurfaceLayout &layout = descriptor.layout();
+    D3d9PresentFormat    presented(0u);
+    if (!presented.take_ddi(layout.format())) {
+        lines_.write("a cross-adapter texture of a format this driver does not know");
+        set_error(E_INVALIDARG);
+        return true;
+    }
+    resource.dimension = D3D10DDIRESOURCE_TEXTURE2D;
+    resource.width = layout.width();
+    resource.height = layout.height();
+    resource.depth = 1u;
+    resource.layers = 1u;
+    resource.mips = 1u;
+    resource.samples = 1u;
+    resource.format = presented.dxgi();
+    resource.bind = D3D10_DDI_BIND_SHADER_RESOURCE | D3D10_DDI_BIND_RENDER_TARGET;
+    resource.allocation_pitch = layout.pitch();
+    /* The very pages the creator's device lent on its adapter, lent here
+     * on this one: the device finds they are the same and joins them. */
+    if (lender_.lend(resource.allocation, descriptor.size(), resource.lent) != Status::ok) {
+        lines_.write("the device took no opened cross-adapter texture's pages");
+        set_error(E_OUTOFMEMORY);
+        return true;
+    }
+    if (waits_.constructed()) waits_.object().shares();
+    d3dproto::ResourceDesc desc = {};
+    desc.dimension = resource.dimension;
+    desc.width = resource.width;
+    desc.height = resource.height;
+    desc.depth_or_array = 1u;
+    desc.mip_levels = 1u;
+    desc.format = resource.format;
+    desc.sample_count = 1u;
+    desc.usage = D3D10_DDI_USAGE_DEFAULT;
+    desc.bind_flags = resource.bind;
+    if (!d3dproto::av_d3d_CreateResource(wire(), resource.stamp.id(), desc, 0u, resource.lent->handle(),
+                                         resource.allocation_pitch))
+        set_error(E_OUTOFMEMORY);
+    return true;
+}
 
 bool D3d11Device::open_guest_surface(ResourceRecord &resource, const D3D10DDIARG_OPENRESOURCE &args)
 {
@@ -478,7 +554,7 @@ bool D3d11Device::open_guest_surface(ResourceRecord &resource, const D3D10DDIARG
     desc.sample_count = 1u;
     desc.usage = D3D10_DDI_USAGE_DEFAULT;
     desc.bind_flags = resource.bind;
-    if (!d3dproto::av_d3d_CreateResource(wire(), resource.stamp.id(), desc, 0u)) return false;
+    if (!d3dproto::av_d3d_CreateResource(wire(), resource.stamp.id(), desc, 0u, 0u, 0u)) return false;
     const size_t bytes = static_cast<size_t>(resource.allocation_pitch) * resource.height;
     resource.shadow = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
     resource.shadow_watched = 0u;

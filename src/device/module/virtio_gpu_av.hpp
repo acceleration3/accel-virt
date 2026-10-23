@@ -29,6 +29,7 @@ namespace av {
 
 class StateWriter;
 
+class GuestRamLendings;
 class Host;
 class TextBuffer;
 struct VirtioGpuAvProbe;
@@ -36,6 +37,10 @@ struct VirtioGpuAvProbe;
 class VirtioGpuAv {
 public:
     explicit VirtioGpuAv(Host &host);
+    /* Main loop, before realize: the guest RAM lendings this device shares with
+     * every other device of its process (docs/host-memory.md). Without any it
+     * has lendings of its own. */
+    void share_lendings(GuestRamLendings &lendings);
     VirtioGpuAv(const VirtioGpuAv &) = delete;
     VirtioGpuAv &operator=(const VirtioGpuAv &) = delete;
 

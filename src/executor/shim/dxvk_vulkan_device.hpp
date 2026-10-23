@@ -50,6 +50,8 @@ public:
     /* DXVK's queue waits for `timeline` to reach `value` before running what
      * is submitted to it after. */
     [[nodiscard]] bool wait(const VulkanTimeline &timeline, uint64_t value);
+    /* Under the Direct3D 11 device's lock: signals after its recorded reads. */
+    [[nodiscard]] bool signal(const VulkanTimeline &timeline, uint64_t value);
     /* Everything DXVK has recorded is submitted and the GPU is done with it.
      * Under the Direct3D 11 device's lock: it flushes the immediate context. */
     void               idle();

@@ -850,6 +850,29 @@ WDDM 1.2 (with GPU VA, feature 017): a 1.2 claim below `DXGKDDI_WDDMv1_2` fails
   `ResetDisplayEngine` has no call site. The driver reports 3.2, declines query
   39 and leaves all twenty-one NULL.
 
+## 4r. Release by packet (cross-adapter sessions)
+
+`SubmitCommandVirtual` on an ordinary context also carries a release record
+(`AVR`, 40 bytes; the context is given room for it, and `FollowRecord` and
+`ReleaseRecord` decode as the prefix of the private data dxgkrnl hands over,
+whatever its size): the miniport publishes the batch it names on the
+process's av context when every earlier batch of the ring is published, and
+holds the packet's node entry until the host has run the batch
+(`Adapter::submit_release`, `AvContextTable::release_batch`). dxgkrnl runs
+the packet only after the waits queued on its context, and a packet submitted
+again after `DxgkDdiPreemptCommand` is idempotent. An order that cannot be
+whole fails the av context, and a held batch whose packet passes the park
+deadline does the same; the packet is not refused. Only Direct3D 11 devices
+release this way. `ResetFromTimeout`
+(through `PowerDown`) abandons every av context and drops what was held.
+
+The limit: a batch is published only after every one before it in the ring, so
+a wait on one queue for a fence that a later batch on another queue of the same
+transport signals cannot be satisfied (that later batch cannot be published
+past the earlier one, whose packet waits for the fence). The real fix is one
+av ring per kernel context (queue) - which is why Direct3D 12, with several
+queues on one session ring, is not released this way (docs/roadmap.md).
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the

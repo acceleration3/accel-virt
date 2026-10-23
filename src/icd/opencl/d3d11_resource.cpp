@@ -1,16 +1,10 @@
 #include "icd/opencl/d3d11_resource.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/resources/mip_extent.hpp"
+#include "proto/resources/subresource_layout.hpp"
 
 namespace av::clicd {
-
-namespace {
-
-/* A mip level's extent is the top level's shifted right once per level; past
- * the width of the number every level is one texel. */
-constexpr uint32_t widest_shift = 31u;
-
-}  // namespace
 
 D3d11Resource::D3d11Resource()
     : kind_(Kind::none), format_(0u), bytes_(0u), width_(0u), height_(0u), depth_(0u), mips_(0u), layers_(0u),
@@ -55,39 +49,33 @@ bool D3d11Resource::holds(uint32_t subresource) const
 {
     AV_SCOPE("D3d11Resource::holds");
     if (kind_ == Kind::buffer) return subresource == 0u;
-    if (kind_ == Kind::texture2d) return mips_ != 0u && subresource / mips_ < layers_;
-    return kind_ == Kind::texture3d && subresource < mips_;
+    if (kind_ == Kind::texture2d) return SubresourceLayout(mips_, layers_, 1u).holds(subresource);
+    return kind_ == Kind::texture3d && SubresourceLayout(mips_, 1u, 1u).holds(subresource);
 }
 
 uint32_t D3d11Resource::width_of(uint32_t subresource) const
 {
     AV_SCOPE("D3d11Resource::width_of");
-    return at_mip(width_, mip_of(subresource));
+    return static_cast<uint32_t>(extent_of(subresource).width());
 }
 
 uint32_t D3d11Resource::height_of(uint32_t subresource) const
 {
     AV_SCOPE("D3d11Resource::height_of");
-    return at_mip(height_, mip_of(subresource));
+    return extent_of(subresource).height();
 }
 
 uint32_t D3d11Resource::depth_of(uint32_t subresource) const
 {
     AV_SCOPE("D3d11Resource::depth_of");
-    return kind_ == Kind::texture3d ? at_mip(depth_, mip_of(subresource)) : 1u;
+    return extent_of(subresource).depth();
 }
 
-uint32_t D3d11Resource::mip_of(uint32_t subresource) const
+MipExtent D3d11Resource::extent_of(uint32_t subresource) const
 {
-    AV_SCOPE("D3d11Resource::mip_of");
-    return mips_ != 0u ? subresource % mips_ : 0u;
-}
-
-uint32_t D3d11Resource::at_mip(uint32_t extent, uint32_t mip) const
-{
-    AV_SCOPE("D3d11Resource::at_mip");
-    const uint32_t shifted = mip > widest_shift ? 0u : extent >> mip;
-    return shifted != 0u ? shifted : 1u;
+    AV_SCOPE("D3d11Resource::extent_of");
+    return MipExtent(width_, height_, kind_ == Kind::texture3d ? depth_ : 1u,
+                     SubresourceLayout(mips_, layers_, 1u).mip_of(subresource));
 }
 
 }  // namespace av::clicd

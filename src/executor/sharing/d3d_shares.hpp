@@ -34,7 +34,9 @@ public:
     /* What a Direct3D session opening `id` gets: the flip copy a compositor
      * reads, else the Direct3D 11 view, else the resource. Null for an
      * unknown id. */
-    IUnknown *open_resource(uint32_t domain, uint64_t id);
+    IUnknown *open_resource(uint32_t domain, uint64_t id, bool &live_of_presented);
+    /* `id` is a buffer a present will show (D3dShareState::expect_shown). */
+    void      expect_shown(uint32_t domain, uint64_t id);
     /* The resource `id` was published as, its Direct3D 11 view (or the
      * resource), and its flip copy; null for none. */
     IUnknown *resource(uint32_t domain, uint64_t id);

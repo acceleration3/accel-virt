@@ -10,7 +10,7 @@ namespace av {
 SourceMemory::SourceMemory(uint32_t domain, uint64_t key, uint32_t memory_type, uint32_t caching,
                            const ExportedMemory &memory)
     : domain_(domain), key_(key), memory_type_(memory_type), caching_(caching), memory_(memory), attached_(true),
-      references_(1u)
+      references_(1u), owner_(nullptr)
 {
     AV_SCOPE("SourceMemory::SourceMemory");
 }
@@ -75,6 +75,18 @@ bool SourceMemory::share(OwnedFd &into) const
     return into.hold_copy(memory_.fd());
 }
 
+void SourceMemory::bind(HostMemorySource &owner)
+{
+    AV_SCOPE("SourceMemory::bind");
+    owner_ = &owner;
+}
+
+HostMemorySource *SourceMemory::owner() const
+{
+    AV_SCOPE("SourceMemory::owner");
+    return owner_;
+}
+
 void SourceMemory::detach()
 {
     AV_SCOPE("SourceMemory::detach");
@@ -84,14 +96,13 @@ void SourceMemory::detach()
 void SourceMemory::acquire()
 {
     AV_SCOPE("SourceMemory::acquire");
-    references_++;
+    __atomic_add_fetch(&references_, 1u, __ATOMIC_ACQ_REL);
 }
 
 bool SourceMemory::release()
 {
     AV_SCOPE("SourceMemory::release");
-    references_--;
-    return references_ == 0u;
+    return __atomic_sub_fetch(&references_, 1u, __ATOMIC_ACQ_REL) == 0u;
 }
 
 bool SourceMemory::attached() const
@@ -103,7 +114,7 @@ bool SourceMemory::attached() const
 uint32_t SourceMemory::references() const
 {
     AV_SCOPE("SourceMemory::references");
-    return references_;
+    return __atomic_load_n(&references_, __ATOMIC_ACQUIRE);
 }
 
 }  // namespace av

@@ -483,6 +483,7 @@ endif()
 # no generated tree - the D3D DDI is the WDK's shape, not a registry's - and
 # unlike them it imports no user32: nothing here touches a window.
 file(GLOB_RECURSE AVUMD_SOURCES CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/poll_budget.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../icd/d3d/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/kmt/*.cpp

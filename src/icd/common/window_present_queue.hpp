@@ -31,6 +31,7 @@
 #include "core/platform/block_source.hpp"
 #include "core/platform/thread_lock.hpp"
 #include "core/platform/thread_lock_hold.hpp"
+#include "core/support/bgra_rows.hpp"
 #include "core/support/growable_array.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
@@ -483,22 +484,21 @@ template <typename Source, typename Readiness>
 const uint8_t *WindowPresentQueue<Source, Readiness>::as_bgra(const Frame &frame)
 {
     AV_SCOPE("WindowPresentQueue::as_bgra");
-    const size_t pixels = size_t{frame.width()} * frame.height();
-    const size_t bytes = pixels * pixel_bytes;
+    size_t pixels = 0u;
+    size_t bytes = 0u;
+    if (__builtin_mul_overflow(size_t{frame.width()}, size_t{frame.height()}, &pixels) ||
+        __builtin_mul_overflow(pixels, size_t{pixel_bytes}, &bytes)) return nullptr;
     if (bytes > scratch_bytes_) {
         if (scratch_ != nullptr) memory_.release(scratch_);
         scratch_ = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
         scratch_bytes_ = scratch_ != nullptr ? bytes : 0u;
     }
     if (scratch_ == nullptr) return nullptr;
-    const uint8_t *const rows = frame.pixels();
-    for (size_t at = 0u; at < pixels; at++) {
-        uint32_t pixel = 0u;
-        __builtin_memcpy(&pixel, rows + at * pixel_bytes, pixel_bytes);
-        pixel = (pixel & 0xFF00FF00u) | ((pixel >> 16u) & 0xFFu) | ((pixel & 0xFFu) << 16u);
-        __builtin_memcpy(scratch_ + at * pixel_bytes, &pixel, pixel_bytes);
-    }
-    return scratch_;
+    const uint64_t pitch = uint64_t{frame.width()} * pixel_bytes;
+    const BgraRows from(frame.pixels(), bytes, pitch);
+    BgraRows to(scratch_, scratch_bytes_, pitch);
+    return to.copy_from(from, frame.width(), frame.height(), BgraRows::Channels::red_blue_swapped) == Status::ok
+               ? scratch_ : nullptr;
 }
 
 template <typename Source, typename Readiness>

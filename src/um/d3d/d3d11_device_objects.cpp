@@ -7,6 +7,7 @@
 #include "core/log/keyed_log.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
 #include "icd/d3d/kernel_surface.hpp"
+#include "guest/transport/host_allocation.hpp"
 #include "icd/d3d/passthrough_geometry_shader.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/d3d/resource_misc.hpp"
@@ -112,6 +113,13 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
                       ((args->MiscFlags & D3D10_DDI_RESOURCE_AUTO_GEN_MIP_MAP) != 0u ? api_generate_mips : 0u) |
                       (cube ? api_texture_cube : 0u);
     desc.structure_stride = args->ByteStride;
+    /* Exactly the buffers a present refreshes a copy of (show_flip). */
+    const d3d::SwapChainBuffer::Model buffer_model =
+        d3d::SwapChainBuffer(args->pPrimaryDesc != nullptr, args->MiscFlags).model();
+    if (resource.dimension == D3D10DDIRESOURCE_TEXTURE2D &&
+        (buffer_model == d3d::SwapChainBuffer::Model::scanout ||
+         (buffer_model == d3d::SwapChainBuffer::Model::flip && (args->BindFlags & D3D10_DDI_BIND_PRESENT) != 0u)))
+        desc.misc_flags |= ResourceMisc::presented_bit;
     /* Every resource the kernel will know - scanned out, presented or shared -
      * is made under a host key, so any session on the GPU can name it: DWM
      * opening an application's buffer, and the scanout showing a primary
@@ -126,15 +134,35 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
                          (args->BindFlags & D3D10_DDI_BIND_PRESENT) == 0u &&
                          resource.dimension == D3D10DDIRESOURCE_TEXTURE2D && resource.mips == 1u &&
                          resource.layers == 1u && args->SampleDesc.Count <= 1u;
-    const bool as_rows = interop && rows_.asked_by(GetCurrentThreadId());
-    if (interop) desc.misc_flags |= ResourceMisc::shared_bit | (as_rows ? ResourceMisc::rows_bit : 0u);
+    const bool across = is_cross_adapter(*args, resource);
+    if ((args->MiscFlags & D3DWDDM1_3DDI_RESOURCE_MISC_CROSS_ADAPTER) != 0u)
+        LogLine(lines_)
+            .text("a cross-adapter resource: ")
+            .number(resource.width)
+            .text("x")
+            .number(resource.height)
+            .text(" format ")
+            .number(resource.format)
+            .text(" misc ")
+            .hex(args->MiscFlags, 8u)
+            .text(" bind ")
+            .hex(args->BindFlags, 8u)
+            .text(across ? " lent as rows" : " not lent: not a single 2D texture")
+            .write();
+    const bool as_rows = interop && !across && rows_.asked_by(caller_.thread_id());
+    if (interop && !across) desc.misc_flags |= ResourceMisc::shared_bit | (as_rows ? ResourceMisc::rows_bit : 0u);
     /* Allocated first: the key is the identity the miniport mints over the
      * allocation, and the host resource is made under it. */
     if (kernel_visible) {
         const HRESULT allocated = allocate(resource, *args, runtime);
         if (FAILED(allocated)) set_error(allocated);
     }
-    if (!d3dproto::av_d3d_CreateResource(wire(), resource.stamp.id(), desc, resource.shared_key)) {
+    /* A cross-adapter texture is made over the pages lent beneath it, as rows
+     * of the allocation's pitch; any other, over memory of the host's own. */
+    const uint64_t lent_name = resource.lent != nullptr ? resource.lent->handle() : 0u;
+    const uint32_t lent_pitch = resource.lent != nullptr ? resource.allocation_pitch : 0u;
+    if (!d3dproto::av_d3d_CreateResource(wire(), resource.stamp.id(), desc, resource.shared_key, lent_name,
+                                         lent_pitch)) {
         set_error(E_OUTOFMEMORY);
         return;
     }
@@ -227,6 +255,7 @@ VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_H
     const uint64_t key = surface ? opened.key() : 0u;
     uint32_t found = 0u;
     d3dproto::ResourceDesc desc = {};
+    if (key == 0u && open_cross_adapter(resource, *args)) return;
     if (key == 0u && open_guest_surface(resource, *args)) return;
     /* The creator's stream is another queue on the host: a key it has just
      * shared can still be on its way there, so a miss is asked again. */
@@ -276,6 +305,9 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
     forget_guest_surface(resource);
     forget_maps(resource.stamp.id());
     destroy_object(resource.stamp.id());
+    /* Behind the destroy: the host's draws over the texture may be queued still. */
+    if (resource.lent != nullptr) lender_.retire(*resource.lent);
+    session_.reclaim_retired();
     if (resource.slice.bytes_ != 0u) leave_slice(resource);
     else if (resource.shadow != nullptr) shadows_.release(resource.shadow, resource.shadow_watched != 0u);
     /* Keyed or not: a presented, scanned-out or shared resource's allocation

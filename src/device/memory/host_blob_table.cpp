@@ -1,15 +1,18 @@
 #include "device/memory/host_blob_table.hpp"
+#include "core/support/sorted_search.hpp"
 
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "device/context/context_plane.hpp"
+#include "device/control/control_request.hpp"
 #include "device/host/host.hpp"
+#include "proto/wire/wire_reader.hpp"
 
 namespace av {
 
 HostBlobTable::HostBlobTable(Host &host)
-    : host_(host), contexts_(nullptr), space_(host), lent_(host), lock_(nullptr), blobs_(host), ids_(host, Pool::paged),
+    : host_(host), contexts_(nullptr), space_(host), own_lendings_(host), lendings_(&own_lendings_), lock_(nullptr), blobs_(host), ids_(host, Pool::paged),
       placed_(host, Pool::paged)
 {
     AV_SCOPE("HostBlobTable::HostBlobTable");
@@ -50,14 +53,7 @@ const HostBlob *HostBlobTable::blob_of(uint32_t id) const
 uint32_t HostBlobTable::placed_from(uint64_t offset) const
 {
     AV_SCOPE("HostBlobTable::placed_from");
-    uint32_t low = 0u;
-    uint32_t high = placed_.size();
-    while (low < high) {
-        const uint32_t middle = low + (high - low) / 2u;
-        if (placed_.at(middle).offset_ < offset) low = middle + 1u;
-        else high = middle;
-    }
-    return low;
+    return SortedSearch<Placed, &Placed::offset_>(placed_).at_or_after(offset);
 }
 
 /* Placements are apart from each other, so only the one before `offset` and
@@ -84,6 +80,9 @@ void HostBlobTable::drop(uint32_t id)
     HostBlob *blob = nullptr;
     if (ids_.take(id, blob)) {
         if (blob->mapped()) unplace(blob->offset());
+        /* The pages go back to the guest's RAM only when no adapter's blob
+         * is over them any more. */
+        if (blob->lending() != nullptr) lendings_->leave(host_, *blob->lending(), *contexts_, id);
         static_cast<void>(blobs_.destroy(blob));
     }
     host_.unlock_mutex(lock_);
@@ -126,7 +125,7 @@ Status HostBlobTable::create(uint32_t id, uint32_t context, HostMemoryRequest re
     host_.lock_mutex(lock_);
     ScopeExit unlock([this] { host_.unlock_mutex(lock_); });
     HostBlob *blob = nullptr;
-    if (blobs_.create(blob, host_, lent_, context, memory) != Status::ok) {
+    if (blobs_.create(blob, host_, context, memory) != Status::ok) {
         host_.close_descriptor(memory.fd);
         contexts_->free_memory(id);
         return Status::no_memory;
@@ -136,14 +135,31 @@ Status HostBlobTable::create(uint32_t id, uint32_t context, HostMemoryRequest re
     return Status::ok;
 }
 
+/* No memory is made: whether this blob makes it or joins a lending another
+ * adapter's device made depends on the pages, which come later. */
 Status HostBlobTable::create_over_guest(uint32_t id, uint32_t context, HostMemoryRequest request, uint64_t size)
 {
     AV_SCOPE("HostBlobTable::create_over_guest");
-    const Status created = create(id, context, request, size);
-    if (created != Status::ok) return created;
-    if (blob_of(id)->caching() == AV_MEMORY_WRITE_BACK) return Status::ok;
-    destroy(id);
-    return Status::not_supported;
+    host_.require_main_loop("HostBlobTable::create_over_guest");
+    if (lock_ == nullptr) return Status::invalid_state;
+    if (!HostBlobId(id).valid()) return Status::not_found;
+    if (blob_of(id) != nullptr) return Status::conflict;
+    if (!request.valid() || size == 0u || size % HostmemSpace::page_size != 0u) return Status::invalid_parameter;
+    host_.lock_mutex(lock_);
+    ScopeExit unlock([this] { host_.unlock_mutex(lock_); });
+    if (ids_.reserve(ids_.count() + 1u) != Status::ok) return Status::no_memory;
+    HostBlob *blob = nullptr;
+    if (blobs_.create(blob, host_, context, size, request) != Status::ok) return Status::no_memory;
+    uint32_t slot = 0u;
+    static_cast<void>(ids_.insert(id, blob, slot));
+    return Status::ok;
+}
+
+void HostBlobTable::share_lendings(GuestRamLendings &lendings)
+{
+    AV_SCOPE("HostBlobTable::share_lendings");
+    host_.require_main_loop("HostBlobTable::share_lendings");
+    lendings_ = &lendings;
 }
 
 Status HostBlobTable::adopt(uint32_t id, ControlRequest &request, size_t offset, uint32_t entries)
@@ -152,7 +168,65 @@ Status HostBlobTable::adopt(uint32_t id, ControlRequest &request, size_t offset,
     host_.require_main_loop("HostBlobTable::adopt");
     HostBlob *const blob = blob_of(id);
     if (blob == nullptr) return Status::not_found;
-    return blob->adopt(request, offset, entries);
+    if (blob->waiting()) {
+        const Status begun = begin_lending(id, *blob, request, offset);
+        if (begun != Status::ok) return begun;
+    }
+    GuestRamLending *const lending = blob->lending();
+    if (lending == nullptr) return Status::invalid_state;
+    if (blob->lender()) return lending->lay(host_, request, offset, entries);
+    uint32_t next = blob->entries_laid();
+    const Status verified = lending->verify(request, offset, entries, next);
+    if (verified == Status::ok) blob->laid(entries);
+    return verified;
+}
+
+/* The first piece's first entry names the pages' first address, which is all
+ * a join is judged by; the rest of the pieces are checked against what the
+ * lender laid as they come. A blob that joins has no memory of its own to
+ * make: the executor is told to name the lender's under this blob's key. */
+Status HostBlobTable::begin_lending(uint32_t id, HostBlob &blob, ControlRequest &request, size_t offset)
+{
+    AV_SCOPE("HostBlobTable::begin_lending");
+    uint8_t entry[GuestPageOverlay::entry_size] = {};
+    if (request.read(offset, entry, sizeof entry) != sizeof entry) return Status::invalid_parameter;
+    WireReader     reader(entry, sizeof entry);
+    const uint64_t first_address = reader.read_u64();
+    if (GuestRamLending *const joined = lendings_->join(first_address, blob.size(), *contexts_, id)) {
+        ContextPlane *holder = nullptr;
+        uint64_t      holder_key = 0u;
+        AvHostMemory  aliased = {-1, 0u, 0u};
+        bool          aliased_ok = false;
+        /* Any other holder's memory is the lending's, the lender's included
+         * while it lives; this blob is the lending's last holder in the list. */
+        for (uint32_t tried = 0u; tried < joined->holders() && !aliased_ok; tried++) {
+            if (!joined->holder_at(tried, holder, holder_key) || holder == contexts_) continue;
+            aliased_ok = contexts_->alias_memory(id, *holder, holder_key, aliased) == Status::ok;
+        }
+        if (!aliased_ok || aliased.size < blob.size() || aliased.caching != AV_MEMORY_WRITE_BACK) {
+            lendings_->leave(host_, *joined, *contexts_, id);
+            return aliased_ok ? Status::not_supported : Status::no_memory;
+        }
+        blob.lend(*joined, false, aliased);
+        return Status::ok;
+    }
+    AvHostMemory memory = {-1, 0u, 0u};
+    if (contexts_->allocate_memory(blob.context(), id, blob.size(), blob.request().encoded(), memory) != Status::ok)
+        return Status::no_memory;
+    const bool cached = memory.caching == AV_MEMORY_WRITE_BACK;
+    if (memory.fd < 0 || memory.size < blob.size() || !cached) {
+        if (memory.fd >= 0) host_.close_descriptor(memory.fd);
+        contexts_->free_memory(id);
+        return cached ? Status::no_memory : Status::not_supported;
+    }
+    memory.size = blob.size();
+    GuestRamLending *const lending = lendings_->lend(host_, blob.size(), memory.fd, *contexts_, id);
+    if (lending == nullptr) {
+        contexts_->free_memory(id);
+        return Status::no_memory;
+    }
+    blob.lend(*lending, true, memory);
+    return Status::ok;
 }
 
 /* Room to note the placement first: a blob the host placed must never be one
@@ -239,7 +313,9 @@ void HostBlobTable::report(StateWriter &writer) const
         writer.number("caching", blob->caching());
         writer.flag("mapped", blob->mapped());
         writer.number("offset", blob->offset());
-        writer.number("adopted", blob->adopted());
+        writer.flag("lent", blob->lending() != nullptr);
+        writer.flag("lender", blob->lender());
+        writer.flag("waiting", blob->waiting());
         writer.close();
     });
     writer.close();

@@ -337,36 +337,36 @@ TEST(d3d_external_export_device, copies_into_the_surface_are_counted_and_covered
     ExportRig rig;
     if (!rig.usable()) return;
     av::ExecutorRoot &root = rig.root();
-    CHECK(av_d3d_CreateResource(rig.wire(), 1u, texture(across, down, misc_shared), surface));
-    CHECK(av_d3d_CreateResource(rig.wire(), 2u, texture(across, down, 0u), 0u));
+    CHECK(av_d3d_CreateResource(rig.wire(), 1u, texture(across, down, misc_shared), surface, 0u, 0u));
+    CHECK(av_d3d_CreateResource(rig.wire(), 2u, texture(across, down, 0u), 0u, 0u, 0u));
 
     std::uint64_t writes = 99u;
     int           fence = -1;
-    CHECK(root.sync_surface(rig.domain(), surface, writes, fence));
+    CHECK(root.sync_surface(rig.domain(), surface, 0u, writes, fence));
     CHECK_EQ(writes, 0u);
     CHECK(fence >= 0);
     CHECK(signalled(fence, 5000));
     close(fence);
-    CHECK(!root.sync_surface(rig.domain(), surface + 1u, writes, fence));
+    CHECK(!root.sync_surface(rig.domain(), surface + 1u, 0u, writes, fence));
     CHECK_EQ(fence, -1);
     const std::uint32_t absent = rig.domain() + 1u;   /* a domain never opened */
-    CHECK(!root.sync_surface(absent, surface, writes, fence));
-    CHECK(!root.sync_surface(0u, surface, writes, fence));
+    CHECK(!root.sync_surface(absent, surface, 0u, writes, fence));
+    CHECK(!root.sync_surface(0u, surface, 0u, writes, fence));
 
     CHECK(av_d3d_CopyResource(rig.wire(), 1u, 2u));
     CHECK(av_d3d_CopyResource(rig.wire(), 2u, 1u));   /* into a texture nobody shares */
     const Box corner = {0u, 0u, 0u, 16u, 16u, 1u};
     CHECK(av_d3d_CopySubresourceRegion(rig.wire(), 1u, 0u, 8u, 8u, 0u, 2u, 0u, 1u, corner, 0u));
-    CHECK(root.sync_surface(rig.domain(), surface, writes, fence));
+    CHECK(root.sync_surface(rig.domain(), surface, 0u, writes, fence));
     CHECK_EQ(writes, 2u);
     CHECK(signalled(fence, 5000));
     close(fence);
 
     AvExportedImage image = {};
-    CHECK(!root.export_surface(rig.domain(), surface + 1u, image));
+    CHECK(!root.export_surface(rig.domain(), surface + 1u, 0u, image));
     CHECK_EQ(image.fd, -1);
-    CHECK(!root.export_surface(absent, surface, image));
-    CHECK(root.export_surface(rig.domain(), surface, image));
+    CHECK(!root.export_surface(absent, surface, 0u, image));
+    CHECK(root.export_surface(rig.domain(), surface, 0u, image));
     CHECK(image.fd >= 0);
     CHECK_EQ(image.slot, 0u);
     CHECK_EQ(image.width, across);
@@ -380,8 +380,8 @@ TEST(d3d_external_export_device, copies_into_the_surface_are_counted_and_covered
     close(image.fd);
     /* The guest let go of it: nothing is shared under it any more. */
     root.release_shared(rig.domain(), surface);
-    CHECK(!root.export_surface(rig.domain(), surface, image));
-    CHECK(!root.sync_surface(rig.domain(), surface, writes, fence));
+    CHECK(!root.export_surface(rig.domain(), surface, 0u, image));
+    CHECK(!root.sync_surface(rig.domain(), surface, 0u, writes, fence));
 }
 
 /* What the device reads of a shared surface when it has to have pixels: the
@@ -393,7 +393,7 @@ TEST(d3d_external_export_device, a_shared_surface_reads_back_as_the_session_drew
     ExportRig rig;
     if (!rig.usable()) return;
     av::ExecutorRoot &root = rig.root();
-    CHECK(av_d3d_CreateResource(rig.wire(), 1u, texture(across, down, misc_shared), surface));
+    CHECK(av_d3d_CreateResource(rig.wire(), 1u, texture(across, down, misc_shared), surface, 0u, 0u));
     rig.fill(1u, across, down);
     static std::uint8_t pixels[across * down * 4u];
     CHECK(root.read_image(rig.domain(), surface, pixels, across * 4u, across, down));
@@ -432,16 +432,16 @@ TEST(d3d_external_export_device, every_texel_reaches_an_egl_consumer_through_the
     for (const Size &size : sizes) {
         const std::uint32_t shared = id++, source = id++;
         const std::uint64_t key = surface + shared;
-        CHECK(av_d3d_CreateResource(rig.wire(), shared, texture(size.across, size.down, misc), key));
-        CHECK(av_d3d_CreateResource(rig.wire(), source, texture(size.across, size.down, 0u), 0u));
+        CHECK(av_d3d_CreateResource(rig.wire(), shared, texture(size.across, size.down, misc), key, 0u, 0u));
+        CHECK(av_d3d_CreateResource(rig.wire(), source, texture(size.across, size.down, 0u), 0u, 0u, 0u));
         rig.fill(source, size.across, size.down);
         CHECK(av_d3d_CopyResource(rig.wire(), shared, source));
         std::uint64_t writes = 0u;
         int           fence = -1;
-        CHECK(rig.root().sync_surface(rig.domain(), key, writes, fence));
+        CHECK(rig.root().sync_surface(rig.domain(), key, 0u, writes, fence));
         CHECK_EQ(writes, 1u);
         AvExportedImage image = {};
-        CHECK(rig.root().export_surface(rig.domain(), key, image));
+        CHECK(rig.root().export_surface(rig.domain(), key, 0u, image));
         std::fprintf(stderr, "exported %ux%u: modifier %016llx, stride %u, offset %u, %ld bytes\n", image.width,
                      image.height, static_cast<unsigned long long>(image.modifier), image.stride, image.offset,
                      static_cast<long>(lseek(image.fd, 0, SEEK_END)));
@@ -464,8 +464,8 @@ TEST(d3d_external_export_device, only_a_texture_asked_for_as_rows_is_opened_by_a
     constexpr std::uint32_t across = 614u, down = 289u;
     ExportRig rig;
     if (!rig.usable()) return;
-    CHECK(av_d3d_CreateResource(rig.wire(), 1u, texture(across, down, misc_shared_rows), surface));
-    CHECK(av_d3d_CreateResource(rig.wire(), 2u, texture(across, down, misc_shared), surface + 1u));
+    CHECK(av_d3d_CreateResource(rig.wire(), 1u, texture(across, down, misc_shared_rows), surface, 0u, 0u));
+    CHECK(av_d3d_CreateResource(rig.wire(), 2u, texture(across, down, misc_shared), surface + 1u, 0u, 0u));
     std::uint32_t handle_kind = 0u;
     int           fd = -1;
     CHECK(rig.backend().export_object(AV_SHARED_MEMORY, 1u, handle_kind, fd));
@@ -473,7 +473,7 @@ TEST(d3d_external_export_device, only_a_texture_asked_for_as_rows_is_opened_by_a
     CHECK(fd >= 0);
     close(fd);
     AvExportedImage image = {};
-    CHECK(rig.root().export_surface(rig.domain(), surface + 1u, image));
+    CHECK(rig.root().export_surface(rig.domain(), surface + 1u, 0u, image));
     close(image.fd);
     fd = -1;
     const bool handed = rig.backend().export_object(AV_SHARED_MEMORY, 2u, handle_kind, fd);
@@ -496,15 +496,15 @@ TEST(d3d_external_export_device, the_direct_export_and_a_linear_copy_are_timed_a
     ExportRig rig;
     if (!rig.usable()) return;
     av::ExecutorRoot &root = rig.root();
-    CHECK(av_d3d_CreateResource(rig.wire(), 1u, texture(across, down, misc_shared), surface));
-    CHECK(av_d3d_CreateResource(rig.wire(), 2u, texture(across, down, 0u), 0u));
+    CHECK(av_d3d_CreateResource(rig.wire(), 1u, texture(across, down, misc_shared), surface, 0u, 0u));
+    CHECK(av_d3d_CreateResource(rig.wire(), 2u, texture(across, down, 0u), 0u, 0u, 0u));
     timespec start = {};
     clock_gettime(CLOCK_MONOTONIC, &start);
     for (std::uint32_t frame = 0u; frame < frames; frame++) {
         CHECK(av_d3d_CopyResource(rig.wire(), 1u, 2u));
         std::uint64_t writes = 0u;
         int           fence = -1;
-        CHECK(root.sync_surface(rig.domain(), surface, writes, fence));
+        CHECK(root.sync_surface(rig.domain(), surface, 0u, writes, fence));
         CHECK_EQ(writes, std::uint64_t{frame} + 1u);
         CHECK(signalled(fence, 5000));
         close(fence);

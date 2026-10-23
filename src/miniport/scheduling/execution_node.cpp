@@ -62,13 +62,14 @@ void ExecutionNode::finish(const void *owner, uint64_t completed)
     }
 }
 
-uint32_t ExecutionNode::release_overdue(uint64_t now)
+uint32_t ExecutionNode::release_overdue(uint64_t now, void **owners, uint32_t room, uint32_t *named)
 {
     AV_SCOPE("ExecutionNode::release_overdue");
     platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::release_overdue");
     SpinLockGuard lock(lock_);
     InvariantScope<ExecutionNode> guard(platform_, *this, "release_overdue");
     uint32_t released = 0u;
+    uint32_t listed = 0u;
     for (uint32_t index = 0u; index < count_; index++) {
         const uint32_t slot = (head_ + index) % capacity;
         /* Added rather than subtracted: the DPC reads `now` before this, and a
@@ -76,7 +77,11 @@ uint32_t ExecutionNode::release_overdue(uint64_t now)
         if (awaited_[slot] == 0u || now < queued_at_[slot] + park_deadline) continue;
         awaited_[slot] = 0u;
         released++;
+        bool listed_already = false;
+        for (uint32_t earlier = 0u; earlier < listed; earlier++) listed_already = listed_already || owners[earlier] == owners_[slot];
+        if (owners != nullptr && listed < room && !listed_already) owners[listed++] = owners_[slot];
     }
+    if (named != nullptr) *named = listed;
     return released;
 }
 

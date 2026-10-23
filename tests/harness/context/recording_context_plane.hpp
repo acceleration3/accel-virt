@@ -26,6 +26,27 @@ public:
     Status        allocate_memory(std::uint32_t context, std::uint64_t key, std::uint64_t size,
                                   std::uint32_t request, AvHostMemory &memory) override;
     void          free_memory(std::uint64_t key) override;
+    /* An alias is made as the test said (alias_as): refused by default, and
+     * else described as an allocation of `size` bytes is. */
+    Status        alias_memory(std::uint64_t key, const ContextPlane &lender, std::uint64_t lender_key,
+                               AvHostMemory &memory) override
+    {
+        last_alias_ = AliasAsked{key, &lender, lender_key};
+        aliases_++;
+        if (!alias_) return Status::no_memory;
+        memory = alias_memory_;
+        return Status::ok;
+    }
+    std::uint32_t memory_domain() const override { return memory_domain_; }
+    void          alias_as(const AvHostMemory &memory) { alias_ = true; alias_memory_ = memory; }
+    void          set_memory_domain(std::uint32_t domain) { memory_domain_ = domain; }
+    struct AliasAsked {
+        std::uint64_t       key;
+        const ContextPlane *lender;
+        std::uint64_t       lender_key;
+    };
+    const AliasAsked &last_alias() const { return last_alias_; }
+    std::uint32_t     aliases() const { return aliases_; }
     Status        create(std::uint32_t) override { return Status::not_supported; }
     Status        destroy(std::uint32_t) override { return Status::not_found; }
     void          destroy_all() override {}
@@ -128,18 +149,20 @@ public:
      * ignored), and its syncs a fresh eventfd, already readable, with
      * `writes`. */
     bool exports_surfaces() const override { return exports_; }
-    bool export_surface(const std::uint8_t *gpu_uuid, std::uint64_t surface, AvExportedImage &image) override
+    bool export_surface(const std::uint8_t *gpu_uuid, std::uint64_t surface, std::uint32_t flags, AvExportedImage &image) override
     {
         export_gpu_ = gpu_uuid;
+        export_flags_ = flags;
         exports_asked_++;
         if (!exported(surface)) return false;
         image = exported_image_;
         image.fd = exported_fd_ ? fresh_memfd() : -1;
         return true;
     }
-    bool sync_surface(const std::uint8_t *gpu_uuid, std::uint64_t surface, std::uint64_t &writes, int &fd) override
+    bool sync_surface(const std::uint8_t *gpu_uuid, std::uint64_t surface, std::uint32_t flags, std::uint64_t &writes, int &fd) override
     {
         export_gpu_ = gpu_uuid;
+        export_flags_ = flags;
         syncs_asked_++;
         if (!exported(surface)) return false;
         writes = writes_;
@@ -161,6 +184,8 @@ public:
     std::uint32_t       exports_asked() const { return exports_asked_; }
     std::uint32_t       syncs_asked() const { return syncs_asked_; }
     const std::uint8_t *export_gpu() const { return export_gpu_; }
+    /* The flags of the last export or sync asked. */
+    std::uint32_t       export_flags() const { return export_flags_; }
     bool          snapshot_mapped() const { return snapshot_mapped_; }
     std::uint32_t unmaps() const { return unmaps_; }
     void report(StateWriter &) override {}
@@ -202,6 +227,7 @@ private:
     std::uint32_t   exports_asked_ = 0u;
     std::uint32_t   syncs_asked_ = 0u;
     const std::uint8_t *export_gpu_ = nullptr;
+    std::uint32_t       export_flags_ = 0u;
     SurfacePoint    frame_;
     AvFrameView snapshot_ = {};
     bool            snapshot_mapped_ = false;
@@ -210,6 +236,11 @@ private:
     std::uint64_t   freed_[capacity] = {};
     std::uint32_t   freed_count_ = 0u;
     std::uint32_t   refuse_memory_ = 0u;
+    bool            alias_ = false;
+    AvHostMemory    alias_memory_ = {-1, 0u, 0u};
+    AliasAsked      last_alias_ = {0u, nullptr, 0u};
+    std::uint32_t   aliases_ = 0u;
+    std::uint32_t   memory_domain_ = 1u;
     std::uint32_t   caching_ = AV_MEMORY_WRITE_BACK;
     bool            short_ = false;
     bool            long_ = false;

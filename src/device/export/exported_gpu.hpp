@@ -33,8 +33,9 @@ public:
     ExportAnswer greet(const ExportRequest &request) const;
     /* The answers to an export and a sync, with the dma-buf or the sync_file
      * that goes beside an ok one in `descriptor`, the caller's; -1 with any
-     * other. invalid_state where nothing is exported, not_found for a surface
-     * the executor does not export. */
+     * other. invalid_state where nothing is exported or the executor cannot make the
+     * twin asked for (wire status unavailable), not_found for a surface the
+     * executor does not export. */
     ExportAnswer export_surface(const ExportRequest &request, int &descriptor) const;
     ExportAnswer sync(const ExportRequest &request, int &descriptor) const;
     /* The answer to a head request: the head's planes composed now into one

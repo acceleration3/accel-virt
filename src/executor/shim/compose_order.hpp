@@ -4,9 +4,8 @@
  * device, which waits for each present's value before anything it runs
  * after: DWM's composition, the scanout's export.
  *
- * The wait takes DXVK's submission lock and nothing else: it orders the wait
- * among DXVK's submissions, and the Direct3D 11 device's lock would only hold
- * DWM's sessions off while it is made. */
+ * The caller holds the Direct3D 11 device's lock: inserting a wait flushes
+ * DXVK's immediate context as well as taking its queue submission lock. */
 #ifndef AV_COMPOSE_ORDER_HPP
 #define AV_COMPOSE_ORDER_HPP
 
@@ -34,7 +33,8 @@ public:
     uint64_t           next() const;
     /* The value the producer's latest present signalled; 0 before one. */
     uint64_t           value() const;
-    /* The producer signalled next(): DXVK's queue waits for it. */
+    /* The producer signalled next(): DXVK's queue waits for it. Called with
+     * the Direct3D 11 device's lock held. */
     [[nodiscard]] bool presented();
     /* What DXVK queued waiting on the timeline waited for, and the timeline
      * let go; values start again. */

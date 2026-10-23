@@ -23,7 +23,7 @@ HostChannel::HostChannel(BlockSource &memory, DriverLog &log, const ChannelShape
     : memory_(memory), lines_(log), lock_(lock), sub_api_(shape.sub_api_), ring_order_(shape.ring_order_),
       reply_bytes_(shape.reply_bytes_), staging_bytes_(shape.staging_bytes_), batch_bytes_(shape.batch_bytes_),
       arena_bytes_(shape.arena_bytes_), staging_(nullptr), batch_block_(nullptr), transport_(), locked_(), arena_(),
-      device_(nullptr), memories_(memory), handles_(memory, Pool::paged), retired_(memory, Pool::paged)
+      device_(nullptr), memories_(memory), handles_(memory, Pool::paged), retired_(memory, Pool::paged), fenced_(memory, Pool::paged)
 {
     AV_SCOPE("HostChannel::HostChannel");
 }
@@ -90,6 +90,7 @@ void HostChannel::close(bool lost)
     /* Retired or not, every allocation goes with the context: the host's work
      * over them goes with it too. */
     retired_.reclaim([](HostAllocation *) {});
+    fenced_.reclaim([](const Fenced &) {});
     close_memories(lost);
     device_ = nullptr;
     if (arena_.constructed()) {
@@ -218,6 +219,39 @@ void HostChannel::reclaim_retired()
             if (!retired_.take_last(next)) return;
         }
         static_cast<void>(close_memory(*next));
+    }
+}
+
+Status HostChannel::retire_memory_after(HostAllocation &allocation, uint64_t fence)
+{
+    AV_SCOPE("HostChannel::retire_memory_after");
+    const ThreadLockHold held(lock_);
+    return fenced_.add(Fenced{&allocation, fence});
+}
+
+bool HostChannel::take_oldest_retired(HostAllocation *&allocation, uint64_t &fence)
+{
+    AV_SCOPE("HostChannel::take_oldest_retired");
+    const ThreadLockHold held(lock_);
+    Fenced               oldest = {nullptr, 0u};
+    if (!fenced_.take_if([](const Fenced &) { return true; }, oldest)) return false;
+    allocation = oldest.allocation_;
+    fence = oldest.fence_;
+    return true;
+}
+
+/* Taken out one at a time under the lock and closed after it, as
+ * reclaim_retired does. */
+void HostChannel::reclaim_retired_through(uint64_t completed)
+{
+    AV_SCOPE("HostChannel::reclaim_retired_through");
+    for (;;) {
+        Fenced next = {nullptr, 0u};
+        {
+            const ThreadLockHold held(lock_);
+            if (!fenced_.take_if([completed](const Fenced &entry) { return entry.fence_ <= completed; }, next)) return;
+        }
+        static_cast<void>(close_memory(*next.allocation_));
     }
 }
 

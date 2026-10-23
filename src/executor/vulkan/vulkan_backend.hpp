@@ -331,6 +331,9 @@ private:
      * when the mask is empty: a shared descriptor carries no type of its own,
      * unlike a blob, whose guest asked for one. */
     uint32_t                           first_memory_type(uint32_t mask) const;
+    /* The type `memory` is imported as on the device being adopted onto: see
+     * the definition. */
+    uint32_t                           import_type(const SourceMemory &memory, int fd) const;
     /* The bound GPU's physical device on `instance`, or VK_NULL_HANDLE. */
     VkPhysicalDevice bound_device(VkInstance instance);
 

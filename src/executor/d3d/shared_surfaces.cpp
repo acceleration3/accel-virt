@@ -2,7 +2,7 @@
 
 #include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
-#include "executor/poll_budget.hpp"
+#include "core/platform/poll_budget.hpp"
 #include "executor/d3d/frame_stager.hpp"
 #include "executor/d3d/staged_frame.hpp"
 

@@ -27,15 +27,18 @@
 #include "icd/d3d/d3d9_state_shadow.hpp"
 #include "icd/d3d/d3d_device_channel.hpp"
 #include "icd/d3d/upload_sink.hpp"
+#include "proto/escape/next_point_record.hpp"
 #include "proto/generated/d3d9/d3d9_wire_types.h"
 #include "um/common/performance_clock.hpp"
-#include "um/d3d/batch_follower.hpp"
+#include "um/d3d/present_order.hpp"
 #include "um/d3d/d3d_call_trace.hpp"
 #include "um/d3d/d3d9_ddi.hpp"
 #include "um/d3d/kernel_device.hpp"
 #include "um/d3d/d3d9_records.hpp"
 #include "um/d3d/presented_allocations.hpp"
-#include "um/d3d/reentrant_call_lock.hpp"
+#include "icd/d3d/reentrant_call_lock.hpp"
+#include "um/common/srw_lock.hpp"
+#include "um/common/windows_calling_thread.hpp"
 
 #include <stdint.h>
 
@@ -225,6 +228,11 @@ private:
      * point named to the miniport for the blt; read back (publish) where the
      * host stages none or the miniport takes no point. */
     HRESULT publish_point(D3d9Resource &resource, uint32_t index);
+    /* Tells the miniport of `resource`'s point; the escape's status. */
+    Status  send_point(const D3d9Resource &resource, uint32_t point, NextPointRecord::Action action);
+    /* The present `resource`'s point was named for did not reach the kernel:
+     * the point is taken back, so the next present does not take it. */
+    void    withdraw_point(D3d9Resource &resource);
     HRESULT follow_host();
 
     d3d::D3dSession                     &session_;
@@ -235,9 +243,11 @@ private:
     icd::LossLatch                  loss_;
     const D3d9HostCaps                  &caps_;
     d3d::UmdAdapter                     &adapter_;
-    ReentrantCallLock                    lock_;
+    WindowsCallingThread                 caller_;
+    SrwLock                              call_mutex_;
+    d3d::ReentrantCallLock                lock_;
     ObjectStorage<d3d::D3dDeviceChannel> channel_;
-    ObjectStorage<d3d::BatchFollower>    follower_;
+    ObjectStorage<d3d::PresentOrder>     present_order_;
     ObjectPool<D3d9Resource>             resources_;
     ObjectPool<D3d9Query>                queries_;
     ObjectPool<d3d::D3d9StateBlock>      blocks_;
@@ -249,6 +259,7 @@ private:
      * points at it once made. */
     D3DDDI_DEVICECALLBACKS               callbacks_;
     d3d::KernelDevice                    kernel_;
+    PerformanceClock                     clock_;
     d3d::PresentedAllocations            allocations_;
     HANDLE                               context_;
     D3DDDIARG_VIEWPORTINFO               viewport_;
@@ -269,7 +280,6 @@ private:
     size_t                               readback_bytes_;
     d3d::D3dCallTrace                   &trace_;
     uint32_t                             context_number_;
-    PerformanceClock                     clock_;
     /* While tracing: when the call in progress began, and the time the
      * device's calls took since the last present, and how many. */
     uint64_t                             call_began_;

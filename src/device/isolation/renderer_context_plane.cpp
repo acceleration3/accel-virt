@@ -182,6 +182,20 @@ void RendererContextPlane::free_memory(uint64_t key)
         give_up();
 }
 
+/* The renderer's library is in a process of its own, and so is each device's:
+ * nothing there could be made the same memory as another's. */
+Status RendererContextPlane::alias_memory(uint64_t, const ContextPlane &, uint64_t, AvHostMemory &)
+{
+    AV_SCOPE("RendererContextPlane::alias_memory");
+    return Status::no_memory;
+}
+
+uint32_t RendererContextPlane::memory_domain() const
+{
+    AV_SCOPE("RendererContextPlane::memory_domain");
+    return 0u;
+}
+
 ObjectStorage<RemoteContext> *RendererContextPlane::slot_of(uint32_t id)
 {
     AV_SCOPE("RendererContextPlane::slot_of");
@@ -556,13 +570,13 @@ bool RendererContextPlane::exports_surfaces() const
     return false;
 }
 
-bool RendererContextPlane::export_surface(const uint8_t *, uint64_t, AvExportedImage &)
+bool RendererContextPlane::export_surface(const uint8_t *, uint64_t, uint32_t, AvExportedImage &)
 {
     AV_SCOPE("RendererContextPlane::export_surface");
     return false;
 }
 
-bool RendererContextPlane::sync_surface(const uint8_t *, uint64_t, uint64_t &, int &)
+bool RendererContextPlane::sync_surface(const uint8_t *, uint64_t, uint32_t, uint64_t &, int &)
 {
     AV_SCOPE("RendererContextPlane::sync_surface");
     return false;

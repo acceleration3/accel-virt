@@ -13,7 +13,7 @@ namespace av {
 static_assert(GuestMemoryTypes::no_type == HostMemoryRequest::memory_types);
 
 HostMemorySource::HostMemorySource(MemoryExporter &exporter, BlockSource &blocks)
-    : exporter_(exporter), memories_(blocks), lock_(), host_(), asked_(0u), mappable_(0u),
+    : exporter_(exporter), memories_(blocks), aliases_(blocks), lock_(), host_(), asked_(0u), mappable_(0u),
       visible_(0u), vulkan_()
 {
     AV_SCOPE("HostMemorySource::HostMemorySource");
@@ -22,6 +22,8 @@ HostMemorySource::HostMemorySource(MemoryExporter &exporter, BlockSource &blocks
 HostMemorySource::~HostMemorySource()
 {
     AV_SCOPE("HostMemorySource::~HostMemorySource");
+    /* Aliases were let go of when the library closed (release_aliases): the
+     * memory they held may be gone with the source that allocated it. */
     memories_.for_each([this](const SourceMemory &memory) { exporter_.free(memory.exported()); });
     memories_.destroy_all();
 }
@@ -126,7 +128,7 @@ Status HostMemorySource::allocate(uint32_t domain, uint64_t key, uint64_t size, 
     if (!request.valid() || size == 0u || size % page_bytes != 0u) return Status::invalid_parameter;
     const ThreadLockHold held(lock_);
     learn();
-    if (find(domain, key) != nullptr) return Status::conflict;
+    if (find(domain, key) != nullptr || aliased(domain, key) != nullptr) return Status::conflict;
     uint32_t       types[most_choices] = {};
     const uint32_t count = choices(request, types);
     if (count == 0u) return Status::invalid_parameter;
@@ -145,10 +147,57 @@ Status HostMemorySource::allocate(uint32_t domain, uint64_t key, uint64_t size, 
         exporter_.free(exported);
         return Status::no_memory;
     }
+    made->bind(*this);
     memory.fd = shared.take();
     memory.caching = caching;
     memory.size = exported.size();
     return Status::ok;
+}
+
+Status HostMemorySource::alias(uint32_t domain, uint64_t key, HostMemorySource &from, uint32_t from_domain,
+                               uint64_t from_key, AvHostMemory &memory)
+{
+    AV_SCOPE("HostMemorySource::alias");
+    /* From's reference first, outside this lock: it may be this source. */
+    SourceMemory *const lent = from.acquire(from_domain, from_key);
+    if (lent == nullptr) return Status::not_found;
+    Status status = Status::ok;
+    {
+        const ThreadLockHold held(lock_);
+        Alias *made = nullptr;
+        if (find(domain, key) != nullptr || aliased(domain, key) != nullptr) status = Status::conflict;
+        else if (aliases_.create(made, Alias{domain, key, lent}) != Status::ok) status = Status::no_memory;
+    }
+    if (status != Status::ok) {
+        lent->owner()->release(*lent);
+        return status;
+    }
+    memory = AvHostMemory{-1, lent->caching(), lent->size()};
+    return Status::ok;
+}
+
+SourceMemory *HostMemorySource::aliased(uint32_t domain, uint64_t key)
+{
+    AV_SCOPE("HostMemorySource::aliased");
+    const Alias *const alias =
+        aliases_.find_if([domain, key](const Alias &held) { return held.domain_ == domain && held.key_ == key; });
+    return alias != nullptr ? alias->memory_ : nullptr;
+}
+
+void HostMemorySource::release_aliases()
+{
+    AV_SCOPE("HostMemorySource::release_aliases");
+    for (;;) {
+        SourceMemory *lent = nullptr;
+        {
+            const ThreadLockHold held(lock_);
+            Alias *const alias = aliases_.find_if([](const Alias &) { return true; });
+            if (alias == nullptr) return;
+            lent = alias->memory_;
+            static_cast<void>(aliases_.destroy(alias));
+        }
+        lent->owner()->release(*lent);
+    }
 }
 
 SourceMemory *HostMemorySource::find(uint32_t domain, uint64_t key)
@@ -168,23 +217,48 @@ void HostMemorySource::let_go(SourceMemory &memory)
 void HostMemorySource::free(uint32_t domain, uint64_t key)
 {
     AV_SCOPE("HostMemorySource::free");
-    const ThreadLockHold held(lock_);
-    SourceMemory *const memory = find(domain, key);
-    if (memory == nullptr) return;
-    memory->detach();
-    let_go(*memory);
+    SourceMemory *lent = nullptr;
+    {
+        const ThreadLockHold held(lock_);
+        SourceMemory *const memory = find(domain, key);
+        if (memory != nullptr) {
+            memory->detach();
+            let_go(*memory);
+            return;
+        }
+        Alias *const alias =
+            aliases_.find_if([domain, key](const Alias &held_alias) { return held_alias.domain_ == domain && held_alias.key_ == key; });
+        if (alias == nullptr) return;
+        lent = alias->memory_;
+        static_cast<void>(aliases_.destroy(alias));
+    }
+    lent->owner()->release(*lent);
 }
 
 void HostMemorySource::free_domain(uint32_t domain)
 {
     AV_SCOPE("HostMemorySource::free_domain");
-    const ThreadLockHold held(lock_);
-    for (SourceMemory *memory = nullptr;
-         (memory = memories_.find_if([domain](const SourceMemory &held) {
-              return held.attached() && held.domain() == domain;
-          })) != nullptr;) {
-        memory->detach();
-        let_go(*memory);
+    {
+        const ThreadLockHold held(lock_);
+        for (SourceMemory *memory = nullptr;
+             (memory = memories_.find_if([domain](const SourceMemory &held_memory) {
+                  return held_memory.attached() && held_memory.domain() == domain;
+              })) != nullptr;) {
+            memory->detach();
+            let_go(*memory);
+        }
+    }
+    for (;;) {
+        SourceMemory *lent = nullptr;
+        {
+            const ThreadLockHold held(lock_);
+            Alias *const alias =
+                aliases_.find_if([domain](const Alias &held_alias) { return held_alias.domain_ == domain; });
+            if (alias == nullptr) return;
+            lent = alias->memory_;
+            static_cast<void>(aliases_.destroy(alias));
+        }
+        lent->owner()->release(*lent);
     }
 }
 
@@ -192,7 +266,15 @@ SourceMemory *HostMemorySource::acquire(uint32_t domain, uint64_t key)
 {
     AV_SCOPE("HostMemorySource::acquire");
     const ThreadLockHold held(lock_);
-    SourceMemory *const memory = find(domain, key);
+    SourceMemory *memory = find(domain, key);
+    if (memory != nullptr) {
+        memory->acquire();
+        return memory;
+    }
+    /* The alias is still there under this lock, and holds a reference, so the
+     * memory lasts while another is taken: the count is atomic, and no lock of
+     * the allocating source's is wanted. */
+    memory = aliased(domain, key);
     if (memory != nullptr) memory->acquire();
     return memory;
 }
@@ -200,6 +282,11 @@ SourceMemory *HostMemorySource::acquire(uint32_t domain, uint64_t key)
 void HostMemorySource::release(SourceMemory &memory)
 {
     AV_SCOPE("HostMemorySource::release");
+    HostMemorySource *const owner = memory.owner();
+    if (owner != nullptr && owner != this) {
+        owner->release(memory);
+        return;
+    }
     const ThreadLockHold held(lock_);
     let_go(memory);
 }
@@ -221,6 +308,7 @@ void HostMemorySource::report(StateWriter &writer) const
     writer.hex("mappable_types", mappable_);
     writer.hex("visible_types", visible_);
     writer.number("live", memories_.live());
+    writer.number("aliases", aliases_.live());
     uint64_t bytes = 0u;
     memories_.for_each([&bytes](const SourceMemory &memory) { bytes += memory.size(); });
     writer.number("bytes", bytes);

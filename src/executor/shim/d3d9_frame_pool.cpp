@@ -97,7 +97,7 @@ bool D3d9FramePool::Frame::copy_to_memory()
 {
     AV_SCOPE("D3d9FramePool::Frame::copy_to_memory");
     if (FAILED(device_->GetRenderTargetData(held_, surface_))) return false;
-    copied_->Issue(D3DISSUE_END);
+    if (FAILED(copied_->Issue(D3DISSUE_END))) return false;
     staged_ = true;
     return true;
 }

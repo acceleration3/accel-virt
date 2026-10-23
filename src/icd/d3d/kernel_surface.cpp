@@ -5,6 +5,7 @@
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "icd/common/shared_bytes.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/cross_adapter_layout.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 #include "proto/resources/surface_layout.hpp"
 
@@ -19,7 +20,7 @@ constexpr uint32_t unsized_element_bytes = 4u;
 
 KernelSurface::KernelSurface()
     : allocation_(), resource_{}, width_(0u), rows_(0u), format_(0u), pitch_(0u), bytes_(0u), scanout_(),
-      primary_(false)
+      primary_(false), cross_adapter_(false)
 {
     AV_SCOPE("KernelSurface::KernelSurface");
 }
@@ -38,7 +39,7 @@ KernelSurface::KernelSurface(uint32_t width, uint32_t height, uint32_t format)
  * the aperture out loading a level. */
 KernelSurface::KernelSurface(uint32_t width, uint32_t height, uint32_t format, const ScanoutTarget &scanout)
     : allocation_(), resource_{}, width_(width), rows_(0u), format_(format), pitch_(0u), bytes_(0u),
-      scanout_(scanout), primary_(true)
+      scanout_(scanout), primary_(true), cross_adapter_(false)
 {
     AV_SCOPE("KernelSurface::KernelSurface");
     const DxgiFormatLayout layout(format);
@@ -53,13 +54,31 @@ KernelSurface::KernelSurface(uint32_t width, uint32_t height, uint32_t format, c
     bytes_ = SharedBytes(uint64_t{pitch_} * rows_).pages();
 }
 
+/* The layout is the kernel's to hold the miniport to: the same one the miniport
+ * describes the allocation by when the runtime asks it to for the opener's
+ * adapter, so both adapters' allocations have the same pages. */
+KernelSurface::KernelSurface(SharedWith, uint32_t width, uint32_t height, uint32_t format)
+    : allocation_(), resource_{}, width_(width), rows_(height), format_(format), pitch_(0u), bytes_(0u), scanout_(),
+      primary_(false), cross_adapter_(true)
+{
+    AV_SCOPE("KernelSurface::KernelSurface");
+    const DxgiFormatLayout layout(format);
+    const CrossAdapterLayout across(width, height, kernel_format(), layout.element_bytes());
+    if (layout.element_bytes() == 0u || layout.element_width() != 1u || layout.element_height() != 1u ||
+        !across.valid())
+        return;
+    pitch_ = across.pitch();
+    bytes_ = across.bytes();
+}
+
 /* A surface of no texels is refused first: its descriptor would be one the
  * miniport refuses. */
 Status KernelSurface::make()
 {
     AV_SCOPE("KernelSurface::make");
     if (bytes_ == 0u) return Status::invalid_parameter;
-    const AllocationKind kind = primary_ ? AllocationKind::shared_primary : AllocationKind::surface;
+    const AllocationKind kind = primary_ ? AllocationKind::shared_primary
+                                : cross_adapter_ ? AllocationKind::cross_adapter : AllocationKind::surface;
     allocation_ = SharedAllocationData(
         AllocationDescriptor(kind, true, SurfaceLayout(width_, rows_, kernel_format(), pitch_), bytes_, scanout_),
         SharedObjectKind(SharedObjectKind::memory), bytes_);

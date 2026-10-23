@@ -40,6 +40,8 @@ public:
     /* Everything the runtime submits after this waits for `timeline` to reach
      * `value`. */
     [[nodiscard]] bool wait(const VulkanTimeline &timeline, uint64_t value);
+    /* Signals after everything the runtime has recorded. */
+    [[nodiscard]] bool signal(const VulkanTimeline &timeline, uint64_t value);
     /* Everything submitted to the queue is done. */
     void               idle();
 

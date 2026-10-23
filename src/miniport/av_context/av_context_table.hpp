@@ -22,6 +22,7 @@
 #include "miniport/av_context/chunk_ids.hpp"
 #include "miniport/av_context/context_chunk.hpp"
 #include "miniport/av_context/context_memory.hpp"
+#include "miniport/av_context/release_queue.hpp"
 #include "miniport/av_context/ring_submitter.hpp"
 #include "miniport/av_context/av_context_binding.hpp"
 #include "miniport/av_context/submission_reader.hpp"
@@ -48,6 +49,7 @@ class GuestPageList;
 class HostWindow;
 class HostWindowRecord;
 class RegisterWindow;
+class SubmissionDescriptor;
 class AvContextRecord;
 class VirtioGpuDevice;
 struct AvContextTableProbe;
@@ -113,6 +115,16 @@ public:
      * whose fence page failed it, or bytes that are not a descriptor of its
      * ring; the binding's refusal otherwise. */
     [[nodiscard]] Status submit(void *context, const uint8_t *private_data, size_t size, uint64_t &awaited);
+    /* DISPATCH. A batch its process wrote into the ring and releases by
+     * packet (ReleaseRecord): published, with everything held behind it that
+     * now follows, when every batch before it in the ring is; held until
+     * then. `awaited` is the host fence the packet waits for. Once a context
+     * releases this way its kernel and hardware-queue submissions take the
+     * same turn (ReleaseQueue). invalid_parameter for a context not live, one
+     * the host faulted, a batch longer than its ring or one overlapping what
+     * was released, or when too many are held; the binding's refusal
+     * otherwise. */
+    [[nodiscard]] Status release_batch(void *context, const SubmissionDescriptor &batch, uint64_t &awaited);
     /* DISPATCH, from the DPC: reads every live context's fence page and
      * finishes on `node` what each one's host completed. A context the host
      * faulted, or whose page no device could write, has everything it queued
@@ -120,6 +132,11 @@ public:
      * fence with no reply behind it (FR-006). dxgkrnl is not told of the
      * fault: DMA_FAULTED bugchecks a GPU MMU adapter (docs/kb/05-scheduling.md). */
     void                 serve(ExecutionNode &node, HwQueueSubmissions &queues);
+    /* DISPATCH. A packet owned by `context` passed its deadline while batches
+     * of it were still held for a predecessor that never came: the context is
+     * failed, so its process learns what its fences cannot say. False when
+     * nothing was held. */
+    bool                 fault_if_held(void *context);
     /* DISPATCH. Whether the device has already finished `fence` on `context`
      * - so its interrupt may have come before the packet was queued - and
      * true for a context this table cannot answer for. */
@@ -206,6 +223,10 @@ private:
     [[nodiscard]] Status set_up(uint32_t slot, const AvContextRecord &record, VirtioGpuDevice &device,
                                 RegisterWindow &doorbells, const CapsetInfo &capset);
     void                 release(uint32_t slot);
+    /* `batch` in its turn on slot `slot`, under the lock (ReleaseQueue). */
+    [[nodiscard]] Status in_turn(uint32_t slot, const SubmissionDescriptor &batch);
+    /* The slot's order can never be whole: its context is failed. ok. */
+    [[nodiscard]] Status lose(uint32_t slot);
     /* Releases every chunk the slot holds, on `device` when it answers.
      * `host_let_go` says a device that is not asked holds nothing of the
      * context any more, so its window pages are free again. */
@@ -233,6 +254,7 @@ private:
     SpinLock                         lock_;
     SubmissionReader                 reader_;
     ObjectStorage<AvContextBinding> bindings_[max_contexts];
+    ReleaseQueue                     releases_[max_contexts];
     void                            *contexts_[max_contexts];
     /* The allocation each slot's context is named by. */
     const Allocation                *names_[max_contexts];

@@ -212,8 +212,11 @@ params = ["u32 count", "u32 resources[count] max 16"]
 name = "CreateResource"
 id = 0x0100
 doc = """A resource. shared_key is non-zero for one another session may open (its KMD shared-object id): the
-host keeps it under that key until the last session holding it destroys it."""
-params = ["u32 resource", "ResourceDesc desc", "u64 shared_key"]
+host keeps it under that key until the last session holding it destroys it. memory is 0 for a resource the
+host makes memory for itself, or the guest's name for host memory imported beforehand (a lent allocation,
+docs/host-memory.md) the texture is made over as rows of row_pitch bytes - a cross-adapter texture, which
+the other adapter's device opens over the very same memory."""
+params = ["u32 resource", "ResourceDesc desc", "u64 shared_key", "u64 memory", "u32 row_pitch"]
 
 [[command]]
 name = "OpenResource"

@@ -27,11 +27,13 @@
 #include "core/support/object_pool.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/shim/exportable_image.hpp"
+#include "executor/shim/system_memory_twin.hpp"
 #include "executor/shim/host_heap.hpp"
 
 #include <stdint.h>
 #include <vulkan/vulkan.h>
 
+struct ID3D11DeviceContext4;
 struct ID3D11Texture2D;
 struct D3D11_TEXTURE2D_DESC1;
 
@@ -91,6 +93,17 @@ public:
      * starts and its pitch. False for a texture not made here, one no
      * modifier lays out, or one in a format no DRM format names. */
     [[nodiscard]] bool export_image(ID3D11Texture2D *texture, AvExportedImage &image);
+    /* A copy of `texture` - any texture of DXVK's, made here or not - in
+     * linear system memory for a consumer on another GPU (SystemMemoryTwin),
+     * made on the first ask and described as export_image describes an
+     * image, its dma-buf the caller's. False for a texture no twin can be
+     * made of (said once in the log), with AV_EXPORT_UNAVAILABLE in
+     * `image.reserved`. */
+    [[nodiscard]] bool export_twin(ID3D11Texture2D *texture, AvExportedImage &image);
+    /* `texture`, as it is once `writes` copies have run into it, copied into
+     * its twin on the GPU, queued on `context` (not again for the same
+     * count); false where no twin was exported. */
+    [[nodiscard]] bool refresh_twin(ID3D11DeviceContext4 *context, ID3D11Texture2D *texture, uint64_t writes);
     /* The images whose textures have gone, freed once DXVK's GPU work is. */
     void             collect();
     /* Every image freed, its texture gone or not: the device is closing. */
@@ -105,6 +118,11 @@ private:
     /* The image `texture` was made over, when it was made here; null for any
      * other texture. */
     ExportableImage *image_of(ID3D11Texture2D *texture);
+    /* The twin `texture` holds; null for a texture with none. */
+    SystemMemoryTwin *twin_of(ID3D11Texture2D *texture);
+    /* A twin of `texture`, made and held by it; null, said once in the log,
+     * when it cannot be made. */
+    SystemMemoryTwin *make_twin(ID3D11Texture2D *texture);
     /* A record for an image about to be made; null, said in the log, when
      * none can be had. */
     ExportableImage *record();
@@ -122,6 +140,9 @@ private:
     DxvkVulkanDevice           &vulkan_;
     HostHeap                    heap_;
     ObjectPool<ExportableImage> images_;
+    ObjectPool<SystemMemoryTwin> twins_;
+    /* A twin has been refused, and said so: once is enough. */
+    bool                        twin_refused_;
     /* Images let go of since the last collect: written by any thread. */
     uint32_t                    retired_;
     DriverLog                  &lines_;

@@ -42,8 +42,13 @@ extern "C" {
  * the device to hand on in parts (answer_part), rather than one it drops. 23
  * made an open name what it is made into, and a close the handle the open
  * answered, so one executor may hold one shared object more than once - a
- * Vulkan context's memory imported into each of its devices. */
-#define AV_EXECUTOR_ABI_VERSION 23u
+ * Vulkan context's memory imported into each of its devices. 24 gave
+ * export_surface and sync_surface flags, by which a consumer on another GPU
+ * is handed a copy of the surface in system memory. 25 gave the library
+ * alias_memory, by which the memory one adapter's device lent names the same
+ * memory in another's, so Direct3D resources two adapters share are one
+ * memory on the host. */
+#define AV_EXECUTOR_ABI_VERSION 25u
 #define AV_EXECUTOR_OPS_SYMBOL "av_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -159,6 +164,18 @@ typedef struct AvScanoutPlane {
  * the dma-buf (export_surface). */
 #define AV_EXPORT_MODIFIER_IMPLICIT 0x00FFFFFFFFFFFFFFull
 
+/* export_surface's and sync_surface's flag: the process outside QEMU imports
+ * on another GPU than the surface's, so it is handed (and synced on) a linear
+ * copy of the surface in system memory that GPU can open, and not the
+ * surface's own memory. */
+#define AV_EXPORT_OTHER_GPU 0x1u
+/* export_surface's answer for a surface the executor shares but cannot make
+ * the twin of AV_EXPORT_OTHER_GPU asks for - no host-visible system memory,
+ * no linear image of its format: not AV_UNKNOWN, which a consumer may retry
+ * while the guest's batch making the surface runs. The library hands it on
+ * in `reserved` of the image it zeroes. */
+#define AV_EXPORT_UNAVAILABLE 2u
+
 /* A staged frame mapped for reading (map_frame): `height` rows of `width`
  * four-byte pixels, `row_pitch` bytes apart, in the frame's own byte order.
  * Valid until unmap_frame. */
@@ -196,6 +213,15 @@ typedef struct AvExecutorOps {
     /* The device lets go of `key`: a no-op for one it never allocated. Main
      * loop. */
     void (*free_memory)(void *opaque, uint32_t domain, uint64_t key);
+    /* Memory the device lent to a second adapter's device: `key` in `domain`
+     * is made to name the very memory `from_key` names in `from_domain`, on
+     * that domain's GPU - not a copy - so an import under `key` is an import
+     * of it, on `domain`'s GPU, by the dma-buf; 0 with *memory describing it
+     * (fd -1, its size and how it is mapped), or nonzero for a key the
+     * library has not got or a domain it cannot reach. The memory is held for
+     * `key` until free_memory, whatever becomes of `from_key`. Main loop. */
+    uint32_t (*alias_memory)(void *opaque, uint32_t domain, uint64_t key, uint32_t from_domain, uint64_t from_key,
+                             AvHostMemory *memory);
 
     /* An executor for one context of `sub_api` in the domain `options` names,
      * made with `options` and sharing the objects of `share` (NULL: none), an
@@ -318,13 +344,22 @@ typedef struct AvExecutorOps {
      * (docs/external-export.md): AV_EXECUTED with `image` filled, its fd the
      * caller's to close and `slot` 0, or AV_UNKNOWN for a surface nothing
      * shares, or one whose memory no other API can open. `modifier` is 0,
-     * DRM_FORMAT_MOD_LINEAR (docs/external-export.md §6). Any thread. */
-    uint32_t (*export_surface)(void *opaque, uint32_t domain, uint64_t surface, AvExportedImage *image);
+     * DRM_FORMAT_MOD_LINEAR (docs/external-export.md §6). With
+     * AV_EXPORT_OTHER_GPU in `flags` the image is the surface's twin in system
+     * memory, always linear, which the next sync_surface with the flag
+     * refreshes, or AV_EXPORT_UNAVAILABLE where none can be made. Any
+     * thread. */
+    uint32_t (*export_surface)(void *opaque, uint32_t domain, uint64_t surface, uint32_t flags,
+                               AvExportedImage *image);
     /* How many copies into `surface` the host has run since it was shared, in
      * *writes, and in *fd a sync_file, the caller's, that signals once the GPU
      * has finished every one of them: AV_EXECUTED, or AV_UNKNOWN for a
-     * surface nothing shares or a GPU that makes no sync_file. Any thread. */
-    uint32_t (*sync_surface)(void *opaque, uint32_t domain, uint64_t surface, uint64_t *writes, int *fd);
+     * surface nothing shares or a GPU that makes no sync_file. With
+     * AV_EXPORT_OTHER_GPU in `flags` the surface is first copied into its
+     * twin (export_surface), and the sync_file covers that copy; AV_UNKNOWN
+     * where no twin was exported. Any thread. */
+    uint32_t (*sync_surface)(void *opaque, uint32_t domain, uint64_t surface, uint32_t flags, uint64_t *writes,
+                             int *fd);
     /* `count` planes, by layer, composed on the GPU into one `width` by
      * `height` image - black where no plane is - and handed over as
      * export_image hands one over: AV_EXECUTED, or AV_UNKNOWN where a key is

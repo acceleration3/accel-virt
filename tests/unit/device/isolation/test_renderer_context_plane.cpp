@@ -1064,7 +1064,7 @@ TEST(renderer_context_plane, exports_no_surface)
   CHECK_STATUS(fixture.start(), Status::ok);
   CHECK(!fixture.plane().exports_surfaces());
   AvExportedImage image = {};
-  CHECK(!fixture.plane().export_surface(uuid, 9u, image));
+  CHECK(!fixture.plane().export_surface(uuid, 9u, 0u, image));
   std::uint64_t writes = 1u;
   int           sync_fd = 1;
-  CHECK(!fixture.plane().sync_surface(uuid, 9u, writes, sync_fd)); }
+  CHECK(!fixture.plane().sync_surface(uuid, 9u, 0u, writes, sync_fd)); }

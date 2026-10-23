@@ -120,7 +120,8 @@ public:
     bool on_ClearState11() override;
     bool on_Finish11(uint32_t &hresult) override;
     bool on_DestroyObject(uint32_t object) override;
-    bool on_CreateResource(uint32_t resource, const d3dproto::ResourceDesc &desc, uint64_t shared_key) override;
+    bool on_CreateResource(uint32_t resource, const d3dproto::ResourceDesc &desc, uint64_t shared_key, uint64_t memory,
+                           uint32_t row_pitch) override;
     bool on_OpenResource(uint32_t resource, uint64_t shared_key, uint32_t &found,
                          d3dproto::ResourceDesc &desc) override;
     bool on_CreateShaderResourceView(uint32_t view, const d3dproto::ViewDesc &desc) override;
@@ -228,6 +229,12 @@ private:
      * `guest_misc` shares it and the host can; null otherwise. */
     void             describe_shared_image(uint64_t shared_key, IUnknown *made);
     ID3D11Texture2D         *shareable(const D3D11_TEXTURE2D_DESC &texture, uint32_t guest_misc);
+    /* A texture over the memory the guest lent beneath it (`memory`, the name
+     * of an import of this session's), as rows `row_pitch` bytes apart: what
+     * two adapters' devices share between them. Null for memory this session
+     * has not imported or too small, or one the host will not make an image
+     * of. */
+    ID3D11Texture2D         *lent_texture(const D3D11_TEXTURE2D_DESC &texture, uint64_t memory, uint32_t row_pitch);
     /* A copy into `destination` has run: counted when it is a shared surface. */
     void                     counted(ID3D11Resource *destination);
     /* Whether every id in `ids` names nothing (0) or an object of `kind`. */

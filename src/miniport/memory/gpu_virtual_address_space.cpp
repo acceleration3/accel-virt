@@ -1,4 +1,5 @@
 #include "miniport/memory/gpu_virtual_address_space.hpp"
+#include "core/support/sorted_search.hpp"
 
 #include "core/platform/invariant_scope.hpp"
 #include "core/trace/function_scope.hpp"
@@ -124,13 +125,8 @@ uint32_t GpuVirtualAddressSpace::range_count() const
 uint32_t GpuVirtualAddressSpace::lower_bound(uint64_t base) const
 {
     AV_SCOPE("GpuVirtualAddressSpace::lower_bound");
-    uint32_t low = 0u, high = ranges_.size();
-    while (low < high) {
-        const uint32_t mid = low + (high - low) / 2u;
-        if (ranges_.at(mid).span().base() < base) low = mid + 1u;
-        else                                      high = mid;
-    }
-    return low;
+    return SortedSearch<VirtualRange, [](const VirtualRange &range) { return range.span().base(); }>(ranges_)
+        .at_or_after(base);
 }
 
 VirtualRange *GpuVirtualAddressSpace::find_exact(uint64_t base)

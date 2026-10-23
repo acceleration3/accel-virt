@@ -157,6 +157,18 @@ public:
     void                 retire_memory(HostAllocation &allocation);
     /* Every retired allocation closed: the host's work over them is done. */
     void                 reclaim_retired();
+    /* The same for memory the host may use until a batch is done, which the
+     * API knows by the batch's fence (Direct3D 11 destroys a resource with
+     * draws queued): kept with its fence - no_memory, keeping nothing, when
+     * the list cannot grow, and the caller then waits for the oldest
+     * (take_oldest_retired) rather than close it under work. */
+    [[nodiscard]] Status retire_memory_after(HostAllocation &allocation, uint64_t fence);
+    /* The oldest allocation retired by fence, taken out for the caller to wait
+     * for `fence` and close (close_memory); false when there is none. */
+    bool                 take_oldest_retired(HostAllocation *&allocation, uint64_t &fence);
+    /* Every allocation retired by a fence the host has finished (`completed`),
+     * closed. */
+    void                 reclaim_retired_through(uint64_t completed);
     /* Every allocation kept for `owner` released, as close_memory releases
      * one - a Vulkan device destroyed while its instance's channel lives on:
      * the first failure. */
@@ -219,6 +231,12 @@ private:
     KeyedSlots<uint64_t, Kept *>              handles_;
     /* What was let go of while the host may still use it (retire_memory). */
     RetireList<HostAllocation *>              retired_;
+    struct Fenced {
+        HostAllocation *allocation_;
+        uint64_t        fence_;
+    };
+    /* Oldest first; guarded by the same lock. */
+    RetireList<Fenced>                        fenced_;
 };
 
 }  // namespace av::icd

@@ -40,8 +40,11 @@ namespace av::d3dproto {
 // one texture and presents another. The ids must be resources, none twice.
 [[nodiscard]] bool av_d3d_RotateResources11(::av::ClientTransport& t, uint32_t count, const uint32_t* resources);
 // A resource. shared_key is non-zero for one another session may open (its KMD shared-object id): the
-// host keeps it under that key until the last session holding it destroys it.
-[[nodiscard]] bool av_d3d_CreateResource(::av::ClientTransport& t, uint32_t resource, const ResourceDesc& desc, uint64_t shared_key);
+// host keeps it under that key until the last session holding it destroys it. memory is 0 for a resource the
+// host makes memory for itself, or the guest's name for host memory imported beforehand (a lent allocation,
+// docs/host-memory.md) the texture is made over as rows of row_pitch bytes - a cross-adapter texture, which
+// the other adapter's device opens over the very same memory.
+[[nodiscard]] bool av_d3d_CreateResource(::av::ClientTransport& t, uint32_t resource, const ResourceDesc& desc, uint64_t shared_key, uint64_t memory, uint32_t row_pitch);
 // A resource another session made with this shared_key, under this session's id. found is 0 when no
 // session shares one by that key, and then the id names nothing.
 [[nodiscard]] bool av_d3d_OpenResource(::av::ClientTransport& t, uint32_t resource, uint64_t shared_key, uint32_t* found, ResourceDesc* desc);

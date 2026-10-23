@@ -19,6 +19,9 @@
 
 namespace av::d3d {
 
+/* What a surface is shared with, to choose its constructor by. */
+enum class SharedWith { another_adapter };
+
 class KernelSurface {
 public:
     /* The allocation's private data: its descriptor, then the identity. */
@@ -30,6 +33,10 @@ public:
     KernelSurface();
     /* A surface `width` by `height` texels of the DXGI format `format`. */
     KernelSurface(uint32_t width, uint32_t height, uint32_t format);
+    /* A texture shared with another adapter's device, in the row pitch and
+     * height dxgkrnl lays such an allocation out by (CrossAdapterLayout) -
+     * pages of the process's own that the host lays its memory under. */
+    KernelSurface(SharedWith, uint32_t width, uint32_t height, uint32_t format);
     /* The same as a primary, scanned out at `scanout`. */
     KernelSurface(uint32_t width, uint32_t height, uint32_t format, const ScanoutTarget &scanout);
     KernelSurface(const KernelSurface &) = delete;
@@ -77,6 +84,7 @@ private:
     uint64_t      bytes_;
     ScanoutTarget scanout_;
     bool          primary_;
+    bool          cross_adapter_;
 };
 
 }  // namespace av::d3d

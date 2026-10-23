@@ -1,4 +1,6 @@
 #include "um/d3d/d3d11_device.hpp"
+#include "proto/resources/mip_extent.hpp"
+#include "proto/resources/subresource_layout.hpp"
 
 #include "core/platform/block_source.hpp"
 #include "core/log/log_line.hpp"
@@ -35,9 +37,9 @@ constexpr uint32_t copy_discard = 0x2u;
 
 D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, KeyedLog &log, const D3d11HostCaps &caps,
                          d3d::D3dCallTrace &trace, const d3d::SharedRowsRequest &rows)
-    : session_(session), memory_(memory), shadows_(memory), maps_(memory), lines_(log), refused_(lines_), loss_(lines_), caps_(caps), runtime_{}, core_layer_{}, kernel_(), clock_(), allocations_(kernel_, lines_, session_.kmt()),
-      core_(nullptr), dxgi_(nullptr), channel_(), slices_(), parent_(nullptr), recording_lock_(), calls_(), recording_(),
-      recorded_(), context_(nullptr), follower_(), gate_(), feature_level_(0u),
+    : session_(session), memory_(memory), shadows_(memory), maps_(memory), lines_(log), refused_(lines_), loss_(lines_), caps_(caps), runtime_{}, core_layer_{}, kernel_(), lender_(session), clock_(), allocations_(kernel_, lines_, clock_),
+      core_(nullptr), dxgi_(nullptr), channel_(), slices_(), parent_(nullptr), recording_lock_(), caller_(), call_mutex_(), calls_(call_mutex_, caller_), recording_(),
+      recorded_(), context_(nullptr), present_order_(), waits_(), feature_level_(0u),
       guest_surfaces_(memory, Pool::paged), guest_lock_refused_(), present_refused_(), present_flags_(~0u), follow_refused_(), token_refused_(), frame_(1u),
       trace_(trace), rows_(rows), context_number_(trace.number_context())
 {
@@ -53,15 +55,16 @@ D3d11Device::~D3d11Device()
         if (recorded_.constructed()) recorded_.destroy();
         return;
     }
-    if (channel_.constructed()) {
+    const bool joined = channel_.constructed();
+    if (joined) {
         static_cast<void>(channel_.object().close());
         static_cast<void>(channel_.object().flush());
         channel_.destroy();
-        session_.leave();
     }
-    follower_.destroy();
-    if (gate_.constructed()) session_.transport().forget(gate_.object());
-    gate_.destroy();
+    if (waits_.constructed()) waits_.destroy();
+    if (present_order_.constructed()) present_order_.destroy();
+    if (joined) session_.reclaim_retired();
+    if (joined) session_.leave();
     kernel_.destroy_context(context_);
 }
 
@@ -71,21 +74,24 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
     runtime_ = create.hRTDevice;
     core_layer_ = create.hRTCoreLayer;
     kernel_.bind(create.pKTCallbacks, runtime_.handle);
+    lender_.bind(create.pKTCallbacks, runtime_.handle);
     core_ = create.p11UMCallbacks;
     dxgi_ = create.DXGIBaseDDI.pDXGIBaseCallbacks;
-    static_cast<void>(follower_.construct(kernel_.callbacks(), kernel_.runtime(), session_.transport()));
     const HRESULT context = allocations_.make_context(context_);
     if (FAILED(context)) return context;
-    static_cast<void>(gate_.construct(kernel_.callbacks(), kernel_.runtime(), context_, lines_));
     const uint32_t level = D3D11DDI_EXTRACT_3DPIPELINELEVEL_FROM_FLAGS(create.Flags);
     feature_level_ = level < sizeof(feature_levels) / sizeof(feature_levels[0]) ? feature_levels[level] : 0u;
     const HRESULT joined = session_.join(adapter);
     if (FAILED(joined)) return joined;
+    static_cast<void>(present_order_.construct(kernel_.callbacks(), kernel_.runtime(), context_, session_.transport(), lines_));
+    static_cast<void>(waits_.construct(kernel_.callbacks(), kernel_.runtime(), session_.transport(), session_.lock(), lines_, context_));
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), session_.next_id()));
     uint32_t hresult = 1u, made = 0u;
     if (!channel_.object().open(feature_level_, hresult, made) || hresult != 0u) {
         lines_.write("the host made no Direct3D 11 device");
         channel_.destroy();
+        waits_.destroy();
+        present_order_.destroy();
         session_.leave();
         return E_FAIL;
     }
@@ -170,6 +176,7 @@ HRESULT D3d11Device::initialize_deferred(D3d11Device &parent, const D3D11DDIARG_
     core_layer_ = create.hRTCoreLayer;
     core_ = create.p11UMCallbacks;
     kernel_.bind(&parent.kernel_.callbacks(), runtime_.handle);
+    lender_.bind(&parent.kernel_.callbacks(), runtime_.handle);
     feature_level_ = parent.feature_level_;
     static_cast<void>(recorded_.construct(memory_, recording_bytes, most_recording_bytes));
     if (recorded_.object().initialize() != Status::ok) return E_OUTOFMEMORY;
@@ -222,10 +229,11 @@ void D3d11Device::extent(const ResourceRecord &resource, uint32_t subresource, u
                          uint32_t &depth) const
 {
     AV_SCOPE("D3d11Device::extent");
-    const uint32_t mip = resource.mips == 0u ? 0u : subresource % resource.mips;
-    width = resource.width >> mip == 0u ? 1u : resource.width >> mip;
-    height = resource.height >> mip == 0u ? 1u : resource.height >> mip;
-    depth = resource.depth >> mip == 0u ? 1u : resource.depth >> mip;
+    const SubresourceLayout subresources(resource.mips, resource.layers, 1u);
+    const MipExtent extent(resource.width, resource.height, resource.depth, subresources.mip_of(subresource));
+    width = static_cast<uint32_t>(extent.width());
+    height = extent.height();
+    depth = extent.depth();
     if (resource.dimension == D3D10DDIRESOURCE_BUFFER) height = depth = 1u;
 }
 
@@ -254,7 +262,8 @@ size_t D3d11Device::subresource_bytes(const ResourceRecord &resource, uint32_t s
 uint32_t D3d11Device::subresource_count(const ResourceRecord &resource) const
 {
     AV_SCOPE("D3d11Device::subresource_count");
-    return resource.dimension == D3D10DDIRESOURCE_BUFFER ? 1u : resource.mips * resource.layers;
+    return resource.dimension == D3D10DDIRESOURCE_BUFFER ? 1u
+        : SubresourceLayout(resource.mips, resource.layers, 1u).count();
 }
 
 size_t D3d11Device::subresource_offset(const ResourceRecord &resource, uint32_t subresource) const
@@ -358,6 +367,7 @@ BOOL D3d11Device::flush(UINT, UINT)
     /* The runtime signals a fence it was asked to after flushing, on the
      * kernel context: the signal must wait for what the flush sent. */
     if (FAILED(follow_host())) lost(__func__);
+    session_.reclaim_retired();
     return TRUE;
 }
 
@@ -765,6 +775,7 @@ VOID D3d11Device::get_resource_layout(D3D10DDI_HRESOURCE handle, UINT count, D3D
     const ResourceRecord &resource = record(handle);
     if (allocation != nullptr) *allocation = resource.allocation;
     if (layout != nullptr) *layout = D3DWDDM2_0DDI_TL_ROW_MAJOR;
+    const bool lent = resource.lent != nullptr;
     if (swizzle_transition != nullptr) *swizzle_transition = no_swizzle_transition;
     if (subresources == nullptr) return;
     const uint32_t known = subresource_count(resource);
@@ -777,7 +788,9 @@ VOID D3d11Device::get_resource_layout(D3D10DDI_HRESOURCE handle, UINT count, D3D
         uint32_t depth = 0u;
         extent(resource, index, width, height, depth);
         out.BaseOffset = subresource_offset(resource, index);
-        out.RowPitch = row_bytes(resource, width);
+        /* A cross-adapter texture is laid out by its allocation: the pitch
+         * the kernel gave it. */
+        out.RowPitch = lent ? resource.allocation_pitch : row_bytes(resource, width);
         out.DepthPitch = out.RowPitch * rows(resource, height);
     }
 }

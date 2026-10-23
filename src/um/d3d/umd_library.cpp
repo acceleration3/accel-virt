@@ -11,7 +11,7 @@
 namespace av {
 
 UmdLibrary::Seams::Seams()
-    : process(L"avumd", "avumd: "), lock(), driver(process.heap(), process.kmt(), process.log()),
+    : process(L"avumd", "avumd: "), lock(), caller(), driver(process.heap(), process.kmt(), process.log()),
       root(process.heap(), process.kmt(), lock, process.log(), d3d::umd_binding, &driver)
 {
     AV_SCOPE("UmdLibrary::Seams::Seams");
@@ -45,14 +45,14 @@ void UmdLibrary::ask_shared_rows()
 {
     AV_SCOPE("UmdLibrary::ask_shared_rows");
     Seams *const seams = driver_.seams();
-    if (seams != nullptr) static_cast<void>(seams->driver.shared_rows().ask(GetCurrentThreadId()));
+    if (seams != nullptr) static_cast<void>(seams->driver.shared_rows().ask(seams->caller.thread_id()));
 }
 
 void UmdLibrary::withdraw_shared_rows()
 {
     AV_SCOPE("UmdLibrary::withdraw_shared_rows");
     Seams *const seams = driver_.seams();
-    if (seams != nullptr) seams->driver.shared_rows().withdraw(GetCurrentThreadId());
+    if (seams != nullptr) seams->driver.shared_rows().withdraw(seams->caller.thread_id());
 }
 
 long UmdLibrary::crashed(void *pointers)

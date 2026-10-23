@@ -32,6 +32,12 @@ VirtioGpuAv::VirtioGpuAv(Host &host)
           AV_SCOPE("VirtioGpuAv::VirtioGpuAv");
       }
 
+void VirtioGpuAv::share_lendings(GuestRamLendings &lendings)
+{
+    AV_SCOPE("VirtioGpuAv::share_lendings");
+    host_blobs_.share_lendings(lendings);
+}
+
 Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecutorOps *executor,
                              const AvRecordingOptions *recording, const char *renderer, const char *executor_path,
                              TextBuffer &message)

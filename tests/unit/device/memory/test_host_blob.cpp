@@ -137,3 +137,20 @@ TEST(host_blob, is_placed_and_taken_down_on_the_main_loop_only)
   CHECK_STATUS(call.unmapped, Status::invalid_state);
   CHECK_STATUS(call.mapped, Status::ok);
   CHECK_STATUS(blob.unmap(), Status::ok); }
+
+/* A blob over lent pages waits with no memory until the first piece of them
+ * decides what it is; the entries it has laid are counted as they come. */
+TEST(host_blob_waiting, holds_no_memory_and_counts_the_entries_it_is_laid_over)
+{ MockHost host;
+  const av::HostMemoryRequest readback(av::HostMemoryRequest::Kind::readback, 0u);
+  HostBlob blob(host, 7u, 2u * page, readback);
+  CHECK(blob.waiting());
+  CHECK_EQ(blob.size(), 2u * page);
+  CHECK_EQ(blob.request().encoded(), readback.encoded());
+  CHECK(blob.lending() == nullptr);
+  CHECK(!blob.lender());
+  CHECK_EQ(blob.entries_laid(), 0u);
+  blob.laid(2u);
+  blob.laid(1u);
+  CHECK_EQ(blob.entries_laid(), 3u);
+  CHECK_EQ(host.unclaimed_violations(), 0u); }

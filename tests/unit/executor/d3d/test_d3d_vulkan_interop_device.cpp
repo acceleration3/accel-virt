@@ -275,7 +275,7 @@ TEST(d3d_vulkan_interop_device, a_shared_texture_written_through_vulkan_reads_ba
         shared.sample_count = 1u;
         shared.bind_flags = bind_shader_resource | bind_render_target;
         shared.misc_flags = misc_shared;
-        CHECK(av_d3d_CreateResource(wire, resource, shared, key + round));
+        CHECK(av_d3d_CreateResource(wire, resource, shared, key + round, 0u, 0u));
         std::uint32_t handle_kind = 0u;
         int           fd = -1;
         CHECK(direct3d.export_object(AV_SHARED_MEMORY, resource, handle_kind, fd));

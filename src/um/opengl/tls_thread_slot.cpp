@@ -6,7 +6,7 @@
 
 namespace av {
 
-TlsThreadSlot::TlsThreadSlot() : index_(TlsAlloc())
+TlsThreadSlot::TlsThreadSlot() : caller_(), index_(TlsAlloc())
 {
     AV_SCOPE("TlsThreadSlot::TlsThreadSlot");
 }
@@ -33,7 +33,7 @@ void TlsThreadSlot::set(void *value)
 uint32_t TlsThreadSlot::thread_id()
 {
     AV_SCOPE("TlsThreadSlot::thread_id");
-    return GetCurrentThreadId();
+    return caller_.thread_id();
 }
 
 void TlsThreadSlot::set_last_error(uint32_t code)

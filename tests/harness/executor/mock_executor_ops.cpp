@@ -43,6 +43,8 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         if (memory == nullptr) return 1u;
         return mock_of(opaque).allocate(domain, key, size, request, *memory);
     };
+    table_.alias_memory = [](void *, std::uint32_t, std::uint64_t, std::uint32_t, std::uint64_t,
+                             AvHostMemory *) -> std::uint32_t { return 1u; };
     table_.free_memory = [](void *opaque, std::uint32_t domain, std::uint64_t key) {
         MockExecutorOps &mock = mock_of(opaque);
         Lock             lock(mock.lock_);
@@ -206,7 +208,7 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         if (surface == mock.frame_surface_ && point == mock.frame_point_) mock.frame_surface_ = 0u;
         mock.frame_unmaps_++;
     };
-    table_.export_surface = [](void *opaque, std::uint32_t domain, std::uint64_t surface,
+    table_.export_surface = [](void *opaque, std::uint32_t domain, std::uint64_t surface, std::uint32_t,
                                AvExportedImage *image) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
         mock.last_domain_ = domain;
@@ -214,8 +216,8 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         *image = mock.surface_image_;
         return AV_EXECUTED;
     };
-    table_.sync_surface = [](void *opaque, std::uint32_t domain, std::uint64_t surface, std::uint64_t *writes,
-                             int *fd) -> std::uint32_t {
+    table_.sync_surface = [](void *opaque, std::uint32_t domain, std::uint64_t surface, std::uint32_t,
+                             std::uint64_t *writes, int *fd) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
         mock.last_domain_ = domain;
         if (writes == nullptr || fd == nullptr || surface == 0u || surface != mock.surface_) return AV_UNKNOWN;

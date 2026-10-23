@@ -2,7 +2,12 @@
  * guest asked for under one key of one domain, which the device maps into the
  * host window and which the guest's contexts import. Counted: the device's
  * blob holds one reference and every import one more, so memory a guest
- * releases while a host API still has it lives until that import goes. */
+ * releases while a host API still has it lives until that import goes. The
+ * count is atomic: another GPU's source names the memory under a key of its
+ * own (HostMemorySource::alias) and takes references to it under its own lock,
+ * with no lock of the allocating source's - two sources aliasing each other's
+ * memory would otherwise take their locks in opposite orders. The last
+ * release is the allocating source's to act on, under its lock. */
 #ifndef AV_SOURCE_MEMORY_HPP
 #define AV_SOURCE_MEMORY_HPP
 
@@ -12,6 +17,7 @@
 
 namespace av {
 
+class HostMemorySource;
 class OwnedFd;
 
 class SourceMemory {
@@ -41,6 +47,12 @@ public:
      * it by. False, holding nothing, when none can be had. */
     [[nodiscard]] bool    share(OwnedFd &into) const;
 
+    /* The source that allocated it, which counts its references: another
+     * GPU's source may name it under a key of its own (HostMemorySource::alias)
+     * and an import through that key gives it back here. Null until bound. */
+    void                  bind(HostMemorySource &owner);
+    HostMemorySource     *owner() const;
+
     /* The key let go: the device released its blob. */
     void detach();
     void acquire();
@@ -57,6 +69,7 @@ private:
     ExportedMemory memory_;
     bool           attached_;
     uint32_t       references_;
+    HostMemorySource *owner_;
 };
 
 }  // namespace av

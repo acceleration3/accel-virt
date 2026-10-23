@@ -3,6 +3,7 @@
 #include "executor/sharing/session_shares.hpp"
 
 #include "core/log/driver_log.hpp"
+#include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/owned_fd.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
@@ -66,6 +67,8 @@ bool D3d12Presentation::present(ID3D12CommandQueue *queue)
     AV_SCOPE("D3d12Presentation::present");
     if (queue == nullptr || !connect()) return false;
     if (FAILED(queue->Signal(fence_, order_.next()))) return false;
+    device11_->lock(nullptr);
+    ScopeExit unlock([this] { device11_->unlock(); });
     return order_.presented();
 }
 

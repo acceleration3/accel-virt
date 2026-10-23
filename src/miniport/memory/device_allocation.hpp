@@ -3,6 +3,8 @@
 #ifndef AV_DEVICE_ALLOCATION_HPP
 #define AV_DEVICE_ALLOCATION_HPP
 
+#include "miniport/memory/point_view.hpp"
+
 #include <stdint.h>
 
 namespace av {
@@ -23,18 +25,33 @@ public:
     Device       &device() const;
     Allocation   &allocation() const;
     SharedObject *shared() const;
-    /* The point the device named for its next present from this allocation
-     * (NextPointRecord), 0 when none was named; forgotten once that present's
-     * last pass has moved. */
+    /* The points the device named for presents from this allocation
+     * (NextPointRecord), oldest first, 0 standing for "read my pages". A
+     * present takes the newest - the one named for it - and every older one
+     * is of a present that never reached the kernel; all are forgotten when
+     * the present has done. A point named over a full queue drops the oldest.
+     * Guarded by the DeviceTable's lock, which every caller holds. */
+    static constexpr uint32_t most_points = 8u;
     void          name_point(uint32_t point);
+    /* A point named for a present that did not happen; false when not queued. */
+    bool          withdraw_point(uint32_t point);
+    /* The newest point named and not yet forgotten, 0 when none. */
     uint32_t      point() const;
+    uint32_t      queued() const;
     void          forget_point();
+    /* A point was ever named: presents of this allocation are its points'. */
+    bool          pointed() const;
+    /* What a present reads, the starvation noted once. */
+    void          view(PointView &view);
 
 private:
     Device       &device_;
     Allocation   &allocation_;
     SharedObject *shared_;
-    uint32_t      point_;
+    uint32_t      points_[most_points];
+    uint32_t      queued_;
+    bool          pointed_;
+    bool          starved_told_;
 };
 
 }  // namespace av

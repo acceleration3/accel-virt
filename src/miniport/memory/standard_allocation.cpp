@@ -5,9 +5,11 @@
 #include "miniport/ddi/d3dkmdt_shared_primary_surface_data_record.hpp"
 #include "miniport/ddi/d3dkmdt_staging_surface_data_record.hpp"
 #include "miniport/ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
+#include "miniport/memory/cross_adapter_format.hpp"
 #include "miniport/memory/pixel_format.hpp"
 #include "core/trace/function_scope.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/cross_adapter_layout.hpp"
 
 namespace av {
 
@@ -71,14 +73,19 @@ Status StandardAllocation::describe_staging(AllocationDescriptor &descriptor) co
     return Status::ok;
 }
 
-Status StandardAllocation::describe_existing_heap(AllocationDescriptor &descriptor) const
+/* A cross-adapter texture, or a heap (no format, one row high): pitch and
+ * rows as dxgkrnl checks them (CrossAdapterLayout). The row-major bytes are
+ * the process's own pages, which the processor reads and writes. */
+Status StandardAllocation::describe_cross_adapter(AllocationDescriptor &descriptor) const
 {
-    AV_SCOPE("StandardAllocation::describe_existing_heap");
+    AV_SCOPE("StandardAllocation::describe_cross_adapter");
     auto &surface = *static_cast<D3dkmdtGdiSurfaceDataRecord *>(request_.pCreateSurfaceData);
-    if (surface.Width == 0u || surface.Height != 1u || surface.Format != 0) return Status::invalid_parameter;
-    const SurfaceLayout layout(surface.Width, 1u, 0u, surface.Width);
-    surface.Pitch = surface.Width;
-    descriptor = AllocationDescriptor(AllocationKind::gdi, true, layout, layout.bytes(), ScanoutTarget());
+    const uint32_t format = static_cast<uint32_t>(surface.Format);
+    const CrossAdapterLayout layout(surface.Width, surface.Height, format, CrossAdapterFormat(format).bytes_per_pixel());
+    if (!layout.valid()) return Status::invalid_parameter;
+    surface.Pitch = layout.pitch();
+    descriptor = AllocationDescriptor(AllocationKind::cross_adapter, true, layout.surface(), layout.bytes(),
+                                      ScanoutTarget());
     return Status::ok;
 }
 
@@ -86,7 +93,7 @@ Status StandardAllocation::describe_gdi(AllocationDescriptor &descriptor) const
 {
     AV_SCOPE("StandardAllocation::describe_gdi");
     auto &surface = *static_cast<D3dkmdtGdiSurfaceDataRecord *>(request_.pCreateSurfaceData);
-    if (surface.Type == gdi_texture_cross_adapter) return describe_existing_heap(descriptor);
+    if (surface.Type == gdi_texture_cross_adapter) return describe_cross_adapter(descriptor);
     const bool texture = surface.Type == gdi_texture || surface.Type == gdi_texture_cpu_visible;
     const bool staging_surface = surface.Type == gdi_staging || surface.Type == gdi_staging_cpu_visible;
     if (!texture && !staging_surface) return Status::invalid_parameter;

@@ -102,6 +102,16 @@ Status ExecutorRoot::allocate_memory(uint32_t domain, uint64_t key, uint64_t siz
     return source->allocate(domain, key, size, HostMemoryRequest(request), memory);
 }
 
+Status ExecutorRoot::alias_memory(uint32_t domain, uint64_t key, uint32_t from_domain, uint64_t from_key,
+                                  AvHostMemory &memory)
+{
+    AV_SCOPE("ExecutorRoot::alias_memory");
+    HostMemorySource *const source = source_of(domain);
+    HostMemorySource *const lender = source_of(from_domain);
+    if (source == nullptr || lender == nullptr) return Status::no_memory;
+    return source->alias(domain, key, *lender, from_domain, from_key, memory);
+}
+
 void ExecutorRoot::free_memory(uint32_t domain, uint64_t key)
 {
     AV_SCOPE("ExecutorRoot::free_memory");
@@ -162,20 +172,20 @@ void ExecutorRoot::unmap_frame(uint32_t domain, const SurfacePoint &frame)
     if (surfaces != nullptr) surfaces->unmap(frame);
 }
 
-bool ExecutorRoot::export_surface(uint32_t domain, uint64_t surface, AvExportedImage &image)
+bool ExecutorRoot::export_surface(uint32_t domain, uint64_t surface, uint32_t flags, AvExportedImage &image)
 {
     AV_SCOPE("ExecutorRoot::export_surface");
     const HostGpu *const   gpu = gpu_of(domain);
     D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
-    return device != nullptr && device->export_surface(domain, surface, image);
+    return device != nullptr && device->export_surface(domain, surface, flags, image);
 }
 
-bool ExecutorRoot::sync_surface(uint32_t domain, uint64_t surface, uint64_t &writes, int &fd)
+bool ExecutorRoot::sync_surface(uint32_t domain, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd)
 {
     AV_SCOPE("ExecutorRoot::sync_surface");
     const HostGpu *const   gpu = gpu_of(domain);
     D3d11HostDevice *const device = gpu != nullptr ? apis_->d3d11_device(gpu->index()) : nullptr;
-    return device != nullptr && device->sync_surface(domain, surface, writes, fd);
+    return device != nullptr && device->sync_surface(domain, surface, flags, writes, fd);
 }
 
 ContextSession *ExecutorRoot::open(uint32_t sub_api, const AvContextOptions &options, ContextSession *share)

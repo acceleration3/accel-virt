@@ -260,12 +260,39 @@ pinned buffer's pages the same way and reclaims them after `glFinish`.
 Direct3D 12 needs no list: an
 application may not destroy a heap the GPU still uses.
 
-A page lies under one blob at a time (`LentPages`, one set per device): a
-second overlay would copy the first blob's memory into its own, and the
-first's restore would take the page from under it. Two of a process's ranges
-sharing a page - OpenCL buffers over neighbouring bytes - are told apart
-there, and the second lending is refused; the API then uses its own copy as
-before.
+A page lies under one lending at a time (`LentPages`, one set for every
+device of the QEMU process): a second overlay would copy the first one's
+memory into its own, and the first's restore would take the page from under
+it. Two of a process's ranges sharing a page - OpenCL buffers over
+neighbouring bytes - are told apart there, and the second lending is refused;
+the API then uses its own copy as before.
+
+**One memory for two adapters.** A Direct3D resource two adapters' devices
+share (Affinity's row-major textures, a cross-adapter heap) is opened by both
+devices, each lending the very pages through its own adapter's allocation. The
+guest always lends with `adopt`; the *device* decides what that means
+(`GuestRamLendings`, owned by the module and outliving every device): the first
+lending of pages makes the memory and lays it under them, and one whose first
+entry names the pages of a lending already laid whole, at the same size, by a
+plane other than its own, holds that lending - its blob is created without
+memory of its own, `alias_memory` makes its key name the lender's memory in the
+executor, and its later pieces must be the very entries the lender laid. The
+pages are restored only when the last holder's blob is released; the lender
+may be released first (the lending keeps the dma-buf, the executor's memory
+lives through the alias's reference). Every holder has its own guest page lock,
+so the pages stay pinned until the last holder's release. Renderer mode lends
+nothing (above), so joins do not happen there.
+
+The executor's `HostMemorySource` allocates a memory and frees it with its
+last reference; an alias is a key of another source (another GPU's) that holds
+one. The count is atomic, so a source takes references to another's memory
+under its own lock alone (two sources aliasing each other's memory never take
+each other's locks), and every release goes to the allocating source, which
+frees under its lock. The library lets go of every alias first at close. An
+importer takes the memory type it imports a dma-buf as from its own device
+(`vkGetMemoryFdPropertiesKHR`), never the type the allocating GPU's source
+chose; a Direct3D 11 texture over lent memory is an image over the dma-buf as
+rows of the allocation's pitch (`ExportableImages::adopt`).
 
 Limits:
 

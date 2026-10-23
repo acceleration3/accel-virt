@@ -135,6 +135,25 @@ TEST(allocation_report_to, a_gpu_only_allocation_is_not_cpu_visible)
   allocation.report_to(info);
   CHECK_EQ(info.Flags, 0u); }
 
+/* Pages the host lays write-back memory under: the processor's mapping is
+ * cached, in the implicit system memory segment where the process's pages are. */
+TEST(allocation_report_to, a_cross_adapter_texture_is_cached_system_memory_and_an_existing_heap_is_not)
+{ MockPlatform platform;
+  const AllocationDescriptor lent(AllocationKind::cross_adapter, true, SurfaceLayout(1249u, 805u, 21u, 5120u),
+                                  1010u * 4096u, ScanoutTarget());
+  Segments segments(platform); Allocation allocation(platform, segments.segments(), lent, 1010u * 4096u);
+  DxgkAllocationInfoRecord info = {};
+  allocation.report_to(info);
+  CHECK_EQ(info.Flags, 5u);   /* CpuVisible | Cached */
+  CHECK_EQ(info.PreferredSegment, 2u);
+  /* An existing heap is a row of no format, and is reported as before. */
+  const AllocationDescriptor heap(AllocationKind::cross_adapter, true, SurfaceLayout(0x30000u, 1u, 0u, 0x30000u),
+                                  0x30000u, ScanoutTarget());
+  Allocation existing(platform, segments.segments(), heap, 0x30000u);
+  DxgkAllocationInfoRecord heap_info = {};
+  existing.report_to(heap_info);
+  CHECK_EQ(heap_info.Flags, 1u); }
+
 TEST(allocation_open, counts_opens_and_refuses_a_close_with_none)
 { MockPlatform platform; Segments segments(platform); Allocation allocation(platform, segments.segments(), shadow, 0x1000u);
   CHECK_STATUS(allocation.close(), Status::invalid_state);

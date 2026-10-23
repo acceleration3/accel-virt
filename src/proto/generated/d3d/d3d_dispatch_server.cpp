@@ -193,8 +193,12 @@ static bool decode_CreateResource(ServerDispatch& s, ::av::WireReader& r, ::av::
     if (!r.read_pod(desc)) return false;
     uint64_t shared_key{};
     if (!r.read_pod(shared_key)) return false;
+    uint64_t memory{};
+    if (!r.read_pod(memory)) return false;
+    uint32_t row_pitch{};
+    if (!r.read_pod(row_pitch)) return false;
     if (r.remaining() != 0u) return false;
-    if (!s.on_CreateResource(resource, desc, shared_key)) return false;
+    if (!s.on_CreateResource(resource, desc, shared_key, memory, row_pitch)) return false;
     return true;
 }
 

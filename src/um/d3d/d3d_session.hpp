@@ -114,6 +114,16 @@ public:
     [[nodiscard]] Status            adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory,
                                                  HostAllocation *&made);
     void                            close_memory(HostAllocation &allocation);
+    /* Lent memory an object was made over, let go of while the host's work
+     * over it may still run (a Direct3D 11 resource can be destroyed with
+     * draws queued): kept with the batch it was retired in, and closed once
+     * the GPU has finished that batch (reclaim_retired). With no room to
+     * note it the oldest is waited for and closed instead - memory is never
+     * closed under work that may still use it. */
+    void                            retire_memory(HostAllocation &allocation);
+    /* Each retired allocation whose batch the host GPU has finished, closed;
+     * called as the session's devices flush and go. */
+    void                            reclaim_retired();
 
 private:
     static constexpr uint8_t  ring_order = 22u;

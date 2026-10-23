@@ -30,6 +30,10 @@ public:
     /* The newest entry out of the list into `entry`; false when it is empty.
      * For an owner whose give-back takes the lock the list is under. */
     bool                 take_last(Entry &entry);
+    /* The oldest entry for which `matches` holds, taken out of the list into
+     * `entry`; false when none does. */
+    template <typename Matches>
+    bool                 take_if(Matches matches, Entry &entry);
     /* Every entry handed to `give_back`, oldest first, and the list emptied. */
     template <typename GiveBack>
     void                 reclaim(GiveBack give_back);
@@ -60,6 +64,20 @@ bool RetireList<Entry>::take_last(Entry &entry)
     entry = entries_.at(entries_.size() - 1u);
     entries_.truncate(entries_.size() - 1u);
     return true;
+}
+
+template <typename Entry>
+template <typename Matches>
+bool RetireList<Entry>::take_if(Matches matches, Entry &entry)
+{
+    AV_SCOPE("RetireList::take_if");
+    for (uint32_t index = 0u; index < entries_.size(); index++) {
+        if (!matches(entries_.at(index))) continue;
+        entry = entries_.at(index);
+        entries_.remove_at(index);
+        return true;
+    }
+    return false;
 }
 
 template <typename Entry>

@@ -65,6 +65,14 @@ public:
     /* DISPATCH. Begins releasing what the device holds, from an established or
      * failed context; invalid_state while a sequence runs. */
     [[nodiscard]] Status tear_down();
+    /* DISPATCH. The context can no longer be trusted to run what it was given
+     * (a batch that will never be published): it is failed, which finishes
+     * everything queued on it and wakes its process. */
+    void                 fail();
+    /* Where the next batch of the ring begins as far as the device can be
+     * told: the later of this submitter's tail and the one the ring's header
+     * says (a process that published for itself). */
+    uint64_t             next_begin() const;
     /* DISPATCH. The device reset: it holds nothing of this context any more. */
     void                 abandon();
     /* PASSIVE. Forgets the pages of a torn-down context, returning it to idle;

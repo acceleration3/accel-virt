@@ -161,6 +161,32 @@ void D3dSession::close_memory(HostAllocation &allocation)
     static_cast<void>(channel_.close_memory(allocation));
 }
 
+void D3dSession::retire_memory(HostAllocation &allocation)
+{
+    AV_SCOPE("D3dSession::retire_memory");
+    if (!timeline_.constructed()) {
+        static_cast<void>(channel_.close_memory(allocation));
+        return;
+    }
+    const uint64_t fence = timeline_.object().recording();
+    while (channel_.retire_memory_after(allocation, fence) != Status::ok) {
+        /* No room to note it: the oldest is waited for and closed, which
+         * makes room; with none to wait for, this one is. */
+        HostAllocation *oldest = nullptr;
+        uint64_t        oldest_fence = fence;
+        const bool      waited = channel_.take_oldest_retired(oldest, oldest_fence);
+        static_cast<void>(timeline_.object().wait(oldest_fence));
+        static_cast<void>(channel_.close_memory(waited ? *oldest : allocation));
+        if (!waited) return;
+    }
+}
+
+void D3dSession::reclaim_retired()
+{
+    AV_SCOPE("D3dSession::reclaim_retired");
+    if (timeline_.constructed()) channel_.reclaim_retired_through(timeline_.object().completed());
+}
+
 BufferSlices *D3dSession::slices()
 {
     AV_SCOPE("D3dSession::slices");

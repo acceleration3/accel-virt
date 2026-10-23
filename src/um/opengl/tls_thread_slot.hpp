@@ -5,6 +5,7 @@
 #define AV_UM_TLS_THREAD_SLOT_HPP
 
 #include "icd/opengl/thread_slot.hpp"
+#include "um/common/windows_calling_thread.hpp"
 
 #include <stdint.h>
 
@@ -21,6 +22,7 @@ public:
     void     set_last_error(uint32_t code) override;
 
 private:
+    WindowsCallingThread caller_;
     uint32_t index_;
 };
 

@@ -17,7 +17,7 @@ constexpr uint64_t default_count = 200000u;
 }  // namespace
 
 D3dCallTrace::D3dCallTrace()
-    : file_(L"avumd-calls"), clock_(), on_(false), skip_(0u), count_(0u), calls_(0u), contexts_(0u), started_(0u)
+    : file_(L"avumd-calls"), clock_(), caller_(), on_(false), skip_(0u), count_(0u), calls_(0u), contexts_(0u), started_(0u)
 {
     AV_SCOPE("D3dCallTrace::D3dCallTrace");
 }
@@ -68,10 +68,10 @@ bool D3dCallTrace::take()
     return call >= skip_ && call < skip_ + count_;
 }
 
-uint32_t D3dCallTrace::thread() const
+uint32_t D3dCallTrace::thread()
 {
     AV_SCOPE("D3dCallTrace::thread");
-    return GetCurrentThreadId();
+    return caller_.thread_id();
 }
 
 D3dCallTrace::Line::Line(uint64_t microseconds, uint32_t thread, uint32_t context, const char *slot)
