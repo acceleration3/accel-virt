@@ -3635,7 +3635,7 @@ TEST(adapter_escape, the_trace_escape_answers_the_state_of_the_adapter_without_a
    * source, and every table empty and free. */
   const char *const expected =
       "adapter/0 started=true present=true powering_down=false presented_fence=0 present_rows=0"
-      " presents_unmoved=0 presents_unticketed=0 presents_ticketed=0 presents_parked=0 display_changed=0x0000000000000000 aperture_bytes=0x0000000200000000 host_visible=false"
+      " presents_unmoved=0 presents_unticketed=0 presents_ticketed=0 presents_parked=0 presents_made=0 presents_refused=0 presents_unpointed=0 last_present_flags=0x0000000000000000 last_present_status=0x0000000000000000 last_present_destination_kind=0 display_changed=0x0000000000000000 aperture_bytes=0x0000000200000000 host_visible=false"
       " host_visible_base=0x0000000000000000 host_visible_bytes=0x0000000000000000 vsync_enables=0 vsync_reported=0\n"
       "adapter/0/device_table/0 busy=false devices=0 opens=0\n"
       "adapter/0/allocation_table/0 busy=false live=0\n"

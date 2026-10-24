@@ -146,7 +146,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       av_contexts_(platform, dxgkrnl_, allocations_, window_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
       native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), present_waiters_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
-      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u), presents_unticketed_(0u), presents_ticketed_(0u), presents_parked_(0u),
+      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u), presents_unticketed_(0u), presents_ticketed_(0u), presents_parked_(0u), presents_refused_(0u), presents_unpointed_(0u), last_present_flags_(0u), last_present_status_(0), last_present_destination_kind_(0u),
       display_changed_(0u), display_announced_(0u), started_(false), luid_(0u), present_(true)
       {
           AV_SCOPE("Adapter::Adapter");
@@ -1665,8 +1665,12 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
     /* A refusal is what dxgkrnl answers by hiding the source: the only trace
      * of why the desktop went dark is this line. More DMA buffer is not one. */
     PresentOperation named = PresentOperation::blt;
-    if (presented < 0 && presented != more_dma_buffer)
+    last_present_flags_ = request->Flags;
+    last_present_status_ = presented;
+    if (presented < 0 && presented != more_dma_buffer) {
+        presents_refused_++;
         log_refused_present(*request, writing.operation(named) == Status::ok);
+    }
     /* Each pass moves the sub-rectangles its DMA buffer carries, and its
      * packet waits for them; a pass that found no room wrote none. */
     const uint32_t end = presented == 0 ? request->SubRectCnt : request->MultipassOffset;
@@ -1703,6 +1707,7 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
         log_unmoved_present("handles", request, request.NumSrcAllocations, request.NumDstAllocations);
         return 0u;
     }
+    last_present_destination_kind_ = static_cast<uint32_t>(destination->allocation().descriptor().kind());
     const PresentSurface written(destination->allocation().descriptor().layout(), destination->allocation().pages());
     const PresentSurface read(source != nullptr ? source->allocation().descriptor().layout() : SurfaceLayout(),
                               source != nullptr ? source->allocation().pages() : GuestPageList());
@@ -1712,6 +1717,7 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
     PointView points;
     if (source != nullptr) static_cast<void>(devices_.peek_point(source_handle, points));
     if (point_missing(request, source, points)) {
+        presents_unpointed_++;
         if (points.first_starvation)
             platform_.log("avgpu: a present of a pointed surface has no point named: the window keeps its last frame");
         return 0u;
@@ -2681,6 +2687,12 @@ void Adapter::report(StateWriter &writer)
     writer.number("presents_unticketed", presents_unticketed_);
     writer.number("presents_ticketed", presents_ticketed_);
     writer.number("presents_parked", presents_parked_);
+    writer.number("presents_made", platform_.load_atomic(presents_made_));
+    writer.number("presents_refused", presents_refused_);
+    writer.number("presents_unpointed", presents_unpointed_);
+    writer.hex("last_present_flags", last_present_flags_);
+    writer.hex("last_present_status", static_cast<uint32_t>(last_present_status_));
+    writer.number("last_present_destination_kind", last_present_destination_kind_);
     writer.hex("display_changed", display_changed_);
     writer.hex("aperture_bytes", segment_.size());
     writer.flag("host_visible", host_visible_.offered());

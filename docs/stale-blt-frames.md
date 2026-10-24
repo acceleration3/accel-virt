@@ -137,3 +137,47 @@ The fix is to leave the legacy path:
 Until then the window is right in every reader but the composition, and the
 composition is wrong for one frame, one or two times in a hundred when the
 application presents faster than DWM composes.
+
+## What `SupportSoftwareDeviceBitmaps` does to a Direct3D 9 window (measured)
+
+Reporting `SupportSoftwareDeviceBitmaps` (0x10000000, as WARP does) leaves
+the legacy path. Here is what happens to a windowed D3D9 present, from ETW
+`Present`, `Blit` and `BlitRect` events and the adapter's present counters
+(`presents_made`, `presents_refused`, `presents_unpointed`,
+`last_present_flags`, `last_present_destination_kind` in the state dump):
+
+- d3d9.dll opens the window's redirection surface through `pfnOpenResource`
+  as the swap chain's primary. The surface covers the **whole window rect**,
+  invisible borders included (1298x847 for a 1280x800 client area), and
+  every present after that names it as `hDstResource`.
+- The present has to keep that surface resident (`keep_resident`). If it
+  doesn't, dxgkrnl fails it with `VidSchErrorSubmittingRenderForNonResidentAllocation`
+  and the device is lost.
+- dxgkrnl records each present as `Blt|RedirectedBlt` with a
+  `D3DKMT_PM_REDIRECTED_BLT` history token. It emits a `Blit` from the back
+  buffer's full rect to the client rect inside the surface ((9,38)-(1289,838)
+  here), on a software command buffer. **`DxgkDdiPresent` is never called for
+  it**: `present_rows` stays at 0, and nothing is refused or left unpointed.
+- That kernel blit writes nothing visible, even when the back buffer's pages
+  hold the frame (tried by reading the frame back into them before
+  `PresentCb`). The window stays white, which is the surface's GDI fill.
+- When the UMD writes the frame into the redirection surface's pages itself,
+  DWM shows it, refreshed through `open_guest_surface`. It lands at the
+  surface's (0,0), though, so it sits under the caption, because
+  `D3DDDIARG_PRESENT` carries no rectangle and no window. Only the kernel
+  knows the client rect.
+
+So enabling the bit would need one of these:
+
+1. The UMD places the frame itself. That needs the window's client rect,
+   which `avumd` can only find through user32 (its image check forbids user32
+   today) or through a size-matching heuristic. Neither is a sound contract.
+2. Make dxgkrnl hand the redirected blt to `DxgkDdiPresent`, which already
+   receives the rects and has the ordered write path. What decides between
+   the software blit and the miniport is not known yet. The candidates are
+   the back buffer's CPU visibility and its segment.
+3. Report `SupportKernelModeCommandBuffer` and run the blit in
+   `DxgkDdiRenderKm` (point 3 above). Then the kernel's rectangles arrive
+   at the miniport as a command.
+
+The caps stay at 0 until one of these is chosen.

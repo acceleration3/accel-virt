@@ -574,6 +574,14 @@ private:
      * (docs/stale-blt-frames.md). */
     uint64_t                       presents_ticketed_;
     uint64_t                       presents_parked_;
+    /* What the last present was and how it ended, and the presents refused
+     * and those of a pointed surface that named no point: a person reading the
+     * state dump sees why a window shows nothing, where DbgPrint is not read. */
+    uint64_t                       presents_refused_;
+    uint64_t                       presents_unpointed_;
+    uint32_t                       last_present_flags_;
+    int32_t                        last_present_status_;
+    uint32_t                       last_present_destination_kind_;
     /* Set from the interrupt when the device says its configuration changed,
      * cleared by the DDI that follows it. */
     uint64_t                       display_changed_;
