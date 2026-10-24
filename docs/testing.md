@@ -993,6 +993,29 @@ gives it (docs/host-memory.md, Budgets).
   user (`setx`), restart whatever launches the application (Steam) so it
   inherits it, and read the frame's pattern between two `Present` lines.
 
+  **`d3d9_dirty_present.exe`** (`tools/guest/probes/`, built by `build.sh`)
+  was written that way from Affinity's trace while a gradient was dragged:
+  one X8R8G8B8 back buffer under `D3DSWAPEFFECT_COPY`, never locked, and a
+  present every few milliseconds of a `Clear` of one rectangle and a few
+  draws under small viewports, with those rectangles as the dirty region
+  (`partial`); or a frame cleared and redrawn whole under `DISCARD`, as a
+  game's (`full`). A handle walks the window a step a frame, as a dragged
+  gradient's does, and a bar code of the frame number is drawn along the top
+  and again along the bottom. What the window shows is read through DWM on
+  request (`PrintWindow`, the default), off the screen (`--screen`), or as
+  the compositor composes it frame by frame (`--wgc`, a
+  Windows.Graphics.Capture of the window, what a window mirror and the
+  scanout take), and judged: the frame shown never goes back, the two bar
+  codes agree (a frame whose top and bottom differ was composed from a
+  surface only partly written - `torn`), and the frame shows its own handle
+  whole and no earlier frame's. `--read-every N` lets presents outrun the
+  reads between, as an application's do. The first two readers pass; the
+  compositor's tears a frame or two in a hundred - the stale rectangles a
+  dragged gradient flickers in Affinity, the old frames in Half-Life 2 -
+  because DWM's `avumd` refreshes the window's redirection surface from its
+  pages (`D3d11Device::refresh_guest_surface`) whenever it composes, and the
+  lock it takes waits for no present the engine is still moving into them.
+
   A **cleared frame, not a triangle**: a triangle through either layer needs
   DXBC and no shader compiler is pinned here. What the clear still proves is
   the device, the swap chain or render target, the command list and fence, the

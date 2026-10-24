@@ -12,7 +12,9 @@
 # in user mode as docs/external-export.md tells a mirror to; and
 # cross_adapter_probe.exe, row-major memory made on one avgpu adapter and opened on another (docs/host-memory.md); and
 # vk_window.exe, a Vulkan window presenting a frame whose orientation and channel order show,
-# its swapchain made again when it resizes. llvm-mingw (https://github.com/mstorsjo/llvm-mingw, found on
+# its swapchain made again when it resizes; and
+# d3d9_dirty_present.exe, a windowed Direct3D 9 chain presented as Affinity's canvas and
+# Half-Life 2's window are, every frame it shows read back off the desktop and judged. llvm-mingw (https://github.com/mstorsjo/llvm-mingw, found on
 # PATH or in /opt/llvm-mingw): its MinGW-w64 headers carry the WinRT capture,
 # Direct3D11 interop and TDH declarations the Windows kit here does not, and a
 # distribution's GCC MinGW lacks the interop one.
@@ -46,4 +48,7 @@ x86_64-w64-mingw32-clang++ -O2 -std=c++17 -municode -Wall -static \
     "$source_dir/shared_id_probe.cpp" -o "$output/shared_id_probe.exe" -lgdi32 -ld3d11 -ldxgi
 x86_64-w64-mingw32-clang++ -O2 -std=c++17 -municode -Wall -static \
     "$source_dir/cross_adapter_probe.cpp" -o "$output/cross_adapter_probe.exe" -ld3d11 -ld3d12 -ldxgi
-echo "$output/cross_adapter_probe.exe $output/shared_id_probe.exe $output/wgc_probe.exe $output/etw_schema.exe $output/d3d9_probe.exe $output/dxgi_modes.exe $output/d3d11_cube.exe $output/gl_window.exe $output/d3d11_flip.exe $output/vk_window.exe"
+x86_64-w64-mingw32-clang++ -O2 -std=c++17 -municode -Wall -Wno-unknown-pragmas -static \
+    "$source_dir/d3d9_dirty_present.cpp" -o "$output/d3d9_dirty_present.exe" \
+    -ld3d9 -ld3d11 -ldxgi -ldwmapi -lruntimeobject -luser32 -lgdi32
+echo "$output/d3d9_dirty_present.exe $output/cross_adapter_probe.exe $output/shared_id_probe.exe $output/wgc_probe.exe $output/etw_schema.exe $output/d3d9_probe.exe $output/dxgi_modes.exe $output/d3d11_cube.exe $output/gl_window.exe $output/d3d11_flip.exe $output/vk_window.exe"
