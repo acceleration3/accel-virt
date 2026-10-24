@@ -81,6 +81,19 @@ private:
         memory_virtual_addressing = 0x20u,         /* DXGK_VIDMMCAPS: VidMm keys on it */
         memory_gpu_mmu = 0x40u,                    /* dxgkrnl keys on it */
         flip_on_vsync_mmio = 0x2u,                 /* DXGK_FLIPCAPS: SetVidPnSourceAddress at device IRQL */
+        /* DXGK_PRESENTATIONCAPS.SupportKernelModeCommandBuffer: dxgkrnl makes
+         * a GDI context for CDD, which sends its drawing as command buffers
+         * to DxgkDdiRenderKm, and CDD creates D3DKMDT_STANDARDALLOCATION_GDISURFACE
+         * allocations for every GDI surface type. This driver only counts
+         * those commands (RenderKmTally): an experiment to see whether
+         * dxgkrnl then hands a window's redirected blt to DxgkDdiPresent
+         * (docs/stale-blt-frames.md). */
+        presentation_kernel_mode_command_buffer = 0x4u,
+        /* AlignmentShift 2 (pitches of 4 bytes) and MaxTextureWidthShift and
+         * MaxTextureHeightShift 3 (16384 texels), the shifts WARP reports: the
+         * GDI command buffers' limits, whose zero would cap a GDI surface at
+         * 2048 and leave every wider desktop to the legacy path. */
+        presentation_gdi_limits = (2u << 10u) | (3u << 14u) | (3u << 17u),
         /* DXGK_PRESENTATIONCAPS.SupportSoftwareDeviceBitmaps: GDI draws a
          * window's redirection surface with its own code into a CPU-visible
          * GDI surface (D3DKMDT_GDISURFACE_TEXTURE_CPUVISIBLE) this driver

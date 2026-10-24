@@ -572,9 +572,14 @@ performs no rotation, scaling, cloning, colour conversion, linked-adapter or
 remote output itself. `DescribePageTable`, `UpdatePageTable`,
 `UpdatePageDirectory`, `MovePageDirectory`, `SubmitRender` and
 `CreateAllocation2` are `PVOID` placeholders in `DRIVER_INITIALIZATION_DATA`
-with no contract and stay NULL, as does `RenderKm`, which `DXGCONTEXT::Render`
-calls only for a GDI context - created only for a driver reporting
-`PresentationCaps.SupportKernelModeCommandBuffer`.
+with no contract and stay NULL. `RenderKm`, which `DXGCONTEXT::Render` calls
+only for a GDI context - created only for a driver reporting
+`PresentationCaps.SupportKernelModeCommandBuffer` - is registered with that
+bit, as an experiment (`RenderKmTally`): it counts CDD's GDI commands by
+operation and runs none (docs/stale-blt-frames.md). Its signature is
+`DXGKDDI_RENDERKM(hContext, DXGKARG_RENDER *)`: the same argument block as
+`Render`, with `pCommand` an array of `DXGK_RENDERKM_COMMAND` stepped by each
+one's `CommandSize`.
 
 ## 4g. WDDM 1.2 (feature 015)
 

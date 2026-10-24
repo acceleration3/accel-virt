@@ -41,6 +41,7 @@
 #include "miniport/ddi/dxgk_physical_adapter_caps_record.hpp"
 #include "miniport/ddi/dxgk_present_allocation_info_record.hpp"
 #include "miniport/ddi/dxgk_pte_record.hpp"
+#include "miniport/ddi/dxgk_renderkm_command_record.hpp"
 #include "miniport/ddi/dxgk_query_page_table_level_desc_in_record.hpp"
 #include "miniport/ddi/dxgk_query_segment_out4_record.hpp"
 #include "miniport/ddi/dxgk_segment_descriptor4_record.hpp"
@@ -553,6 +554,24 @@ AV_SAME_OFFSET(DxgkargRenderRecord, PatchLocationListOutSize, DXGKARG_RENDER, Pa
 AV_SAME_OFFSET(DxgkargRenderRecord, MultipassOffset, DXGKARG_RENDER, MultipassOffset);
 AV_SAME_OFFSET(DxgkargRenderRecord, DmaBufferSegmentId, DXGKARG_RENDER, DmaBufferSegmentId);
 AV_SAME_OFFSET(DxgkargRenderRecord, DmaBufferPhysicalAddress, DXGKARG_RENDER, DmaBufferPhysicalAddress);
+
+AV_SAME_SIZE(DxgkGdiargBitbltRecord, DXGK_GDIARG_BITBLT);
+AV_SAME_OFFSET(DxgkGdiargBitbltRecord, SrcRect, DXGK_GDIARG_BITBLT, SrcRect);
+AV_SAME_OFFSET(DxgkGdiargBitbltRecord, DstRect, DXGK_GDIARG_BITBLT, DstRect);
+AV_SAME_OFFSET(DxgkGdiargBitbltRecord, SrcAllocationIndex, DXGK_GDIARG_BITBLT, SrcAllocationIndex);
+AV_SAME_OFFSET(DxgkGdiargBitbltRecord, DstAllocationIndex, DXGK_GDIARG_BITBLT, DstAllocationIndex);
+AV_SAME_OFFSET(DxgkGdiargBitbltRecord, NumSubRects, DXGK_GDIARG_BITBLT, NumSubRects);
+AV_SAME_OFFSET(DxgkGdiargBitbltRecord, pSubRects, DXGK_GDIARG_BITBLT, pSubRects);
+AV_SAME_OFFSET(DxgkGdiargBitbltRecord, Rop, DXGK_GDIARG_BITBLT, Rop);
+AV_SAME_OFFSET(DxgkGdiargBitbltRecord, Rop3, DXGK_GDIARG_BITBLT, Rop3);
+AV_SAME_OFFSET(DxgkGdiargBitbltRecord, SrcPitch, DXGK_GDIARG_BITBLT, SrcPitch);
+AV_SAME_OFFSET(DxgkGdiargBitbltRecord, DstPitch, DXGK_GDIARG_BITBLT, DstPitch);
+
+AV_SAME_OFFSET(DxgkRenderkmCommandRecord, OpCode, DXGK_RENDERKM_COMMAND, OpCode);
+AV_SAME_OFFSET(DxgkRenderkmCommandRecord, CommandSize, DXGK_RENDERKM_COMMAND, CommandSize);
+AV_SAME_OFFSET(DxgkRenderkmCommandRecord, BitBlt, DXGK_RENDERKM_COMMAND, Command.BitBlt);
+static_assert(sizeof(av::DxgkRenderkmCommandRecord) <= sizeof(DXGK_RENDERKM_COMMAND),
+              "DxgkRenderkmCommandRecord is larger than DXGK_RENDERKM_COMMAND");
 
 AV_SAME_SIZE(DxgkargPatchRecord, DXGKARG_PATCH);
 AV_SAME_OFFSET(DxgkargPatchRecord, hDevice, DXGKARG_PATCH, hDevice);

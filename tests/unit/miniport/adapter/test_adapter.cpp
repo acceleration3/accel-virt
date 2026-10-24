@@ -73,6 +73,8 @@
 #include "miniport/ddi/dxgkarg_recommend_monitor_modes_record.hpp"
 #include "miniport/ddi/dxgkarg_recommend_vidpn_topology_record.hpp"
 #include "core/platform/log_budget.hpp"
+#include "miniport/ddi/dxgk_renderkm_command_record.hpp"
+#include "core/trace/state_writer.hpp"
 #include "miniport/ddi/dxgkarg_render_record.hpp"
 #include "miniport/ddi/dxgkarg_reset_engine_record.hpp"
 #include "miniport/ddi/dxgkarg_reset_hw_engine_record.hpp"
@@ -3635,7 +3637,7 @@ TEST(adapter_escape, the_trace_escape_answers_the_state_of_the_adapter_without_a
    * source, and every table empty and free. */
   const char *const expected =
       "adapter/0 started=true present=true powering_down=false presented_fence=0 present_rows=0"
-      " presents_unmoved=0 presents_unticketed=0 presents_ticketed=0 presents_parked=0 presents_made=0 presents_refused=0 presents_unpointed=0 last_present_flags=0x0000000000000000 last_present_status=0x0000000000000000 last_present_destination_kind=0 display_changed=0x0000000000000000 aperture_bytes=0x0000000200000000 host_visible=false"
+      " presents_unmoved=0 presents_unticketed=0 presents_ticketed=0 presents_parked=0 presents_made=0 presents_refused=0 presents_unpointed=0 last_present_flags=0x0000000000000000 last_present_status=0x0000000000000000 last_present_destination_kind=0 renderkm_calls=0 renderkm_bitblt=0 renderkm_colorfill=0 renderkm_alphablend=0 renderkm_stretchblt=0 renderkm_transparentblt=0 renderkm_cleartypeblend=0 renderkm_escape=0 renderkm_unknown=0 renderkm_last_bitblt_source_kind=0 renderkm_last_bitblt_destination_kind=0 display_changed=0x0000000000000000 aperture_bytes=0x0000000200000000 host_visible=false"
       " host_visible_base=0x0000000000000000 host_visible_bytes=0x0000000000000000 vsync_enables=0 vsync_reported=0\n"
       "adapter/0/device_table/0 busy=false devices=0 opens=0\n"
       "adapter/0/allocation_table/0 busy=false live=0\n"
@@ -3997,6 +3999,60 @@ TEST(adapter_render, needs_a_live_context_then_renders)
   CHECK_EQ(nt(fixture.adapter().render(context.hContext, &render)), success);
   CHECK_EQ(dma[2], 3u);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* CDD's context once the adapter reports SupportKernelModeCommandBuffer: dxgkrnl
+ * creates it with GdiContext, and with VirtualAddressing in the mode this
+ * adapter runs, and sends it RenderKm buffers. */
+TEST(adapter_render_km, counts_a_gdi_context_s_commands_and_its_submission_completes_like_any_other)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  const std::uint32_t gdi = 0x2u, gdi_virtual = 0x6u;
+  const std::uint32_t kinds[] = {gdi, gdi_virtual};
+  for (const std::uint32_t flags : kinds) {
+      av::DxgkargCreateContextRecord context = {};
+      context.Flags = flags;
+      CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+      CHECK_EQ(static_cast<av::Context *>(context.hContext)->flags(), flags);
+      av::DxgkRenderkmCommandRecord commands[2] = {};
+      commands[0].OpCode = static_cast<std::uint32_t>(av::DxgkRenderkmOperation::colorfill);
+      commands[0].CommandSize = sizeof(av::DxgkRenderkmCommandRecord);
+      commands[1].OpCode = static_cast<std::uint32_t>(av::DxgkRenderkmOperation::bitblt);
+      commands[1].CommandSize = sizeof(av::DxgkRenderkmCommandRecord);
+      std::uint8_t dma[16] = {};
+      av::DxgkargRenderRecord render = {};
+      render.pCommand = commands;
+      render.CommandLength = sizeof commands;
+      render.pDmaBuffer = dma;
+      render.DmaSize = sizeof dma;
+      CHECK_EQ(nt(fixture.adapter().render_km(&fixture, &render)), invalid_parameter);
+      CHECK_EQ(nt(fixture.adapter().render_km(context.hContext, nullptr)), invalid_parameter);
+      CHECK_EQ(nt(fixture.adapter().render_km(context.hContext, &render)), success);
+      CHECK(render.pDmaBuffer == dma + 4);
+      const std::uint32_t before = fixture.dxgkrnl().dpcs_queued();
+      if (flags == gdi) {
+          av::DxgkargSubmitCommandRecord submit = {};
+          submit.SubmissionFenceId = 1u;
+          fixture.platform().set_irql(Irql::dispatch);
+          CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), success);
+          fixture.platform().set_irql(Irql::passive);
+      } else {
+          av::DxgkargSubmitCommandVirtualRecord submit = {};
+          submit.hContext = context.hContext;
+          submit.SubmissionFenceId = 2u;
+          submit.DmaBufferVirtualAddress = 0x8000000000ull;
+          CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
+      }
+      CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), before + 1u);
+      CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  }
+  char bytes[8192] = {};
+  av::StateWriter writer(bytes, sizeof bytes);
+  fixture.adapter().report(writer);
+  CHECK(std::strstr(writer.dump(),
+                    "renderkm_calls=2 renderkm_bitblt=2 renderkm_colorfill=2 renderkm_alphablend=0") != nullptr);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
 TEST(adapter_patch, patches_or_refuses_a_missing_block)

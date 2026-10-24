@@ -181,3 +181,17 @@ So enabling the bit would need one of these:
    at the miniport as a command.
 
 The caps stay at 0 until one of these is chosen.
+
+## Kernel-mode command buffers (measured, build 26200)
+
+Reporting `SupportKernelModeCommandBuffer` with `DxgkDdiRenderKm` registered,
+then again with valid GDI limits (`AlignmentShift` 2, texture shifts 3,
+`PresentationCaps` 0x6c804), on a cache-coherent aperture: dxgkrnl starts the
+adapter, but nothing changes. CDD still creates `Staging` and
+`StagingCpuVisible` GDI surfaces (ETW `CddStandardAllocation`), never creates
+a GDI context, and never calls `RenderKm` (`renderkm_calls=0`). The D3D9
+redirected blt still arrives through `DxgkDdiPresent` into a staging
+allocation (`last_present_destination_kind=3`), which is the legacy path and
+its tear. The cap is honoured somewhere this driver cannot see. The open
+question is what else CDD or dxgkrnl requires before it accelerates GDI for
+a GPU-VA (WDDM 2.x) adapter. Public documentation doesn't say.

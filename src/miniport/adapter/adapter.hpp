@@ -44,6 +44,7 @@
 #include "miniport/scheduling/execution_node.hpp"
 #include "miniport/scheduling/hw_queue_contexts.hpp"
 #include "miniport/scheduling/native_fence_table.hpp"
+#include "miniport/scheduling/render_km_tally.hpp"
 #include "miniport/scheduling/hw_queue_submissions.hpp"
 #include "miniport/scheduling/doorbell_table.hpp"
 #include "miniport/scheduling/hw_queue_table.hpp"
@@ -186,6 +187,9 @@ public:
     int32_t create_context(void *device, DxgkargCreateContextRecord *request);
     int32_t destroy_context(void *context);
     int32_t render(void *context, DxgkargRenderRecord *request);
+    /* A GDI context's command buffer, which CDD sends once the adapter reports
+     * SupportKernelModeCommandBuffer: counted, not run. */
+    int32_t render_km(void *context, DxgkargRenderRecord *request);
     int32_t patch(const DxgkargPatchRecord *request);
     /* DISPATCH: queues the fence and asks for the DPC that completes it. */
     int32_t submit_command(const DxgkargSubmitCommandRecord *request);
@@ -520,6 +524,7 @@ private:
     AllocationTable                allocations_;
     DeviceTable                    devices_;
     ContextTable                   contexts_;
+    RenderKmTally                  render_km_;
     AvContextTable                av_contexts_;
     HwQueueTable                   hw_queues_;
     HwQueueSubmissions             hw_submissions_;

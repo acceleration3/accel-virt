@@ -34,13 +34,14 @@ Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) con
     caps.MemoryManagementCaps = memory_cross_adapter_resource | memory_virtual_addressing | memory_gpu_mmu;
     caps.GpuEngineTopologyNbAsymetricProcessingNodes = node_count;
     caps.FlipCaps = flip_on_vsync_mmio;
-    /* Not yet reported: with it, d3d9.dll opens the window's redirection
-     * surface into the application's device and expects the user-mode driver
-     * to copy each frame into it (D3D9On12 does; the kernel moves nothing),
-     * which avumd does not do yet - every Direct3D 9 window would be blank.
-     * The legacy path it keeps instead has the tear docs/stale-blt-frames.md
-     * describes. */
-    caps.PresentationCaps = 0u;
+    /* SupportSoftwareDeviceBitmaps stays unreported: with it, d3d9.dll opens
+     * the window's redirection surface into the application's device and
+     * expects the user-mode driver to copy each frame into it (D3D9On12 does;
+     * the kernel moves nothing), which avumd does not do yet - every Direct3D
+     * 9 window would be blank. The legacy path that bit leaves has the tear
+     * docs/stale-blt-frames.md describes, and leaving it is what the kernel
+     * mode command buffer bit is for. */
+    caps.PresentationCaps = presentation_kernel_mode_command_buffer | presentation_gdi_limits;
     caps.SupportPerEngineTDR = 1u;
     /* Overlay planes, which dxgkrnl takes only beside DirectFlip and from one
      * to ten of them (DXGADAPTER::Initialize); it then clears both again unless

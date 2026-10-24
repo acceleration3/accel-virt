@@ -72,6 +72,7 @@ TEST(driver_capabilities_report_driver_caps, claims_wddm_3_2_gpu_mmu_and_what_ea
   expected.MemoryManagementCaps = 0x70u;   /* CrossAdapterResource | VirtualAddressingSupported | GpuMmuSupported */
   expected.GpuEngineTopologyNbAsymetricProcessingNodes = 2u;
   expected.FlipCaps = 0x2u;                /* FlipOnVSyncMmIo */
+  expected.PresentationCaps = 0x6c804u;        /* SupportKernelModeCommandBuffer, and not SupportSoftwareDeviceBitmaps */
   expected.SupportPerEngineTDR = 1u;
   expected.SupportDirectFlip = 1u;
   expected.SupportMultiPlaneOverlay = 1u;
@@ -81,6 +82,16 @@ TEST(driver_capabilities_report_driver_caps, claims_wddm_3_2_gpu_mmu_and_what_ea
   expected.MaxPointerHeight = 64u;
   expected.PointerCaps = 0x7u;   /* Monochrome | Color | MaskedColor */
   CHECK(std::memcmp(&caps, &expected, sizeof caps) == 0); }
+
+/* The bit is a promise of DxgkDdiRenderKm, which dxgkrnl rejects the adapter
+ * for breaking (docs/ddi-sequences.md, 2.3). */
+TEST(driver_capabilities_report_driver_caps, reports_the_kernel_mode_command_buffer_bit_and_no_software_device_bitmaps)
+{ MockPlatform platform; const DriverCapabilities capabilities(platform);
+  DxgkDriverCapsRecord caps = {};
+  const DxgkargQueryAdapterInfoRecord record = request(nullptr, 0u, &caps, sizeof caps);
+  CHECK_STATUS(capabilities.report_driver_caps(AdapterInfoQuery(platform, record)), Status::ok);
+  CHECK_EQ(caps.PresentationCaps & 0x4u, 0x4u);
+  CHECK_EQ(caps.PresentationCaps & 0x10000000u, 0u); }
 
 /* FR-006 named out loud: rotation and gamma are what the display path would
  * otherwise silently ignore, so each field that would claim one is asserted

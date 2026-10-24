@@ -143,6 +143,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform), overlays_(platform, sources_),
       shared_(platform), allocations_(platform, segment_, memory_, shared_),
       devices_(platform, allocations_, shared_, dxgkrnl_), contexts_(platform, devices_, geometry_),
+      render_km_(platform, devices_),
       av_contexts_(platform, dxgkrnl_, allocations_, window_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
       native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), present_waiters_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
@@ -1167,6 +1168,14 @@ int32_t Adapter::render(void *context, DxgkargRenderRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::render");
     if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
     return NtStatus(RenderRequest(platform_, *request).render()).value();
+}
+
+int32_t Adapter::render_km(void *context, DxgkargRenderRecord *request)
+{
+    AV_SCOPE("Adapter::render_km");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::render_km");
+    if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return render_km_.render(*request).value();
 }
 
 int32_t Adapter::patch(const DxgkargPatchRecord *request)
@@ -2693,6 +2702,7 @@ void Adapter::report(StateWriter &writer)
     writer.hex("last_present_flags", last_present_flags_);
     writer.hex("last_present_status", static_cast<uint32_t>(last_present_status_));
     writer.number("last_present_destination_kind", last_present_destination_kind_);
+    render_km_.report(writer);
     writer.hex("display_changed", display_changed_);
     writer.hex("aperture_bytes", segment_.size());
     writer.flag("host_visible", host_visible_.offered());
