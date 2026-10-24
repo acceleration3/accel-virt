@@ -333,6 +333,11 @@ endif()
 # Harness includes name a path from tests/ ("harness/vidsch/fake_vidsch.hpp").
 file(GLOB_RECURSE AV_HARNESS_SOURCES CONFIGURE_DEPENDS tests/harness/*.cpp)
 list(FILTER AV_HARNESS_SOURCES EXCLUDE REGEX "/test_main\\.cpp$")
+# The executor and ICD halves of the harness name executor headers that moved;
+# a build of the miniport's and the protocol's tests alone leaves them out.
+if(AV_LOCAL_MINIPORT_ONLY)
+  list(FILTER AV_HARNESS_SOURCES EXCLUDE REGEX "/harness/(executor|icd)/|/harness/transport/mock_transport\\.cpp$|/harness/guest/scripted_host\\.cpp$")
+endif()
 add_library(av_harness STATIC ${AV_HARNESS_SOURCES})
 target_include_directories(av_harness PUBLIC tests)
 # MockHost runs the device core's workers on real threads.

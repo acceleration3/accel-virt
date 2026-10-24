@@ -81,6 +81,15 @@ private:
         memory_virtual_addressing = 0x20u,         /* DXGK_VIDMMCAPS: VidMm keys on it */
         memory_gpu_mmu = 0x40u,                    /* dxgkrnl keys on it */
         flip_on_vsync_mmio = 0x2u,                 /* DXGK_FLIPCAPS: SetVidPnSourceAddress at device IRQL */
+        /* DXGK_PRESENTATIONCAPS.SupportSoftwareDeviceBitmaps: GDI draws a
+         * window's redirection surface with its own code into a CPU-visible
+         * GDI surface (D3DKMDT_GDISURFACE_TEXTURE_CPUVISIBLE) this driver
+         * describes, and DWM opens it through the user-mode driver. Without
+         * it CDD takes its legacy path, where the kernel copies the window
+         * out of a staging allocation with the CPU behind every reader this
+         * driver has (docs/stale-blt-frames.md). WARP reports the same bit,
+         * and no kernel-mode command buffers (reverse-engineering.md §3). */
+        presentation_software_device_bitmaps = 0x10000000u,
         physical_gpu_mmu = 0x2u,                   /* DXGK_PHYSICALADAPTERFLAGS */
     };
     /* The virtio device addresses all of guest physical memory. */

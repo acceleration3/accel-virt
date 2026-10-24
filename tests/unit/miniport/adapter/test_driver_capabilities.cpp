@@ -69,9 +69,10 @@ TEST(driver_capabilities_report_driver_caps, claims_wddm_3_2_gpu_mmu_and_what_ea
    * NativeGpuFence while the feature is disabled fails the adapter start
    * (feature 049, research.md §17). */
   expected.SchedulingCaps = 0x1u;
-  expected.MemoryManagementCaps = 0x60u;   /* VirtualAddressingSupported | GpuMmuSupported */
+  expected.MemoryManagementCaps = 0x70u;   /* CrossAdapterResource | VirtualAddressingSupported | GpuMmuSupported */
   expected.GpuEngineTopologyNbAsymetricProcessingNodes = 2u;
   expected.FlipCaps = 0x2u;                /* FlipOnVSyncMmIo */
+  expected.PresentationCaps = 0x10000000u; /* SupportSoftwareDeviceBitmaps */
   expected.SupportPerEngineTDR = 1u;
   expected.SupportDirectFlip = 1u;
   expected.SupportMultiPlaneOverlay = 1u;
