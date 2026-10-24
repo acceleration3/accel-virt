@@ -36,7 +36,7 @@
 //   d3d9_dirty_present.exe [partial|full] [--ex] [--frames N] [--interval-ms N]
 //                          [--width W --height H] [--source-rect] [--settle-ms N]
 //                          [--screen] [--wgc] [--read-every N] [--rect-order N]
-//                          [--no-read] [--verbose]
+//                          [--settle-capture-ms N] [--no-read] [--verbose]
 //
 // --ex           makes the device through Direct3D9Ex, as a few applications do.
 // --source-rect  presents the dirty rectangles' bound as pSourceRect/pDestRect
@@ -46,6 +46,11 @@
 //                default); 1 new,old,code; 2 code,old,new; 3 code,new,old.
 // --read-every N reads after every Nth frame only, so presents outrun the
 //                reads between, as an application's do.
+// --settle-capture-ms N
+//                waits N ms after a compositor frame arrives before reading it,
+//                and reads it twice: a frame that reads differently the second
+//                time was still being written when it arrived - a tear of the
+//                capture's own, not of the window.
 // --no-read      only presents, for a trace of the calls alone.
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0A00
@@ -99,6 +104,7 @@ struct Options {
     bool     verbose = false;
     uint32_t read_every = 1u;
     uint32_t rect_order = 0u;
+    uint32_t settle_capture_ms = 0u;
     uint32_t frames = 600u;
     uint32_t interval_ms = 4u;
     uint32_t settle_ms = 400u;
@@ -535,6 +541,7 @@ public:
 
     Judge &judge() { return judge_; }
     uint32_t frames() const { return frames_; }
+    uint32_t rereads_differed() const { return rereads_differed_; }
 
 private:
     static DWORD WINAPI run(void *context)
@@ -633,20 +640,21 @@ private:
                     copy.MiscFlags = 0;
                     device->CreateTexture2D(&copy, nullptr, &staging);
                 }
-                D3D11_MAPPED_SUBRESOURCE map;
-                if (staging != nullptr) {
-                    context->CopyResource(staging, texture);
-                    if (SUCCEEDED(context->Map(staging, 0, D3D11_MAP_READ, 0, &map))) {
-                        for (uint32_t y = 0; y < description.Height; y++)
-                            memcpy(picture->rows() + size_t{y} * description.Width,
-                                   static_cast<const uint8_t *>(map.pData) + size_t{y} * map.RowPitch,
-                                   size_t{description.Width} * 4u);
-                        context->Unmap(staging, 0);
-                        frames_++;
-                        const int64_t code = picture->code();
-                        if (options_.verbose) wprintf(L"compositor: frame shows %lld, %u presented\n", code, presented);
-                        judge_.judge(*picture, code, presented, false);
+                if (options_.settle_capture_ms != 0u) Sleep(options_.settle_capture_ms);
+                if (staging != nullptr && read_into(context, staging, texture, description, *picture)) {
+                    frames_++;
+                    const int64_t code = picture->code();
+                    const int64_t bottom = picture->code_at(bottom_code_y(options_));
+                    /* Read again: a frame that changed under the first read was
+                     * still being written by the compositor when it arrived. */
+                    if (options_.settle_capture_ms != 0u && read_into(context, staging, texture, description, *picture) &&
+                        (picture->code() != code || picture->code_at(bottom_code_y(options_)) != bottom)) {
+                        rereads_differed_++;
+                        wprintf(L"compositor: a frame read %lld/%lld then %lld/%lld: written while read\n", code, bottom,
+                                picture->code(), picture->code_at(bottom_code_y(options_)));
                     }
+                    if (options_.verbose) wprintf(L"compositor: frame shows %lld, %u presented\n", code, presented);
+                    judge_.judge(*picture, picture->code(), presented, false);
                 }
                 release(texture);
             }
@@ -679,6 +687,19 @@ private:
     }
 #undef WATCH
 
+    static bool read_into(ID3D11DeviceContext *context, ID3D11Texture2D *staging, ID3D11Texture2D *texture,
+                          const D3D11_TEXTURE2D_DESC &description, Pixels &picture)
+    {
+        D3D11_MAPPED_SUBRESOURCE map;
+        context->CopyResource(staging, texture);
+        if (FAILED(context->Map(staging, 0, D3D11_MAP_READ, 0, &map))) return false;
+        for (uint32_t y = 0; y < description.Height; y++)
+            memcpy(picture.rows() + size_t{y} * description.Width,
+                   static_cast<const uint8_t *>(map.pData) + size_t{y} * map.RowPitch, size_t{description.Width} * 4u);
+        context->Unmap(staging, 0);
+        return true;
+    }
+
     static ID3D11Texture2D *texture_of(wgc::IDirect3D11CaptureFrame *frame)
     {
         wgd3d::IDirect3DSurface *surface = nullptr;
@@ -699,6 +720,7 @@ private:
     HANDLE               thread_ = nullptr;
     volatile LONG        started_ = 0, stopped_ = 0, stopping_ = 0;
     uint32_t             frames_ = 0u;
+    uint32_t             rereads_differed_ = 0u;
 };
 
 LRESULT CALLBACK window_procedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
@@ -733,6 +755,7 @@ bool parse(int argc, wchar_t **argv, Options &options)
         else if (wcscmp(argument, L"--wgc") == 0) options.wgc = true;
         else if (wcscmp(argument, L"--read-every") == 0 && more) options.read_every = wcstoul(argv[++index], nullptr, 10);
         else if (wcscmp(argument, L"--rect-order") == 0 && more) options.rect_order = wcstoul(argv[++index], nullptr, 10);
+        else if (wcscmp(argument, L"--settle-capture-ms") == 0 && more) options.settle_capture_ms = wcstoul(argv[++index], nullptr, 10);
         else if (wcscmp(argument, L"--verbose") == 0) options.verbose = true;
         else if (wcscmp(argument, L"--frames") == 0 && more) options.frames = wcstoul(argv[++index], nullptr, 10);
         else if (wcscmp(argument, L"--interval-ms") == 0 && more) options.interval_ms = wcstoul(argv[++index], nullptr, 10);
@@ -907,6 +930,8 @@ int wmain(int argc, wchar_t **argv)
     if (options.wgc) {
         watcher.stop();
         watcher.judge().report(presented);
+        if (options.settle_capture_ms != 0u)
+            wprintf(L"compositor: %u frames read differently the second time\n", watcher.rereads_differed());
     }
     if (options.read) judge.report(presented);
     const uint32_t failures = judge.failures() + (options.wgc ? watcher.judge().failures() : 0u);

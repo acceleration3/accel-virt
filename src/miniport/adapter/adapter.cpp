@@ -141,7 +141,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       av_contexts_(platform, dxgkrnl_, allocations_, window_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
       native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
-      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u), presents_unticketed_(0u),
+      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u), presents_unticketed_(0u), presents_ticketed_(0u), presents_parked_(0u),
       display_changed_(0u), display_announced_(0u), started_(false), luid_(0u), present_(true)
       {
           AV_SCOPE("Adapter::Adapter");
@@ -1749,6 +1749,7 @@ void Adapter::mark_present(DxgkargPresentRecord &request, uint64_t ticket)
     }
     request.pDmaBufferPrivateData = private_data + PresentTicketRecord::encoded_size;
     request.DmaBufferPrivateDataSize -= static_cast<uint32_t>(PresentTicketRecord::encoded_size);
+    presents_ticketed_++;
 }
 
 void Adapter::log_unticketed_present(const DxgkargPresentRecord &request)
@@ -2349,6 +2350,7 @@ bool Adapter::submit_present(const DxgkargSubmitCommandVirtualRecord &request, S
     owner = &presents_.object();
     awaited = record.ticket();
     status = node_.submit(request.SubmissionFenceId, owner, awaited);
+    presents_parked_++;
     return true;
 }
 
@@ -2624,6 +2626,8 @@ void Adapter::report(StateWriter &writer)
     writer.number("present_rows", present_rows_);
     writer.number("presents_unmoved", presents_unmoved_);
     writer.number("presents_unticketed", presents_unticketed_);
+    writer.number("presents_ticketed", presents_ticketed_);
+    writer.number("presents_parked", presents_parked_);
     writer.hex("display_changed", display_changed_);
     writer.hex("aperture_bytes", segment_.size());
     writer.flag("host_visible", host_visible_.offered());

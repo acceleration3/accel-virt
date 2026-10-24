@@ -560,6 +560,12 @@ private:
     /* Presents the engine moves whose packets had no room to name their
      * ticket, and so complete without waiting for the pixels. */
     uint64_t                       presents_unticketed_;
+    /* Presents the engine moves whose ticket was named in their packet, and
+     * packets that arrived naming one and were held for it: a gap between the
+     * two is a present whose packet ran ahead of its pixels
+     * (docs/stale-blt-frames.md). */
+    uint64_t                       presents_ticketed_;
+    uint64_t                       presents_parked_;
     /* Set from the interrupt when the device says its configuration changed,
      * cleared by the DDI that follows it. */
     uint64_t                       display_changed_;

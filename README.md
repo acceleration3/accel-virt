@@ -797,6 +797,7 @@ third_party/                  fetched and pinned: windows-kit, khronos, qemu, dx
 | [`docs/renderer.md`](docs/renderer.md) | The renderer process: where the line is, what crosses it, recovery |
 | [`docs/trace.md`](docs/trace.md) | Thread and state tracking, crash reports, the trace table format |
 | [`docs/frame-pacing.md`](docs/frame-pacing.md) | Why a guest frame came late: the frame-pacing recording and report, and the WGC capture rule |
+| [`docs/stale-blt-frames.md`](docs/stale-blt-frames.md) | Why a blt-model window flickers to an older frame: the legacy redirection path's kernel copy racing the present engine, what was measured not to fix it, and the present path that does |
 | [`docs/testing.md`](docs/testing.md) | The five test layers, and preparing and debugging a guest image |
 | [`docs/kb/`](docs/kb/) | The WDDM 3.2 knowledge base: the architecture, the kernel-mode contract, memory, scheduling, display, user mode, the 3.x changes, Microsoft's GPU-PV and WARP drivers as case studies |
 | [`docs/kb/12-re-cookbook.md`](docs/kb/12-re-cookbook.md) | How to keep reverse engineering: fetching binaries and PDBs, Ghidra, symbols |

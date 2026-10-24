@@ -2033,6 +2033,8 @@ TEST(adapter_present, a_queued_blt_holds_its_packet_until_the_engine_has_moved_t
   }
   CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 1u);
   CHECK_EQ(fixture.dxgkrnl().interrupt(before).FenceId, 1u);
+  const StateDump parked(fixture);
+  CHECK(parked.holds("presents_ticketed=1 presents_parked=1"));
 
   /* Another epoch, or a ticket never given: an ordinary packet. */
   const av::PresentTicketRecord forged[] = {av::PresentTicketRecord(record.epoch() + 1u, 1u),
@@ -3363,7 +3365,7 @@ TEST(adapter_escape, the_trace_escape_answers_the_state_of_the_adapter_without_a
    * source, and every table empty and free. */
   const char *const expected =
       "adapter/0 started=true present=true powering_down=false presented_fence=0 present_rows=0"
-      " presents_unmoved=0 presents_unticketed=0 display_changed=0x0000000000000000 aperture_bytes=0x0000000200000000 host_visible=false"
+      " presents_unmoved=0 presents_unticketed=0 presents_ticketed=0 presents_parked=0 display_changed=0x0000000000000000 aperture_bytes=0x0000000200000000 host_visible=false"
       " host_visible_base=0x0000000000000000 host_visible_bytes=0x0000000000000000 vsync_enables=0 vsync_reported=0\n"
       "adapter/0/device_table/0 busy=false devices=0 opens=0\n"
       "adapter/0/allocation_table/0 busy=false live=0\n"

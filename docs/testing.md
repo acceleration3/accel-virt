@@ -1011,10 +1011,9 @@ gives it (docs/host-memory.md, Budgets).
   whole and no earlier frame's. `--read-every N` lets presents outrun the
   reads between, as an application's do. The first two readers pass; the
   compositor's tears a frame or two in a hundred - the stale rectangles a
-  dragged gradient flickers in Affinity, the old frames in Half-Life 2 -
-  because DWM's `avumd` refreshes the window's redirection surface from its
-  pages (`D3d11Device::refresh_guest_surface`) whenever it composes, and the
-  lock it takes waits for no present the engine is still moving into them.
+  dragged gradient flickers in Affinity, the old frames in Half-Life 2 - and
+  not at all with presents 50 ms apart. Where the tear comes from, what was
+  tried, and what fixes it are in docs/stale-blt-frames.md.
 
   A **cleared frame, not a triangle**: a triangle through either layer needs
   DXBC and no shader compiler is pinned here. What the clear still proves is
