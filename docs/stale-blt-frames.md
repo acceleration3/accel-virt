@@ -195,3 +195,47 @@ allocation (`last_present_destination_kind=3`), which is the legacy path and
 its tear. The cap is honoured somewhere this driver cannot see. The open
 question is what else CDD or dxgkrnl requires before it accelerates GDI for
 a GPU-VA (WDDM 2.x) adapter. Public documentation doesn't say.
+
+## What Windows orders, from its binaries (build 26200, public symbols)
+
+Decompiled from `dxgkrnl.sys`, `dxgmms2.sys`, `cdd.dll`, `win32kbase.sys`
+and `win32kfull.sys`. VirtualBox's WDDM driver (open source) reports the same
+legacy `PresentationCaps` as this one. It moves a D3D surface -> staging blt
+inside the present's DMA buffer (`SVGA3D_CMD_SURFACE_DMA`, `gaPresentBlt`).
+It is WDDM 1.2 without GPU virtual addressing.
+
+- **The app's redirected blt** (`DXGCONTEXT::Present`, flag 0x10000), in order:
+  1. `CWin32kLocks::Lock(hwnd)`.
+  2. `DxgkEngAddRedirBitmapD3DDirtyRgn`, which does two things:
+     - The PDEV's `DrvAccumulateD3DDirtyRect`, under the CDD bitmap's
+       semaphore. For `CddBitmapHw` that queues GPU waits through
+       `CDDSYNCOBJECT`. For `CddBitmapSw` it only marks the bitmap dirty.
+     - `GreAddBitmapD3DDirtyRgn`, which notifies DWM's sprite with
+       `bSpDwmNotifyDirty`. This happens **before** the present is submitted.
+  3. `SubmitPresent`: `DxgkDdiPresent`, then the packet is queued.
+  4. `SubmitPresentHistoryToken` (REDIRECTED_BLT, with the dirty rects).
+  5. Unlock.
+- **A GDI-side access** to a CDD bitmap the app wrote, two paths:
+  - `CddBitmapHw` uses `SyncDXAccessInternal`: `IssueSignalForDxProcess` +
+    `IssueWaitForGdi`, which are GPU waits on the contexts.
+  - `CddBitmapSw` uses `CDDPDEV::SyncGPUAccess` -> `DxgkCddSyncGPUAccess` ->
+    `VidMmWaitOnAllocationDmaReferences`. That calls
+    `WaitOnAllDMAReferencesExceptThis`, which flushes every other busy
+    device that has the allocation open, i.e. waits for the packets already
+    queued. Nothing in it holds back a packet queued later.
+- **VidMm's CPU lock** (`VIDMM_GLOBAL::Lock1`, `WaitOnAllocForceSync`) only
+  flushes the allocation's owning device.
+
+Every Microsoft ordering here is stated in packets: a reader waits for the
+queued packets to complete, and a writer is held by waits queued on its
+context. None of it can see a write that starts in `DxgkDdiPresent`, before
+the packet is queued, which is what this driver does today.
+
+The trace adds one more fact. While the probe presents, nobody calls
+`DxgkCddSyncGPUAccess`, `DxgkCddLock` or a CDD sync object (dxgkrnl's
+profiler events). CDD creates, locks and unlocks the window's allocations
+only at window creation. So the per-frame reader of the staging pages holds a
+mapping it took earlier, and syncs through none of the paths above. That is
+consistent with the submit-time move not changing the tear rate. Who that
+reader is remains open: candidates are win32k's sprite and redirection code
+reading the CDD surface's mapping at DWM's request.
