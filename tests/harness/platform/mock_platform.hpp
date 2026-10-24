@@ -180,6 +180,9 @@ public:
     /* Called inside every blocking lock acquire, before the lock is taken: the
      * moment a thread is waiting on it. */
     void on_acquire(StallCallback callback, void *context);
+    /* Called inside every load_atomic, before it reads: the moment another
+     * processor's store can land between two loads of a seqlock. */
+    void on_load(StallCallback callback, void *context);
 
     /* An MDL of `page_count` pages with those frame addresses, as dxgkrnl hands
      * one to BuildPagingBuffer. The frames must outlive this platform; any
@@ -413,6 +416,8 @@ private:
     const ServiceValue *service_ = nullptr;
     StallCallback acquire_callback_ = nullptr;
     void         *acquire_context_ = nullptr;
+    StallCallback load_callback_ = nullptr;
+    void         *load_context_ = nullptr;
     bool          holding_elsewhere_ = false;
     LockRank      held_elsewhere_ = LockRank::log_budget;
     MockEvent     events_[max_events] = {};

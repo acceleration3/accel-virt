@@ -25,6 +25,8 @@
 #include "proto/escape/umd_adapter_info.hpp"
 #include "proto/escape/follow_record.hpp"
 #include "proto/escape/next_point_record.hpp"
+#include "proto/escape/pages_read_record.hpp"
+#include "miniport/driver/acquired_handle_data.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "proto/escape/present_point_record.hpp"
 #include "miniport/present/present_ticket_record.hpp"
@@ -119,6 +121,9 @@ namespace {
 /* STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER: a present asking for more room, not a refusal. */
 constexpr int32_t more_dma_buffer = static_cast<int32_t>(0xC01E0001u);
 
+/* Platform::interrupt_time counts 100 ns. */
+constexpr uint64_t ticks_per_microsecond = 10u;
+
 /* What basicdisplay.sys reports for its one output (docs/ddi-sequences.md). */
 enum : int32_t {
     type_video_output         = 1,   /* TypeVideoOutput */
@@ -140,7 +145,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       devices_(platform, allocations_, shared_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       av_contexts_(platform, dxgkrnl_, allocations_, window_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
-      native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
+      native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), present_waiters_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u), presents_unticketed_(0u), presents_ticketed_(0u), presents_parked_(0u),
       display_changed_(0u), display_announced_(0u), started_(false), luid_(0u), present_(true)
       {
@@ -485,7 +490,10 @@ void Adapter::dpc_routine()
     if (harvest && device_.object().harvest_cursor(completed) != Status::ok && budget_.allows())
         platform_.log("avgpu: cursor queue harvest failed in the DPC");
     av_contexts_.serve(node_, hw_submissions_);
-    if (harvest && presents_.constructed()) node_.finish(&presents_.object(), presents_.object().completed());
+    if (harvest && presents_.constructed()) {
+        node_.finish(&presents_.object(), presents_.object().completed());
+        present_waiters_.wake();
+    }
     void        *overdue_owners[8] = {};
     uint32_t     named = 0u;
     const uint32_t overdue = node_.release_overdue(now, overdue_owners, 8u, &named);
@@ -797,6 +805,7 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
     if (magic == HostWindowRecord::magic) return window_chunk(*escape);
     if (magic == ContextViewsRecord::magic) return context_views(*escape);
     if (magic == WakeEventRecord::magic) return wake_event(*escape);
+    if (magic == PagesReadRecord::magic) return pages_read(*escape);
     if (magic == NextPointRecord::magic || magic == NextPointRecord::withdraw_magic ||
         magic == NextPointRecord::pages_magic)
         return next_point(*escape);
@@ -804,6 +813,40 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
     /* Only the adapter is named: the inspector opens no device. */
     const Status answered = TraceEscape(platform_, *this).answer(bytes, escape->PrivateDriverDataSize);
     return NtStatus(answered == Status::malformed ? Status::invalid_parameter : answered).value();
+}
+
+/* A process reading the pages presents write into: DWM's user-mode driver
+ * refreshing its texture of a window's surface (PagesReadRecord). Both
+ * actions answer the allocation's write sequence; a begin first waits until
+ * the present engine has moved every present queued into the pages, and says
+ * in `complete` whether it did - a wait that ran out is no refusal, the reader
+ * decides what to show. Every refusal is STATUS_INVALID_PARAMETER. */
+int32_t Adapter::pages_read(const DxgkargEscapeRecord &escape)
+{
+    AV_SCOPE("Adapter::pages_read");
+    auto *const     bytes = static_cast<uint8_t *>(escape.pPrivateDriverData);
+    PagesReadRecord record;
+    if (record.decode(bytes, escape.PrivateDriverDataSize) != Status::ok)
+        return NtStatus(Status::invalid_parameter).value();
+    AcquiredHandleData acquired(dxgkrnl_, record.allocation());
+    Allocation *const  allocation = acquired.acquire() == Status::ok ? allocations_.find(acquired.data()) : nullptr;
+    if (allocation == nullptr) return NtStatus(Status::invalid_parameter).value();
+    PresentWrites &writes = allocation->writes();
+    uint64_t       sequence = writes.sequence();
+    bool           complete = true;
+    if (record.action() == PagesReadRecord::Action::begin) {
+        const PresentPageView *const engine = presents_.constructed() ? &presents_.object().progress() : nullptr;
+        const Status waited =
+            present_waiters_.wait_for(writes, engine, uint64_t{record.wait_microseconds()} * ticks_per_microsecond,
+                                      sequence);
+        complete = waited == Status::ok;
+        if (waited == Status::not_found && budget_.allows())
+            platform_.log("avgpu: a reader of presented pages waited out its time");
+        if (waited == Status::no_space && budget_.allows())
+            platform_.log("avgpu: more readers of presented pages than slots to wait in");
+    }
+    static_cast<void>(record.answered(sequence, complete).encode(bytes, PagesReadRecord::encoded_size));   /* decode checked the length */
+    return NtStatus(Status::ok).value();
 }
 
 /* A process asking for a chunk of the host window on its av context, or
@@ -1676,6 +1719,16 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
     PresentTicket ticket(platform_, budget_, presents_.constructed() && present_ ? &presents_.object() : nullptr,
                          immediate_mover(), image_of(request, source, points));
     PresentBlit   blit(platform_, ticket, source != nullptr ? &read : nullptr, written);
+    /* A reader of the destination's pages orders itself after this write: the
+     * count is odd while the present is queued or moved, and names the ticket
+     * that moves the pixels once the engine has them. Closed on every path,
+     * including the refusal below, so a reader is never left waiting on it. */
+    PresentWrites &writes = destination->allocation().writes();
+    writes.opening();
+    ScopeExit written_into([&] {
+        writes.written(ticket.ticket());
+        present_waiters_.wake();
+    });
     const Rectangle into(request.DstRect.left, request.DstRect.top, request.DstRect.right, request.DstRect.bottom);
     const uint32_t  count = end - first;
     const RectRecord *const rectangles = count != 0u ? request.pDstSubRects + first : nullptr;
@@ -2641,6 +2694,7 @@ void Adapter::report(StateWriter &writer)
     contexts_.report(writer);
     hw_queues_.report(writer);
     node_.report(writer);
+    present_waiters_.report(writer);
     av_contexts_.report(writer);
     sources_.report(writer);
     writer.close();

@@ -6,6 +6,7 @@
 #define AV_ALLOCATION_HPP
 
 #include "miniport/memory/aperture_pages.hpp"
+#include "miniport/memory/present_writes.hpp"
 #include "core/platform/platform.hpp"
 #include "core/support/status.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
@@ -51,6 +52,9 @@ public:
      * (research.md §16). */
     Resource                   *resource() const;
     void                        belongs_to(Resource *resource);
+    /* The presents moving pixels into its pages, which a reader of them
+     * orders itself after (docs/stale-blt-frames.md). */
+    PresentWrites              &writes();
 
     /* The DXGK_ALLOCATIONINFO fields the driver answers. */
     void report_to(DxgkAllocationInfoRecord &info);
@@ -105,6 +109,7 @@ private:
     /* The owner's process, as the device it was opened through names it. */
     const void          *process_;
     AperturePages        aperture_;
+    PresentWrites        writes_;
 
     friend struct AllocationProbe;
 };

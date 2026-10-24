@@ -173,6 +173,12 @@ bool PresentQueue::holds(const PresentTicketRecord &record)
     return record.epoch() == epoch_ && record.ticket() != 0u && record.ticket() <= platform_.load_atomic(queued_);
 }
 
+const PresentPageView &PresentQueue::progress() const
+{
+    AV_SCOPE("PresentQueue::progress");
+    return page_;
+}
+
 uint32_t PresentQueue::epoch() const
 {
     AV_SCOPE("PresentQueue::epoch");

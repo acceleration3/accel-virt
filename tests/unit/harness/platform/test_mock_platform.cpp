@@ -221,6 +221,26 @@ TEST(mock_platform_atomic, stores_and_loads_the_value)
   platform.set_irql(Irql::passive);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
+TEST(mock_platform_atomic, a_load_hook_runs_before_each_load_reads_so_a_store_can_land_between_two)
+{ MockPlatform platform;
+  std::uint64_t word = 1u;
+  struct Landing {
+      MockPlatform  *platform;
+      std::uint64_t *word;
+      std::uint32_t  calls;
+  } landing{&platform, &word, 0u};
+  platform.on_load([](void *context) {
+                      auto *const hook = static_cast<Landing *>(context);
+                      if (++hook->calls == 2u) *hook->word = 7u;
+                  },
+                  &landing);
+  CHECK_EQ(platform.load_atomic(word), 1u);
+  CHECK_EQ(platform.load_atomic(word), 7u);
+  CHECK_EQ(landing.calls, 2u);
+  platform.on_load(nullptr, nullptr);
+  CHECK_EQ(platform.load_atomic(word), 7u);
+  CHECK_EQ(landing.calls, 2u); }
+
 TEST(mock_platform_time, saturates_instead_of_wrapping)
 { MockPlatform platform;
   platform.advance_time(~std::uint64_t{0});

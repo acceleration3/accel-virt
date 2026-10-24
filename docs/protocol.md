@@ -1025,6 +1025,55 @@ Every refusal is `STATUS_INVALID_PARAMETER`:
 
 The driver reads its frames back into the allocation then, as it did before.
 
+### Pages read record (user mode -> guest driver, escape)
+
+The private data of one adapter-level `D3DKMTEscape`. A process that reads
+with the CPU the pages presents write into - DWM's user-mode driver refreshing
+its texture of a window's surface - sends it around each read, so that the
+read is ordered after the present engine's move. The miniport decodes it at
+`PASSIVE`, may wait in it, and writes the answer back into the same bytes.
+32 bytes.
+
+A windowed blt-model present's pixels are moved into the destination
+allocation's pages by the device's present engine on a host thread, after
+`DxgkDdiPresent` returned (see Present engine). Nothing in the kernel orders a
+CPU read of those pages after that move, so a reader reads a frame half
+written (docs/stale-blt-frames.md).
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 0 | u32 | magic | `AVB` = `0x00425641` |
+| 4 | u16 | version | 1 |
+| 6 | u16 | action | 1 begin, 2 end |
+| 8 | u32 | allocation | the process's `D3DKMT_HANDLE` of the allocation whose pages it reads; not 0 |
+| 12 | u32 | wait microseconds | how long a begin may wait for the pages to settle; 0 for an end, which does not wait |
+| 16 | u64 | writes | the answer; 0 in the request |
+| 24 | u32 | complete | the answer, 0 or 1; 0 in the request |
+| 28 | u32 | reserved | 0 |
+
+The miniport counts the presents written into each allocation's pages as a
+seqlock: the count goes odd when a present into them is about to be queued
+or moved, and even again once it is queued to the engine under a ticket, or
+moved in place. It also keeps the latest ticket queued into them.
+
+- **begin** waits, up to `wait microseconds`, until the count is even and the
+  present engine's page (see Present engine) says the latest ticket has
+  completed - a device with no engine has no ticket to wait for. It answers
+  `writes`, the even count the read may begin at, and `complete` 1. A wait
+  that ran out answers the count as it is and `complete` 0: the pages may
+  hold part of a present, and the reader decides what to show. At most four
+  readers wait at once; a fifth is answered at once with `complete` 0, as one whose wait ran out.
+- **end** does not wait. It answers `writes`, the count now, and `complete`
+  1. A reader whose end answers a count other than its begin's read while a
+  present was written, and does not show what it read.
+
+Every refusal is `STATUS_INVALID_PARAMETER` and writes nothing back:
+- another length, magic, version or action, a reserved field that is not 0;
+- allocation 0, or a handle `dxgkrnl` knows no allocation of this driver by;
+- an answer already filled in (`writes` or `complete` not 0).
+
+A wait that runs out is not a refusal: the reader reads it from `complete`.
+
 ### Wake event record (user mode -> guest driver, escape)
 
 The private data of one `D3DKMTEscape` whose `hContext` names a live av

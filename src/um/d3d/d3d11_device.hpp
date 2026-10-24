@@ -245,6 +245,8 @@ private:
     void refresh_guest_surfaces();
     void refresh_bound_guest_surfaces(const D3D10DDI_HSHADERRESOURCEVIEW *views, UINT count);
     void refresh_guest_surface(ResourceRecord &resource);
+    bool begin_pages_read(const ResourceRecord &resource, uint64_t &writes);
+    uint64_t end_pages_read(const ResourceRecord &resource, uint64_t begun);
     void forget_guest_surface(const ResourceRecord &resource);
     HRESULT show_flip(const ResourceRecord &source, uint32_t subresource);
     /* What a multiplane present shows of `source` is the host's frame of it as
@@ -340,6 +342,8 @@ private:
     /* Every window surface DWM opened on this device. */
     GrowableArray<ResourceRecord *> guest_surfaces_;
     icd::OnceLatch  guest_lock_refused_;
+    icd::OnceLatch  pages_read_refused_;
+    icd::OnceLatch  pages_read_late_;
     icd::OnceLatch  present_refused_;
     /* The flags of the last present, ~0 before any: a fullscreen change shows
      * in the log as a change of these. */

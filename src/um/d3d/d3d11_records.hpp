@@ -11,6 +11,7 @@
 #include "icd/d3d/buffer_slices.hpp"
 #include "icd/d3d/present_count.hpp"
 #include "icd/d3d/record_stamp.hpp"
+#include "icd/d3d/row_band.hpp"
 #include "icd/d3d/swap_chain_buffer.hpp"
 
 #include <stddef.h>
@@ -59,6 +60,11 @@ struct ResourceRecord {
     /* The presents of this surface so far: the point the last one published
      * on it (docs/shared-surfaces.md). Moves with shared_key. */
     d3d::PresentCount presents;
+    /* A guest surface's rows scanned into the shadow but not yet sent: the
+     * refresh read the pages while a present was queued into them, so what it
+     * read may be half a frame (docs/stale-blt-frames.md). The next refresh
+     * sends them with whatever it finds then. */
+    d3d::RowBand pending_rows;
     void    *runtime_resource; /* D3D10DDI_HRTRESOURCE.handle */
     uint8_t *shadow;
     size_t   shadow_bytes;

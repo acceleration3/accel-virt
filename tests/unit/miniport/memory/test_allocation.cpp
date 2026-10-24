@@ -541,3 +541,19 @@ TEST(allocation, belongs_to_the_resource_it_was_created_into_and_to_none_by_defa
   CHECK(allocation.resource() == &resource);
   allocation.belongs_to(nullptr);
   CHECK(allocation.resource() == nullptr); }
+
+/* One count per allocation, so a reader of one window's pages is not made to
+ * wait for a present into another's. */
+TEST(allocation, counts_the_presents_written_into_its_pages_apart_from_every_other_allocation_s)
+{ MockPlatform platform;
+  Segments     segments(platform);
+  Allocation   allocation(platform, segments.segments(), shadow, 0x1000u);
+  Allocation   other(platform, segments.segments(), shadow, 0x1000u);
+  CHECK_EQ(allocation.writes().sequence(), 0u);
+  CHECK_EQ(allocation.writes().ticket(), 0u);
+  allocation.writes().opening();
+  allocation.writes().written(4u);
+  CHECK_EQ(allocation.writes().sequence(), 2u);
+  CHECK_EQ(allocation.writes().ticket(), 4u);
+  CHECK_EQ(other.writes().sequence(), 0u);
+  CHECK(allocation.invariants_hold()); }

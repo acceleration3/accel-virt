@@ -22,6 +22,7 @@
 #include "harness/host/mock_request.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "proto/dma/present_region.hpp"
+#include "proto/pages/present_progress.hpp"
 #include "proto/resources/guest_page_list.hpp"
 #include "proto/resources/surface_layout.hpp"
 #include "proto/resources/surface_point.hpp"
@@ -219,6 +220,7 @@ TEST(present_queue, a_queued_blt_is_sent_unwaited_and_moved_by_the_device_s_thre
   CHECK_STATUS(queue.start(), Status::ok);
   CHECK(queue.invariants_hold());
   CHECK_EQ(queue.completed(), 0u);
+  CHECK(queue.progress().address() != 0u);
   Surface source(fixture.platform());
   Surface destination(fixture.platform());
   source.number();
@@ -243,6 +245,9 @@ TEST(present_queue, a_queued_blt_is_sent_unwaited_and_moved_by_the_device_s_thre
   device.serve();
   CHECK(finishes(queue, 2u));
   CHECK_EQ(destination.at(side - 1u, 12u), 0xFF00FF00u);
+  av::PresentProgress engine;
+  CHECK_STATUS(queue.progress().read(engine), Status::ok);
+  CHECK_EQ(engine.completed(), 2u);
   CHECK_EQ(fixture.platform().mapped_frames(), 0u); }
 
 /* A packet waits only on a present this queue queued: its epoch, a ticket

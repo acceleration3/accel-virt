@@ -171,6 +171,13 @@ private:
     HRESULT create_host_object(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create);
     HRESULT create_surfaces(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create);
     void    release_resource(D3d9Resource &resource);
+    /* A resource the runtime opened into the device holds no host object and
+     * answers no command that needs one: true, after saying so once, for a
+     * `call` on it. */
+    [[nodiscard]] bool refuses_opened(const D3d9Resource &resource, const char *call);
+    /* An OpenResource this device cannot serve, said once per `kind` of
+     * allocation (0 when its blob did not decode). */
+    HRESULT            refuse_open(const D3DDDIARG_OPENRESOURCE &args, uint32_t kind);
     /* Bytes one subresource takes laid out as a lock hands it out. */
     uint32_t row_pitch(const D3d9Resource &resource, const D3d9Subresource &subresource) const;
     size_t   subresource_bytes(const D3d9Resource &resource, const D3d9Subresource &subresource) const;

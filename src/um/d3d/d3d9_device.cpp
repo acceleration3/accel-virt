@@ -490,6 +490,8 @@ HRESULT D3d9Device::set_render_target(const D3DDDIARG_SETRENDERTARGET *args)
     if (args->RenderTargetIndex >= render_targets) return E_INVALIDARG;
     uint32_t                  id = 0u, subresource = 0u;
     const D3d9Resource *const target = resource(args->hRenderTarget);
+    if (target != nullptr && refuses_opened(*target, "a Direct3D 9 render target that is an opened surface"))
+        return E_NOTIMPL;
     if (target != nullptr && !surface_of(*target, args->SubResourceIndex, id, subresource)) return E_INVALIDARG;
     trace("target", args->RenderTargetIndex, id, target != nullptr ? target->subresources[args->SubResourceIndex].width : 0u,
           target != nullptr ? target->subresources[args->SubResourceIndex].height : 0u);
@@ -504,6 +506,8 @@ HRESULT D3d9Device::set_depth_stencil(const D3DDDIARG_SETDEPTHSTENCIL *args)
     AV_SCOPE("D3d9Device::set_depth_stencil");
     uint32_t                  id = 0u, subresource = 0u;
     const D3d9Resource *const target = resource(args->hZBuffer);
+    if (target != nullptr && refuses_opened(*target, "a Direct3D 9 depth buffer that is an opened surface"))
+        return E_NOTIMPL;
     if (target != nullptr && !surface_of(*target, 0u, id, subresource)) return E_INVALIDARG;
     trace("depth", id, target != nullptr ? target->subresources[0].width : 0u,
           target != nullptr ? target->subresources[0].height : 0u, 0u);

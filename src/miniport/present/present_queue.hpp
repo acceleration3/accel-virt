@@ -69,6 +69,9 @@ public:
     /* Dispatch at most: whether `record` names a present this queue queued,
      * and so one a packet must wait for. */
     bool                 holds(const PresentTicketRecord &record);
+    /* The engine's page, for a reader that waits on the tickets it says
+     * finished without being this queue's packet. */
+    const PresentPageView &progress() const;
     uint32_t             epoch() const;
 
     bool invariants_hold() const;

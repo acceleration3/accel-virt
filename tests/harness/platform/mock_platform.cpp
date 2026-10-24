@@ -712,7 +712,17 @@ std::uint64_t MockPlatform::interrupt_time() const { return now_; }
 /* A stall busy-waits in the kernel; here it only moves the clock. */
 void MockPlatform::store_atomic(std::uint64_t &target, std::uint64_t value) { target = value; }
 
-std::uint64_t MockPlatform::load_atomic(std::uint64_t &source) { return source; }
+std::uint64_t MockPlatform::load_atomic(std::uint64_t &source)
+{
+    if (load_callback_ != nullptr) load_callback_(load_context_);
+    return source;
+}
+
+void MockPlatform::on_load(StallCallback callback, void *context)
+{
+    load_callback_ = callback;
+    load_context_ = context;
+}
 
 std::uint64_t MockPlatform::performance_counter(std::uint64_t &frequency) const
 {

@@ -771,7 +771,7 @@ bool parse(int argc, wchar_t **argv, Options &options)
            options.read_every > 0u && options.rect_order < 4u;
 }
 
-HRESULT make_device(const Options &options, HWND window, IDirect3D9 *&direct3d, IDirect3DDevice9 *&device)
+D3DPRESENT_PARAMETERS present_parameters(const Options &options, HWND window)
 {
     D3DPRESENT_PARAMETERS present = {};
     present.BackBufferWidth = options.width;
@@ -782,6 +782,12 @@ HRESULT make_device(const Options &options, HWND window, IDirect3D9 *&direct3d, 
     present.hDeviceWindow = window;
     present.Windowed = TRUE;
     present.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
+    return present;
+}
+
+HRESULT make_device(const Options &options, HWND window, IDirect3D9 *&direct3d, IDirect3DDevice9 *&device)
+{
+    D3DPRESENT_PARAMETERS present = present_parameters(options, window);
     const DWORD behaviour = D3DCREATE_HARDWARE_VERTEXPROCESSING | D3DCREATE_FPU_PRESERVE | D3DCREATE_MULTITHREADED;
     if (options.ex) {
         IDirect3D9Ex *ex = nullptr;
@@ -831,6 +837,16 @@ int wmain(int argc, wchar_t **argv)
     SetForegroundWindow(window);
     pump();
 
+    /* The capture first: DWM gives a captured window a new redirection
+     * surface, and a Direct3D 9 device that opened the old one at its creation
+     * reports the change as a lost device. */
+    volatile LONG presented_count = 0;
+    CompositorWatcher watcher(window, options, presented_count);
+    if (options.wgc && !watcher.start()) {
+        wprintf(L"d3d9_dirty_present: FAIL (no compositor capture)\n");
+        return 4;
+    }
+    if (options.wgc) Sleep(300);
     IDirect3D9       *direct3d = nullptr;
     IDirect3DDevice9 *device = nullptr;
     const HRESULT     made = make_device(options, window, direct3d, device);
@@ -845,12 +861,6 @@ int wmain(int argc, wchar_t **argv)
     Picture      picture(device, options);
     WindowReader reader(window, options.width, options.height, options.screen);
     Judge        judge(options, options.screen ? L"screen" : L"dwm");
-    volatile LONG presented_count = 0;
-    CompositorWatcher watcher(window, options, presented_count);
-    if (options.wgc && !watcher.start()) {
-        wprintf(L"d3d9_dirty_present: FAIL (no compositor capture)\n");
-        return 4;
-    }
     D3DVIEWPORT9 whole = {0u, 0u, options.width, options.height, 0.0f, 1.0f};
     device->SetViewport(&whole);
     device->SetRenderState(D3DRS_LIGHTING, FALSE);
@@ -865,6 +875,28 @@ int wmain(int argc, wchar_t **argv)
     picture.draw_handle(handle_rect(options, 0u));
     device->EndScene();
     HRESULT shown = device->Present(nullptr, nullptr, nullptr, nullptr);
+    uint32_t resets = 0u;
+    for (uint32_t attempt = 0u; shown == D3DERR_DEVICELOST && attempt < 5u; attempt++) {
+        resets++;
+        const HRESULT state = device->TestCooperativeLevel();
+        wprintf(L"device lost at frame 0 (cooperative level 0x%08lx), resetting\n", static_cast<unsigned long>(state));
+        Sleep(100);
+        D3DPRESENT_PARAMETERS again = present_parameters(options, window);
+        const HRESULT reset = device->Reset(&again);
+        wprintf(L"Reset 0x%08lx\n", static_cast<unsigned long>(reset));
+        if (FAILED(reset)) return 3;
+        device->SetViewport(&whole);
+        device->SetRenderState(D3DRS_LIGHTING, FALSE);
+        device->SetRenderState(D3DRS_ZENABLE, FALSE);
+        device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+        device->BeginScene();
+        picture.erase(RECT{0, 0, static_cast<LONG>(options.width), static_cast<LONG>(options.height)},
+                      options.mode == Mode::partial ? background : full_background);
+        picture.draw_code(0u);
+        picture.draw_handle(handle_rect(options, 0u));
+        device->EndScene();
+        shown = device->Present(nullptr, nullptr, nullptr, nullptr);
+    }
     if (FAILED(shown)) {
         wprintf(L"Present 0x%08lx at frame 0\n", static_cast<unsigned long>(shown));
         return 3;
@@ -906,6 +938,34 @@ int wmain(int argc, wchar_t **argv)
         } else {
             shown = device->Present(nullptr, nullptr, nullptr, nullptr);
         }
+        if (shown == D3DERR_DEVICELOST) {
+            /* As a game does: wait for the device to be resettable, reset it
+             * with the same chain, and go on; frame 0's picture is redrawn
+             * whole since a reset empties the back buffer. */
+            resets++;
+            wprintf(L"device lost at frame %u, resetting\n", frame);
+            for (uint32_t waited = 0; waited < 200u && device->TestCooperativeLevel() == D3DERR_DEVICELOST; waited++) {
+                Sleep(10);
+                pump();
+            }
+            D3DPRESENT_PARAMETERS again = present_parameters(options, window);
+            const HRESULT reset = device->Reset(&again);
+            if (FAILED(reset)) {
+                wprintf(L"Reset 0x%08lx at frame %u\n", static_cast<unsigned long>(reset), frame);
+                break;
+            }
+            device->SetViewport(&whole);
+            device->SetRenderState(D3DRS_LIGHTING, FALSE);
+            device->SetRenderState(D3DRS_ZENABLE, FALSE);
+            device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+            device->BeginScene();
+            picture.erase(RECT{0, 0, static_cast<LONG>(options.width), static_cast<LONG>(options.height)},
+                          options.mode == Mode::partial ? background : full_background);
+            picture.draw_code(frame);
+            picture.draw_handle(now);
+            device->EndScene();
+            shown = device->Present(nullptr, nullptr, nullptr, nullptr);
+        }
         if (FAILED(shown)) {
             wprintf(L"Present 0x%08lx at frame %u\n", static_cast<unsigned long>(shown), frame);
             break;
@@ -934,6 +994,7 @@ int wmain(int argc, wchar_t **argv)
             wprintf(L"compositor: %u frames read differently the second time\n", watcher.rereads_differed());
     }
     if (options.read) judge.report(presented);
+    if (resets != 0u) wprintf(L"the device was lost and reset %u times\n", resets);
     const uint32_t failures = judge.failures() + (options.wgc ? watcher.judge().failures() : 0u);
     wprintf(failures == 0u ? L"d3d9_dirty_present: PASS\n" : L"d3d9_dirty_present: FAIL (%u failures)\n", failures);
     device->Release();

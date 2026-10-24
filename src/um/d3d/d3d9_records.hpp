@@ -58,6 +58,11 @@ struct D3d9Resource {
      * primary's, null for one made at a present. */
     HANDLE               allocation_resource;
     uint32_t             allocation_pitch;
+    /* A kernel surface another party made - the redirection surface of a
+     * window - which the runtime opened into this device to present into: the
+     * kernel moves a present's pixels into its pages, the host never hears of
+     * it, and the allocation is the runtime's to free, not this device's. */
+    bool                 opened;
     uint64_t             shared_key;
     /* Each present of the resource, counted from 1 (PresentPointRecord). */
     d3d::PresentCount    presents;

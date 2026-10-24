@@ -45,6 +45,7 @@
 #include "proto/escape/host_window_record.hpp"
 #include "proto/resources/host_blob_id.hpp"
 #include "proto/resources/host_memory_request.hpp"
+#include "proto/escape/pages_read_record.hpp"
 #include "proto/escape/trace_escape_record.hpp"
 #include "miniport/ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "miniport/ddi/dxgkarg_get_scan_line_record.hpp"
@@ -610,7 +611,7 @@ public:
     MappedSurface(Fixture &fixture, av::FakeHandleTable &handles, void *device, av::AllocationKind kind,
                   bool shared = false)
         : platform_(fixture.platform()), block_(nullptr), frames_{}, encoded_{}, handle_(nullptr),
-          open_handle_(nullptr)
+          open_handle_(nullptr), kmt_handle_(0u)
     {
         block_ = static_cast<std::uint8_t *>(platform_.allocate_contiguous(page));
         CHECK(block_ != nullptr);
@@ -650,7 +651,8 @@ public:
         std::memcpy(paging.Reserved, &mapping, sizeof mapping);
         CHECK_EQ(nt(fixture.adapter().build_paging_buffer(&paging)), success);
         av::DxgkOpenAllocationInfoRecord opening = {};
-        opening.hAllocation = handles.insert(handle_);
+        kmt_handle_ = handles.insert(handle_);
+        opening.hAllocation = kmt_handle_;
         /* dxgkrnl hands the creator's own bytes to its implicit open, which is
          * where the miniport writes the minted id back. */
         if (shared) {
@@ -670,6 +672,8 @@ public:
     void *open_handle() const { return open_handle_; }
     /* The miniport's own handle, which paging operations name. */
     void *handle() const { return handle_; }
+    /* The D3DKMT_HANDLE a process names the allocation by, in an escape. */
+    std::uint32_t kmt_handle() const { return kmt_handle_; }
 
     void paint_all(std::uint32_t value)
     {
@@ -698,6 +702,48 @@ private:
     std::uint8_t      encoded_[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size];
     void             *handle_;
     void             *open_handle_;
+    std::uint32_t     kmt_handle_;
+};
+
+/* The escape a reader of presented pages sends around each read, and the
+ * answer it reads back. */
+class PagesReader {
+public:
+    PagesReader(Fixture &fixture, std::uint32_t allocation)
+        : fixture_(fixture), allocation_(allocation), bytes_{}, answer_()
+    {
+    }
+
+    std::uint32_t begin(std::uint32_t wait_microseconds)
+    {
+        return send(av::PagesReadRecord::Action::begin, wait_microseconds);
+    }
+    std::uint32_t end() { return send(av::PagesReadRecord::Action::end, 0u); }
+    /* The bytes of an escape the caller built, as the kernel gets them. */
+    std::uint32_t send_bytes(std::uint8_t *bytes, std::size_t length)
+    {
+        DxgkargEscapeRecord escape = {};
+        escape.pPrivateDriverData = bytes;
+        escape.PrivateDriverDataSize = static_cast<std::uint32_t>(length);
+        return nt(fixture_.adapter().escape(&escape));
+    }
+    std::uint64_t writes() const { return answer_.writes(); }
+    bool          complete() const { return answer_.complete(); }
+
+private:
+    std::uint32_t send(av::PagesReadRecord::Action action, std::uint32_t wait_microseconds)
+    {
+        CHECK_STATUS(av::PagesReadRecord(action, allocation_, wait_microseconds).encode(bytes_, sizeof bytes_),
+                     av::Status::ok);
+        const std::uint32_t status = send_bytes(bytes_, sizeof bytes_);
+        if (status == success) CHECK_STATUS(answer_.read_answer(bytes_, sizeof bytes_), av::Status::ok);
+        return status;
+    }
+
+    Fixture             &fixture_;
+    std::uint32_t        allocation_;
+    std::uint8_t         bytes_[av::PagesReadRecord::encoded_size];
+    av::PagesReadRecord  answer_;
 };
 
 /* The driver's own state dump, as av-inspect reads it: the trace escape's
@@ -2054,6 +2100,230 @@ TEST(adapter_present, a_queued_blt_holds_its_packet_until_the_engine_has_moved_t
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
+/* DWM's driver reads the pages a present writes, on a thread of its own, and
+ * nothing orders that read after the engine's move: so it asks the driver at
+ * each end of the read (PagesReadRecord). Before a present into the pages, or
+ * once the engine has moved the last, a begin answers at once; while the engine
+ * still holds a present queued into them a begin that cannot wait says the
+ * pages are not complete, and the write count it answers lets the end tell a
+ * read a present interrupted. */
+TEST(adapter_present, a_reader_of_presented_pages_waits_for_the_present_moving_into_them)
+{ Fixture fixture;
+  fixture.offer_present_engine();
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+  source.paint_all(MappedSurface::colour);
+  destination.paint_all(0u);
+  PagesReader reader(fixture, destination.kmt_handle());
+
+  CHECK_EQ(reader.begin(0u), success);
+  CHECK_EQ(reader.writes(), 0u);
+  CHECK(reader.complete());
+  CHECK_EQ(reader.end(), success);
+  CHECK_EQ(reader.writes(), 0u);
+  CHECK(reader.complete());
+
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t             dma[512] = {};
+  std::uint8_t             private_data[av::PresentTicketRecord::encoded_size] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.pDmaBufferPrivateData = private_data;
+  present.DmaBufferPrivateDataSize = sizeof private_data;
+  present.Flags = 1u;   /* Blt */
+  present.pAllocationList = info;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(destination.count(MappedSurface::colour), 0u);   /* queued, not moved */
+
+  CHECK_EQ(reader.begin(0u), success);
+  CHECK_EQ(reader.writes(), 2u);   /* one present opened and queued it */
+  CHECK(!reader.complete());
+  CHECK(fixture.platform().logged_line("avgpu: a reader of presented pages waited out its time"));
+  const StateDump waited(fixture);
+  CHECK(waited.holds("present_waiters/0 busy=false waiting=0 waits=1 timeouts=1"));
+  CHECK_EQ(reader.end(), success);
+  CHECK_EQ(reader.writes(), 2u);
+  CHECK(reader.complete());   /* an end only reports the count */
+
+  fixture.serve();
+  const timespec pause = {0, 100000};
+  for (std::uint32_t waited_for = 0u; waited_for < 20000u && destination.count(MappedSurface::colour) == 0u;
+       waited_for++)
+      nanosleep(&pause, nullptr);
+  CHECK_EQ(destination.count(MappedSurface::colour), MappedSurface::side * MappedSurface::side);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  bool settled = false;
+  for (std::uint32_t polled = 0u; polled < 20000u && !settled; polled++) {
+      CHECK_EQ(reader.begin(0u), success);
+      settled = reader.complete();
+      if (!settled) nanosleep(&pause, nullptr);
+  }
+  CHECK(settled);
+  CHECK_EQ(reader.writes(), 2u);
+
+  /* Refusals: every one STATUS_INVALID_PARAMETER, and the bytes left as sent. */
+  PagesReader unknown(fixture, destination.kmt_handle() + 1000u);
+  CHECK_EQ(unknown.begin(0u), invalid_parameter);
+  CHECK_EQ(unknown.end(), invalid_parameter);
+  PagesReader none(fixture, 0u);
+  CHECK_EQ(none.begin(0u), invalid_parameter);
+  std::uint8_t bytes[av::PagesReadRecord::encoded_size + 1u] = {};
+  CHECK_STATUS(av::PagesReadRecord(av::PagesReadRecord::Action::begin, destination.kmt_handle(), 0u)
+                   .encode(bytes, av::PagesReadRecord::encoded_size),
+               av::Status::ok);
+  CHECK_EQ(reader.send_bytes(bytes, av::PagesReadRecord::encoded_size - 1u), invalid_parameter);
+  CHECK_EQ(reader.send_bytes(bytes, av::PagesReadRecord::encoded_size + 1u), invalid_parameter);
+  CHECK_STATUS(av::PagesReadRecord(av::PagesReadRecord::Action::begin, destination.kmt_handle(), 0u)
+                   .answered(9u, true)
+                   .encode(bytes, av::PagesReadRecord::encoded_size),
+               av::Status::ok);
+  std::uint8_t answered[av::PagesReadRecord::encoded_size] = {};
+  std::memcpy(answered, bytes, sizeof answered);
+  CHECK_EQ(reader.send_bytes(bytes, av::PagesReadRecord::encoded_size), invalid_parameter);
+  CHECK(std::memcmp(answered, bytes, sizeof answered) == 0);
+  CHECK_EQ(handles.outstanding(), 0u);
+  CHECK(fixture.adapter().invariants_hold());
+  fixture.stop_presents();
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* A reader asleep in its begin is woken by the DPC that sees the engine's page
+ * count the present: the engine finishes on its own thread, and only the DPC
+ * (or the present itself) can tell the sleeper. */
+TEST(adapter_present, a_reader_asleep_in_a_begin_is_woken_by_the_dpc_that_sees_the_engine_finish)
+{ Fixture fixture;
+  fixture.offer_present_engine();
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+  source.paint_all(MappedSurface::colour);
+  destination.paint_all(0u);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t             dma[512] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.Flags = 1u;   /* Blt */
+  present.pAllocationList = info;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(destination.count(MappedSurface::colour), 0u);
+
+  /* The device acts while the reader sleeps: it takes the present, moves the
+   * pixels and counts them, and the next DPC runs. */
+  struct Engine {
+      Fixture       *fixture;
+      MappedSurface *destination;
+      std::uint32_t  sleeps;
+  } engine{&fixture, &destination, 0u};
+  fixture.platform().on_stall(
+      [](void *context_of) {
+          auto *const running = static_cast<Engine *>(context_of);
+          running->sleeps++;
+          running->fixture->serve();
+          const timespec pause = {0, 100000};
+          for (std::uint32_t waited = 0u;
+               waited < 20000u && running->destination->count(MappedSurface::colour) == 0u; waited++)
+              nanosleep(&pause, nullptr);
+          const timespec counted = {0, 20000000};
+          nanosleep(&counted, nullptr);
+          running->fixture->platform().set_irql(Irql::dispatch);
+          running->fixture->adapter().dpc_routine();
+          running->fixture->platform().set_irql(Irql::passive);
+      },
+      &engine);
+  PagesReader reader(fixture, destination.kmt_handle());
+  CHECK_EQ(reader.begin(1000000u), success);
+  fixture.platform().on_stall(nullptr, nullptr);
+  CHECK(reader.complete());
+  CHECK_EQ(reader.writes(), 2u);
+  CHECK(engine.sleeps >= 1u);
+  CHECK_EQ(fixture.platform().slept_ticks(), 0u);   /* woken by the DPC, not timed out */
+  CHECK_EQ(destination.count(MappedSurface::colour), MappedSurface::side * MappedSurface::side);
+  const StateDump dump(fixture);
+  CHECK(dump.holds("timeouts=0"));
+  CHECK_EQ(handles.outstanding(), 0u);
+  fixture.stop_presents();
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* A device that moves a present's pixels as DdiPresent runs - no engine, so no
+ * ticket - leaves a reader nothing to wait for once it returns: the present
+ * opened and closed its write count in the call, so a begin answers at once
+ * with the write behind it. */
+TEST(adapter_present, a_present_moved_in_place_leaves_its_reader_nothing_to_wait_for)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+  source.paint_all(MappedSurface::colour);
+  av::DxgkAllocationListRecord list[2] = {};
+  list[0].hDeviceSpecificAllocation = source.open_handle();
+  list[1].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t                     dma[512] = {};
+  av::D3dddiPatchLocationListRecord patches[8] = {};
+  av::DxgkargPresentRecord         present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.pPatchLocationListOut = patches;
+  present.PatchLocationListOutSize = 8u;
+  present.Flags = 1u;   /* Blt */
+  present.pAllocationList = list;
+  present.NumSrcAllocations = 1u;
+  present.NumDstAllocations = 1u;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  PagesReader reader(fixture, destination.kmt_handle());
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(destination.count(MappedSurface::colour), MappedSurface::side * MappedSurface::side);
+  const std::uint64_t slept = fixture.platform().slept_ticks();
+  CHECK_EQ(reader.begin(1000000u), success);
+  CHECK_EQ(reader.writes(), 2u);
+  CHECK(reader.complete());
+  CHECK_EQ(fixture.platform().slept_ticks(), slept);   /* nothing to wait for */
+  CHECK_EQ(reader.end(), success);
+  CHECK_EQ(reader.writes(), 2u);
+  const StateDump dump(fixture);
+  CHECK(dump.holds("present_waiters/0 busy=false waiting=0 waits=0 timeouts=0"));
+  CHECK_EQ(handles.outstanding(), 0u);
+  CHECK(fixture.adapter().invariants_hold());
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
 /* A queued blt whose DMA buffer has no room to name its ticket cannot hold its
  * packet: it is counted, and said while the log budget lasts. */
 TEST(adapter_present, a_queued_blt_with_no_room_for_its_ticket_is_counted_and_said)
@@ -3374,6 +3644,7 @@ TEST(adapter_escape, the_trace_escape_answers_the_state_of_the_adapter_without_a
       "adapter/0/hw_queue_table/0 busy=false live=0\n"
       "adapter/0/execution_node/0 busy=false pending=0 last_submitted=0 last_completed=0"
       " preemption_requested=false preemption_fence=0 stopped=false progress_time=0\n"
+      "adapter/0/present_waiters/0 busy=false waiting=0 waits=0 timeouts=0\n"
       "adapter/0/av_context_table/0 busy=false bound=0\n"
       "adapter/0/display_sources/0 count=1 vsync=false\n"
       "adapter/0/display_sources/0/source/0 format=0 width=0 height=0 scanout=0x0000000000000000"

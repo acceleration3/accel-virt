@@ -35,6 +35,13 @@ HRESULT PresentedAllocations::make(KernelSurface &surface, HANDLE resource, D3DK
     /* An identity is asked for, which the miniport mints and dxgkrnl hands
      * whoever opens the surface: with none, nothing can open it. */
     if (surface.key() == 0u) lines_.once("the miniport minted no identity for a presented surface; nothing can open it");
+    static_cast<void>(keep_resident(allocation));
+    return S_OK;
+}
+
+HRESULT PresentedAllocations::keep_resident(D3DKMT_HANDLE allocation)
+{
+    AV_SCOPE("PresentedAllocations::keep_resident");
     if (!paging_.constructed()) static_cast<void>(paging_.construct(kernel_.callbacks(), kernel_.runtime(), clock_));
     const HRESULT resident = paging_.object().make_resident(allocation);
     if (FAILED(resident) && lines_.first("the kernel would not keep a presented surface resident", resident))
@@ -42,7 +49,7 @@ HRESULT PresentedAllocations::make(KernelSurface &surface, HANDLE resource, D3DK
             .text("the kernel would not keep a presented surface resident ")
             .hex(static_cast<uint32_t>(resident), 8u)
             .write();
-    return S_OK;
+    return resident;
 }
 
 HRESULT PresentedAllocations::make_context(HANDLE &context)

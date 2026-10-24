@@ -31,6 +31,7 @@
 #include "miniport/present/pixel_mover.hpp"
 #include "miniport/present/present_copier.hpp"
 #include "miniport/present/present_queue.hpp"
+#include "miniport/present/present_waiters.hpp"
 #include "core/platform/log_budget.hpp"
 #include "core/platform/platform.hpp"
 #include "miniport/scheduling/context_table.hpp"
@@ -389,6 +390,9 @@ private:
     int32_t          context_views(const DxgkargEscapeRecord &escape);
     int32_t          wake_event(const DxgkargEscapeRecord &escape);
     int32_t          next_point(const DxgkargEscapeRecord &escape);
+    /* A reader of an allocation's presented pages beginning or ending its read
+     * (PagesReadRecord): a begin waits until the pages are settled. */
+    int32_t          pages_read(const DxgkargEscapeRecord &escape);
     int32_t          publish_own_tail(const DxgkargEscapeRecord &escape);
     /* SubmitCommandVirtual for an av context: published, rung, and held on
      * the node until the fence page says the host finished it. */
@@ -530,6 +534,10 @@ private:
     bool                           hardware_scheduling_;
     bool                           user_mode_submission_;
     ExecutionNode                  node_;
+    /* Where a reader of presented pages sleeps until the present engine has
+     * moved the last present into them, woken by the DPC and by a present
+     * moved in place. */
+    PresentWaiters                 present_waiters_;
     EngineProgress                 progress_;
     PowerTransition                transition_;
     DeviceIdentity                 identity_;

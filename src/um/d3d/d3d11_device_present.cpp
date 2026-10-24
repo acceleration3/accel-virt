@@ -11,11 +11,13 @@
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
+#include "icd/d3d/guest_surface_scan.hpp"
 #include "icd/d3d/kernel_surface.hpp"
 #include "proto/d3d/d3d9_present_format.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/scanout_target.hpp"
+#include "proto/escape/pages_read_record.hpp"
 #include "proto/escape/present_point_record.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d_session.hpp"
@@ -600,31 +602,69 @@ void D3d11Device::refresh_bound_guest_surfaces(const D3D10DDI_HSHADERRESOURCEVIE
     }
 }
 
-/* Only the band of rows that differ from what was last sent crosses. */
+/* The pages are read ordered after the present engine's write into them, and
+ * a present queued during the read defers the band to the next refresh: DWM
+ * composes again for that present, and a band shown now could be half a frame
+ * (docs/stale-blt-frames.md). Only rows that differ from what was last sent
+ * cross. */
 void D3d11Device::refresh_guest_surface(ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::refresh_guest_surface");
     if (resource.allocation == 0u || resource.shadow == nullptr) return;
+    uint64_t begun = 0u;
+    const bool ordered = begin_pages_read(resource, begun);
     const auto *const pixels = static_cast<const uint8_t *>(kernel_.lock_to_read(resource.allocation));
     if (pixels == nullptr) {
         if (guest_lock_refused_.first()) lines_.write("a GDI surface the kernel would not lock");
+        if (ordered) static_cast<void>(end_pages_read(resource, begun));
         return;
     }
-    const size_t pitch = resource.allocation_pitch;
-    uint32_t first = resource.height, last = 0u;
-    for (uint32_t row = 0u; row < resource.height; row++) {
-        if (__builtin_memcmp(pixels + row * pitch, resource.shadow + row * pitch, pitch) == 0) continue;
-        if (first == resource.height) first = row;
-        last = row;
-    }
-    if (first != resource.height) {
-        const size_t offset = first * pitch, bytes = (last + 1u - first) * pitch;
-        __builtin_memcpy(resource.shadow + offset, pixels + offset, bytes);
-        const D3D10_DDI_BOX band = {0, static_cast<LONG>(first), 0, static_cast<LONG>(resource.width),
-                                    static_cast<LONG>(last + 1u), 1};
-        upload(resource, 0u, &band, resource.shadow + offset, resource.allocation_pitch, 0u, 0u);
-    }
+    d3d::GuestSurfaceScan scan(resource.shadow, resource.allocation_pitch, resource.height);
+    const d3d::RowBand band = scan.differing(pixels).joined(resource.pending_rows);
     kernel_.unlock(resource.allocation);
+    if (ordered && end_pages_read(resource, begun) != begun) {
+        resource.pending_rows = band;
+        return;
+    }
+    resource.pending_rows = d3d::RowBand();
+    if (band.empty()) return;
+    const D3D10_DDI_BOX box = {0, static_cast<LONG>(band.first()), 0, static_cast<LONG>(resource.width),
+                               static_cast<LONG>(band.end()), 1};
+    upload(resource, 0u, &box, resource.shadow + band.first() * static_cast<size_t>(resource.allocation_pitch),
+           resource.allocation_pitch, 0u, 0u);
+}
+
+bool D3d11Device::begin_pages_read(const ResourceRecord &resource, uint64_t &writes)
+{
+    AV_SCOPE("D3d11Device::begin_pages_read");
+    /* Longer than any frame the engine moves, short of a dead device, which
+     * must not hang DWM's compose. */
+    constexpr uint32_t wait_microseconds = 100000u;
+    const PagesReadRecord request(PagesReadRecord::Action::begin, resource.allocation, wait_microseconds);
+    uint8_t bytes[PagesReadRecord::encoded_size];
+    PagesReadRecord answer;
+    if (request.encode(bytes, sizeof bytes) != Status::ok || session_.escape(bytes, sizeof bytes) != Status::ok ||
+        answer.read_answer(bytes, sizeof bytes) != Status::ok) {
+        if (pages_read_refused_.first())
+            lines_.write("the miniport orders no read of a window's pages after the presents into it");
+        return false;
+    }
+    if (!answer.complete() && pages_read_late_.first())
+        lines_.write("a window's pages were read before the present into them had moved");
+    writes = answer.writes();
+    return true;
+}
+
+uint64_t D3d11Device::end_pages_read(const ResourceRecord &resource, uint64_t begun)
+{
+    AV_SCOPE("D3d11Device::end_pages_read");
+    const PagesReadRecord request(PagesReadRecord::Action::end, resource.allocation, 0u);
+    uint8_t bytes[PagesReadRecord::encoded_size];
+    PagesReadRecord answer;
+    if (request.encode(bytes, sizeof bytes) != Status::ok || session_.escape(bytes, sizeof bytes) != Status::ok ||
+        answer.read_answer(bytes, sizeof bytes) != Status::ok)
+        return begun;
+    return answer.writes();
 }
 
 }  // namespace av::d3d11

@@ -19,6 +19,8 @@
 #include "icd/d3d/texture_upload.hpp"
 #include "proto/resources/pitched_rows.hpp"
 #include "proto/d3d/d3d9_format_layout.hpp"
+#include "proto/d3d/d3d9_present_format.hpp"
+#include "proto/resources/allocation_descriptor.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "um/d3d/d3d9_device.hpp"
 
@@ -200,16 +202,80 @@ void D3d9Device::release_resource(D3d9Resource &resource)
     }
     if (resource.subresources != nullptr) memory_.release(resource.subresources);
     resource.subresources = nullptr;
-    kernel_.deallocate(resource.allocation, resource.allocation_resource);
+    if (!resource.opened) kernel_.deallocate(resource.allocation, resource.allocation_resource);
 }
 
-/* Another process's resource opens through the host's object, which nothing
- * here shares yet. The runtime tolerates the refusal for the shared GDI
- * primary a windowed device opens (reverse-engineering.md §4.2). */
-HRESULT D3d9Device::open_resource(D3DDDIARG_OPENRESOURCE *)
+/* The redirection surface of a window, which d3d9.dll opens into the device
+ * before it presents into it (reverse-engineering.md §4.3). Another process's
+ * resource would open through the host's object, which nothing here shares. */
+HRESULT D3d9Device::open_resource(D3DDDIARG_OPENRESOURCE *args)
 {
     AV_SCOPE("D3d9Device::open_resource");
+    if (args->NumAllocations != 1u || args->pOpenAllocationInfo == nullptr) return refuse_open(*args, 0u);
+    const D3DDDI_OPENALLOCATIONINFO &info = args->pOpenAllocationInfo[0];
+    AllocationDescriptor             descriptor;
+    if (info.pPrivateDriverData == nullptr ||
+        descriptor.decode(static_cast<const uint8_t *>(info.pPrivateDriverData), info.PrivateDriverDataSize) !=
+            Status::ok)
+        return refuse_open(*args, 0u);
+    const SurfaceLayout &layout = descriptor.layout();
+    D3d9PresentFormat    presented(0u);
+    if (descriptor.kind() != AllocationKind::gdi || layout.width() == 0u || layout.height() == 0u ||
+        !presented.take_ddi(layout.format()))
+        return refuse_open(*args, static_cast<uint32_t>(descriptor.kind()));
+    D3d9Resource *made = nullptr;
+    if (resources_.create(made) != Status::ok) return E_OUTOFMEMORY;
+    *made = D3d9Resource{};
+    made->subresources = static_cast<D3d9Subresource *>(memory_.allocate(sizeof(D3d9Subresource), Pool::paged));
+    if (made->subresources == nullptr) {
+        static_cast<void>(resources_.destroy(made));
+        return E_OUTOFMEMORY;
+    }
+    memset(made->subresources, 0, sizeof(D3d9Subresource));
+    made->subresources[0].width = layout.width();
+    made->subresources[0].height = layout.height();
+    made->subresources[0].depth = 1u;
+    made->kind = D3d9Resource::Kind::surface;
+    made->format = static_cast<D3DDDIFORMAT>(layout.format());
+    made->count = 1u;
+    made->runtime = args->hResource;
+    made->allocation = info.hAllocation;
+    made->allocation_pitch = layout.pitch();
+    made->opened = true;
+    /* A present names it as its destination in the blt dxgkrnl builds, and
+     * dxgkrnl puts the device in error for an allocation this device never
+     * asked to be resident (PagingQueue). */
+    if (FAILED(allocations_.keep_resident(made->allocation))) {
+        release_resource(*made);
+        static_cast<void>(resources_.destroy(made));
+        return E_FAIL;
+    }
+    trace("opened", layout.width(), layout.height(), layout.format(), layout.pitch());
+    args->hResource = made;
+    return S_OK;
+}
+
+HRESULT D3d9Device::refuse_open(const D3DDDIARG_OPENRESOURCE &args, uint32_t kind)
+{
+    AV_SCOPE("D3d9Device::refuse_open");
+    if (lines_.first("a Direct3D 9 OpenResource it refused", kind))
+        LogLine(lines_)
+            .text("a Direct3D 9 OpenResource it cannot serve: allocation kind ")
+            .number(kind)
+            .text(" allocations ")
+            .number(args.NumAllocations)
+            .text(" resource data ")
+            .hex(args.PrivateDriverDataSize, 4u)
+            .write();
     return E_INVALIDARG;
+}
+
+bool D3d9Device::refuses_opened(const D3d9Resource &resource, const char *call)
+{
+    AV_SCOPE("D3d9Device::refuses_opened");
+    if (!resource.opened) return false;
+    not_implemented(call);
+    return true;
 }
 
 bool D3d9Device::surface_of(const D3d9Resource &resource, uint32_t index, uint32_t &id, uint32_t &subresource) const
@@ -292,6 +358,7 @@ HRESULT D3d9Device::lock(D3DDDIARG_LOCK *args)
     D3d9Resource *const locked = resource(args->hResource);
     if (locked == nullptr || args->SubResourceIndex >= locked->count) return E_INVALIDARG;
     if (args->Flags.NotifyOnly) return S_OK;
+    if (refuses_opened(*locked, "a Direct3D 9 lock of an opened surface")) return E_NOTIMPL;
     D3d9Subresource &subresource = locked->subresources[args->SubResourceIndex];
     if (locked->kind == D3d9Resource::Kind::system) {
         auto *const base = const_cast<uint8_t *>(subresource.system);
@@ -495,6 +562,7 @@ HRESULT D3d9Device::tex_blt(const D3DDDIARG_TEXBLT *args)
     if (destination == nullptr || source == nullptr || source->kind != D3d9Resource::Kind::system ||
         destination->kind == D3d9Resource::Kind::system || destination->levels == 0u)
         return E_INVALIDARG;
+    if (refuses_opened(*destination, "a Direct3D 9 TexBlt into an opened surface")) return E_NOTIMPL;
     const uint32_t faces = destination->kind == D3d9Resource::Kind::cube ? cube_faces : 1u;
     const uint32_t source_levels = source->count / faces;
     const uint32_t face = faces == 1u ? 0u : static_cast<uint32_t>(args->CubeMapFace);
@@ -607,6 +675,9 @@ HRESULT D3d9Device::blt(const D3DDDIARG_BLT *args)
     if (source == nullptr || destination == nullptr || args->SrcSubResourceIndex >= source->count ||
         args->DstSubResourceIndex >= destination->count)
         return E_INVALIDARG;
+    if (refuses_opened(*source, "a Direct3D 9 blt from an opened surface") ||
+        refuses_opened(*destination, "a Direct3D 9 blt into an opened surface"))
+        return E_NOTIMPL;
     const bool from_system = source->kind == D3d9Resource::Kind::system;
     const bool to_system = destination->kind == D3d9Resource::Kind::system;
     if (from_system && to_system) return S_OK;
@@ -665,6 +736,7 @@ HRESULT D3d9Device::color_fill(const D3DDDIARG_COLORFILL *args)
     const D3d9Resource *const target = resource(args->hResource);
     uint32_t                  id = 0u, subresource = 0u;
     if (target == nullptr) return S_OK;
+    if (refuses_opened(*target, "a Direct3D 9 colour fill of an opened surface")) return E_NOTIMPL;
     if (!surface_of(*target, args->SubResourceIndex, id, subresource)) return E_INVALIDARG;
     const d3d9proto::Rect rect = {args->DstRect.left, args->DstRect.top, args->DstRect.right, args->DstRect.bottom};
     return d3d9proto::av_d3d9_ColorFill9(wire(), id, subresource, rect, args->Color) ? S_OK : lost(__func__);
