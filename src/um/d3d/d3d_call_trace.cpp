@@ -111,6 +111,13 @@ void D3dCallTrace::Line::signed_number(int64_t value)
 void D3dCallTrace::Line::object(const void *block)
 {
     AV_SCOPE("D3dCallTrace::Line::object");
+    /* An array the runtime passes with a count of 0 may point anywhere (SetDescriptorHeaps). */
+    MEMORY_BASIC_INFORMATION memory = {};
+    if (block != nullptr && (VirtualQuery(block, &memory, sizeof memory) == 0u || memory.State != MEM_COMMIT ||
+                             (memory.Protect & (PAGE_NOACCESS | PAGE_GUARD)) != 0u)) {
+        body_.append(" unreadable");
+        return;
+    }
     body_.append(" #");
     body_.append_decimal(block == nullptr ? 0u : static_cast<const d3d::RecordStamp *>(block)->id());
 }
