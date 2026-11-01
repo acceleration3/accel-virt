@@ -14,7 +14,7 @@ namespace av {
 D3d12HostDevice::D3d12HostDevice(DriverLog &lines)
     : runtime_(nullptr), uuid_(), tenant_heap_(),
       renewal_(tenant_heap_, lines), shown_by_(nullptr),
-      device_(nullptr), capabilities_(), frames_()
+      device_(nullptr), capabilities_(), dispatch_limit_(), frames_()
 {
     AV_SCOPE("D3d12HostDevice::D3d12HostDevice");
 }
@@ -36,6 +36,7 @@ bool D3d12HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
         return false;
     }
     capabilities_.measure(*device_);
+    dispatch_limit_.measure(*device_);
     return true;
 }
 
@@ -153,6 +154,12 @@ const D3d12Capabilities &D3d12HostDevice::capabilities() const
 {
     AV_SCOPE("D3d12HostDevice::capabilities");
     return capabilities_;
+}
+
+const D3d12DispatchLimit &D3d12HostDevice::dispatch_limit() const
+{
+    AV_SCOPE("D3d12HostDevice::dispatch_limit");
+    return dispatch_limit_;
 }
 
 ID3D12Heap *D3d12HostDevice::import_dmabuf_heap(void *address, int fd, uint64_t size) const

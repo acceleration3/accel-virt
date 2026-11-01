@@ -3,6 +3,7 @@
  * its own, with its ids, descriptor references and addresses translated. */
 #include "executor/d3d/d3d12_session.hpp"
 
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/d3d12_copy_extent.hpp"
 #include "executor/d3d/d3d12_footprint.hpp"
@@ -305,9 +306,12 @@ bool D3d12Session::on_DrawIndexedInstanced12(uint32_t id, uint32_t index_count, 
 bool D3d12Session::on_Dispatch12(uint32_t id, uint32_t x, uint32_t y, uint32_t z)
 {
     AV_SCOPE("D3d12Session::on_Dispatch12");
-    constexpr uint32_t most_groups = 65535u;
     ID3D12GraphicsCommandList *const recorded = list(id);
-    if (recorded == nullptr || x > most_groups || y > most_groups || z > most_groups) return false;
+    if (recorded == nullptr || !device_->dispatch_limit().admits(x, y, z)) {
+        LogLine(lines_).text("Dispatch12 on ").text(recorded == nullptr ? "an unknown list " : "list ").number(id)
+            .text(" of ").number(x).text(" x ").number(y).text(" x ").number(z).text(" groups").write();
+        return false;
+    }
     recorded->Dispatch(x, y, z);
     return true;
 }

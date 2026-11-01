@@ -21,6 +21,7 @@
 #include "executor/host_device_renewal.hpp"
 #include "executor/renewable_device.hpp"
 #include "executor/shim/d3d12_capabilities.hpp"
+#include "executor/shim/d3d12_dispatch_limit.hpp"
 #include "executor/shim/d3d12_frame_pool.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "proto/context/device_uuid.hpp"
@@ -83,6 +84,7 @@ public:
 
     ID3D12Device            *device() const;
     const D3d12Capabilities &capabilities() const;
+    const D3d12DispatchLimit &dispatch_limit() const;
     /* Host memory of the GPU's memory source, the dma-buf `fd` (the caller
      * keeps it) mapped here at `address`, as a heap buffers can be placed in,
      * with a reference the caller owns; null where the runtime cannot import
@@ -118,6 +120,7 @@ private:
     D3d11HostDevice   *shown_by_;
     ID3D12Device      *device_;
     D3d12Capabilities  capabilities_;
+    D3d12DispatchLimit dispatch_limit_;
     D3d12FramePool     frames_;
 };
 
