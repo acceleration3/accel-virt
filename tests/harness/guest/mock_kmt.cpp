@@ -1593,10 +1593,10 @@ Status MockKmt::query_adapter_name(std::uint32_t adapter, std::uint16_t *name, s
     return succeed();
 }
 
-Status MockKmt::query_kmd_driver_version(std::uint32_t adapter, std::uint64_t &version)
+Status MockKmt::query_umd_driver_version(std::uint32_t adapter, std::uint64_t &version)
 {
     version = 0u;
-    if (!begin(Call::query_kmd_driver_version)) return refuse(last_code_);
+    if (!begin(Call::query_umd_driver_version)) return refuse(last_code_);
     const Object *const object = find(Kind::adapter, adapter);
     if (object == nullptr) return misuse();
     if (object->owner < adapter_count_) version = kmd_versions_[object->owner];

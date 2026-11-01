@@ -101,7 +101,7 @@ public:
         query_video_memory,
         query_adapter_location,
         query_adapter_name,
-        query_kmd_driver_version,
+        query_umd_driver_version,
         query_segment_sizes,
         query_adapter_features,
         count
@@ -179,7 +179,7 @@ public:
     Status        query_adapter_features(std::uint32_t adapter, UmdAdapterInfo &info) override;
     Status        query_adapter_location(std::uint32_t adapter, PciLocation &location) override;
     Status        query_adapter_name(std::uint32_t adapter, std::uint16_t *name, std::uint32_t capacity) override;
-    Status        query_kmd_driver_version(std::uint32_t adapter, std::uint64_t &version) override;
+    Status        query_umd_driver_version(std::uint32_t adapter, std::uint64_t &version) override;
     Status        query_segment_sizes(std::uint32_t adapter, std::uint64_t &dedicated_video,
                                       std::uint64_t &dedicated_system, std::uint64_t &shared_system) override;
     void          sleep_briefly() override;

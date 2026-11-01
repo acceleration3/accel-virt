@@ -311,13 +311,13 @@ Status GdiKmt::query_segment_sizes(uint32_t adapter, uint64_t &dedicated_video, 
     return status;
 }
 
-Status GdiKmt::query_kmd_driver_version(uint32_t adapter, uint64_t &version)
+Status GdiKmt::query_umd_driver_version(uint32_t adapter, uint64_t &version)
 {
-    AV_SCOPE("GdiKmt::query_kmd_driver_version");
-    D3DKMT_KMD_DRIVER_VERSION reported = {};
+    AV_SCOPE("GdiKmt::query_umd_driver_version");
+    D3DKMT_UMD_DRIVER_VERSION reported = {};
     D3DKMT_QUERYADAPTERINFO   query = {};
     query.hAdapter = adapter;
-    query.Type = KMTQAITYPE_KMD_DRIVER_VERSION;
+    query.Type = KMTQAITYPE_UMD_DRIVER_VERSION;
     query.pPrivateDriverData = &reported;
     query.PrivateDriverDataSize = sizeof reported;
     const Status status = answer(D3DKMTQueryAdapterInfo(&query));

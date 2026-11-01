@@ -4,12 +4,16 @@
 
 #include <windows.h>
 
+extern "C" BOOL WINAPI K32EnumProcessModules(HANDLE process, HMODULE *modules, DWORD bytes, LPDWORD needed);
+
 namespace av {
 
 namespace {
 
-/* The Direct3D user-mode driver as a process of this bitness loads it
- * (avgpu.inf's UserModeDriverName and its Wow value). */
+constexpr uint32_t max_modules = 512u;
+
+/* The Direct3D user-mode driver as a process of this bitness loads it on a
+ * guest of one GPU vendor (avgpu.inf's UserModeDriverName and its Wow value). */
 #if defined(_WIN64)
 constexpr wchar_t umd_name[] = L"avumd.dll";
 #else
@@ -18,23 +22,41 @@ constexpr wchar_t umd_name[] = L"avumd32.dll";
 
 }  // namespace
 
-SharedRowsScope::SharedRowsScope() : withdraw_(nullptr)
+SharedRowsScope::SharedRowsScope() : withdraw_(), asked_(0u)
 {
     AV_SCOPE("SharedRowsScope::SharedRowsScope");
-    HMODULE const umd = GetModuleHandleW(umd_name);
-    if (umd == nullptr) return;
-    const auto ask = reinterpret_cast<void (*)()>(reinterpret_cast<void *>(GetProcAddress(umd, "AvAskSharedRows")));
+    HMODULE loaded[max_modules] = {};
+    DWORD   needed = 0u;
+    uint32_t count = 0u;
+    if (K32EnumProcessModules(GetCurrentProcess(), loaded, static_cast<DWORD>(sizeof loaded), &needed))
+        count = static_cast<uint32_t>(needed / sizeof(HMODULE));
+    if (count > max_modules) count = max_modules;
+    for (uint32_t at = 0u; at < count; ++at) ask(loaded[at]);
+    /* By name as well: a large application holds more modules than the walk
+     * sees, and the driver may be past them. */
+    ask(GetModuleHandleW(umd_name));
+}
+
+void SharedRowsScope::ask(void *module)
+{
+    AV_SCOPE("SharedRowsScope::ask");
+    if (module == nullptr || asked_ == max_asked) return;
+    HMODULE const handle = static_cast<HMODULE>(module);
+    const auto    asking =
+        reinterpret_cast<void (*)()>(reinterpret_cast<void *>(GetProcAddress(handle, "AvAskSharedRows")));
     const auto withdraw =
-        reinterpret_cast<void (*)()>(reinterpret_cast<void *>(GetProcAddress(umd, "AvWithdrawSharedRows")));
-    if (ask == nullptr || withdraw == nullptr) return;
-    ask();
-    withdraw_ = withdraw;
+        reinterpret_cast<Withdraw>(reinterpret_cast<void *>(GetProcAddress(handle, "AvWithdrawSharedRows")));
+    if (asking == nullptr || withdraw == nullptr) return;
+    for (uint32_t at = 0u; at < asked_; ++at)
+        if (withdraw_[at] == withdraw) return;
+    asking();
+    withdraw_[asked_++] = withdraw;
 }
 
 SharedRowsScope::~SharedRowsScope()
 {
     AV_SCOPE("SharedRowsScope::~SharedRowsScope");
-    if (withdraw_ != nullptr) withdraw_();
+    for (uint32_t at = 0u; at < asked_; ++at) withdraw_[at]();
 }
 
 }  // namespace av

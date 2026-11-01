@@ -75,7 +75,7 @@ TEST(vendor_adapters, learns_every_avgpu_adapter_and_only_those_with_each_fact_w
  * the others are still described. */
 TEST(vendor_adapters, an_adapter_a_fact_of_which_windows_will_not_give_is_left_out)
 { for (const MockKmt::Call refused : {MockKmt::Call::adapter_luid, MockKmt::Call::query_adapter_location,
-                                     MockKmt::Call::query_adapter_name, MockKmt::Call::query_kmd_driver_version,
+                                     MockKmt::Call::query_adapter_name, MockKmt::Call::query_umd_driver_version,
                                      MockKmt::Call::query_segment_sizes}) {
       MockKmt kmt;
       kmt.add_adapter(on_raphael, 3200u);

@@ -56,7 +56,7 @@ nothing more:
 | vendor, device, subsystem, revision | `KMTQAITYPE_PHYSICALADAPTERDEVICEIDS` |
 | bus, device, function | `KMTQAITYPE_ADAPTERADDRESS` |
 | name | `KMTQAITYPE_ADAPTERREGISTRYINFO` (`AdapterString`) |
-| driver version | `KMTQAITYPE_KMD_DRIVER_VERSION`, the version the INF states |
+| driver version | `KMTQAITYPE_UMD_DRIVER_VERSION`, the file version of the adapter's user-mode driver, which provision.ps1 stamps with the vendor's current Windows driver version |
 | memory | `KMTQAITYPE_GETSEGMENTSIZE` |
 | memory available now | `D3DKMTQueryVideoMemoryInfo`'s local budget less its usage (`icd::AdapterMemory`, as Vulkan's `VK_EXT_memory_budget` and OpenCL's free memory read it) |
 | integrated or discrete | avgpu's UMDRIVERPRIVATE features, `UmdAdapterInfo::feature_integrated_gpu` |

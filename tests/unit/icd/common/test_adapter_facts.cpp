@@ -95,7 +95,7 @@ TEST(adapter_facts, a_refused_fact_is_unknown_and_reads_as_nothing_while_the_res
       {MockKmt::Call::query_identity, AdapterFacts::identity_fact},
       {MockKmt::Call::query_adapter_location, AdapterFacts::location_fact},
       {MockKmt::Call::query_adapter_name, AdapterFacts::name_fact},
-      {MockKmt::Call::query_kmd_driver_version, AdapterFacts::driver_version_fact},
+      {MockKmt::Call::query_umd_driver_version, AdapterFacts::driver_version_fact},
       {MockKmt::Call::query_segment_sizes, AdapterFacts::segments_fact},
       {MockKmt::Call::query_adapter_features, AdapterFacts::features_fact},
   };

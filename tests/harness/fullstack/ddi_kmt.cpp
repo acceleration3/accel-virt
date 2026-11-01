@@ -245,7 +245,7 @@ Status DdiKmt::query_adapter_name(std::uint32_t, std::uint16_t *name, std::uint3
     return refuse(Status::not_supported);
 }
 
-Status DdiKmt::query_kmd_driver_version(std::uint32_t, std::uint64_t &version)
+Status DdiKmt::query_umd_driver_version(std::uint32_t, std::uint64_t &version)
 {
     version = 0u;
     return refuse(Status::not_supported);

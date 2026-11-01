@@ -59,8 +59,19 @@ $Subject = 'CN=accel-virt test signing'
 $AvHardwareId = '^PCI\\VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})&SUBSYS_52561AF4$'
 $StockHardwareId = 'PCI\VEN_1AF4&DEV_1050&SUBSYS_52561AF4'
 # What the runner knows each host GPU is called: "<vendor>`t<device>`t<name>"
-# a line, hex in lowercase. Absent, a generated model is named as the static one.
+# a line, with a fourth field, "`t<version>", where it looked up the vendor's
+# current Windows driver version; hex in lowercase. Absent, a generated model
+# is named as the static one.
 $AdapterNames = 'C:\av\adapters.txt'
+# What a vendor's user-mode driver is stamped with when adapters.txt gives no
+# version for it: an offline install, and a runner with no lookup
+# (run_guest_suite.py, gpu_matrix.py). Refreshed at release from the Microsoft
+# Update Catalog. A vendor in neither is stamped with the INF's DriverVer.
+$FallbackDriverVersions = @{
+    '1002' = '32.0.31044.16'
+    '10DE' = '32.0.16.1088'
+    '8086' = '32.0.101.8509'
+}
 # The end of every INF line WriteModels wrote, so signing again replaces them.
 $GeneratedMark = '; provision.ps1: a host GPU'
 $Diagnostics = 'C:\av\diag'
@@ -153,10 +164,191 @@ function AvHardwareIds {
 function AdapterName($Vendor, $Device) {
     if (-not (Test-Path $AdapterNames)) { return $null }
     foreach ($line in Get-Content $AdapterNames -Encoding UTF8) {
-        $fields = $line -split "`t", 3
-        if ($fields.Count -eq 3 -and $fields[0] -eq $Vendor -and $fields[1] -eq $Device) { return $fields[2] }
+        $fields = $line -split "`t", 4
+        if ($fields.Count -ge 3 -and $fields[0] -eq $Vendor -and $fields[1] -eq $Device) { return $fields[2] }
     }
     return $null
+}
+
+# The version the runner found for one host GPU, or $null.
+function AdapterVersion($Vendor, $Device) {
+    if (-not (Test-Path $AdapterNames)) { return $null }
+    foreach ($line in Get-Content $AdapterNames -Encoding UTF8) {
+        $fields = $line -split "`t", 4
+        if ($fields.Count -eq 4 -and $fields[0] -eq $Vendor -and $fields[1] -eq $Device) {
+            $version = $null
+            # A file version holds four parts of sixteen bits, and a value past
+            # them would wrap into another version without complaint.
+            if ([version]::TryParse($fields[3].Trim(), [ref]$version) -and $version.Revision -ge 0 -and
+                @($version.Major, $version.Minor, $version.Build, $version.Revision | Where-Object { $_ -gt 65535 }).Count -eq 0) {
+                return $version
+            }
+        }
+    }
+    return $null
+}
+
+function InfDriverVer($Inf) {
+    foreach ($line in Get-Content $Inf) {
+        $match = [regex]::Match($line, '^DriverVer\s*=\s*([0-9/]+),([0-9.]+)\s*$')
+        if ($match.Success) { return [version]$match.Groups[2].Value }
+    }
+    throw "$Inf has no DriverVer"
+}
+
+# The version each present vendor's user-mode driver is stamped with, by
+# vendor in sorted order: the highest adapters.txt gives for its present
+# devices, else the table's, else the INF's as built, so no file is left at
+# 0.0.0.0. DXGI's CheckInterfaceSupport reports this file version, and
+# applications refuse a driver that reads too old. A package with no host GPU
+# among its adapters (llvmpipe) is stamped as virtio-gpu's own vendor.
+function DriverVersions($Inf) {
+    $asBuilt = InfDriverVer $Inf
+    $given = @{}
+    foreach ($id in AvHardwareIds) {
+        if ($id -eq $StockHardwareId -or -not ($id -match $AvHardwareId)) { continue }
+        $vendor = $Matches[1].ToLowerInvariant()
+        $version = AdapterVersion $vendor $Matches[2].ToLowerInvariant()
+        if (-not $given.ContainsKey($vendor) -or ($version -and (-not $given[$vendor] -or $version -gt $given[$vendor]))) {
+            $given[$vendor] = $version
+        }
+    }
+    if ($given.Count -eq 0) { $given['1af4'] = $null }
+    $versions = [ordered]@{}
+    foreach ($vendor in @($given.Keys | Sort-Object)) {
+        if ($given[$vendor]) { $versions[$vendor] = $given[$vendor] }
+        elseif ($FallbackDriverVersions.ContainsKey($vendor)) { $versions[$vendor] = [version]$FallbackDriverVersions[$vendor] }
+        else { $versions[$vendor] = $asBuilt }
+    }
+    return $versions
+}
+
+$VersionResourceApi = @'
+using System;
+using System.Runtime.InteropServices;
+public static class VersionResource {
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern IntPtr BeginUpdateResourceW(string file, bool deleteExisting);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool UpdateResourceW(IntPtr update, IntPtr type, IntPtr name, ushort language, byte[] data, uint size);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool EndUpdateResourceW(IntPtr update, bool discard);
+}
+'@
+
+# One VS_VERSIONINFO node: header, key, then the value and the children, each
+# padded to four bytes. A child's length is its own.
+function VersionNode([string]$Key, [byte[]]$Value, [uint16]$ValueLength, [uint16]$Type, [byte[][]]$Children) {
+    $bytes = New-Object 'System.Collections.Generic.List[byte]'
+    $bytes.AddRange([byte[]](0, 0))
+    $bytes.AddRange([BitConverter]::GetBytes($ValueLength))
+    $bytes.AddRange([BitConverter]::GetBytes($Type))
+    $bytes.AddRange([Text.Encoding]::Unicode.GetBytes($Key + [char]0))
+    while ($bytes.Count % 4) { $bytes.Add(0) }
+    if ($Value) {
+        $bytes.AddRange($Value)
+        while ($bytes.Count % 4) { $bytes.Add(0) }
+    }
+    foreach ($child in $Children) {
+        $bytes.AddRange($child)
+        while ($bytes.Count % 4) { $bytes.Add(0) }
+    }
+    $length = [BitConverter]::GetBytes([uint16]$bytes.Count)
+    $bytes[0] = $length[0]
+    $bytes[1] = $length[1]
+    , $bytes.ToArray()
+}
+
+function VersionString([string]$Key, [string]$Value) {
+    VersionNode $Key ([Text.Encoding]::Unicode.GetBytes($Value + [char]0)) ([uint16]($Value.Length + 1)) 1 @()
+}
+
+# The file version of a DLL with no version resource, which is what DXGI and
+# Explorer read. Written in place with BeginUpdateResource: the package is not
+# signed yet, and the catalog covers whatever it holds once it is.
+function StampVersion($Path, [version]$Version) {
+    if (-not ('VersionResource' -as [type])) { Add-Type -TypeDefinition $VersionResourceApi -ErrorAction Stop }
+    $text = $Version.ToString(4)
+    $ms = ([uint32]$Version.Major -shl 16) -bor [uint32]$Version.Minor
+    $ls = ([uint32]$Version.Build -shl 16) -bor [uint32]$Version.Revision
+    $fixed = New-Object 'System.Collections.Generic.List[byte]'
+    # A bare 0xFEEF04BD literal parses negative.
+    foreach ($field in [Convert]::ToUInt32('FEEF04BD', 16), [uint32]0x00010000, $ms, $ls, $ms, $ls, [uint32]0x3F,
+                       [uint32]0, [uint32]0x00040004, [uint32]3, [uint32]4, [uint32]0, [uint32]0) {
+        $fixed.AddRange([BitConverter]::GetBytes([uint32]$field))
+    }
+    $strings = @((VersionString 'CompanyName' 'accel-virt'),
+                 (VersionString 'FileDescription' 'accel-virt Direct3D user-mode driver'),
+                 (VersionString 'FileVersion' $text), (VersionString 'ProductName' 'accel-virt'),
+                 (VersionString 'ProductVersion' $text))
+    $table = VersionNode '040904B0' $null 0 1 $strings
+    $stringInfo = VersionNode 'StringFileInfo' $null 0 1 @(, $table)
+    $translation = VersionNode 'Translation' ([byte[]](0x09, 0x04, 0xB0, 0x04)) 4 0 @()
+    $varInfo = VersionNode 'VarFileInfo' $null 0 1 @(, $translation)
+    $blob = VersionNode 'VS_VERSION_INFO' $fixed.ToArray() 52 0 @($stringInfo, $varInfo)
+    $update = [VersionResource]::BeginUpdateResourceW($Path, $false)
+    if ($update -eq [IntPtr]::Zero) { throw "BeginUpdateResource $Path failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
+    if (-not [VersionResource]::UpdateResourceW($update, [IntPtr]16, [IntPtr]1, 1033, $blob, [uint32]$blob.Length)) {
+        throw "UpdateResource $Path failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
+    }
+    if (-not [VersionResource]::EndUpdateResourceW($update, $false)) {
+        throw "EndUpdateResource $Path failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
+    }
+}
+
+# Stamp the user-mode drivers in the package with their vendors' versions. The
+# first vendor's are the package's own avumd.dll and avumd32.dll; each further
+# vendor gets copies named for it, which WriteModels points its models at.
+# Copies from an earlier signing are dropped first.
+function StampUserModeDrivers($Versions) {
+    Get-ChildItem $Package -Filter 'avumd*_*.dll' | Remove-Item -Force
+    $targets = @()
+    foreach ($vendor in $Versions.Keys) {
+        foreach ($name in 'avumd', 'avumd32') {
+            $target = "$name.dll"
+            if ($targets.Count -ge 2) {
+                $target = "${name}_$vendor.dll"
+                Copy-Item "$Package\$name.dll" "$Package\$target"
+            }
+            $targets += , @($target, $Versions[$vendor])
+        }
+    }
+    # A version is worth less than a display: a file that cannot be stamped
+    # stays as built, which an application reads as 0.0.0.0, and the install
+    # goes on. Failing here would also fail every later try, as the signing's
+    # manifest check then finds the files stamped before this one changed.
+    foreach ($target in $targets) {
+        try {
+            StampVersion "$Package\$($target[0])" $target[1]
+            Write-Output "sign: $($target[0]) stamped $($target[1])"
+        } catch {
+            Write-Output "sign: $($target[0]) left unstamped: $($_.Exception.Message)"
+        }
+    }
+}
+
+# What [Avgpu_Install] does, for a vendor whose user-mode drivers are its own
+# copies: the same files and settings, and UserModeDriverName and its Wow
+# arm naming the copies. The AddReg that overrides them comes after the shared
+# one, so its values are the ones left.
+function VendorInstallSection($Vendor) {
+    $mark = $GeneratedMark
+    $names = (1..4 | ForEach-Object { '"%13%\avumd_' + $Vendor + '.dll"' }) -join ', '
+    $namesWow = (1..4 | ForEach-Object { '"%13%\avumd32_' + $Vendor + '.dll"' }) -join ', '
+    @("[Avgpu_Install_$Vendor] $mark",
+      "FeatureScore = F8 $mark",
+      "CopyFiles    = Avgpu_Files, Avgpu_Vendor64, Avgpu_Vendor32, Avgpu_Files_$Vendor $mark",
+      "AddReg       = Avgpu_SoftwareSettings, Avgpu_Scheduler, Avgpu_SoftwareSettings_$Vendor $mark",
+      "[Avgpu_Install_$Vendor.HW] $mark",
+      "AddReg = Avgpu_Interrupts $mark",
+      "[Avgpu_Install_$Vendor.Services] $mark",
+      "AddService = avgpu, 0x00000002, Avgpu_Service $mark",
+      "[Avgpu_Files_$Vendor] $mark",
+      "avumd_$Vendor.dll $mark",
+      "avumd32_$Vendor.dll $mark",
+      "[Avgpu_SoftwareSettings_$Vendor] $mark",
+      "HKR,, UserModeDriverName, 0x00010000, $names $mark",
+      "HKR,, UserModeDriverNameWow, 0x00010000, $namesWow $mark")
 }
 
 # One model line in the INF for each present virtio-gpu-av-pci whose IDs are
@@ -165,10 +357,14 @@ function AdapterName($Vendor, $Device) {
 # A host GPU the runner named gets its own DeviceDesc, which is what Device
 # Manager, WMI and DXGI show until avgpu.sys writes the same name at
 # StartDevice; the rest are named as the static model is.
-function WriteModels($Inf) {
+# Every vendor but the first among $Versions installs through its own section,
+# Avgpu_Install_<vendor>, which is Avgpu_Install with that vendor's stamped
+# user-mode drivers (StampUserModeDrivers) in place of the package's.
+function WriteModels($Inf, $Versions) {
     $lines = [System.Collections.Generic.List[string]]@(Get-Content $Inf | Where-Object { -not $_.EndsWith($GeneratedMark) })
     $models = @()
     $strings = @()
+    $later = @($Versions.Keys | Select-Object -Skip 1)
     foreach ($id in AvHardwareIds) {
         if ($id -eq $StockHardwareId -or -not ($id -match $AvHardwareId)) { continue }
         $vendor = $Matches[1]
@@ -180,7 +376,9 @@ function WriteModels($Inf) {
             $description = "%$key%"
             $strings += "$key = `"$($name.Replace('"', '""').Replace('%', '%%'))`" $GeneratedMark"
         }
-        $models += "$description = Avgpu_Install, $id $GeneratedMark"
+        $install = 'Avgpu_Install'
+        if ($later -contains $vendor.ToLowerInvariant()) { $install = "Avgpu_Install_$($vendor.ToLowerInvariant())" }
+        $models += "$description = $install, $id $GeneratedMark"
         Write-Output "sign: $id named $(if ($name) { $name } else { 'as the static model' })"
     }
     $section = $lines.FindIndex([Predicate[string]]{ param($line) $line -match '^\[Avgpu\.NTamd64\.10\.0\.\.\.26100\]' })
@@ -189,6 +387,17 @@ function WriteModels($Inf) {
     $stringsAt = $lines.FindIndex([Predicate[string]]{ param($line) $line -match '^\[Strings\]' })
     if ($stringsAt -lt 0) { throw "$Inf has no [Strings] section" }
     $lines.InsertRange($stringsAt + 1, [string[]]$strings)
+    $sections = @()
+    $disks = @()
+    foreach ($vendor in $later) {
+        $sections += VendorInstallSection $vendor
+        $disks += "avumd_$vendor.dll = 1 $GeneratedMark"
+        $disks += "avumd32_$vendor.dll = 1 $GeneratedMark"
+    }
+    $lines.InsertRange($stringsAt, [string[]]$sections)
+    $disksAt = $lines.FindIndex([Predicate[string]]{ param($line) $line -match '^\[SourceDisksFiles\]' })
+    if ($disksAt -lt 0) { throw "$Inf has no [SourceDisksFiles] section" }
+    $lines.InsertRange($disksAt + 1, [string[]]$disks)
     # UTF-16 with a byte order mark: an INF may be ANSI or Unicode, and a
     # host GPU's name need not be ANSI.
     Set-Content -Path $Inf -Value $lines -Encoding Unicode
@@ -257,9 +466,11 @@ function StoreMatchesPackage {
     if ($names.Count -eq 0) { Write-Host "installed: $key names no user-mode driver"; return $false }
     $store = Split-Path $names[0]
     $bad = 0
-    foreach ($line in Get-Content $path) {
-        if ($line -notmatch '^[0-9a-fA-F]{64}\s+\*?(\S.*)$') { continue }
-        $name = $Matches[1]
+    # The manifest's files, and the per-vendor user-mode drivers signing made.
+    $files = @(foreach ($line in Get-Content $path) {
+            if ($line -match '^[0-9a-fA-F]{64}\s+\*?(\S.*)$') { $Matches[1] }
+        }) + @(Get-ChildItem $Package -Filter 'avumd*_*.dll' | ForEach-Object { $_.Name })
+    foreach ($name in $files) {
         $installed = Join-Path $store $name
         $want = (Get-FileHash (Join-Path $Package $name) -Algorithm SHA256).Hash
         $got = if (Test-Path $installed) { (Get-FileHash $installed -Algorithm SHA256).Hash } else { 'missing' }
@@ -450,7 +661,12 @@ switch ($Stage) {
     }
     'sign' {
         if (-not (PackageMatchesManifest)) { exit 1 }
-        WriteModels "$Package\avgpu.inf"
+        $versions = DriverVersions "$Package\avgpu.inf"
+        StampUserModeDrivers $versions
+        WriteModels "$Package\avgpu.inf" $versions
+        # Only the files are stamped: the INF keeps accel-virt's own DriverVer.
+        # With a vendor's there (32.0.31044.16), dxgkrnl refused every adapter
+        # with STATUS_DEVICE_CONFIGURATION_ERROR before the driver's first query.
         RaiseDriverVer "$Package\avgpu.inf"
         $certificate = SigningCertificate
         Sign "$Package\avgpu.sys" $certificate

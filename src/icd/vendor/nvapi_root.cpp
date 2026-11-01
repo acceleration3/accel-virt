@@ -169,7 +169,9 @@ int NvapiRoot::driver_and_branch_version(uint32_t *version, char *branch)
     const VendorAdapter *const first = adapters_.nth_of(PciIdentity::nvidia_vendor, 0u);
     if (first == nullptr) return device_not_found;
     const uint64_t full = first->facts().driver_version();
-    *version = static_cast<uint32_t>(((full >> 32u) & 0xFFFFu) * 100u + ((full >> 16u) & 0xFFFFu) % 100u);
+    /* NVIDIA's a.b.c.d is the release c.dd, shown as three digits and the two
+     * after the point: 32.0.16.1088 is 61088, which is 610.88. */
+    *version = static_cast<uint32_t>((((full >> 16u) & 0xFFFFu) % 10u) * 10000u + (full & 0xFFFFu));
     TextBuffer text(branch, short_string);
     text.append("avgpu ");
     first->facts().append_driver_version(text);

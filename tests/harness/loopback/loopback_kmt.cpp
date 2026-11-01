@@ -92,7 +92,7 @@ Status LoopbackKmt::query_adapter_name(std::uint32_t, std::uint16_t *name, std::
     return Status::not_supported;
 }
 
-Status LoopbackKmt::query_kmd_driver_version(std::uint32_t, std::uint64_t &version)
+Status LoopbackKmt::query_umd_driver_version(std::uint32_t, std::uint64_t &version)
 {
     version = 0u;
     return Status::not_supported;

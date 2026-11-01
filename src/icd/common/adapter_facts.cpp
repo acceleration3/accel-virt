@@ -35,7 +35,7 @@ void AdapterFacts::learn(Kmt &kmt, uint32_t adapter)
         name_.take(wide);
         known_ |= name_fact;
     }
-    if (kmt.query_kmd_driver_version(adapter, driver_version_) == Status::ok) known_ |= driver_version_fact;
+    if (kmt.query_umd_driver_version(adapter, driver_version_) == Status::ok) known_ |= driver_version_fact;
     else driver_version_ = 0u;
     if (kmt.query_segment_sizes(adapter, dedicated_video_, dedicated_system_, shared_system_) == Status::ok) {
         known_ |= segments_fact;

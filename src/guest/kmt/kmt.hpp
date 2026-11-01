@@ -33,9 +33,10 @@ public:
      * driver wrote it (HardwareInformation.AdapterString), UTF-16 and ended
      * within `capacity` units - an empty string where there is none. */
     virtual Status   query_adapter_name(uint32_t adapter, uint16_t *name, uint32_t capacity) = 0;
-    /* KMTQAITYPE_KMD_DRIVER_VERSION: the driver package's version, the INF's
-     * DriverVer as four 16-bit parts, the most significant first. */
-    virtual Status   query_kmd_driver_version(uint32_t adapter, uint64_t &version) = 0;
+    /* KMTQAITYPE_UMD_DRIVER_VERSION: the user-mode driver's file version, which
+     * is what DXGI reports for the adapter, as four 16-bit parts, the most
+     * significant first. */
+    virtual Status   query_umd_driver_version(uint32_t adapter, uint64_t &version) = 0;
     /* KMTQAITYPE_GETSEGMENTSIZE: the memory the adapter reports - dedicated
      * video, dedicated system and shared system bytes - which is what DXGI
      * describes it with. */

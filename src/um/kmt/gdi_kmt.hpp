@@ -30,7 +30,7 @@ public:
     Status   query_driver_version(uint32_t adapter, uint32_t &version) override;
     Status   query_adapter_location(uint32_t adapter, PciLocation &location) override;
     Status   query_adapter_name(uint32_t adapter, uint16_t *name, uint32_t capacity) override;
-    Status   query_kmd_driver_version(uint32_t adapter, uint64_t &version) override;
+    Status   query_umd_driver_version(uint32_t adapter, uint64_t &version) override;
     Status   query_segment_sizes(uint32_t adapter, uint64_t &dedicated_video, uint64_t &dedicated_system,
                                    uint64_t &shared_system) override;
     Status   query_native_gpu_fences(uint32_t adapter, bool &supported) override;
