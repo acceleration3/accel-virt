@@ -327,9 +327,9 @@ index ef0bb464..4566ddfb 100644
 +    import_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
 +    import_info.fd = owned;
 +
-+    /* A failed import leaves the descriptor with the caller. */
++    /* The memory exists: no budget refuses it. A failure leaves the fd with the caller. */
 +    if (FAILED(hr = vkd3d_try_allocate_device_memory(device, size, type_flags,
-+            type_mask & fd_properties.memoryTypeBits, &import_info, true, allocation)))
++            type_mask & fd_properties.memoryTypeBits, &import_info, false, allocation)))
 +    {
 +        close(owned);
 +        WARN("Failed to import dma-buf memory, hr %#x, memory types %#x of %#x.\n",
