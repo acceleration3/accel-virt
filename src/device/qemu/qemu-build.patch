@@ -133,3 +133,100 @@ diff --git a/system/physmem.c b/system/physmem.c
  
      if (memory < block->page_size) {
          error_setg(errp, "memory size 0x" RAM_ADDR_FMT " must be equal to "
+diff --git a/hw/usb/host-libusb.c b/hw/usb/host-libusb.c
+--- a/hw/usb/host-libusb.c
++++ b/hw/usb/host-libusb.c
+@@ -51,6 +51,7 @@
+ #include "qemu/error-report.h"
+ #include "qemu/main-loop.h"
+ #include "qemu/module.h"
++#include "qemu/thread.h"
+ #include "system/runstate.h"
+ #include "system/system.h"
+ #include "trace.h"
+@@ -1099,6 +1100,66 @@
+     }
+ }
+ 
++/*
++ * What a closed device still needs: its reset, its kernel drivers back, and its
++ * handle closed. A reset waits on the device, and a phone takes 44 s to answer
++ * one; on the main loop that holds the BQL and stops the guest for all of it.
++ */
++typedef struct USBHostRelease {
++    libusb_device_handle *dh;
++    int hostfd;
++    bool detached[USB_MAX_INTERFACES];
++} USBHostRelease;
++
++/* On the main loop: libusb_close calls back into QEMU's fd handlers. */
++static void usb_host_release_done(void *opaque)
++{
++    USBHostRelease *release = opaque;
++
++    libusb_close(release->dh);
++    if (release->hostfd != -1) {
++        close(release->hostfd);
++    }
++    g_free(release);
++}
++
++static void *usb_host_release_thread(void *opaque)
++{
++    USBHostRelease *release = opaque;
++    struct libusb_config_descriptor *conf;
++    int i;
++
++    libusb_reset_device(release->dh);
++    if (libusb_get_active_config_descriptor(libusb_get_device(release->dh),
++                                            &conf) == 0) {
++        for (i = 0; i < conf->bNumInterfaces && i < USB_MAX_INTERFACES; i++) {
++            if (release->detached[i]) {
++                libusb_attach_kernel_driver(release->dh, i);
++            }
++        }
++        libusb_free_config_descriptor(conf);
++    }
++    aio_bh_schedule_oneshot(qemu_get_aio_context(), usb_host_release_done,
++                            release);
++    return NULL;
++}
++
++static void usb_host_release_async(USBHostDevice *s)
++{
++    USBHostRelease *release = g_new0(USBHostRelease, 1);
++    QemuThread thread;
++    int i;
++
++    release->dh = s->dh;
++    release->hostfd = s->hostfd;
++    for (i = 0; i < USB_MAX_INTERFACES; i++) {
++        release->detached[i] = s->ifs[i].detached;
++        s->ifs[i].detached = false;
++    }
++    qemu_thread_create(&thread, "usb-release", usb_host_release_thread, release,
++                       QEMU_THREAD_DETACHED);
++}
++
+ static int usb_host_close(USBHostDevice *s)
+ {
+     USBDevice *udev = USB_DEVICE(s);
+@@ -1117,16 +1178,10 @@
+     }
+ 
+     usb_host_release_interfaces(s);
+-    libusb_reset_device(s->dh);
+-    usb_host_attach_kernel(s);
+-    libusb_close(s->dh);
++    usb_host_release_async(s);
+     s->dh = NULL;
+     s->dev = NULL;
+-
+-    if (s->hostfd != -1) {
+-        close(s->hostfd);
+-        s->hostfd = -1;
+-    }
++    s->hostfd = -1;
+ 
+     usb_host_auto_check(NULL);
+     return 0;
