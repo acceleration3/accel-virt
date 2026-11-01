@@ -323,6 +323,10 @@ int av_device_pci_identity(AvDevice *device, AvPciIdentity *identity);
  * keeps GET_DISPLAY_INFO's rectangle; -1, nothing changed, for text that is no
  * list of modes. */
 int av_device_set_modes(AvDevice *device, const char *modes, uint32_t *width, uint32_t *height);
+/* Main loop, before the guest runs or while it does: the refresh rate in
+ * millihertz the guest is told for every mode, and the display's blanks run at
+ * from the next one. 1 when set; -1, nothing changed, outside 1000 to 1000000. */
+int av_device_set_refresh(AvDevice *device, uint32_t millihz);
 /* The status the driver wrote (virtio_set_status). Main loop. */
 void av_device_status(AvDevice *device, uint8_t status);
 /* A virtio reset: every context is destroyed, the fence interrupts released,

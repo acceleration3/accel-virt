@@ -500,7 +500,7 @@ and this driver follows, for one source and one target:
 | `RecommendFunctionalVidPn` | `STATUS_GRAPHICS_NO_RECOMMENDED_FUNCTIONAL_VIDPN` (0xC01E0323) |
 | `RecommendVidPnTopology` | `STATUS_GRAPHICS_NO_RECOMMENDED_VIDPN_TOPOLOGY` (0xC01E031A) |
 | `ControlInterrupt` | `DXGK_INTERRUPT_CRTC_VSYNC` recorded; any other type `STATUS_NOT_SUPPORTED` |
-| `GetScanLine` | from interrupt time at 60 Hz over the committed mode's total lines (one blank line per 24 active, 1080p's ratio); no committed mode is `STATUS_INVALID_DEVICE_STATE` |
+| `GetScanLine` | from interrupt time at the committed mode's refresh (60 Hz unless the device says another) over its total lines (one blank line per 24 active, 1080p's ratio); no committed mode is `STATUS_INVALID_DEVICE_STATE` |
 
 Mode enumeration ends on `STATUS_GRAPHICS_NO_MORE_ELEMENTS_IN_DATASET`
 (0x401E034C) and `STATUS_GRAPHICS_DATASET_IS_EMPTY` (0x401E034B), both

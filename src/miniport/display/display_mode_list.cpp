@@ -56,7 +56,7 @@ Status DisplayModeList::adopt(const DisplayModeSet &set)
     uint32_t    count = 0u;
     uint32_t    preferred = max_modes;
     for (uint32_t index = 0u; index < set.count() && count < max_modes; index++) {
-        const DisplayMode mode(set.width(index), set.height(index));
+        const DisplayMode mode(set.width(index), set.height(index), set.refresh_millihz());
         if (!mode.offerable()) continue;
         /* Into place by area, after any of the same area: ascending, and in
          * the host's order where two modes tie. */

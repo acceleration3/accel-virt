@@ -640,7 +640,8 @@ config space of its own to walk, so it asks QEMU where the guest programmed the
 BAR instead."""
 MEGABYTE = 1 << 20
 REFRESH_HZ = 60
-"""DisplayMode::refresh_hz: the rate every mode is committed at."""
+"""DisplayMode::default_refresh_millihz: the rate every mode is committed at on a
+device that is not given a refresh= (a suite VM is not)."""
 VSYNC_TOLERANCE_PERCENT = 5
 """SC-003."""
 TICKS_PER_SECOND = 10000000

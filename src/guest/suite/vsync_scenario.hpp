@@ -28,7 +28,9 @@ class Kmt;
 
 class VsyncScenario {
 public:
-    /* DisplayMode::refresh_hz, which is the rate every mode is committed at. */
+    /* The rate every mode is committed at when the device is not told another
+     * (DisplayMode::default_refresh_millihz), and what a source that does not
+     * report its mode is judged by. */
     static constexpr uint32_t expected_hz = 60u;
     static constexpr uint32_t tolerance_percent = 5u;
     /* Twenty seconds of blanks at the rate a pulse-woken loop catches: enough
@@ -65,6 +67,8 @@ private:
     uint64_t             last_tick_;
     uint64_t             shortest_;
     uint64_t             frequency_;
+    /* The rate the source is committed at, in hundredths of a hertz. */
+    uint32_t             expected_centihertz_;
 };
 
 }  // namespace av

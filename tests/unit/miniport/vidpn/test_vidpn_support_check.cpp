@@ -1,4 +1,5 @@
 #include "miniport/ddi/d3dkmdt_vidpn_source_mode_record.hpp"
+#include "miniport/ddi/d3dkmdt_vidpn_target_mode_record.hpp"
 #include "miniport/ddi/dxgkarg_is_supported_vidpn_record.hpp"
 #include "core/support/nt_status.hpp"
 #include "miniport/display/display_mode.hpp"
@@ -13,6 +14,7 @@
 #include <cstring>
 
 using av::D3dkmdtVidPnSourceModeRecord;
+using av::D3dkmdtVidPnTargetModeRecord;
 using av::DisplayMode;
 using av::DisplayModeList;
 using av::DxgkargIsSupportedVidPnRecord;
@@ -142,6 +144,38 @@ TEST(vidpn_support_check_visit, a_pinned_source_mode_the_adapter_does_not_offer_
       CHECK_EQ(decide(fixture, fixture.handle(), supported), 0);
       CHECK_EQ(supported, 0u);
   } }
+
+/* The target mode a saved configuration pins carries the refresh it was made
+ * at: one the device no longer states is refused, so Windows asks for a VidPn
+ * at the new rate; one it does state, or none pinned, is supported. */
+TEST(vidpn_support_check_visit, a_pinned_target_mode_at_another_refresh_is_not_supported)
+{ DisplayModeList modes;
+  av::DisplayModeSet set;
+  CHECK_STATUS(set.add(1024u, 768u), av::Status::ok);
+  CHECK_STATUS(set.set_refresh(144000u), av::Status::ok);
+  CHECK_STATUS(modes.adopt(set), av::Status::ok);
+  const auto decide_with = [&](std::uint32_t millihz, bool pin, const char *&refusal) {
+      VidPnFixture fixture;
+      fixture.vidpn().add_path(0u, 0u);
+      if (pin) {
+          D3dkmdtVidPnTargetModeRecord target = {};
+          DisplayMode(1024u, 768u, millihz).describe(target.VideoSignalInfo);
+          fixture.vidpn().target_modes(0u).seed(target, true);
+      }
+      const av::DisplaySources      sources(fixture.platform());
+      DxgkargIsSupportedVidPnRecord request = {};
+      request.hDesiredVidPn = fixture.handle();
+      VidPnSupportCheck check(fixture.platform(), fixture.dxgkrnl(), modes, sources, request);
+      CHECK_EQ(check.decide().value(), 0);
+      refusal = check.refusal();
+      return request.IsVidPnSupported;
+  };
+  const char *refusal = nullptr;
+  CHECK_EQ(decide_with(144000u, true, refusal), 1u);
+  CHECK(refusal == nullptr);
+  CHECK_EQ(decide_with(0u, false, refusal), 1u);
+  CHECK_EQ(decide_with(60000u, true, refusal), 0u);
+  CHECK(std::strcmp(refusal, "target mode") == 0); }
 
 TEST(vidpn_support_check_visit, a_source_mode_set_it_cannot_read_fails)
 { const VidPnCall calls[] = {VidPnCall::acquire_source_mode_set, VidPnCall::acquire_pinned_mode};

@@ -51,6 +51,8 @@ private:
     /* Presents a refresh less a sixteenth apart are taken for a blank apart. */
     static constexpr uint64_t refresh_slack_parts = 16u;
 
+    /* The adapter's refresh in counter ticks, as of a second ago at the latest. */
+    uint64_t refresh_period(uint64_t now, uint64_t frequency);
     /* Where the scan-out cannot be read: one a refresh apart from the first. */
     bool admits_on_schedule(uint64_t now, uint64_t period);
 
@@ -60,6 +62,9 @@ private:
     uint32_t device_;
     uint64_t blanks_;
     uint64_t failures_;
+    /* The refresh last read, 0 before the first, and the tick it was read at. */
+    uint32_t refresh_millihz_;
+    uint64_t refresh_read_ticks_;
     /* The performance-counter tick from which the next frame is admitted,
      * on the schedule. */
     uint64_t due_;

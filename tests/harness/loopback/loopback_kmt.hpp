@@ -99,6 +99,7 @@ public:
     Status   wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source) override;
     /* No display: nothing to read, and a pacer keeps its own schedule. */
     Status   scan_line(std::uint32_t adapter, std::uint32_t source, BeamPosition &position) override;
+    Status   refresh_millihz(std::uint32_t adapter, std::uint32_t source, std::uint32_t &millihz) override;
     Status   escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t context, std::uint8_t *data,
                     std::uint32_t size) override;
     std::uint64_t performance_counter(std::uint64_t &frequency) const override;

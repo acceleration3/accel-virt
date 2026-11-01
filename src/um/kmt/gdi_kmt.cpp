@@ -903,6 +903,28 @@ Status GdiKmt::scan_line(uint32_t adapter, uint32_t source, BeamPosition &positi
     return answered;
 }
 
+/* The current mode of the source, whose rate dxgkrnl keeps as the fraction the
+ * driver's target mode stated. */
+Status GdiKmt::refresh_millihz(uint32_t adapter, uint32_t source, uint32_t &millihz)
+{
+    AV_SCOPE("GdiKmt::refresh_millihz");
+    D3DKMT_CURRENTDISPLAYMODE current = {};
+    current.VidPnSourceId = source;
+    D3DKMT_QUERYADAPTERINFO query = {};
+    query.hAdapter = adapter;
+    query.Type = KMTQAITYPE_CURRENTDISPLAYMODE;
+    query.pPrivateDriverData = &current;
+    query.PrivateDriverDataSize = sizeof current;
+    const Status status = answer(D3DKMTQueryAdapterInfo(&query));
+    if (status != Status::ok) return status;
+    const D3DDDI_RATIONAL &rate = current.DisplayMode.RefreshRate;
+    const uint64_t         exact = rate.Denominator != 0u
+                                       ? (uint64_t{rate.Numerator} * 1000u + rate.Denominator / 2u) / rate.Denominator
+                                       : uint64_t{current.DisplayMode.IntegerRefreshRate} * 1000u;
+    millihz = exact > 0xFFFFFFFFu ? 0xFFFFFFFFu : static_cast<uint32_t>(exact);
+    return millihz != 0u ? Status::ok : Status::not_found;
+}
+
 /* dxgkrnl copies the data into the kernel, hands the copy to DxgkDdiEscape and
  * copies it back out, so an answer the driver wrote lands in `data`. */
 Status GdiKmt::escape(uint32_t adapter, uint32_t device, uint32_t context, uint8_t *data, uint32_t size)

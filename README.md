@@ -117,7 +117,8 @@ there stays on the host ([`docs/host-memory.md`](docs/host-memory.md)).
 The desktop's primary surface is a blob the host shows directly, as a display
 surface over the device's own mapping of its pages, when the display backend
 has a GL context (`gtk,gl=on` or `egl-headless`). Otherwise it is transferred.
-Vsync is a synthetic 60 Hz, and the cursor is a 64x64 hardware cursor.
+Vsync is the device's own clock at the refresh rate it is given (60 Hz unless
+the `refresh` property says another), and the cursor is a 64x64 hardware cursor.
 
 **Isolation.** With `renderer=`, the whole host GPU stack runs in
 `av-renderer`. A crash there loses the device's contexts, which the guest sees
@@ -169,11 +170,14 @@ Tested beyond the probes and sample suites:
   `avd3d9probe.exe` checks.
 
 **Display:**
-- **One display per adapter**, at 60 Hz.
+- **One display per adapter**, and one refresh rate for all its modes: 60 Hz by
+  default, or the `refresh` property's (see [Resolutions](#resolutions)).
 - **Resolutions have hard limits.** From 100x100, the smallest source mode
-  dxgkrnl accepts, up to 4095 pixels per edge with a pixel clock of at most
-  655.35 MHz at 60 Hz, which is what an EDID detailed timing can describe.
-  3840x2160 works; 5120x2880 is left out.
+  dxgkrnl accepts, up to 4095 pixels per edge, which is what an EDID detailed
+  timing can describe. 3840x2160 works; 5120x2880 is left out. A mode whose
+  pixel clock at the refresh rate is past the EDID's 655.35 MHz is still
+  offered: the EDID states it at the fastest rate that fits, and Windows is
+  told the real one.
 - **Absolute pointer only.** Use the USB tablet. Relative mouse mode, which
   games want for mouse-look, loops on GTK and flickers on SDL under a Wayland
   host.
@@ -487,6 +491,7 @@ If the new driver bugchecks at boot, boot the same disk without the device
 | `executor` | none | The executor library, usually `build-qemu/libav_executor.so`. Without one the device is a plain virtio-gpu with no av capset: 2D only, no acceleration. `libav_echo_executor.so` is the test double the runner defaults to. |
 | `renderer` | none | The path to `av-renderer`. The executor then runs in that process instead of QEMU, and a host driver crash costs the guest a device reset instead of the VM. |
 | `modes` | empty | The display's resolutions: `WxH` between commas, the first preferred, e.g. `2560x1440,1920x1080,1000x600`. Empty means the host monitors' own modes. It can be changed while the guest runs (see [Resolutions](#resolutions)). |
+| `refresh` | `60000` | The display's refresh rate in millihertz, 1000 to 1000000, the same for every mode: what Windows is told and what the display's blanks run at. It can be changed while the guest runs (see [Resolutions](#resolutions)). |
 | `display` | `on` | `off` makes a render-only adapter with no outputs, for a second host GPU. |
 | `record` | none | A file to write a wire recording to: everything the executor received. |
 | `record-limit` | `0` (256 MiB) | The recording's ceiling in bytes. |
@@ -541,10 +546,21 @@ Windows is showing makes it switch to the preferred mode, so offering one size
 sets the resolution. Offered modes appear in Settings → Display like a real
 monitor's.
 
+The refresh rate is one number for every mode, the device's `refresh` property
+in millihertz (`60000` is 60 Hz; `359980` is 359.98 Hz). It is given the same
+way, on the command line or live (`qom-set` on `refresh`), and a change
+takes the same path as one of the modes: the device sets the display clock for
+every head to the new rate, raises the display event, and the driver offers
+exactly one rate at each resolution, so Windows switches to it with no restart.
+`modes=` stays `WxH`.
+
 What the driver does with the list:
 - **Size limits.** It keeps what Windows can use: 100x100 and up, and what an
-  EDID detailed timing can describe (up to 4095 per edge, 655.35 MHz). Anything
-  else is left out, and the driver log says how many were taken.
+  EDID detailed timing can describe (up to 4095 per edge). Anything else is
+  left out, and the driver log says how many were taken. The detailed timing's
+  pixel clock holds 655.35 MHz at most, so a mode too fast for it at the
+  refresh rate (2560x1440 at 360 Hz) is stated there at the fastest rate that
+  fits; the monitor source modes Windows validates against carry the real one.
 - **Pixel format.** Source modes are A8R8G8B8, because `cdd.dll` lists only
   R8G8B8, A8R8G8B8, R5G6B5 and P8 modes. Any other format leaves Windows a
   single made-up 800x600 and a greyed-out resolution setting.

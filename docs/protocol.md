@@ -680,6 +680,14 @@ and the device answers:
 | 24 | 4 | count | 1 to 32 |
 | 28 | 4 | preferred | the index of the mode the guest shows unless its user picks another; below `count` |
 | 32 | 8 each | modes | u32 width, u32 height, each 1 to 16384; no mode twice |
+| 32 + 8 * count | 4 | refresh | the display's refresh rate in millihertz, 1000 to 1000000, the same for every mode: the device's `refresh` property. After the modes, so a reader that stops there still reads them; an answer without it, or with 0, is 60000 |
+
+The refresh rate follows the modes in the same way: the `refresh` property, set
+on QEMU's command line or over QMP while the guest runs, sets this field and
+the display clock of every head (see "A head's rate") together, and raises the
+same display event. The miniport states exactly that rate in every mode's video
+signal (vertical sync as the fraction `refresh / 1000`, the pixel clock the
+whole frame times it), so Windows has one rate to choose at each resolution.
 
 A device with no modes to offer - none set and no monitor - answers
 `ERR_UNSPEC`, and so does one from before this request; the miniport then
@@ -688,8 +696,10 @@ before. The device keeps that rectangle at the preferred mode, and a change of
 modes while the guest runs sets `VIRTIO_GPU_EVENT_DISPLAY` and notifies the
 configuration change, which is when the miniport asks again, clears the event
 and has Windows read the monitor's modes afresh. A mode the miniport cannot
-describe in its EDID's detailed timing - an edge past 4095, or a pixel clock
-past 655.35 MHz at 60 Hz - is not offered.
+describe in its EDID's detailed timing - an edge past 4095 - is not offered. A
+pixel clock past 655.35 MHz at the refresh rate is no such limit: the EDID
+states the mode at the fastest rate its 16 bit clock holds, and the monitor
+source modes carry the real one.
 
 ### Reply slot (device -> guest)
 
@@ -1655,7 +1665,10 @@ registers it again at each start.
 `OK_NODATA`, or `ERR_INVALID_PARAMETER` for a head or a rate out of range. The
 head's next blank comes one new period after the blank before it, and the
 sequence carries on: a rate change is never a lost or repeated blank. A head
-runs at 60 Hz until told otherwise.
+runs at 60 Hz until told otherwise. The host sets every head's rate this way
+itself when the device's `refresh` property is set, so that the rate Windows
+is told (the display's modes) and the rate the blanks run at are one number; no
+driver sends this request.
 
 ### Posting a frame
 

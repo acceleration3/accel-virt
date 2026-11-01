@@ -40,7 +40,7 @@ TEST(display_mode_set, an_unusual_resolution_round_trips_and_stays_preferred)
   av::WireWriter writer(bytes, sizeof bytes);
   CHECK_STATUS(set.encode(writer), Status::ok);
   CHECK_EQ(writer.offset(), set.encoded_size());
-  CHECK_EQ(set.encoded_size(), 32u + 3u * 8u);
+  CHECK_EQ(set.encoded_size(), 32u + 3u * 8u + 4u);
   DisplayModeSet read;
   CHECK_STATUS(read.decode(bytes, writer.offset()), Status::ok);
   CHECK(read.same_as(set));
@@ -106,3 +106,31 @@ TEST(display_mode_set, a_response_that_breaks_a_rule_is_refused_and_changes_noth
   CHECK_EQ(kept.count(), 2u);
   CHECK_EQ(kept.width(kept.preferred()), 80u);
   CHECK(kept.invariants_hold()); }
+
+TEST(display_mode_set, the_refresh_follows_the_modes_and_a_set_without_one_is_60_hz)
+{ DisplayModeSet set;
+  CHECK_EQ(set.refresh_millihz(), 60000u);
+  CHECK_STATUS(set.add(2560u, 1440u), Status::ok);
+  CHECK_STATUS(set.set_refresh(359980u), Status::ok);
+  CHECK_STATUS(set.set_refresh(999u), Status::invalid_parameter);
+  CHECK_STATUS(set.set_refresh(1000001u), Status::invalid_parameter);
+  CHECK_EQ(set.refresh_millihz(), 359980u);
+  std::uint8_t   bytes[DisplayModeSet::max_encoded_size] = {};
+  av::WireWriter writer(bytes, sizeof bytes);
+  CHECK_STATUS(set.encode(writer), Status::ok);
+  DisplayModeSet read;
+  CHECK_STATUS(read.decode(bytes, writer.offset()), Status::ok);
+  CHECK_EQ(read.refresh_millihz(), 359980u);
+  CHECK(read.same_as(set));
+  /* A device older than the refresh ends its answer after the modes; a zero is as good as none. */
+  DisplayModeSet old;
+  CHECK_STATUS(old.decode(bytes, writer.offset() - DisplayModeSet::refresh_size), Status::ok);
+  CHECK_EQ(old.refresh_millihz(), 60000u);
+  std::memset(bytes + writer.offset() - DisplayModeSet::refresh_size, 0, DisplayModeSet::refresh_size);
+  CHECK_STATUS(old.decode(bytes, writer.offset()), Status::ok);
+  CHECK_EQ(old.refresh_millihz(), 60000u);
+  /* A rate out of range refuses the answer. */
+  const std::uint32_t slow = 500u;
+  std::memcpy(bytes + writer.offset() - DisplayModeSet::refresh_size, &slow, sizeof slow);
+  CHECK_STATUS(old.decode(bytes, writer.offset()), Status::malformed);
+  CHECK(old.invariants_hold()); }

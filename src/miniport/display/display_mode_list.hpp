@@ -34,7 +34,7 @@ public:
      * leaves the list as it was: a driver with no modes offers no display. */
     [[nodiscard]] Status follow(const DisplayInfoResponse &info, uint32_t scanout);
     /* Offers the host's modes, in ascending area, the set's preferred one
-     * preferred. Only offerable modes are taken - one dxgkrnl refuses would
+     * preferred, all at the refresh the set says. Only offerable modes are taken - one dxgkrnl refuses would
      * fail the whole source mode set, and the display with it; when the set's
      * preferred is not one of them, the largest that is is preferred.
      * not_found for a set with none, which leaves the list as it was. */

@@ -65,6 +65,10 @@ struct VirtIOGPUAv {
     /* The modes the display offers, "WxH,WxH" with the first preferred; none
      * is the host's monitors'. Settable before realize and while the VM runs. */
     char *modes;
+    /* The refresh rate every mode runs at, in millihertz, for the guest's
+     * mode list and the display's blanks alike. Settable before realize and
+     * while the VM runs. */
+    uint32_t refresh;
     /* The unix socket a process outside QEMU asks for shared surfaces on
      * (docs/external-export.md); none: no socket. The listening descriptor,
      * -1 while none listens. */

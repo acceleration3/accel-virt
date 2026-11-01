@@ -29,7 +29,7 @@ public:
     NtStatus decide();
     [[nodiscard]] Status visit(const D3dkmdtVidPnPresentPathRecord &path) override;
     /* Why decide() found the VidPn unsupported - "paths", "path ends",
-     * "transformation" or "source mode" - or null when it did not. */
+     * "transformation", "source mode" or "target mode" - or null when it did not. */
     const char *refusal() const;
     /* The pinned source mode a "source mode" refusal turned down. */
     const D3dkmdtVidPnSourceModeRecord &refused_mode() const;
@@ -39,6 +39,8 @@ private:
 
     /* ok with no source mode pinned, not_supported for one the adapter does not offer. */
     [[nodiscard]] Status offers_pinned_source(uint32_t source);
+    /* ok with no target mode pinned, not_supported for one at a size or a refresh the adapter does not offer. */
+    [[nodiscard]] Status offers_pinned_target(uint32_t target);
 
     Platform                      &platform_;
     const DisplayModeList         &modes_;

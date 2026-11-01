@@ -49,6 +49,10 @@ public:
     /* Main loop. invalid_parameter for a head past `heads` or a rate the
      * protocol does not allow. */
     [[nodiscard]] Status retime(uint32_t head, uint32_t millihz);
+    /* Main loop. Every head at once, as retime does one. invalid_parameter
+     * for a rate the protocol does not allow; before initialize the rate is
+     * kept for the heads' first blanks all the same. */
+    [[nodiscard]] Status retime_all(uint32_t millihz);
     /* Any thread: the host's display (docs/external-export.md, timing). Every
      * head blanks at `millihz` from its next blank on, in phase with `blank`
      * (VblankSchedule::align). invalid_state before initialize;

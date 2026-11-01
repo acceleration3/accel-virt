@@ -69,6 +69,13 @@ public:
     [[nodiscard]] Status set_modes(const char *text, uint32_t &width, uint32_t &height);
     /* av_device_set_modes' answer for the same: 1 set, 0 none, -1 refused. */
     int                  offer_modes(const char *text, uint32_t *width, uint32_t *height);
+    /* Main loop: the refresh the guest's modes say, in millihertz, and every
+     * head's blanks run at from the next one, so Windows' stated rate and the
+     * real one are the same. invalid_parameter, nothing changed, outside the
+     * display clock's 1 Hz to 1 kHz. */
+    [[nodiscard]] Status set_refresh(uint32_t millihz);
+    /* av_device_set_refresh's answer for the same: whether it was set. */
+    bool                 offer_refresh(uint32_t millihz);
     /* How many capsets the device offers: one once realized. */
     uint32_t             capsets() const;
     /* Main loop: the host image a guest allocation shows under `key`, into a

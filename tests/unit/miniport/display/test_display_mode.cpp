@@ -111,7 +111,8 @@ TEST(display_mode_scan_line, sweeps_the_total_height_once_per_frame)
   CHECK(mode.scan_line(0xFFFFFFFFFFFFFFFFull) < 1125u); }
 
 /* dxgkrnl's smallest source mode edge is 100, and an EDID's detailed timing
- * names edges and blanks in twelve bits and the clock up to 655.35 MHz. */
+ * names edges and blanks in twelve bits. Its clock, up to 655.35 MHz, limits
+ * the rate it can state and not the mode (edid_timing). */
 TEST(display_mode, what_windows_can_be_offered)
 { CHECK(av::DisplayMode(100u, 100u).offerable());
   CHECK(!av::DisplayMode(99u, 100u).offerable());
@@ -121,7 +122,8 @@ TEST(display_mode, what_windows_can_be_offered)
   CHECK(av::DisplayMode(4095u, 2160u).offerable());
   CHECK(!av::DisplayMode(4096u, 2160u).offerable());
   CHECK(!av::DisplayMode(1000u, 4096u).offerable());
-  CHECK(!av::DisplayMode(4095u, 4095u).offerable());
+  CHECK(av::DisplayMode(4095u, 4095u).offerable());
+  CHECK(av::DisplayMode(2560u, 1440u, 360000u).offerable());
   /* A slot's default is the smallest standard mode. */
   CHECK_EQ(av::DisplayMode().width(), 640u);
   CHECK_EQ(av::DisplayMode().height(), 480u); }
@@ -149,3 +151,69 @@ TEST(display_mode, frame_pages_count_a_part_page_whole)
   CHECK_EQ(DisplayMode(1366u, 768u).frame_pages(), 1025u);    /* 1024.5 */
   CHECK_EQ(DisplayMode(1u, 1u).frame_pages(), 1u);
   CHECK_EQ(DisplayMode(0u, 0u).frame_pages(), 0u); }
+
+/* The rate the device states is the mode's: exact fractions with a
+ * denominator of 1000 at most, a pixel clock of the whole frame times it. */
+TEST(display_mode_describe, a_signal_is_at_the_refresh_the_mode_was_made_at)
+{ D3dkmdtVideoSignalInfoRecord signal = {};
+  const DisplayMode            mode(2560u, 1440u, 359980u);
+  CHECK_EQ(mode.refresh_millihz(), 359980u);
+  mode.describe(signal);
+  CHECK_EQ(signal.VSyncFreqNumerator, 17999u);
+  CHECK_EQ(signal.VSyncFreqDenominator, 50u);
+  CHECK_EQ(signal.HSyncFreqNumerator, 539970u);
+  CHECK_EQ(signal.HSyncFreqDenominator, 1u);
+  CHECK_EQ(signal.PixelRate, (2720ull * 1500ull * 359980ull + 500ull) / 1000ull);
+  DisplayMode(1920u, 1080u, 144000u).describe(signal);
+  CHECK_EQ(signal.VSyncFreqNumerator, 144u);
+  CHECK_EQ(signal.VSyncFreqDenominator, 1u);
+  CHECK_EQ(signal.HSyncFreqNumerator, 1125u * 144u);
+  CHECK_EQ(signal.PixelRate, 2080ull * 1125ull * 144ull); }
+
+/* 7680x4320 at 1000 Hz is 35.28 GHz of pixel clock and 4.5 MHz of line rate:
+ * the 64-bit pixel rate holds, and no fraction wraps its 32-bit words. */
+TEST(display_mode_describe, the_largest_mode_at_the_fastest_rate_overflows_nothing)
+{ D3dkmdtVideoSignalInfoRecord signal = {};
+  const DisplayMode            mode(7680u, 4320u, 1000000u);
+  mode.describe(signal);
+  CHECK_EQ(signal.PixelRate, 7840ull * 4500ull * 1000ull);
+  CHECK_EQ(signal.VSyncFreqNumerator, 1000u);
+  CHECK_EQ(signal.VSyncFreqDenominator, 1u);
+  CHECK_EQ(signal.HSyncFreqNumerator, 4500u * 1000u);
+  CHECK_EQ(signal.HSyncFreqDenominator, 1u);
+  /* A numerator the 32 bits cannot hold loses precision and not range. */
+  D3dkmdtVideoSignalInfoRecord tall = {};
+  DisplayMode(100u, 16384u, 999999u).describe(tall);
+  CHECK(tall.HSyncFreqDenominator >= 1u);
+  const double lines = double(tall.HSyncFreqNumerator) / double(tall.HSyncFreqDenominator);
+  CHECK(lines > 17000.0 * 999.0 && lines < 17100.0 * 1000.0); }
+
+/* A saved configuration at another rate is not the mode the device states. */
+TEST(display_mode_matches, a_signal_at_its_refresh_and_no_other)
+{ const DisplayMode mode(1920u, 1080u, 144000u);
+  D3dkmdtVideoSignalInfoRecord signal = {};
+  mode.describe(signal);
+  CHECK(mode.matches(signal));
+  D3dkmdtVideoSignalInfoRecord saved = {};
+  DisplayMode(1920u, 1080u).describe(saved);
+  CHECK(!mode.matches(saved));
+  CHECK(DisplayMode(1920u, 1080u).matches(saved)); }
+
+/* An EDID's detailed timing stops at 655.35 MHz: a mode too fast for it is
+ * stated at the fastest rate that fits, and one that fits is itself. */
+TEST(display_mode, the_edid_states_the_fastest_rate_its_clock_holds)
+{ const DisplayMode fits(1920u, 1080u, 240000u);
+  CHECK_EQ(fits.edid_timing().refresh_millihz(), 240000u);
+  const DisplayMode fast = DisplayMode(2560u, 1440u, 360000u).edid_timing();
+  CHECK_EQ(fast.width(), 2560u);
+  CHECK(fast.refresh_millihz() < 360000u);
+  CHECK(fast.pixel_rate() / 10000u <= 65535u);
+  /* And nothing slower than the clock forces: within two millihertz of a frame's worth of it. */
+  CHECK(fast.pixel_rate() <= 655'350'000ull && 655'350'000ull - fast.pixel_rate() < 2ull * 2720ull * 1500ull / 1000ull);
+  const DisplayMode huge = DisplayMode(7680u, 4320u, 1000000u).edid_timing();
+  CHECK(huge.refresh_millihz() >= 1000u); }
+
+TEST(display_mode, a_period_is_in_the_100_ns_interrupt_time_units)
+{ CHECK_EQ(DisplayMode(1920u, 1080u).period(), second / 60u);
+  CHECK_EQ(DisplayMode(1920u, 1080u, 360000u).period(), second / 360u);
+  CHECK_EQ(DisplayMode(1920u, 1080u, 1000000u).period(), second / 1000u); }

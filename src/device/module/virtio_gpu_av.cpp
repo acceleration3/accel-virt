@@ -248,6 +248,21 @@ int VirtioGpuAv::offer_modes(const char *text, uint32_t *width, uint32_t *height
     return set == Status::ok ? 1 : 0;
 }
 
+Status VirtioGpuAv::set_refresh(uint32_t millihz)
+{
+    AV_SCOPE("VirtioGpuAv::set_refresh");
+    host_.require_main_loop("VirtioGpuAv::set_refresh");
+    const Status set = display_modes_.set_refresh(millihz);
+    if (set != Status::ok) return set;
+    return clock_.retime_all(millihz);
+}
+
+bool VirtioGpuAv::offer_refresh(uint32_t millihz)
+{
+    AV_SCOPE("VirtioGpuAv::offer_refresh");
+    return set_refresh(millihz) == Status::ok;
+}
+
 uint32_t VirtioGpuAv::capsets() const
 {
     AV_SCOPE("VirtioGpuAv::capsets");

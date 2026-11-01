@@ -199,3 +199,45 @@ TEST(frame_pacer, a_refused_scan_line_admits_on_the_schedule)
   rig.kmt().fail_at(MockKmt::Call::scan_line, 1u, 0xC0000001u);
   CHECK(!pacer.admits());
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::scan_line), 2u); }
+
+/* The pacer's refresh is the adapter's, not a constant: a sixteenth of a
+ * 240 Hz refresh short of one apart is a blank apart, and the same gap at
+ * 60 Hz is not. */
+TEST(frame_pacer, presents_nearly_a_refresh_apart_at_the_adapter_s_own_refresh_count_as_a_blank_apart)
+{ constexpr std::uint64_t fast = MockKmt::ticks_per_second / 240u;
+  const std::uint64_t     nearly = fast - fast / 16u;
+  const std::uint64_t     gaps[2] = {nearly - 1u, nearly};
+  for (std::uint64_t gap : gaps) {
+      PacerRig rig;
+      rig.kmt().set_blank_period(fast);
+      FramePacer pacer(rig.kmt(), rig.lines(), rig.adapter(), rig.device());
+      rig.kmt().reads_clock(nullptr, 100u);
+      CHECK(pacer.admits());
+      rig.kmt().reads_clock(nullptr, 300u);
+      CHECK(!pacer.admits());
+      /* Still before the blank at `fast`. */
+      rig.kmt().reads_clock(nullptr, gap);
+      CHECK_EQ(pacer.admits(), gap == nearly);
+  } }
+
+/* The host can change the rate while the VM runs, so the pacer reads it
+ * again: within the second it keeps what it had, after it, the new rate. The
+ * scan-out is refused throughout, so frames are admitted on the schedule, a
+ * refresh apart. */
+TEST(frame_pacer, a_refresh_changed_while_running_is_read_again_within_a_second)
+{ constexpr std::uint64_t fast = MockKmt::ticks_per_second / 240u;
+  PacerRig rig;
+  FramePacer pacer(rig.kmt(), rig.lines(), rig.adapter(), rig.device());
+  const auto admits = [&](std::uint64_t step) {
+      rig.kmt().reads_clock(nullptr, step);
+      rig.kmt().fail_at(MockKmt::Call::scan_line, 1u, 0xC0000001u);
+      return pacer.admits();
+  };
+  CHECK(admits(first_present));   /* due again a 60 Hz refresh on */
+  rig.kmt().set_blank_period(fast);
+  CHECK(admits(MockKmt::ticks_per_second / 2u));   /* due; the rate read half a second ago stands */
+  CHECK(!admits(fast + fast / 2u));
+  CHECK(admits(MockKmt::ticks_per_second / 2u));   /* a second after the first read: now 240 Hz */
+  CHECK(!admits(fast / 2u));
+  CHECK(admits(fast / 2u + fast / 10u));
+  CHECK(pacer.invariants_hold()); }

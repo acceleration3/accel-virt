@@ -52,7 +52,11 @@ Status VidPnSupportCheck::visit(const D3dkmdtVidPnPresentPathRecord &path)
     const Status offered = offers_pinned_source(path.VidPnSourceId);
     supported_ = offered != Status::not_supported;
     if (!supported_) refusal_ = "source mode";
-    return offered;
+    if (offered != Status::ok) return offered;
+    const Status timed = offers_pinned_target(path.VidPnTargetId);
+    supported_ = timed != Status::not_supported;
+    if (!supported_) refusal_ = "target mode";
+    return timed;
 }
 
 const char *VidPnSupportCheck::refusal() const
@@ -82,6 +86,21 @@ Status VidPnSupportCheck::offers_pinned_source(uint32_t source)
     if (status != Status::ok) return status;
     if (modes_.find(pinned) != nullptr) return Status::ok;
     refused_mode_ = pinned;
+    return Status::not_supported;
+}
+
+/* The target mode a saved configuration pins carries the refresh it was made at.
+ * A rate the device no longer states is refused here as a size it no longer
+ * offers is, so that a refresh changed while the VM runs is taken up by the
+ * next VidPn Windows asks for and not kept by the pinned one. A target set that
+ * cannot be read is no reason to refuse. */
+Status VidPnSupportCheck::offers_pinned_target(uint32_t target)
+{
+    AV_SCOPE("VidPnSupportCheck::offers_pinned_target");
+    TargetModeSet                set(platform_, vidpn_, target);
+    D3dkmdtVidPnTargetModeRecord pinned = {};
+    if (set.acquire() != Status::ok || set.copy_pinned(pinned) != Status::ok) return Status::ok;
+    if (modes_.find(pinned.VideoSignalInfo) != nullptr) return Status::ok;
     return Status::not_supported;
 }
 

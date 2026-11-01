@@ -7,7 +7,38 @@
 
 namespace av {
 
-DisplayMode::DisplayMode(uint32_t width, uint32_t height) : width_(width), height_(height)
+namespace {
+
+uint64_t greatest_common_divisor(uint64_t first, uint64_t second)
+{
+    while (second != 0u) {
+        const uint64_t rest = first % second;
+        first = second;
+        second = rest;
+    }
+    return first;
+}
+
+/* A rate as the lowest fraction D3DDDI_RATIONAL's two 32-bit words hold. A
+ * numerator past them - a line rate of a very tall mode at a very high refresh
+ * - gives up precision, never range: both halves shrink together. */
+void rational(uint64_t numerator, uint64_t denominator, uint32_t &numerator_out, uint32_t &denominator_out)
+{
+    const uint64_t divisor = greatest_common_divisor(numerator, denominator);
+    numerator /= divisor;
+    denominator /= divisor;
+    while (numerator > 0xFFFFFFFFu && denominator > 1u) {
+        numerator = (numerator + 1u) / 2u;
+        denominator = (denominator + 1u) / 2u;
+    }
+    numerator_out = numerator > 0xFFFFFFFFu ? 0xFFFFFFFFu : static_cast<uint32_t>(numerator);
+    denominator_out = static_cast<uint32_t>(denominator);
+}
+
+}  // namespace
+
+DisplayMode::DisplayMode(uint32_t width, uint32_t height, uint32_t refresh_millihz)
+    : width_(width), height_(height), refresh_millihz_(refresh_millihz)
 {
     AV_SCOPE("DisplayMode::DisplayMode");
 }
@@ -29,8 +60,16 @@ bool DisplayMode::offerable() const
     AV_SCOPE("DisplayMode::offerable");
     if (width_ < min_source_edge || height_ < min_source_edge) return false;
     if (width_ > max_edid_edge || height_ > max_edid_edge) return false;
-    if (total_height() - height_ > max_edid_edge) return false;
-    return pixel_rate() / edid_pixel_clock_unit_hz <= max_edid_pixel_clock_units;
+    return total_height() - height_ <= max_edid_edge;
+}
+
+DisplayMode DisplayMode::edid_timing() const
+{
+    AV_SCOPE("DisplayMode::edid_timing");
+    const uint64_t frame = uint64_t{total_width()} * total_height();
+    const uint64_t fastest = max_edid_pixel_clock_units * edid_pixel_clock_unit_hz * millihertz_per_hertz / frame;
+    if (refresh_millihz_ <= fastest) return *this;
+    return DisplayMode(width_, height_, static_cast<uint32_t>(fastest));
 }
 
 uint32_t DisplayMode::width() const
@@ -43,6 +82,18 @@ uint32_t DisplayMode::height() const
     AV_SCOPE("DisplayMode::height");
     return height_;
 }
+uint32_t DisplayMode::refresh_millihz() const
+{
+    AV_SCOPE("DisplayMode::refresh_millihz");
+    return refresh_millihz_;
+}
+
+uint64_t DisplayMode::period() const
+{
+    AV_SCOPE("DisplayMode::period");
+    return interrupt_ticks_per_second * millihertz_per_hertz / refresh_millihz_;
+}
+
 uint32_t DisplayMode::total_width() const
 {
     AV_SCOPE("DisplayMode::total_width");
@@ -57,7 +108,8 @@ uint32_t DisplayMode::total_height() const
 uint64_t DisplayMode::pixel_rate() const
 {
     AV_SCOPE("DisplayMode::pixel_rate");
-    return static_cast<uint64_t>(total_width()) * total_height() * refresh_hz;
+    const uint64_t frame = uint64_t{total_width()} * total_height();
+    return (frame * refresh_millihz_ + millihertz_per_hertz / 2u) / millihertz_per_hertz;
 }
 
 void DisplayMode::describe(D3dkmdtVidPnSourceModeRecord &source, int32_t format) const
@@ -82,10 +134,9 @@ void DisplayMode::describe(D3dkmdtVideoSignalInfoRecord &signal) const
     signal.TotalSizeCy = total_height();
     signal.ActiveSizeCx = width_;
     signal.ActiveSizeCy = height_;
-    signal.VSyncFreqNumerator = refresh_hz;
-    signal.VSyncFreqDenominator = 1u;
-    signal.HSyncFreqNumerator = total_height() * refresh_hz;
-    signal.HSyncFreqDenominator = 1u;
+    rational(refresh_millihz_, millihertz_per_hertz, signal.VSyncFreqNumerator, signal.VSyncFreqDenominator);
+    rational(uint64_t{total_height()} * refresh_millihz_, millihertz_per_hertz, signal.HSyncFreqNumerator,
+             signal.HSyncFreqDenominator);
     signal.PixelRate = pixel_rate();
     signal.ScanLineOrdering = ordering_progressive;
 }
@@ -102,7 +153,12 @@ bool DisplayMode::matches(const D3dkmdtVidPnSourceModeRecord &source) const
 bool DisplayMode::matches(const D3dkmdtVideoSignalInfoRecord &signal) const
 {
     AV_SCOPE("DisplayMode::matches");
-    return signal.ActiveSizeCx == width_ && signal.ActiveSizeCy == height_;
+    if (signal.ActiveSizeCx != width_ || signal.ActiveSizeCy != height_) return false;
+    /* The rate it was offered at and no other: a saved configuration at
+     * another is not this mode. */
+    D3dkmdtVideoSignalInfoRecord own = {};
+    describe(own);
+    return signal.VSyncFreqNumerator == own.VSyncFreqNumerator && signal.VSyncFreqDenominator == own.VSyncFreqDenominator;
 }
 
 uint32_t DisplayMode::scan_line_within(uint64_t since, uint64_t period) const
@@ -117,8 +173,8 @@ uint32_t DisplayMode::scan_line_within(uint64_t since, uint64_t period) const
 uint32_t DisplayMode::scan_line(uint64_t interrupt_time) const
 {
     AV_SCOPE("DisplayMode::scan_line");
-    const uint64_t frame_position = (interrupt_time % interrupt_ticks_per_second) * refresh_hz %
-                                    interrupt_ticks_per_second;
+    const uint64_t frame_position = (interrupt_time % interrupt_ticks_per_second) * refresh_millihz_ /
+                                    millihertz_per_hertz % interrupt_ticks_per_second;
     return static_cast<uint32_t>(frame_position * total_height() / interrupt_ticks_per_second);
 }
 

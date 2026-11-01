@@ -148,7 +148,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
       native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), present_waiters_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u), presents_unticketed_(0u), presents_ticketed_(0u), presents_parked_(0u), presents_refused_(0u), presents_unpointed_(0u), last_present_flags_(0u), last_present_status_(0), last_present_destination_kind_(0u),
-      display_changed_(0u), display_announced_(0u), started_(false), luid_(0u), present_(true)
+      display_changed_(0u), display_announced_(0u), scanout_period_(DisplayMode().period()), started_(false), luid_(0u), present_(true)
       {
           AV_SCOPE("Adapter::Adapter");
       }
@@ -535,7 +535,11 @@ void Adapter::dpc_routine()
 void Adapter::refresh_scanout(uint64_t now)
 {
     AV_SCOPE("Adapter::refresh_scanout");
-    constexpr uint64_t refresh_period = 10000000u / DisplayMode::refresh_hz - 10000u;   /* 100 ns, a ms early */
+    /* A display period less a millisecond early, in 100 ns, but never less than
+     * half of it: at 500 Hz and up that millisecond is the period. */
+    const uint64_t period = platform_.load_atomic(scanout_period_);
+    constexpr uint64_t early = 10000u;
+    const uint64_t     refresh_period = period - (early < period / 2u ? early : period / 2u);
     const bool         due = now - refreshed_at_ >= refresh_period;
     const bool         shown = due && refresh_waiting_;
     if (due) refreshed_at_ = now;
@@ -1358,10 +1362,13 @@ Status Adapter::follow_display_modes()
     DisplayModeSet offered;
     if (device_.object().ask_control(request, writer.length(), answer, sizeof answer, written) == Status::ok &&
         offered.decode(answer, written) == Status::ok && modes_.adopt(offered) == Status::ok) {
+        platform_.store_atomic(scanout_period_, modes_.preferred().period());
         log_offered_modes(offered.count());
         return Status::ok;
     }
-    return modes_.follow(display_info_, 0u);
+    const Status followed = modes_.follow(display_info_, 0u);
+    platform_.store_atomic(scanout_period_, modes_.preferred().period());
+    return followed;
 }
 
 /* What the host offered and what came of it: a mode past what the EDID can
@@ -1380,6 +1387,9 @@ void Adapter::log_offered_modes(uint32_t offered)
     message.append_decimal(modes_.preferred().width());
     message.append("x");
     message.append_decimal(modes_.preferred().height());
+    message.append(" at ");
+    message.append_decimal(modes_.preferred().refresh_millihz());
+    message.append(" mHz");
     platform_.log(message.text());
 }
 

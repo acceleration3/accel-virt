@@ -20,10 +20,10 @@ constexpr uint8_t identity[] = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 
 constexpr uint8_t colour[] = {0x78, 0x0E, 0xEE, 0x91, 0xA3, 0x54, 0x4C, 0x99, 0x26, 0x0F, 0x50, 0x54,
                               0x21, 0x08, 0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
                               0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
-/* Vertical 50-75 Hz, horizontal 1-255 kHz, pixel clock to 660 MHz: a mode
- * the driver offers - 100x100 scans lines at 6 kHz, 3840x2160 at 135 kHz and a
- * 540 MHz clock - is never outside the monitor's own range. */
-constexpr uint8_t range_limits[] = {0x00, 0x00, 0x00, 0xFD, 0x00, 50u, 75u, 1u, 255u, 66u,
+/* Vertical 1-255 Hz, horizontal 1-255 kHz, pixel clock to 2550 MHz: the widest
+ * EDID 1.3 states, so a mode the driver offers is outside the monitor's own
+ * range only above 255 Hz or 255 kHz. */
+constexpr uint8_t range_limits[] = {0x00, 0x00, 0x00, 0xFD, 0x00, 1u, 255u, 1u, 255u, 255u,
                                     0x00, 0x0A, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20};
 constexpr uint8_t monitor_name[] = {0x00, 0x00, 0x00, 0xFC, 0x00, 'a', 'c', 'c', 'e', 'l', '-', 'v',
                                     'i', 'r', 't', 0x0A, 0x20, 0x20};
@@ -93,9 +93,13 @@ void Edid::describe(DxgkChildContainerIdRecord &container) const
     container.EldInfoProductCode = static_cast<uint16_t>(bytes_[product_offset] | bytes_[product_offset + 1u] << 8u);
 }
 
-void Edid::write_preferred_timing(const DisplayMode &mode, uint32_t width_mm, uint32_t height_mm)
+/* The pixel clock is sixteen bits of 10 kHz, so a mode too fast for it is
+ * stated at the fastest rate that fits (DisplayMode::edid_timing) rather than
+ * with a clock that wrapped; the monitor source modes carry the real rate. */
+void Edid::write_preferred_timing(const DisplayMode &preferred, uint32_t width_mm, uint32_t height_mm)
 {
     AV_SCOPE("Edid::write_preferred_timing");
+    const DisplayMode mode = preferred.edid_timing();
     const auto low_byte = [](uint32_t value) { return static_cast<uint8_t>(value & 0xFFu); };
     const auto high_nibbles = [](uint32_t first, uint32_t second) {
         return static_cast<uint8_t>(((first >> 8u) & 0x0Fu) << 4u | ((second >> 8u) & 0x0Fu));

@@ -318,6 +318,8 @@ Status LoopbackKmt::wait_for_vertical_blank(std::uint32_t, std::uint32_t, std::u
 
 Status LoopbackKmt::scan_line(std::uint32_t, std::uint32_t, BeamPosition &) { return Status::not_supported; }
 
+Status LoopbackKmt::refresh_millihz(std::uint32_t, std::uint32_t, std::uint32_t &) { return Status::not_supported; }
+
 /* The one escape the shim answers as the driver would: where a context's ring
  * and reply slot are. */
 Status LoopbackKmt::escape(std::uint32_t, std::uint32_t, std::uint32_t context, std::uint8_t *data,

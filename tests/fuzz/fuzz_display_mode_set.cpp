@@ -37,10 +37,15 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
         if (set.width(index) != field(data, 32u + index * 8u)) __builtin_trap();
         if (set.height(index) != field(data, 36u + index * 8u)) __builtin_trap();
     }
-    /* What was accepted encodes back to the same bytes. */
+    /* What was accepted encodes back to the same bytes, the refresh apart: a
+     * zero or missing one is 60 Hz. */
+    const std::size_t modes_end = av::DisplayModeSet::fixed_size + set.count() * av::DisplayModeSet::mode_size;
+    if (size >= modes_end + av::DisplayModeSet::refresh_size && field(data, modes_end) != 0u &&
+        set.refresh_millihz() != field(data, modes_end))
+        __builtin_trap();
     std::uint8_t   again[av::DisplayModeSet::max_encoded_size] = {};
     av::WireWriter writer(again, sizeof again);
     if (set.encode(writer) != av::Status::ok) __builtin_trap();
-    if (std::memcmp(again + 24u, data + 24u, writer.offset() - 24u) != 0) __builtin_trap();
+    if (std::memcmp(again + 24u, data + 24u, modes_end - 24u) != 0) __builtin_trap();
     return 0;
 }

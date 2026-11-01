@@ -370,3 +370,19 @@ TEST(display_clock, aligned_every_head_blanks_in_phase_with_the_host_s_display)
       CHECK_EQ(record.period_ns(), period_144);
   }
   CHECK(rig.clock.invariants_hold()); }
+
+/* A rate set live reaches the page from the next blank. */
+TEST(display_clock, a_live_retime_of_every_head_reaches_the_page)
+{ Rig rig;
+  CHECK_STATUS(rig.clock.retime_all(999u), Status::invalid_parameter);
+  CHECK_STATUS(rig.clock.initialize(), Status::ok);
+  CHECK_STATUS(rig.clock.attach(page), Status::ok);
+  VblankRecord record;
+  rig.host.set_clock(start_at + period_60);
+  CHECK(rig.reaches(page, 0u, 1u, record));
+  CHECK_STATUS(rig.clock.retime_all(359980u), Status::ok);
+  CHECK(rig.host.wait_for_sleepers(1u, 2000u));
+  rig.host.set_clock(record.vblank_ns() + 2u * period_60);
+  CHECK(rig.reaches(page, 5u, 3u, record));
+  CHECK_EQ(record.refresh_millihz(), 359980u);
+  CHECK(rig.clock.invariants_hold()); }

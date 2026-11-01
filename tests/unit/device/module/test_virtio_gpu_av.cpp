@@ -1062,6 +1062,34 @@ TEST(virtio_gpu_av_modes, told_modes_are_answered_and_a_bad_text_changes_nothing
   CHECK_EQ(none, 0u);
   CHECK(device.invariants_hold()); }
 
+/* The refresh the guest's modes say and every head blanks at is one number,
+ * set while the VM runs, and it outlives a change of the modes. */
+TEST(virtio_gpu_av_modes, the_refresh_is_in_the_mode_list_and_survives_a_change_of_modes)
+{ MockHost host;
+  host.add_gpu(first);
+  VirtioGpuAv device(host);
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::ok);
+  CHECK_EQ(device.offer_modes("1920x1080", nullptr, nullptr), 1);
+  const auto listed = [&]() {
+      GpuRequestBuilder asked(av::DisplayModeSet::request_type);
+      MockRequest       request(asked.bytes(), asked.size());
+      CHECK(device.control(&request, av::DisplayModeSet::request_type));
+      av::DisplayModeSet read;
+      CHECK_STATUS(read.decode(request.response_bytes(), request.response_size()), Status::ok);
+      return read.refresh_millihz();
+  };
+  CHECK_EQ(listed(), 60000u);
+  CHECK(device.offer_refresh(359980u));
+  CHECK_EQ(listed(), 359980u);
+  CHECK_EQ(device.offer_modes("1280x800,1920x1080", nullptr, nullptr), 1);
+  CHECK_EQ(listed(), 359980u);
+  CHECK(!device.offer_refresh(999u));
+  CHECK(!device.offer_refresh(1000001u));
+  CHECK_EQ(listed(), 359980u);
+  CHECK(device.invariants_hold()); }
+
 namespace {
 
 std::uint32_t export_key_51(void *, std::uint32_t, std::uint64_t key, AvExportedImage *image)

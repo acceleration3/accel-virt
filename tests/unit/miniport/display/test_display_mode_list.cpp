@@ -233,6 +233,27 @@ TEST(display_mode_list_adopt, the_hosts_modes_in_ascending_area_with_its_preferr
   CHECK_EQ(modes.preferred().width(), 100u);
   CHECK(modes.invariants_hold()); }
 
+/* One rate for every mode, the set's, and the 4K the 16 bit EDID clock cannot
+ * name at that rate among them. */
+TEST(display_mode_list_adopt, every_mode_runs_at_the_refresh_the_set_says)
+{ DisplayModeList modes;
+  av::DisplayModeSet set = offered({{3840u, 2160u}, {1920u, 1080u}}, 0u);
+  CHECK_STATUS(set.set_refresh(359980u), av::Status::ok);
+  CHECK_STATUS(modes.adopt(set), av::Status::ok);
+  CHECK_EQ(modes.count(), 2u);
+  CHECK_EQ(modes.mode(0u).refresh_millihz(), 359980u);
+  CHECK_EQ(modes.mode(1u).refresh_millihz(), 359980u);
+  CHECK_EQ(modes.preferred().refresh_millihz(), 359980u);
+  D3dkmdtVideoSignalInfoRecord signal = {};
+  av::DisplayMode(1920u, 1080u).describe(signal);
+  CHECK(modes.find(signal) == nullptr);
+  av::DisplayMode(1920u, 1080u, 359980u).describe(signal);
+  CHECK(modes.find(signal) == &modes.mode(0u));
+  /* A set that says nothing is 60 Hz. */
+  CHECK_STATUS(modes.adopt(offered({{1920u, 1080u}}, 0u)), av::Status::ok);
+  CHECK_EQ(modes.preferred().refresh_millihz(), 60000u);
+  CHECK(modes.invariants_hold()); }
+
 /* dxgkrnl refuses a source mode under 100 pixels an edge, and one refusal
  * would fail the whole source mode set - the display with it. */
 TEST(display_mode_list_adopt, a_mode_windows_refuses_as_too_small_is_left_out)

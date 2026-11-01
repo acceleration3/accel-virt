@@ -789,6 +789,8 @@ bool DdiKmt::waiting_on(const Doorbell &doorbell, std::uint32_t context)
     return on != nullptr && on->context == context;
 }
 
+Status DdiKmt::refresh_millihz(std::uint32_t, std::uint32_t, std::uint32_t &) { return Status::not_supported; }
+
 Status DdiKmt::scan_line(std::uint32_t adapter, std::uint32_t source, BeamPosition &position)
 {
     if (adapter != adapter_handle) return refuse(Status::invalid_parameter);

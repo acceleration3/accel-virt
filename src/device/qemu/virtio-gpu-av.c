@@ -17,6 +17,7 @@
 #include "qemu/iov.h"
 #include "qemu/mmap-alloc.h"
 #include "hw/core/qdev-properties.h"
+#include "qapi/visitor.h"
 #include "hw/virtio/virtio.h"
 #include "hw/virtio/virtio-bus.h"
 #include "hw/virtio/virtio-gpu-bswap.h"
@@ -117,6 +118,42 @@ static void virtio_gpu_av_set_modes(Object *obj, const char *value, Error **errp
     r->modes = g_strdup(value);
 }
 
+static void virtio_gpu_av_get_refresh(Object *obj, Visitor *v, const char *name, void *opaque, Error **errp)
+{
+    VirtIOGPUAv *r = VIRTIO_GPU_AV(obj);
+    uint32_t value = r->refresh;
+
+    visit_type_uint32(v, name, &value, errp);
+}
+
+/* As the modes: before realize this only keeps the number, which realize
+ * applies; after it the rate changes at once - the blanks and the guest's mode
+ * list - and the guest is told with a display event. */
+static void virtio_gpu_av_set_refresh(Object *obj, Visitor *v, const char *name, void *opaque, Error **errp)
+{
+    VirtIOGPUAv *r = VIRTIO_GPU_AV(obj);
+    VirtIOGPUBase *b = VIRTIO_GPU_BASE(obj);
+    uint32_t value;
+
+    if (!visit_type_uint32(v, name, &value, errp)) {
+        return;
+    }
+    if (r->core) {
+        /* The same rate again is no change, and a display event makes Windows
+         * re-read its monitor. */
+        if (value == r->refresh) {
+            return;
+        }
+        if (av_device_set_refresh(r->core, value) != 1) {
+            error_setg(errp, "virtio-gpu-av: refresh %u is not between 1000 and 1000000 millihertz", value);
+            return;
+        }
+        b->virtio_config.events_read |= VIRTIO_GPU_EVENT_DISPLAY;
+        virtio_notify_config(VIRTIO_DEVICE(obj));
+    }
+    r->refresh = value;
+}
+
 static void virtio_gpu_av_realize(DeviceState *qdev, Error **errp)
 {
     /* A profiling run (AV_PERFETTO) lets any process of the user read this
@@ -205,6 +242,10 @@ static void virtio_gpu_av_realize(DeviceState *qdev, Error **errp)
     }
     /* After the base class, which sets the rectangle from xres and yres. */
     if (!virtio_gpu_av_apply_modes(r, r->modes, errp)) {
+        return;
+    }
+    if (av_device_set_refresh(r->core, r->refresh) != 1) {
+        error_setg(errp, "virtio-gpu-av: refresh %u is not between 1000 and 1000000 millihertz", r->refresh);
         return;
     }
     /* A GPU that renders but drives no monitor, as a second host GPU is. */
@@ -412,6 +453,7 @@ static void virtio_gpu_av_instance_init(Object *obj)
 
     virtio_gpu_av_renderer_init(r);
     virtio_gpu_av_export_init(r);
+    r->refresh = 60000;
     memory_region_init_io(&r->doorbells, obj, &virtio_gpu_av_doorbell_ops, r, "virtio-gpu-av-doorbells",
                           (uint64_t)AV_DEVICE_DOORBELLS * AV_DEVICE_DOORBELL_PAGE);
 }
@@ -445,6 +487,11 @@ static void virtio_gpu_av_class_init(ObjectClass *klass, const void *data)
     object_class_property_set_description(klass, "modes",
                                           "the display's modes, WxH between commas, the first preferred; "
                                           "empty: the host monitors' modes");
+    object_class_property_add(klass, "refresh", "uint32", virtio_gpu_av_get_refresh, virtio_gpu_av_set_refresh,
+                              NULL, NULL);
+    object_class_property_set_description(klass, "refresh",
+                                          "the display's refresh rate in millihertz, 1000 to 1000000, for every "
+                                          "mode; the guest switches to a new one without a restart");
 }
 
 static const TypeInfo virtio_gpu_av_info[] = {

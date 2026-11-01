@@ -104,6 +104,22 @@ Status DisplayClock::retime(uint32_t head, uint32_t millihz)
     return Status::ok;
 }
 
+Status DisplayClock::retime_all(uint32_t millihz)
+{
+    AV_SCOPE("DisplayClock::retime_all");
+    host_.require_main_loop("DisplayClock::retime_all");
+    if (millihz < VblankRecord::least_millihz || millihz > VblankRecord::most_millihz)
+        return Status::invalid_parameter;
+    /* Without the lock no thread runs: nothing else reads the schedules. */
+    if (lock_ != nullptr) host_.lock_mutex(lock_);
+    const uint64_t now = host_.monotonic_nanoseconds();
+    for (VblankSchedule &schedule : schedules_) schedule.retime(millihz, now);
+    if (lock_ != nullptr) host_.unlock_mutex(lock_);
+    /* The thread sleeps toward the old rate's deadline. */
+    if (wake_ != nullptr) host_.signal_event(wake_);
+    return Status::ok;
+}
+
 Status DisplayClock::align(uint32_t millihz, uint64_t blank)
 {
     AV_SCOPE("DisplayClock::align");

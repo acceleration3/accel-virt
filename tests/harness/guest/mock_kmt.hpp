@@ -267,6 +267,8 @@ public:
     /* Where the beam is on the clock performance_counter answers: a blank
      * begins every blank period, the first at tick 0. */
     Status        scan_line(std::uint32_t adapter, std::uint32_t source, BeamPosition &position) override;
+    /* The rate the blank period makes: not_found with none. */
+    Status        refresh_millihz(std::uint32_t adapter, std::uint32_t source, std::uint32_t &millihz) override;
     /* As the driver answers them: a ContextViewsRecord with where the
      * context's ring and reply slot are, refused for a context made without a
      * record; a HostWindowRecord as open_host_window says; anything else

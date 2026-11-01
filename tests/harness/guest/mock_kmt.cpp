@@ -979,6 +979,14 @@ Status MockKmt::scan_line(std::uint32_t adapter, std::uint32_t source, BeamPosit
     return succeed();
 }
 
+Status MockKmt::refresh_millihz(std::uint32_t adapter, std::uint32_t source, std::uint32_t &millihz)
+{
+    if (find(Kind::adapter, adapter) == nullptr || source != 0u) return misuse();
+    if (blank_period_ == 0u) return Status::not_found;
+    millihz = static_cast<std::uint32_t>(ticks_per_second * 1000u / blank_period_);
+    return Status::ok;
+}
+
 Status MockKmt::escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t context, std::uint8_t *data,
                        std::uint32_t size)
 {

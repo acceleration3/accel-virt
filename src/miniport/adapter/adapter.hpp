@@ -593,6 +593,8 @@ private:
     /* Set with display_changed_ by the interrupt, taken by the DPC, which
      * clears the device's event and has Windows replug each monitor. */
     uint64_t                       display_announced_;
+    /* The display period in 100 ns the DPC paces the scanout refresh by, set when the modes are. */
+    uint64_t                       scanout_period_;
     bool                           started_;
     /* DXGK_START_INFO.AdapterLuid, HighPart above LowPart: what the user-mode
      * driver is told, through UMDRIVERPRIVATE, so it talks to this adapter

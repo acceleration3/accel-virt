@@ -1,6 +1,9 @@
 /* One resolution the adapter scans out: a 32-bpp primary, blue first or red
- * first, with progressive 60 Hz timing whose blanking keeps 1080p's
- * proportions (160 columns, and one blank line for every 24 active ones). */
+ * first, with progressive timing at the refresh the device says (the same for
+ * every mode; 60 Hz where it says none) whose blanking keeps 1080p's
+ * proportions (160 columns, and one blank line for every 24 active ones).
+ * Nothing scans these timings out, so the blanking stays in those proportions
+ * at any rate and the pixel clock is only what total size times refresh make. */
 #ifndef AV_DISPLAY_MODE_HPP
 #define AV_DISPLAY_MODE_HPP
 
@@ -13,7 +16,8 @@ struct D3dkmdtVidPnSourceModeRecord;
 
 class DisplayMode {
 public:
-    static constexpr uint32_t refresh_hz = 60u;
+    /* The refresh of a mode made with none, and of a device that names none. */
+    static constexpr uint32_t default_refresh_millihz = 60000u;
     /* The D3DDDIFORMATs each mode is offered in, the desktop's first.
      * A8R8G8B8, not X8R8G8B8: cdd.dll's DrvGetModes keeps only R8G8B8,
      * A8R8G8B8, R5G6B5 and P8 source modes, and a list it empties leaves
@@ -24,12 +28,16 @@ public:
     static constexpr uint32_t source_format_count = 2u;
     static constexpr int32_t  source_formats[source_format_count] = {21, 32};
 
-    DisplayMode(uint32_t width, uint32_t height);
+    DisplayMode(uint32_t width, uint32_t height, uint32_t refresh_millihz = default_refresh_millihz);
     /* 640x480: what a list's slot holds until the list fills it. */
     DisplayMode();
 
     uint32_t width() const;
     uint32_t height() const;
+    /* In millihertz: 359980 is 359.98 Hz. */
+    uint32_t refresh_millihz() const;
+    /* One refresh in the 100 ns units of interrupt time, rounded down. */
+    uint64_t period() const;
     uint32_t total_width() const;
     uint32_t total_height() const;
     uint64_t pixel_rate() const;
@@ -40,8 +48,13 @@ public:
      * DMMVIDEOSIGNALMODE::_ValidateDdiVideoSignalModeInfo, whose 1 MHz clock
      * floor 100x100 clears), and the monitor's EDID must be able to name it
      * preferred in a detailed timing - twelve bits for each edge and each
-     * blank, sixteen for the pixel clock in 10 kHz units. */
-    bool     offerable() const;
+     * blank. Its pixel clock, sixteen bits of 10 kHz units, is not a limit
+     * here: edid_timing() is the mode at a rate it fits. */
+    bool        offerable() const;
+    /* This mode at the highest refresh a detailed timing can state (655.35 MHz
+     * of pixel clock): itself where it fits, as 1080p at 240 Hz does; 2560x1440 at 360 Hz is stated at 160 Hz. The EDID states
+     * this, the monitor source modes the real rate. */
+    DisplayMode edid_timing() const;
 
     /* As a primary of `format`, one of source_formats; leaves the Id dxgkrnl
      * assigned. */
@@ -68,6 +81,7 @@ private:
     static constexpr uint32_t max_edid_edge = 4095u;
     static constexpr uint64_t edid_pixel_clock_unit_hz = 10000u;
     static constexpr uint64_t max_edid_pixel_clock_units = 65535u;
+    static constexpr uint32_t millihertz_per_hertz = 1000u;
     static constexpr uint32_t active_lines_per_blank_line = 24u;
     static constexpr uint32_t bytes_per_pixel = 4u;
     static constexpr uint64_t interrupt_ticks_per_second = 10000000u;
@@ -81,6 +95,7 @@ private:
 
     uint32_t width_;
     uint32_t height_;
+    uint32_t refresh_millihz_;
 };
 
 }  // namespace av

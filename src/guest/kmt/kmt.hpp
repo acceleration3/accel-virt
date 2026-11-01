@@ -195,6 +195,11 @@ public:
     virtual Status   wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32_t source) = 0;
     /* Where the scan-out of `source` is now, as the driver's clock places it. */
     virtual Status   scan_line(uint32_t adapter, uint32_t source, BeamPosition &position) = 0;
+    /* The refresh `source` is committed at, in millihertz, as dxgkrnl reports
+     * the current display mode: the rate the driver was told and Windows is
+     * told, which a host changes while the VM runs. not_found for a source
+     * showing nothing. */
+    virtual Status   refresh_millihz(uint32_t adapter, uint32_t source, uint32_t &millihz) = 0;
     /* D3DKMTEscape with driver-private data on `context` of `device`: the
      * miniport reads the `size` bytes and may write its answer back into them,
      * which the caller finds in `data` on return. The status is the driver's. */

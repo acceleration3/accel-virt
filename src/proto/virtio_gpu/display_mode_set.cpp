@@ -6,7 +6,7 @@
 
 namespace av {
 
-DisplayModeSet::DisplayModeSet() : widths_(), heights_(), count_(0u), preferred_(0u)
+DisplayModeSet::DisplayModeSet() : widths_(), heights_(), count_(0u), preferred_(0u), refresh_millihz_(default_refresh_millihz)
 {
     AV_SCOPE("DisplayModeSet::DisplayModeSet");
 }
@@ -30,6 +30,14 @@ Status DisplayModeSet::prefer(uint32_t index)
     AV_SCOPE("DisplayModeSet::prefer");
     if (index >= count_) return Status::invalid_parameter;
     preferred_ = index;
+    return Status::ok;
+}
+
+Status DisplayModeSet::set_refresh(uint32_t millihz)
+{
+    AV_SCOPE("DisplayModeSet::set_refresh");
+    if (millihz < least_refresh_millihz || millihz > most_refresh_millihz) return Status::invalid_parameter;
+    refresh_millihz_ = millihz;
     return Status::ok;
 }
 
@@ -64,10 +72,17 @@ uint32_t DisplayModeSet::preferred() const
     return preferred_;
 }
 
+uint32_t DisplayModeSet::refresh_millihz() const
+{
+    AV_SCOPE("DisplayModeSet::refresh_millihz");
+    return refresh_millihz_;
+}
+
 bool DisplayModeSet::same_as(const DisplayModeSet &other) const
 {
     AV_SCOPE("DisplayModeSet::same_as");
-    if (count_ != other.count_ || preferred_ != other.preferred_) return false;
+    if (count_ != other.count_ || preferred_ != other.preferred_ || refresh_millihz_ != other.refresh_millihz_)
+        return false;
     for (uint32_t index = 0u; index < count_; index++)
         if (widths_[index] != other.widths_[index] || heights_[index] != other.heights_[index]) return false;
     return true;
@@ -85,13 +100,14 @@ Status DisplayModeSet::encode(WireWriter &writer) const
         writer.write_u32(widths_[index]);
         writer.write_u32(heights_[index]);
     }
+    writer.write_u32(refresh_millihz_);
     return writer.status();
 }
 
 size_t DisplayModeSet::encoded_size() const
 {
     AV_SCOPE("DisplayModeSet::encoded_size");
-    return fixed_size + count_ * mode_size;
+    return fixed_size + count_ * mode_size + refresh_size;
 }
 
 Status DisplayModeSet::decode(const uint8_t *bytes, size_t length)
@@ -115,6 +131,10 @@ Status DisplayModeSet::decode(const uint8_t *bytes, size_t length)
         if (decoded.add(width, height) != Status::ok || decoded.count_ == before) return Status::malformed;
     }
     decoded.preferred_ = preferred;
+    if (reader.remaining() >= refresh_size) {
+        const uint32_t refresh = reader.read_u32();
+        if (refresh != 0u && decoded.set_refresh(refresh) != Status::ok) return Status::malformed;
+    }
     *this = decoded;
     return Status::ok;
 }
@@ -124,6 +144,7 @@ bool DisplayModeSet::invariants_hold() const
     AV_SCOPE("DisplayModeSet::invariants_hold");
     if (count_ > max_modes) return false;
     if (count_ == 0u ? preferred_ != 0u : preferred_ >= count_) return false;
+    if (refresh_millihz_ < least_refresh_millihz || refresh_millihz_ > most_refresh_millihz) return false;
     for (uint32_t index = 0u; index < count_; index++) {
         if (widths_[index] == 0u || heights_[index] == 0u) return false;
         if (widths_[index] > max_dimension || heights_[index] > max_dimension) return false;

@@ -9,7 +9,7 @@ namespace av {
 
 VsyncScenario::VsyncScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
     : kmt_(kmt), search_(search), steps_(kmt, report, "vsync"), blanks_(0u), first_tick_(0u), last_tick_(0u),
-      shortest_(0u), frequency_(0u)
+      shortest_(0u), frequency_(0u), expected_centihertz_(expected_hz * 100u)
       {
           AV_SCOPE("VsyncScenario::VsyncScenario");
       }
@@ -20,6 +20,10 @@ void VsyncScenario::run()
     if (steps_.check("adapter", search_.found() ? Status::ok : Status::not_found) != Status::ok) return;
     GuestSession session(kmt_, search_.adapter());
     Status       status = steps_.check("device", session.open_device());
+    /* The rate dxgkrnl reports for the source; the default where it does not. */
+    uint32_t millihz = 0u;
+    if (status == Status::ok && kmt_.refresh_millihz(search_.adapter(), source, millihz) == Status::ok)
+        expected_centihertz_ = millihz / 10u;
     if (status == Status::ok) status = steps_.check("blanks", count(session));
     if (status == Status::ok)
         static_cast<void>(steps_.check_measured("rate", paced() ? Status::ok : Status::conflict,
@@ -71,7 +75,7 @@ bool VsyncScenario::paced() const
 {
     AV_SCOPE("VsyncScenario::paced");
     const uint32_t rate = rate_centihertz();
-    const uint32_t fastest = expected_hz * 100u;
+    const uint32_t fastest = expected_centihertz_;
     const uint32_t slowest = fastest / 2u;
     return rate + fastest * tolerance_percent / 100u >= slowest &&
            rate <= fastest + fastest * tolerance_percent / 100u;
