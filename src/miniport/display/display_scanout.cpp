@@ -84,14 +84,21 @@ Status DisplayScanout::disable(uint32_t source)
     return resources_[source].disable();
 }
 
+void DisplayScanout::wait_for_refresh()
+{
+    AV_SCOPE("DisplayScanout::wait_for_refresh");
+    platform_.require_irql_at_most(Irql::passive, "DisplayScanout::wait_for_refresh");
+    SpinLockGuard held(lock_);
+}
+
 /* A source that is not visible is not carried: dxgkrnl has told us nothing is
  * on it, and the host was already told to scan out nothing.
  *
  * The primary handle is the one this driver gave dxgkrnl for its own
  * allocation, so it is cast back rather than looked up: the allocation table
- * is reached under a mutex, which this path may not take, and
- * DisplaySources::forget_primary clears the handle before the allocation is
- * destroyed. */
+ * is reached under a mutex, which this path may not take. The destroy clears
+ * the handle (DisplaySources::forget_primary) and then waits out any refresh
+ * that read it before then (wait_for_refresh), under this lock. */
 Status DisplayScanout::refresh(DisplaySources &sources, bool presented, bool due)
 {
     AV_SCOPE("DisplayScanout::refresh");

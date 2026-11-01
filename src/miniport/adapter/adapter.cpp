@@ -1008,6 +1008,7 @@ int32_t Adapter::destroy_allocation(const DxgkargDestroyAllocationRecord *reques
             void *const user = av_contexts_.user_of(allocations_.find(request->pAllocationList[index]));
             if (user != nullptr) static_cast<void>(av_contexts_.unbind(user, answering_device()));
         }
+    scanout_.wait_for_refresh();
     const Status destroyed = allocations_.destroy(*request);
     release_shared();
     return NtStatus(destroyed).value();

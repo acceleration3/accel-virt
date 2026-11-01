@@ -59,6 +59,9 @@ public:
     /* StopDevice: the host holds nothing of ours afterwards. */
     void                 release();
     void                 forget_device();
+    /* Returns once no refresh that could have read a source's primary before
+     * DisplaySources::forget_primary cleared it is still running. */
+    void                 wait_for_refresh();
 
     bool invariants_hold() const;
 
