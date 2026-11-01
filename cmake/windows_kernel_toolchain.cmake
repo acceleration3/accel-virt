@@ -14,7 +14,7 @@ set(CMAKE_MT llvm-mt)
 # Compiler detection links a test program; a user-mode executable cannot link
 # without a C runtime, and there is none.
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
-list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES AV_WINDOWS_KIT_DIR)
+list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES AV_WINDOWS_KIT_DIR AV_CHECKED)
 
 # The MSVC platform module appends /RTC1, /EHsc, WIN32 and kernel32.lib to the
 # *_INIT variables after this file runs. A rules override runs after it.

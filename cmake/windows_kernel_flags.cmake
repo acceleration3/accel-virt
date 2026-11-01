@@ -9,9 +9,13 @@ endif()
 # and use the joined -imsvc<dir> form because CMake collapses repeated option
 # words ("-imsvc a -imsvc b" becomes "-imsvc a b"). Under clang-cl -Wall means
 # -Weverything, hence /W4 plus the host build's explicit list.
+if(AV_CHECKED)
+  set(AV_CHECKED_DEFINE /DAV_CHECKED=1)
+endif()
+
 string(JOIN " " CMAKE_CXX_FLAGS_INIT
   /kernel /GR- /EHs-c- /Zl /X /Z7 /O2
-  /D_AMD64_ /DAMD64 /D_WIN64 /DAV_CHECKED=1
+  /D_AMD64_ /DAMD64 /D_WIN64 ${AV_CHECKED_DEFINE}
   /W4 /WX -Wextra -Wconversion -Wsign-conversion -Wshadow -Wold-style-cast
   /clang:-ivfsoverlay${AV_WINDOWS_KIT_DIR}/overlay.yaml
   -imsvc/windows-kit/km/crt -imsvc/windows-kit/km

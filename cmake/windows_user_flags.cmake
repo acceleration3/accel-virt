@@ -18,9 +18,13 @@ else()
   set(AV_GUEST_ARCH_DEFINES /D_AMD64_ /DAMD64 /D_WIN64)
 endif()
 
+if(AV_CHECKED)
+  set(AV_CHECKED_DEFINE /DAV_CHECKED=1)
+endif()
+
 string(JOIN " " CMAKE_CXX_FLAGS_INIT
   /GR- /EHs-c- /Zl /X /Z7 /GS- /Gy /Gw /O2 -flto=thin
-  ${AV_GUEST_ARCH_DEFINES} /DAV_CHECKED=1 /DWIN32_LEAN_AND_MEAN /DNOMINMAX
+  ${AV_GUEST_ARCH_DEFINES} ${AV_CHECKED_DEFINE} /DWIN32_LEAN_AND_MEAN /DNOMINMAX
   /W4 /WX -Wextra -Wconversion -Wsign-conversion -Wshadow -Wold-style-cast
   /clang:-ivfsoverlay${AV_WINDOWS_KIT_DIR}/overlay.yaml
   -imsvc/windows-kit/km/crt -imsvc/windows-kit/um -imsvc/windows-kit/sdk-shared)

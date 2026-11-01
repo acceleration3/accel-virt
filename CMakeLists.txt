@@ -13,6 +13,9 @@ endif()
 option(AV_COVERAGE "instrument for llvm-cov"        OFF)
 option(AV_SANITIZE "build tests with ASan + UBSan"  ON)
 option(AV_FUZZ     "build libFuzzer targets"        OFF)
+# Constitution IV's invariants, on entry and exit of every mutating call. They
+# walk whole tables, so a driver that ships with them slows as its tables grow.
+option(AV_CHECKED "verify invariants around every mutation" ON)
 option(AV_QEMU     "build the patched QEMU with the device and smoke-test it" OFF)
 # The QEMU configuration is the one guests run on: with no build type, CMake
 # compiles the core and the executor library unoptimized.
@@ -169,7 +172,9 @@ endif()
 set(AV_DXVK_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/dxvk/include/native/directx
                     ${CMAKE_SOURCE_DIR}/third_party/dxvk/include/native/windows)
 target_include_directories(av_core SYSTEM PUBLIC ${AV_DXVK_INCLUDE})
-target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
+if(AV_CHECKED)
+  target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
+endif()
 
 # The D3D11 samples' host side (samples/d3d11): DXVK native, the guest's
 # shader bytecode, the same frames the guest renders - the report's baseline
@@ -671,7 +676,7 @@ ExternalProject_Add(avgpu
   CONFIGURE_COMMAND ${CMAKE_COMMAND} -E rm -f <BINARY_DIR>/CMakeCache.txt
   COMMAND ${CMAKE_COMMAND} -G Ninja -S <SOURCE_DIR> -B <BINARY_DIR>
           -DCMAKE_TOOLCHAIN_FILE=${CMAKE_SOURCE_DIR}/cmake/windows_kernel_toolchain.cmake
-          -DAV_WINDOWS_KIT_DIR=${AV_WINDOWS_KIT_DIR}
+          -DAV_WINDOWS_KIT_DIR=${AV_WINDOWS_KIT_DIR} -DAV_CHECKED=${AV_CHECKED}
   BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
   BUILD_ALWAYS ON
   INSTALL_COMMAND ""
@@ -692,7 +697,7 @@ ExternalProject_Add(avtest
   CONFIGURE_COMMAND ${CMAKE_COMMAND} -E rm -f <BINARY_DIR>/CMakeCache.txt
   COMMAND ${CMAKE_COMMAND} -G Ninja -S <SOURCE_DIR> -B <BINARY_DIR>
           -DCMAKE_TOOLCHAIN_FILE=${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
-          -DAV_WINDOWS_KIT_DIR=${AV_WINDOWS_KIT_DIR}
+          -DAV_WINDOWS_KIT_DIR=${AV_WINDOWS_KIT_DIR} -DAV_CHECKED=${AV_CHECKED}
   BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
   BUILD_ALWAYS ON
   INSTALL_COMMAND ""
@@ -721,7 +726,7 @@ ExternalProject_Add(avtest32
   CONFIGURE_COMMAND ${CMAKE_COMMAND} -E rm -f <BINARY_DIR>/CMakeCache.txt
   COMMAND ${CMAKE_COMMAND} -G Ninja -S <SOURCE_DIR> -B <BINARY_DIR>
           -DCMAKE_TOOLCHAIN_FILE=${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
-          -DAV_WINDOWS_KIT_DIR=${AV_WINDOWS_KIT_DIR} -DAV_GUEST_ARCH=x86
+          -DAV_WINDOWS_KIT_DIR=${AV_WINDOWS_KIT_DIR} -DAV_GUEST_ARCH=x86 -DAV_CHECKED=${AV_CHECKED}
   BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
   BUILD_ALWAYS ON
   INSTALL_COMMAND ""
