@@ -1011,7 +1011,9 @@ int32_t Adapter::destroy_allocation(const DxgkargDestroyAllocationRecord *reques
     scanout_.wait_for_refresh();
     const Status destroyed = allocations_.destroy(*request);
     release_shared();
-    return NtStatus(destroyed).value();
+    const int32_t answer = NtStatus(destroyed).value();
+    log_failure("avgpu: DestroyAllocation", answer);
+    return answer;
 }
 
 /* dxgkrnl destroys a shared allocation only once every process let go of it,
@@ -1097,7 +1099,9 @@ int32_t Adapter::close_allocation(void *device, const DxgkargCloseAllocationReco
     AV_SCOPE("Adapter::close_allocation");
     platform_.require_irql_at_most(Irql::passive, "Adapter::close_allocation");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return NtStatus(devices_.close(device, *request)).value();
+    const int32_t closed = NtStatus(devices_.close(device, *request)).value();
+    log_failure("avgpu: CloseAllocation", closed);
+    return closed;
 }
 
 int32_t Adapter::set_display_private_driver_format(const DxgkargSetDisplayPrivateDriverFormatRecord *request)

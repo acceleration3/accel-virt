@@ -90,15 +90,20 @@ HRESULT KernelDevice::allocate(KernelSurface &surface, HANDLE resource, D3DKMT_H
     return made;
 }
 
-void KernelDevice::deallocate(D3DKMT_HANDLE allocation, HANDLE resource)
+HRESULT KernelDevice::deallocate(D3DKMT_HANDLE allocation, HANDLE resource)
 {
     AV_SCOPE("KernelDevice::deallocate");
-    if (allocation == 0u || callbacks_ == nullptr) return;
+    if (allocation == 0u || callbacks_ == nullptr) return S_OK;
     D3DDDICB_DEALLOCATE deallocate = {};
+    /* One or the other. d3dumddi.h says the list is ignored beside a resource,
+     * but the runtime answers E_INVALIDARG to both, and the allocation stays
+     * until its device goes: measured, every shared texture a process released. */
     deallocate.hResource = resource;
-    deallocate.NumAllocations = 1u;
-    deallocate.HandleList = &allocation;
-    static_cast<void>(callbacks_->pfnDeallocateCb(runtime_, &deallocate));
+    if (resource == nullptr) {
+        deallocate.NumAllocations = 1u;
+        deallocate.HandleList = &allocation;
+    }
+    return callbacks_->pfnDeallocateCb(runtime_, &deallocate);
 }
 
 void *KernelDevice::lock(D3DDDICB_LOCK &asked)

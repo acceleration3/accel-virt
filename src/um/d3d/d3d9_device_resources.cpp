@@ -202,7 +202,7 @@ void D3d9Device::release_resource(D3d9Resource &resource)
     }
     if (resource.subresources != nullptr) memory_.release(resource.subresources);
     resource.subresources = nullptr;
-    if (!resource.opened) kernel_.deallocate(resource.allocation, resource.allocation_resource);
+    if (!resource.opened) allocations_.give_back(resource.allocation, resource.allocation_resource);
 }
 
 /* The redirection surface of a window, which d3d9.dll opens into the device

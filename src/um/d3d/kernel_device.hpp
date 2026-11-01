@@ -33,7 +33,8 @@ public:
      * scanned out at its source - belonging to the runtime's `resource`, or
      * to none for null. */
     HRESULT allocate(KernelSurface &surface, HANDLE resource, D3DKMT_HANDLE &allocation);
-    void    deallocate(D3DKMT_HANDLE allocation, HANDLE resource);
+    /* S_OK for no allocation, or no kernel device to give it back to. */
+    [[nodiscard]] HRESULT deallocate(D3DKMT_HANDLE allocation, HANDLE resource);
     /* A CPU view of `allocation` to write, or to read; null when the kernel
      * would not lock it. Each is unlocked once read or written. */
     void   *lock_to_write(D3DKMT_HANDLE allocation);

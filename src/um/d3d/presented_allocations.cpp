@@ -39,6 +39,17 @@ HRESULT PresentedAllocations::make(KernelSurface &surface, HANDLE resource, D3DK
     return S_OK;
 }
 
+void PresentedAllocations::give_back(D3DKMT_HANDLE allocation, HANDLE resource)
+{
+    AV_SCOPE("PresentedAllocations::give_back");
+    const HRESULT freed = kernel_.deallocate(allocation, resource);
+    if (FAILED(freed) && lines_.first("the kernel would not take an allocation back", freed))
+        LogLine(lines_)
+            .text("the kernel would not take an allocation back ")
+            .hex(static_cast<uint32_t>(freed), 8u)
+            .write();
+}
+
 HRESULT PresentedAllocations::keep_resident(D3DKMT_HANDLE allocation)
 {
     AV_SCOPE("PresentedAllocations::keep_resident");

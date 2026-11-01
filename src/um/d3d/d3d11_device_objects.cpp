@@ -314,7 +314,7 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
      * was this device's to make and is its to give back. Kept, every swap
      * chain DWM remade leaked its primaries. An opened one is its maker's. */
     if (resource.allocation_owned != 0u)
-        kernel_.deallocate(resource.allocation, static_cast<HANDLE>(resource.runtime_resource));
+        allocations_.give_back(resource.allocation, static_cast<HANDLE>(resource.runtime_resource));
     resource = ResourceRecord{};
 }
 

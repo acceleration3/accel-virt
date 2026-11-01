@@ -49,7 +49,7 @@ HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATE
     /* The pages the other adapter's device is lent too, when it opens this
      * allocation: the host makes one memory of them. */
     if (across && lender_.lend(allocation, surface.bytes(), resource.lent) != Status::ok) {
-        kernel_.deallocate(allocation, runtime.handle);
+        allocations_.give_back(allocation, runtime.handle);
         lines_.write("the device took no cross-adapter texture's pages");
         return E_OUTOFMEMORY;
     }

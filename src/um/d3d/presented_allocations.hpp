@@ -34,6 +34,8 @@ public:
      * A refusal to keep it resident is said and the allocation still made: a
      * flip never names it. */
     [[nodiscard]] HRESULT make(KernelSurface &surface, HANDLE resource, D3DKMT_HANDLE &allocation);
+    /* What `make` made, given back; the kernel's refusal is said once. */
+    void give_back(D3DKMT_HANDLE allocation, HANDLE resource);
     /* An allocation another device made and this one opened - a window's
      * redirection surface, which a present names as its destination - asked
      * to be resident for this device; the kernel's refusal is said once. */
