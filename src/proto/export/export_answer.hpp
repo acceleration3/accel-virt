@@ -26,7 +26,7 @@ public:
     static constexpr uint16_t major = 1u;
     /* The request minor this device reads (ExportRequest::minor): a consumer
      * that sends a newer one knows from the hello that its flags go unread. */
-    static constexpr uint16_t minor = 3u;
+    static constexpr uint16_t minor = 5u;
 
     /* A request that did not decode, refused as malformed. */
     ExportAnswer();
@@ -45,6 +45,9 @@ public:
     void greet(const ExportGreeting &greeting);
     void describe(const ExportedLayout &layout);
     void count(uint64_t writes);
+    /* A sync's: the rate the guest's display blanks at, in microhertz, which
+     * the consumer paces itself by. 0: not said. */
+    void tell_refresh(uint32_t microhz);
 
     ExportOperation       operation() const;
     Status                status() const;
@@ -54,6 +57,7 @@ public:
     const ExportedLayout &layout() const;
     /* The copies into the surface the host has run, as a sync answers. */
     uint64_t              writes() const;
+    uint32_t              refresh_microhz() const;
     /* A revocation's reason; 0 in any other answer. */
     uint32_t              reason() const;
     /* What travels beside it: the dma-buf of an export or the sync_file of a
@@ -88,6 +92,7 @@ private:
     ExportGreeting  greeting_;
     ExportedLayout  layout_;
     uint64_t        writes_;
+    uint32_t        refresh_microhz_;
     uint32_t        reason_;
 };
 

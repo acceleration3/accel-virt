@@ -1,32 +1,31 @@
 #include "proto/export/export_request.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "proto/pages/vblank_record.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
 ExportRequest::ExportRequest()
-    : operation_(ExportOperation::hello), surface_(0u), tag_(0u), refresh_millihz_(0u), blank_(0u), flags_(0u)
+    : operation_(ExportOperation::hello), surface_(0u), tag_(0u), shift_ns_(0), flags_(0u)
 {
     AV_SCOPE("ExportRequest::ExportRequest");
 }
 
 ExportRequest::ExportRequest(ExportOperation operation, uint64_t surface, uint64_t tag)
-    : operation_(operation), surface_(surface), tag_(tag), refresh_millihz_(0u), blank_(0u), flags_(0u)
+    : operation_(operation), surface_(surface), tag_(tag), shift_ns_(0), flags_(0u)
 {
     AV_SCOPE("ExportRequest::ExportRequest");
 }
 
-ExportRequest::ExportRequest(uint32_t refresh_millihz, uint64_t blank, uint64_t tag)
-    : operation_(ExportOperation::timing), surface_(0u), tag_(tag), refresh_millihz_(refresh_millihz), blank_(blank), flags_(0u)
+ExportRequest::ExportRequest(int64_t shift_ns, uint64_t tag)
+    : operation_(ExportOperation::timing), surface_(0u), tag_(tag), shift_ns_(shift_ns), flags_(0u)
 {
     AV_SCOPE("ExportRequest::ExportRequest");
 }
 
 ExportRequest::ExportRequest(ExportOperation operation, uint64_t surface, uint64_t tag, uint32_t flags)
-    : operation_(operation), surface_(surface), tag_(tag), refresh_millihz_(0u), blank_(0u), flags_(flags)
+    : operation_(operation), surface_(surface), tag_(tag), shift_ns_(0), flags_(flags)
 {
     AV_SCOPE("ExportRequest::ExportRequest");
 }
@@ -67,21 +66,15 @@ uint64_t ExportRequest::tag() const
     return tag_;
 }
 
-uint32_t ExportRequest::refresh_millihz() const
+int64_t ExportRequest::shift_ns() const
 {
-    AV_SCOPE("ExportRequest::refresh_millihz");
-    return refresh_millihz_;
+    AV_SCOPE("ExportRequest::shift_ns");
+    return shift_ns_;
 }
 
-uint64_t ExportRequest::blank() const
-{
-    AV_SCOPE("ExportRequest::blank");
-    return blank_;
-}
-
-/* A timing's refresh takes the word at 12, and its moment the surface's
- * place; an export and a sync put their flags in the word, and every other
- * operation leaves it 0. */
+/* A timing's shift takes the surface's place, as a two's complement; an export
+ * and a sync put their flags in the word at 12, and every other operation,
+ * a timing among them, leaves it 0. */
 Status ExportRequest::encode(uint8_t *bytes, size_t capacity) const
 {
     AV_SCOPE("ExportRequest::encode");
@@ -91,8 +84,8 @@ Status ExportRequest::encode(uint8_t *bytes, size_t capacity) const
     writer.write_u16(major);
     writer.write_u16(minor);
     writer.write_u32(static_cast<uint32_t>(operation_));
-    writer.write_u32(operation_ == ExportOperation::timing ? refresh_millihz_ : flags_);
-    writer.write_u64(operation_ == ExportOperation::timing ? blank_ : surface_);
+    writer.write_u32(flags_);
+    writer.write_u64(operation_ == ExportOperation::timing ? static_cast<uint64_t>(shift_ns_) : surface_);
     writer.write_u64(tag_);
     return writer.status();
 }
@@ -107,8 +100,7 @@ bool ExportRequest::fields_valid() const
     case ExportOperation::release: return surface_ != 0u && flags_ == 0u;
     case ExportOperation::head: return surface_ != 0u && surface_ <= most_heads && flags_ == 0u;
     case ExportOperation::timing:
-        return blank_ != 0u && refresh_millihz_ >= VblankRecord::least_millihz &&
-               refresh_millihz_ <= VblankRecord::most_millihz;
+        return flags_ == 0u && shift_ns_ > -most_shift_ns && shift_ns_ < most_shift_ns;
     default: return false;
     }
 }
@@ -128,13 +120,9 @@ Status ExportRequest::decode(const uint8_t *bytes, size_t length)
     const uint32_t word = reader.read_u32();
     const uint64_t named = reader.read_u64();
     candidate.tag_ = reader.read_u64();
-    if (candidate.operation_ == ExportOperation::timing) {
-        candidate.refresh_millihz_ = word;
-        candidate.blank_ = named;
-    } else {
-        candidate.flags_ = word;
-        candidate.surface_ = named;
-    }
+    candidate.flags_ = word;
+    if (candidate.operation_ == ExportOperation::timing) candidate.shift_ns_ = static_cast<int64_t>(named);
+    else candidate.surface_ = named;
     if (!candidate.fields_valid()) return Status::malformed;
     *this = candidate;
     return Status::ok;

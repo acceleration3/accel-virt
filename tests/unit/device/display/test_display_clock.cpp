@@ -342,39 +342,44 @@ TEST(display_clock, a_stopped_clock_ticks_no_more_and_one_destroyed_running_stop
   CHECK_EQ(host.live_events(), 0u);
   CHECK_EQ(host.live_mutexes(), 0u); }
 
-/* The host's display, through its export socket: every head takes its rate
- * and its phase from the next blank on, and a clock not yet made, or a rate
- * the protocol does not have, is refused. */
-TEST(display_clock, aligned_every_head_blanks_in_phase_with_the_host_s_display)
+/* The host's display, through its export socket: every head takes its shift
+ * from the next blank on and keeps the rate it had, which the device was
+ * given (retime_all); a clock not yet made refuses. */
+TEST(display_clock, aligned_every_head_blanks_at_its_own_rate_and_the_shift)
 { Rig rig;
   constexpr std::uint64_t period_144 = 6944444u;
-  CHECK_STATUS(rig.clock.align(144000u, 5u), Status::invalid_state);
+  CHECK_STATUS(rig.clock.align(5), Status::invalid_state);
+  CHECK_EQ(rig.clock.refresh_microhz(), 0u);
+  CHECK_STATUS(rig.clock.retime_all(999u), Status::invalid_parameter);
   CHECK_STATUS(rig.clock.initialize(), Status::ok);
-  CHECK_STATUS(rig.clock.align(VblankRecord::least_millihz - 1u, 5u), Status::invalid_parameter);
-  CHECK_STATUS(rig.clock.align(VblankRecord::most_millihz + 1u, 5u), Status::invalid_parameter);
+  CHECK_EQ(rig.clock.refresh_microhz(), 60000000u);
+  CHECK_STATUS(rig.clock.retime_all(144000u), Status::ok);
+  CHECK_EQ(rig.clock.refresh_microhz(), 144000000u);
   CHECK_STATUS(rig.clock.attach(page), Status::ok);
   VblankRecord record;
-  rig.host.set_clock(start_at + period_60);
+  rig.host.set_clock(start_at + period_144);
   CHECK(rig.reaches(page, 0u, 1u, record));
   const std::uint64_t last = record.vblank_ns();
-  CHECK_STATUS(rig.clock.align(144000u, last + 10u * period_144 + 77u), Status::ok);
+  CHECK_STATUS(rig.clock.align(77), Status::ok);
   CHECK(rig.host.wait_for_sleepers(1u, 2000u));
-  rig.host.set_clock(last + period_144 + 76u);
+  /* The shift is from the blank the 144 Hz schedule had next. */
+  rig.host.set_clock(last + period_144 - 78u);
   CHECK(rig.read(page, 0u, record));
   CHECK_EQ(record.sequence(), 1u);
-  rig.host.set_clock(last + period_144 + 77u);
+  rig.host.set_clock(last + period_144 - 77u);
   for (std::uint32_t head = 0u; head < DisplayClock::heads; head++) {
       CHECK(rig.reaches(page, head, 2u, record));
-      CHECK_EQ(record.vblank_ns(), last + period_144 + 77u);
+      CHECK_EQ(record.vblank_ns(), last + period_144 - 77u);
       CHECK_EQ(record.refresh_millihz(), 144000u);
       CHECK_EQ(record.period_ns(), period_144);
   }
+  CHECK_EQ(rig.clock.refresh_microhz(), 144000000u);
   CHECK(rig.clock.invariants_hold()); }
 
-/* A rate set live reaches the page from the next blank. */
+/* A rate set live reaches the page from the next blank, in the nearest
+ * millihertz it can say, and the device keeps it exact. */
 TEST(display_clock, a_live_retime_of_every_head_reaches_the_page)
 { Rig rig;
-  CHECK_STATUS(rig.clock.retime_all(999u), Status::invalid_parameter);
   CHECK_STATUS(rig.clock.initialize(), Status::ok);
   CHECK_STATUS(rig.clock.attach(page), Status::ok);
   VblankRecord record;

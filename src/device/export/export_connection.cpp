@@ -82,7 +82,8 @@ bool ExportConnection::answer(const uint8_t *bytes, size_t length)
 /* Sync and release name a surface this consumer exported: what it holds is
  * what it is told of when the surface goes. A release of one it does not hold
  * is answered ok all the same - releasing is idempotent. A timing the clock
- * cannot take yet - the device not realized - is unavailable. */
+ * cannot take yet - the device not realized - is unavailable. A timing moves
+ * the guest's blanks and never changes their rate. */
 ExportAnswer ExportConnection::respond(const ExportRequest &request, int &descriptor)
 {
     AV_SCOPE("ExportConnection::respond");
@@ -95,9 +96,15 @@ ExportAnswer ExportConnection::respond(const ExportRequest &request, int &descri
         return ExportAnswer(request, Status::ok);
     case ExportOperation::sync:
         if (!holds(surface)) return ExportAnswer(request, Status::not_found);
-        return gpu_.sync(request, descriptor);
+    {
+        /* Every frame's sync says the rate the guest's blanks run at now, so a
+         * consumer follows a change of it without asking. */
+        ExportAnswer synced = gpu_.sync(request, descriptor);
+        if (synced.status() == Status::ok) synced.tell_refresh(clock_.refresh_microhz());
+        return synced;
+    }
     case ExportOperation::timing:
-        return ExportAnswer(request, clock_.align(request.refresh_millihz(), request.blank()) == Status::ok
+        return ExportAnswer(request, clock_.align(request.shift_ns()) == Status::ok
                                          ? Status::ok
                                          : Status::invalid_state);
     /* A head is nothing this consumer holds: a new picture each time. */

@@ -43,8 +43,8 @@ def request(operation, surface=0, tag=0, major=1):
     return struct.pack("<IHHIIQQ", REQUEST_MAGIC, major, 0, operation, 0, surface, tag)
 
 
-def timing(refresh_millihz, blank, tag):
-    return struct.pack("<IHHIIQQ", REQUEST_MAGIC, 1, 1, TIMING, refresh_millihz, blank, tag)
+def timing(shift_ns, tag):
+    return struct.pack("<IHHIIqQ", REQUEST_MAGIC, 1, 5, TIMING, 0, shift_ns, tag)
 
 
 class Answer:
@@ -172,29 +172,35 @@ class VirtioGpuExport(unittest.TestCase):
         self.expect(consumer.receive(), UNREADABLE, MALFORMED)
         self.expect(consumer.ask(HELLO, 0, 1), HELLO, OK, tag=1)
 
-    def test_a_timing_puts_the_guest_s_display_clock_in_phase_with_the_consumer_s(self):
+    def test_a_timing_shifts_the_guest_s_display_clock_and_keeps_its_rate(self):
         gpu = self.start()
         page = gpu.device.memory.allocate(PAGE)
         answer = gpu.control(header(CMD_DISPLAY_CLOCK) + struct.pack("<Q", page))
         self.assertEqual(hex(response_type(answer)), hex(RESP_OK_NODATA))
         consumer = self.consumer()
-        blank = time.clock_gettime_ns(time.CLOCK_MONOTONIC) + 12345
-        consumer.socket.send(timing(144000, blank, 9))
+        consumer.socket.send(timing(-12345, 9))
         self.expect(consumer.receive(), TIMING, OK, tag=9)
         time.sleep(0.2)
-        record = page + 32
-        for _ in range(1000):
-            before = struct.unpack("<I", gpu.qtest.read_bytes(record, 4))[0]
-            fields = gpu.qtest.read_bytes(record + 4, 32)
-            after = struct.unpack("<I", gpu.qtest.read_bytes(record, 4))[0]
-            if before == after and before % 2 == 0:
-                break
-        _, _, vblank, period, refresh, _ = struct.unpack("<IQQIII", fields)
-        self.assertEqual((refresh, period), (144000, 6944444))
-        # The blank is a whole number of periods from the moment given, to
-        # the few nanoseconds the rate's fraction carries over 0.2 s.
-        apart = (vblank - blank) % period
-        self.assertLess(min(apart, period - apart), 1000)
+
+        def head_record():
+            record = page + 32
+            for _ in range(1000):
+                before = struct.unpack("<I", gpu.qtest.read_bytes(record, 4))[0]
+                fields = gpu.qtest.read_bytes(record + 4, 32)
+                after = struct.unpack("<I", gpu.qtest.read_bytes(record, 4))[0]
+                if before == after and before % 2 == 0:
+                    break
+            return struct.unpack("<IQQIII", fields)
+
+        _, sequence, vblank, period, refresh, _ = head_record()
+        self.assertEqual((refresh, period), (60000, 16666667))
+        time.sleep(0.2)
+        _, later_sequence, later_vblank, _, _, _ = head_record()
+        # The blanks after it keep the rate to the nanosecond or two the
+        # fraction of a period carries over a few dozen blanks.
+        blanks = later_sequence - sequence
+        self.assertGreater(blanks, 0)
+        self.assertLess(abs((later_vblank - vblank) - blanks * 1e9 / 60.0), 1000)
 
     def test_the_guest_s_release_and_a_reset_reach_the_consumer(self):
         gpu = self.start()

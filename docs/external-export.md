@@ -66,11 +66,13 @@ answers for the surfaces the guest shared.
 ## 3. Messages
 
 Little-endian, fixed size, one datagram each; each starts with a magic and a
-version. This document is version **1.3**. A device reads any minor of major 1
+version. This document is version **1.5**. A device reads any minor of major 1
 as this layout and answers a request of another major `not_supported`. A
 consumer should do the same with answers. Version 1.1 added timing (§4),
-1.2 head (§4) and 1.3 the other-GPU flag of export and sync (§4.2); an older
-device answers each as a request it cannot read.
+1.2 head (§4), 1.3 the other-GPU flag of export and sync (§4.2), 1.4 timing as
+a shift (§4) and 1.5 the guest's refresh in a sync's answer, with timing no
+longer carrying a rate (§4); an older device answers each as a request it
+cannot read.
 
 ### 3.1 Request (consumer -> device), 32 bytes
 
@@ -78,10 +80,10 @@ device answers each as a request it cannot read.
 |--:|---|---|---|
 | 0 | u32 | magic | `AVXQ` = `0x51585641` |
 | 4 | u16 | major | 1 |
-| 6 | u16 | minor | 3 |
+| 6 | u16 | minor | 5 |
 | 8 | u32 | operation | 1 hello, 2 export, 3 sync, 4 release, 5 timing, 6 head |
-| 12 | u32 | flags / refresh | 0; for export and sync, bit 0: the consumer imports on another GPU (§4.2), no other bit; for timing, the consumer's display's refresh in millihertz, 1000 to 1000000 |
-| 16 | u64 | surface / blank | the guest's shared id (§5); 0 for hello; for head, the head plus one, 1 to 16. For timing, a moment on the host's `CLOCK_MONOTONIC`, in ns and not 0, that the guest's display is to blank in phase with |
+| 12 | u32 | flags / refresh | 0; for export and sync, bit 0: the consumer imports on another GPU (§4.2), no other bit |
+| 16 | u64 / i64 | surface / shift | the guest's shared id (§5); 0 for hello; for head, the head plus one, 1 to 16. For timing, an i64 in ns, 0 or either sign and less than a second in magnitude: how much earlier than its schedule would have the guest's display is to blank (negative: later) |
 | 24 | u64 | tag | the consumer's own; the answer carries it back |
 
 A consumer sends no descriptors; any that come are closed. A request may be
@@ -94,7 +96,7 @@ the one connection.
 |--:|---|---|---|
 | 0 | u32 | magic | `AVXA` = `0x41585641` |
 | 4 | u16 | major | 1 |
-| 6 | u16 | minor | 3: the request minor the device reads |
+| 6 | u16 | minor | 5: the request minor the device reads |
 | 8 | u32 | operation | the request's; 0 for one that could not be read; `0x80` revoked (an event) |
 | 12 | u32 | status | 0 ok, 1 malformed, 2 not_supported, 3 not_found, 4 no_space, 5 unavailable |
 | 16 | u64 | surface | the request's (0 for hello, for timing and for one that could not be read); an event's surface |
@@ -107,7 +109,7 @@ Bodies of an answer with status ok:
 |---|---|---|
 | hello | 16 bytes GPU UUID (`VkPhysicalDeviceIDProperties::deviceUUID`), u32 PCI domain, u8 bus, u8 device, u8 function, u8 flags (bit 0: on PCI; otherwise the address is 0), 8 bytes reserved | nothing |
 | export, head | u32 width, u32 height, u32 DRM fourcc, u32 stride (bytes), u32 offset (bytes), u32 reserved, u64 DRM format modifier | the dma-buf |
-| sync | u64 copies run, 24 bytes zero | the sync_file |
+| sync | u64 copies run, u32 the guest's refresh in microhertz (1000000 to 1000000000; 0 where the device does not say), 20 bytes zero | the sync_file |
 | release | zero | nothing |
 | timing | zero | nothing |
 | revoked (event) | u32 reason (1 the guest released the surface, 2 the device was reset), 28 bytes zero | nothing |
@@ -158,16 +160,23 @@ or head and none otherwise. It is the consumer's to close.
 
 - **timing** puts the guest's display clock in step with the consumer's
   display (docs/protocol.md, "Display clock"): from each head's next blank
-  on, the head blanks at the refresh given, each blank a whole number of
-  periods from the moment given. The next blank is the first such one at
+  on, the next blank comes `shift` nanoseconds earlier than one new period
+  after the last would have put it (negative: later), at the rate the head
+  has. The rate is not the consumer's to change: Windows is told it, as the
+  device's `refresh` property, and a clock that blanked at another would be
+  an application counting blanks running fast. Every sync answers it, so a
+  consumer follows a host that changes it while the VM runs. That blank is moved on by whole periods until it is at
   least half a period after the last and still to come, so the guest never
-  sees two blanks closer than that, and the sequence carries on. `unavailable`
-  from a device that is not realized. The consumer chooses both: remotewin
-  gives the whole number of its output's periods nearest the guest mode's 60 Hz,
-  and puts the guest's blanks just far enough ahead of its own that each
-  frame the guest composes reaches the consumer's compositor in time for the
-  next one (remotewin's `DisplayLock`). With more than one consumer, the last
-  to ask wins.
+  sees two blanks closer than that, and the sequence carries on. The shift is
+  relative, so it needs no clock shared with the guest's. `unavailable` from a
+  device that is not realized. The consumer chooses the shift: remotewin shifts the
+  guest's blanks until each frame the guest composes reaches the consumer's
+  compositor in time for the next one (remotewin's `DisplayLock`), where the
+  guest's period is the whole number of its output's periods the sync's rate
+  is, to within 50 parts per million; at any other (a 144 Hz guest on a 240 Hz
+  output) a frame's commit slides round the output's period and nothing is
+  asked for. The head's page still says the rate in whole
+  millihertz, rounded. With more than one consumer, the last to ask wins.
 
 ### 4.2 Another GPU
 

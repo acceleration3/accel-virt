@@ -24,21 +24,21 @@ ExportAnswer::ExportAnswer() : ExportAnswer(Status::malformed)
 
 ExportAnswer::ExportAnswer(Status status)
     : operation_(ExportOperation::unreadable), status_(status), surface_(0u), tag_(0u), greeting_(), layout_(),
-      writes_(0u), reason_(0u)
+      writes_(0u), refresh_microhz_(0u), reason_(0u)
 {
     AV_SCOPE("ExportAnswer::ExportAnswer");
 }
 
 ExportAnswer::ExportAnswer(const ExportRequest &request, Status status)
     : operation_(request.operation()), status_(status), surface_(request.surface()), tag_(request.tag()),
-      greeting_(), layout_(), writes_(0u), reason_(0u)
+      greeting_(), layout_(), writes_(0u), refresh_microhz_(0u), reason_(0u)
 {
     AV_SCOPE("ExportAnswer::ExportAnswer");
 }
 
 ExportAnswer::ExportAnswer(ExportRevocation reason, uint64_t surface)
     : operation_(ExportOperation::revoked), status_(Status::ok), surface_(surface), tag_(0u), greeting_(), layout_(),
-      writes_(0u), reason_(static_cast<uint32_t>(reason))
+      writes_(0u), refresh_microhz_(0u), reason_(static_cast<uint32_t>(reason))
 {
     AV_SCOPE("ExportAnswer::ExportAnswer");
 }
@@ -59,6 +59,12 @@ void ExportAnswer::count(uint64_t writes)
 {
     AV_SCOPE("ExportAnswer::count");
     writes_ = writes;
+}
+
+void ExportAnswer::tell_refresh(uint32_t microhz)
+{
+    AV_SCOPE("ExportAnswer::tell_refresh");
+    refresh_microhz_ = microhz;
 }
 
 ExportOperation ExportAnswer::operation() const
@@ -103,6 +109,12 @@ uint64_t ExportAnswer::writes() const
     return writes_;
 }
 
+uint32_t ExportAnswer::refresh_microhz() const
+{
+    AV_SCOPE("ExportAnswer::refresh_microhz");
+    return refresh_microhz_;
+}
+
 uint32_t ExportAnswer::reason() const
 {
     AV_SCOPE("ExportAnswer::reason");
@@ -136,7 +148,7 @@ bool ExportAnswer::read_status(uint32_t wire)
 bool ExportAnswer::body_empty() const
 {
     AV_SCOPE("ExportAnswer::body_empty");
-    return greeting_.empty() && layout_.empty() && writes_ == 0u;
+    return greeting_.empty() && layout_.empty() && writes_ == 0u && refresh_microhz_ == 0u;
 }
 
 /* A reason is only ever a revocation's: no constructor gives another answer
@@ -150,19 +162,21 @@ bool ExportAnswer::fields_valid() const
         return (status_ == Status::malformed || status_ == Status::not_supported) && surface_ == 0u && tag_ == 0u &&
                body_empty();
     case ExportOperation::revoked:
-        return status_ == Status::ok && tag_ == 0u && greeting_.empty() && layout_.empty() && writes_ == 0u &&
+        return status_ == Status::ok && tag_ == 0u && greeting_.empty() && layout_.empty() && writes_ == 0u && refresh_microhz_ == 0u &&
                ((reason_ == static_cast<uint32_t>(ExportRevocation::released) && surface_ != 0u) ||
                 (reason_ == static_cast<uint32_t>(ExportRevocation::reset) && surface_ == 0u));
     case ExportOperation::hello:
-        return surface_ == 0u && layout_.empty() && writes_ == 0u &&
+        return surface_ == 0u && layout_.empty() && writes_ == 0u && refresh_microhz_ == 0u &&
                (status_ == Status::ok ? greeting_.valid() : greeting_.empty());
     case ExportOperation::export_surface:
     case ExportOperation::head:
-        return surface_ != 0u && greeting_.empty() && writes_ == 0u &&
+        return surface_ != 0u && greeting_.empty() && writes_ == 0u && refresh_microhz_ == 0u &&
                (status_ == Status::ok ? layout_.describes_a_picture() : layout_.empty());
     case ExportOperation::sync:
         return surface_ != 0u && greeting_.empty() && layout_.empty() &&
-               (status_ == Status::ok || writes_ == 0u);
+               (status_ == Status::ok || (writes_ == 0u && refresh_microhz_ == 0u)) &&
+               (refresh_microhz_ == 0u || (refresh_microhz_ >= ExportRequest::least_refresh_microhz &&
+                                           refresh_microhz_ <= ExportRequest::most_refresh_microhz));
     case ExportOperation::release: return surface_ != 0u && body_empty();
     case ExportOperation::timing: return surface_ == 0u && body_empty();
     default: return false;
@@ -204,7 +218,8 @@ Status ExportAnswer::encode(uint8_t *bytes, size_t capacity) const
         break;
     case ExportOperation::sync:
         writer.write_u64(writes_);
-        writer.write_zeros(body_size - sizeof(uint64_t));
+        writer.write_u32(refresh_microhz_);
+        writer.write_zeros(body_size - sizeof(uint64_t) - sizeof(uint32_t));
         break;
     case ExportOperation::revoked:
         writer.write_u32(reason_);
@@ -256,8 +271,9 @@ Status ExportAnswer::decode(const uint8_t *bytes, size_t length, uint32_t descri
         candidate.layout_ = ExportedLayout(width, height, fourcc, stride, offset, reader.read_u64());
     } else if (candidate.operation_ == ExportOperation::sync) {
         candidate.writes_ = reader.read_u64();
-        for (size_t word = 0u; word < (body_size - sizeof(uint64_t)) / sizeof(uint64_t); word++)
-            reserved |= reader.read_u64() != 0u ? 1u : 0u;
+        candidate.refresh_microhz_ = reader.read_u32();
+        for (size_t word = 0u; word < (body_size - sizeof(uint64_t) - sizeof(uint32_t)) / sizeof(uint32_t); word++)
+            reserved |= reader.read_u32();
     } else {
         candidate.reason_ = reader.read_u32();
         for (size_t word = 0u; word < (body_size - sizeof(uint32_t)) / sizeof(uint32_t); word++)

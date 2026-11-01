@@ -11,6 +11,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 
 using av::ExportAnswer;
 using av::ExportGreeting;
@@ -62,7 +63,7 @@ TEST(export_answer, an_export_carries_its_layout_at_the_documented_offsets_and_o
   CHECK_EQ(sent.descriptors(), 1u);
   CHECK_STATUS(sent.encode(bytes, sizeof bytes), Status::ok);
   CHECK_EQ(u32_at(bytes, 0u), 0x41585641u);
-  CHECK_EQ(u32_at(bytes, 4u), 0x00030001u);   /* major 1, minor 3 */
+  CHECK_EQ(u32_at(bytes, 4u), 0x00050001u);   /* major 1, minor 5 */
   CHECK_EQ(u32_at(bytes, 8u), 2u);
   CHECK_EQ(u32_at(bytes, 12u), 0u);
   CHECK_EQ(u64_at(bytes, 16u), surface);
@@ -103,6 +104,34 @@ TEST(export_answer, a_sync_carries_the_writes_and_a_sync_file)
   CHECK_EQ(read.descriptors(), 1u);
   bytes[63] = 1u;
   CHECK_STATUS(read.decode(bytes, sizeof bytes, 1u), Status::malformed); }
+
+/* A sync also says the rate the guest's blanks run at, in microhertz, within
+ * the display clock's range; a rate beside any other answer is refused. */
+TEST(export_answer, a_sync_carries_the_guests_refresh)
+{ std::uint8_t bytes[ExportAnswer::encoded_size] = {};
+  ExportAnswer sent(ExportRequest(ExportOperation::sync, surface, tag), Status::ok);
+  sent.count(7u);
+  sent.tell_refresh(359980000u);
+  CHECK_STATUS(sent.encode(bytes, sizeof bytes), Status::ok);
+  CHECK_EQ(u64_at(bytes, 32u), 7u);
+  CHECK_EQ(u32_at(bytes, 40u), 359980000u);
+  for (std::size_t at = 44u; at < ExportAnswer::encoded_size; at++) CHECK_EQ(bytes[at], 0u);
+  ExportAnswer read;
+  CHECK_STATUS(read.decode(bytes, sizeof bytes, 1u), Status::ok);
+  CHECK_EQ(read.refresh_microhz(), 359980000u);
+  /* None said: 0, which a consumer takes as unknown. */
+  ExportAnswer none(ExportRequest(ExportOperation::sync, surface, tag), Status::ok);
+  CHECK_STATUS(none.encode(bytes, sizeof bytes), Status::ok);
+  CHECK_STATUS(read.decode(bytes, sizeof bytes, 1u), Status::ok);
+  CHECK_EQ(read.refresh_microhz(), 0u);
+  for (const std::uint32_t outside : {999999u, 1000000001u}) {
+      ExportAnswer wrong(ExportRequest(ExportOperation::sync, surface, tag), Status::ok);
+      wrong.tell_refresh(outside);
+      CHECK_STATUS(wrong.encode(bytes, sizeof bytes), Status::invalid_parameter);
+  }
+  ExportAnswer other(ExportRequest(ExportOperation::release, surface, tag), Status::ok);
+  other.tell_refresh(60000000u);
+  CHECK_STATUS(other.encode(bytes, sizeof bytes), Status::invalid_parameter); }
 
 TEST(export_answer, hello_carries_the_gpu_and_its_address_only_when_on_pci)
 { std::uint8_t bytes[ExportAnswer::encoded_size] = {};
@@ -282,7 +311,7 @@ TEST(export_answer, a_timing_is_answered_with_nothing_named_and_no_body)
 { const Status statuses[] = {Status::ok, Status::invalid_state};
   for (const Status status : statuses) {
       std::uint8_t       bytes[ExportAnswer::encoded_size] = {};
-      const ExportAnswer sent(ExportRequest(144000u, 5u, tag), status);
+      const ExportAnswer sent(ExportRequest(5, tag), status);
       CHECK_EQ(sent.surface(), 0u);
       CHECK_EQ(sent.descriptors(), 0u);
       CHECK_STATUS(sent.encode(bytes, sizeof bytes), Status::ok);
@@ -299,7 +328,7 @@ TEST(export_answer, a_timing_is_answered_with_nothing_named_and_no_body)
       bytes[32] = 1u;   /* carrying a body */
       CHECK_STATUS(read.decode(bytes, sizeof bytes, 0u), Status::malformed);
   }
-  ExportAnswer counted(ExportRequest(144000u, 5u, tag), Status::ok);
+  ExportAnswer counted(ExportRequest(5, tag), Status::ok);
   counted.count(1u);
   std::uint8_t bytes[ExportAnswer::encoded_size] = {};
   CHECK_STATUS(counted.encode(bytes, sizeof bytes), Status::invalid_parameter); }

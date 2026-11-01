@@ -130,20 +130,22 @@ TEST(export_connection, answers_hello_export_sync_and_release_in_turn)
   CHECK(fixture.connection().invariants_hold()); }
 
 /* The consumer's display times the guest's: refused while the device has no
- * clock to move, taken once it has - here before the guest registered its
- * page, so the rate is what the page first says. */
+ * clock to move, taken once it has, and the rate is the device's, not the
+ * consumer's: here before the guest registered its page, so the rate is what
+ * the page first says. */
 TEST(export_connection, a_timing_moves_the_display_clock_once_there_is_one)
 { Fixture fixture;
   FakeExportConsumer consumer;
   CHECK_STATUS(fixture.connection().open(consumer.device_end()), Status::ok);
   ExportAnswer answer;
-  CHECK(consumer.send(ExportRequest(144000u, 5000u, 77u)));
+  CHECK(consumer.send(ExportRequest(5000, 77u)));
   CHECK_STATUS(consumer.receive(answer), Status::ok);
   CHECK(answer.operation() == ExportOperation::timing);
   CHECK_STATUS(answer.status(), Status::invalid_state);
   CHECK_EQ(answer.tag(), 77u);
   CHECK_STATUS(fixture.clock().initialize(), Status::ok);
-  CHECK(consumer.send(ExportRequest(144000u, 5000u, 78u)));
+  CHECK_STATUS(fixture.clock().retime_all(144000u), Status::ok);
+  CHECK(consumer.send(ExportRequest(-5000, 78u)));
   CHECK_STATUS(consumer.receive(answer), Status::ok);
   CHECK_STATUS(answer.status(), Status::ok);
   CHECK_EQ(answer.surface(), 0u);

@@ -25,6 +25,9 @@ public:
     static constexpr uint32_t most_millihz = 1000000u;
     /* Nanoseconds in a second, times the thousand a millihertz divides by. */
     static constexpr uint64_t nanoseconds_times_millihz = 1000000000000u;
+    /* The same for the schedule's finer rate, in microhertz. */
+    static constexpr uint32_t microhz_per_millihz = 1000u;
+    static constexpr uint64_t nanoseconds_times_microhz = 1000000000000000u;
 
     VblankRecord();
     /* The period is the rate's, rounded down to the nanosecond. */

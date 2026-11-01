@@ -53,11 +53,14 @@ public:
      * for a rate the protocol does not allow; before initialize the rate is
      * kept for the heads' first blanks all the same. */
     [[nodiscard]] Status retime_all(uint32_t millihz);
+    /* Any thread: the rate the heads blank at, in microhertz; 0 before
+     * initialize. All heads run at one rate, whoever last set it. */
+    uint32_t             refresh_microhz() const;
     /* Any thread: the host's display (docs/external-export.md, timing). Every
-     * head blanks at `millihz` from its next blank on, in phase with `blank`
-     * (VblankSchedule::align). invalid_state before initialize;
-     * invalid_parameter for a rate the protocol does not allow. */
-    [[nodiscard]] Status align(uint32_t millihz, uint64_t blank);
+     * head keeps its rate and blanks `shift` nanoseconds earlier than its
+     * schedule would have from its next blank on (VblankSchedule::align).
+     * invalid_state before initialize. */
+    [[nodiscard]] Status align(int64_t shift);
     /* Main loop. Whether a frame posted on `head` is shown at a blank rather
      * than at once: a page is registered and the head is one of its. */
     bool                 latches(uint32_t head) const;

@@ -7,6 +7,7 @@
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>
+#include <initializer_list>
 
 using av::VblankSchedule;
 
@@ -164,73 +165,186 @@ VblankSchedule three_blanks_in(std::uint64_t &last)
 
 }  // namespace
 
-/* The host's display is at 144 Hz and blanks 123 ns past a whole number of its
- * periods from the guest's last blank: the guest's next blank is the first
- * such one, and every one after it a host period apart. */
-TEST(vblank_schedule, aligned_the_next_blank_is_the_first_in_phase_with_the_host_s)
+constexpr std::uint32_t hz_60 = 60000000u;     /* in microhertz */
+constexpr std::uint32_t hz_144 = 144000000u;
+
+/* The shift is the consumer's against the grid it saw: the next blank is the
+ * one the old rate had due, `shift` earlier, and the new rate carries on from
+ * there. 144 Hz with the blank 123 ns early is the 60 Hz blank less 123 ns,
+ * then every one after it a 144 Hz period apart. */
+TEST(vblank_schedule, aligned_the_next_blank_is_the_one_due_less_the_shift_and_the_new_rate_carries_on)
 { std::uint64_t last = 0u;
   VblankSchedule schedule = three_blanks_in(last);
-  schedule.align(144000u, last + 10u * period_144 + 123u, last + 1000u);
+  const std::uint64_t was = schedule.next();
+  schedule.align(hz_144, 123, last + 1000u);
   CHECK_EQ(schedule.refresh_millihz(), 144000u);
   CHECK_EQ(schedule.sequence(), 3u);
   CHECK_EQ(schedule.last(), last);   /* the blank that was, still */
-  CHECK_EQ(schedule.next(), last + period_144 + 123u);
-  CHECK_EQ(schedule.advance(last + period_144 + 122u), 0u);
-  CHECK_EQ(schedule.advance(last + period_144 + 123u), 1u);
-  CHECK_EQ(schedule.last(), last + period_144 + 123u);
-  CHECK_EQ(schedule.next(), last + 2u * period_144 + 123u);
+  CHECK_EQ(schedule.next(), was - 123u);
+  CHECK_EQ(schedule.advance(was - 124u), 0u);
+  CHECK_EQ(schedule.advance(was - 123u), 1u);
+  CHECK_EQ(schedule.last(), was - 123u);
+  CHECK_EQ(schedule.next(), was - 123u + period_144);
   CHECK(schedule.invariants_hold()); }
 
-/* A host blank long past says the phase as well as one to come. */
-TEST(vblank_schedule, aligned_to_a_blank_long_past_the_phase_is_the_same)
+/* A negative shift puts the blank later. */
+TEST(vblank_schedule, aligned_a_negative_shift_is_later_and_none_is_the_blank_that_was_due)
 { std::uint64_t last = 0u;
   VblankSchedule schedule = three_blanks_in(last);
-  schedule.align(60000u, last - 5u * period_60 + 1u, last + 2u);
-  CHECK_EQ(schedule.next(), last + period_60 + 1u);
+  const std::uint64_t was = schedule.next();
+  CHECK_EQ(was, last + period_60);
+  schedule.align(hz_60, -3000000, last + 10u);
+  CHECK_EQ(schedule.next(), was + 3000000u);
   CHECK_EQ(schedule.sequence(), 3u);
+  VblankSchedule unshifted = three_blanks_in(last);
+  unshifted.align(hz_60, 0, last + 10u);
+  CHECK_EQ(unshifted.next(), was);
+  VblankSchedule earlier = three_blanks_in(last);
+  earlier.align(hz_60, 2000000, last + 10u);
+  CHECK_EQ(earlier.next(), was - 2000000u);
   CHECK(schedule.invariants_hold()); }
 
-/* In phase a millisecond after the last blank would be a blank a millisecond
- * long: the guest gets the one a period later instead. */
+/* A zero shift at the rate the schedule has is no retiming: every blank after
+ * it is where it was to the nanosecond or two the rounding of a new epoch
+ * costs, on a rate whose period is not a whole nanosecond and one that has
+ * run a while. */
+TEST(vblank_schedule, aligned_by_nothing_at_the_same_rate_leaves_the_blanks_where_they_were)
+{ for (const std::uint32_t microhz : {hz_60, hz_144, 59999460u}) {
+      std::uint64_t last = 0u;
+      VblankSchedule kept = three_blanks_in(last);
+      kept.align(microhz, 0, last + 10u);
+      static_cast<void>(kept.advance(kept.next() + 100u * second / 60u));
+      VblankSchedule moved = kept;
+      moved.align(microhz, 0, kept.last() + 10u);
+      CHECK_EQ(moved.last(), kept.last());
+      CHECK_EQ(moved.sequence(), kept.sequence());
+      for (std::uint32_t blank = 0u; blank < 600u; blank++) {
+          const std::uint64_t was = kept.next();
+          const std::uint64_t is = moved.next();
+          CHECK((was > is ? was - is : is - was) <= 1u);
+          CHECK_EQ(kept.advance(was), 1u);
+          CHECK_EQ(moved.advance(is), 1u);
+      }
+      CHECK(moved.invariants_hold());
+  } }
+
+/* A shift that would put the blank within half a period of the last one puts
+ * it a period later instead; exactly half a period after it is soon enough. */
 TEST(vblank_schedule, aligned_no_blank_comes_sooner_than_half_a_period_after_the_last)
 { std::uint64_t last = 0u;
   VblankSchedule schedule = three_blanks_in(last);
-  schedule.align(60000u, last + 1000000u, last + 10u);
-  CHECK_EQ(schedule.next(), last + 1000000u + period_60);
-  /* Exactly half a period after it is soon enough. */
-  schedule.align(60000u, last + period_60 / 2u - 2u * period_60, last + 10u);
+  schedule.align(hz_60, 9000000, last + 10u);
+  CHECK_EQ(schedule.next(), last + 2u * period_60 - 9000000u);
+  schedule = three_blanks_in(last);
+  schedule.align(hz_60, static_cast<std::int64_t>(period_60 - period_60 / 2u), last + 10u);
   CHECK_EQ(schedule.next(), last + period_60 / 2u);
+  schedule = three_blanks_in(last);
+  schedule.align(hz_60, static_cast<std::int64_t>(period_60 - period_60 / 2u + 1u), last + 10u);
+  CHECK_EQ(schedule.next(), last + period_60 / 2u + period_60 - 1u);
+  /* A shift of most of a second is many periods early, and still no closer. */
+  schedule = three_blanks_in(last);
+  schedule.align(hz_60, 900000000, last + 10u);
+  CHECK(schedule.next() >= last + period_60 / 2u);
+  CHECK(schedule.next() < last + period_60 / 2u + period_60);
+  CHECK_EQ((schedule.next() + 900000000u - last) % period_60, 0u);
+  CHECK(schedule.invariants_hold()); }
+
+/* The floors are the new rate's: moving to a rate whose half period is longer
+ * than the shifted blank's distance from the last one moves it on by whole
+ * periods of the new rate. */
+TEST(vblank_schedule, aligned_to_a_slower_rate_the_floor_is_half_of_its_period)
+{ std::uint64_t last = 0u;
+  VblankSchedule schedule = three_blanks_in(last);
+  const std::uint64_t was = schedule.next();
+  const std::uint64_t period_30 = 33333333u;
+  schedule.align(30000000u, 10000000, last + 10u);
+  CHECK(was - 10000000u < last + period_30 / 2u);
+  CHECK_EQ(schedule.next(), was - 10000000u + period_30);
   CHECK(schedule.invariants_hold()); }
 
 /* Aligned late in a period, the next blank is still to come, never one already
- * due: the guest is not handed a blank that is in the past. */
-TEST(vblank_schedule, aligned_late_the_next_blank_is_after_now)
+ * due: the guest is not handed a blank that is in the past, and the blank it
+ * gets keeps the phase of the shift. */
+TEST(vblank_schedule, aligned_late_the_next_blank_is_after_now_by_whole_periods)
 { std::uint64_t last = 0u;
   VblankSchedule schedule = three_blanks_in(last);
   const std::uint64_t now = last + 12000000u;
-  schedule.align(60000u, last + 2000000u, now);
-  CHECK_EQ(schedule.next(), last + 2000000u + period_60);
-  CHECK(schedule.next() > now);
+  schedule.align(hz_60, 2000000, now);
+  CHECK_EQ(schedule.next(), last + period_60 - 2000000u);   /* 14.7 ms: still to come */
   CHECK_EQ(schedule.advance(now), 0u);
+  schedule = three_blanks_in(last);
+  schedule.align(hz_60, 2000000, last + 20000000u);
+  CHECK_EQ(schedule.next(), last + 2u * period_60 - 2000000u);
+  schedule = three_blanks_in(last);
+  schedule.align(hz_60, 2000000, last + 100000000u);
+  CHECK(schedule.next() > last + 100000000u);
+  CHECK(schedule.next() <= last + 100000000u + period_60);
+  CHECK_EQ((schedule.next() + 2000000u - last) % period_60, 0u);
+  /* Exactly at the blank is not after it. */
+  schedule = three_blanks_in(last);
+  schedule.align(hz_60, 0, last + period_60);
+  CHECK_EQ(schedule.next(), last + 2u * period_60);
   CHECK(schedule.invariants_hold()); }
 
-/* Twice before the next blank: the second measures from the blank that was,
- * not from where the first put the grid. */
-TEST(vblank_schedule, aligned_twice_before_a_blank_still_measures_from_the_last_one)
+/* Early by more than the time since the clock began keeps the phase. */
+TEST(vblank_schedule, aligned_early_by_more_than_the_clock_has_run_keeps_the_phase)
+{ VblankSchedule schedule;
+  schedule.start(1000u);
+  schedule.align(hz_60, 900000000, 1000u);
+  CHECK(schedule.next() > 1000u);
+  CHECK(schedule.next() >= 1000u + period_60 / 2u);
+  CHECK(schedule.next() < 1000u + period_60 / 2u + period_60);
+  CHECK_EQ((schedule.next() + 900000000u - 1000u) % period_60, 0u);
+  CHECK(schedule.invariants_hold()); }
+
+/* Twice before the next blank: the second is measured against the grid the
+ * first made, which is the one the consumer's frames are then judged by. */
+TEST(vblank_schedule, aligned_twice_before_a_blank_the_second_shift_is_from_where_the_first_put_it)
 { std::uint64_t last = 0u;
   VblankSchedule schedule = three_blanks_in(last);
-  schedule.align(60000u, last + 9000000u, last + 10u);
-  CHECK_EQ(schedule.next(), last + 9000000u);
-  schedule.align(60000u, last + 1000000u, last + 20u);
+  schedule.align(hz_60, 5000000, last + 10u);
+  CHECK_EQ(schedule.next(), last + period_60 - 5000000u);
+  schedule.align(hz_60, 1000000, last + 20u);
   CHECK_EQ(schedule.last(), last);
-  CHECK_EQ(schedule.next(), last + 1000000u + period_60);
+  CHECK_EQ(schedule.next(), last + period_60 - 6000000u);
+  CHECK(schedule.invariants_hold()); }
+
+/* A rate off the millihertz grid holds: a thousand seconds of blanks at
+ * 59.99946 Hz end within a nanosecond or two of where that many exact periods
+ * put the last one, where the rate rounded to millihertz would be 7.7 us out. */
+TEST(vblank_schedule, a_rate_between_millihertz_holds_over_a_thousand_seconds)
+{ constexpr std::uint32_t microhz = 59999460u;
+  std::uint64_t last = 0u;
+  VblankSchedule schedule = three_blanks_in(last);
+  schedule.align(microhz, 0, last + 10u);
+  const std::uint64_t first = schedule.next();
+  const std::uint64_t passed = schedule.advance(first + 1000u * second);
+  const long double   exact_period = 1e15L / microhz;
+  const long double   exact = static_cast<long double>(first) + static_cast<long double>(passed - 1u) * exact_period;
+  const long double   error = static_cast<long double>(schedule.last()) - exact;
+  CHECK(passed > 59999u);
+  CHECK(error < 2.0L && error > -2.0L);
+  CHECK(schedule.invariants_hold()); }
+
+/* The page says the rate in whole millihertz, the nearest one. */
+TEST(vblank_schedule, the_rate_is_reported_rounded_to_the_nearest_millihertz)
+{ std::uint64_t last = 0u;
+  VblankSchedule schedule = three_blanks_in(last);
+  schedule.align(59999499u, 0, last + 10u);
+  CHECK_EQ(schedule.refresh_millihz(), 59999u);
+  schedule.align(59999500u, 0, last + 10u);
+  CHECK_EQ(schedule.refresh_millihz(), 60000u);
+  schedule.align(1000000u, 0, last + 10u);
+  CHECK_EQ(schedule.refresh_millihz(), 1000u);
+  schedule.align(1000000000u, 0, last + 10u);
+  CHECK_EQ(schedule.refresh_millihz(), 1000000u);
   CHECK(schedule.invariants_hold()); }
 
 /* Before it starts there is no blank to measure from: the rate is kept, and
  * start puts the first blank a period of it after the start. */
 TEST(vblank_schedule, aligned_before_it_starts_only_the_rate_is_kept)
 { VblankSchedule schedule;
-  schedule.align(144000u, 123456789u, 0u);
+  schedule.align(hz_144, 123456789, 0u);
   CHECK_EQ(schedule.refresh_millihz(), 144000u);
   CHECK_EQ(schedule.sequence(), 0u);
   CHECK_EQ(schedule.advance(second), 0u);
