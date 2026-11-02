@@ -111,7 +111,8 @@ void GlDisplay::destroy_context(void *context) const
 {
     AV_SCOPE("GlDisplay::destroy_context");
     if (display_ == nullptr || context == nullptr) return;
-    (void)eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    if (eglGetCurrentContext() == static_cast<EGLContext>(context))
+        (void)eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     (void)eglDestroyContext(display_, context);
 }
 

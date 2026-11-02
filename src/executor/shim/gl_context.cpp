@@ -44,6 +44,7 @@ bool GlContext::make_current()
 {
     AV_SCOPE("GlContext::make_current");
     if (context_ == nullptr) return false;
+    if (eglGetCurrentContext() == static_cast<EGLContext>(context_)) return true;
     return display_->make_current(context_);
 }
 

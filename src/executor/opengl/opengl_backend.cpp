@@ -10,6 +10,7 @@
 #include "proto/generated/opengl/gl_command_names.h"
 #include "proto/generated/opengl/gl_dispatch_server.h"
 
+#include <atomic>
 #include <stdio.h>
 #include <string.h>
 
@@ -24,10 +25,49 @@ constexpr uint32_t gl_sync_flush_commands_bit = 0x1u;
 constexpr uint32_t gl_already_signaled = 0x911Au, gl_condition_satisfied = 0x911Cu;
 constexpr uint32_t gl_out_of_memory = 0x0505u;
 
+constexpr GLenum gl_device_node_mask = 0x959Au;
+
+template <typename Value>
+class GuardedQuery {
+public:
+    using Query = void (*)(GLenum, Value *);
+
+    static void *wrap(void *found)
+    {
+        Query expected = nullptr;
+        const Query query = reinterpret_cast<Query>(found);
+        if (!real_.compare_exchange_strong(expected, query) && expected != query) return found;
+        return reinterpret_cast<void *>(&guarded);
+    }
+
+private:
+    static void guarded(GLenum pname, Value *data)
+    {
+        if (pname == gl_device_node_mask) {
+            if (data != nullptr) *data = static_cast<Value>(1);
+            return;
+        }
+        real_.load(std::memory_order_relaxed)(pname, data);
+    }
+
+    static inline std::atomic<Query> real_{nullptr};
+};
+
+void *guard_query(const char *name, void *found)
+{
+    if (found == nullptr) return nullptr;
+    if (strcmp(name, "glGetIntegerv") == 0) return GuardedQuery<GLint>::wrap(found);
+    if (strcmp(name, "glGetInteger64v") == 0) return GuardedQuery<GLint64>::wrap(found);
+    if (strcmp(name, "glGetBooleanv") == 0) return GuardedQuery<GLboolean>::wrap(found);
+    if (strcmp(name, "glGetFloatv") == 0) return GuardedQuery<GLfloat>::wrap(found);
+    if (strcmp(name, "glGetDoublev") == 0) return GuardedQuery<GLdouble>::wrap(found);
+    return found;
+}
+
 void *resolve_through(const char *name, void *user)
 {
     AV_SCOPE("resolve_through");
-    return static_cast<GlContext *>(user)->resolve(name);
+    return guard_query(name, static_cast<GlContext *>(user)->resolve(name));
 }
 
 void bind_sync(void *user, uint64_t token, void *fence)
@@ -122,13 +162,15 @@ bool OpenGlBackend::granted_fixed_function()
 void OpenGlBackend::shut_down()
 {
     AV_SCOPE("OpenGlBackend::shut_down");
-    pack_.release();
-    pack_.abandon();
-    buffers_.give_back();
-    import_.give_back();
-    void *fence = nullptr;
-    while (fences_.take_any(fence))
-        if (gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(fence));
+    if (context_.make_current()) {
+        pack_.release();
+        pack_.abandon();
+        buffers_.give_back();
+        import_.give_back();
+        void *fence = nullptr;
+        while (fences_.take_any(fence))
+            if (gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(fence));
+    }
     context_.close();
     gl_ = glproto::RealGl{};
     resolved_ = 0u;
@@ -146,7 +188,7 @@ bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
                         WireArena &arena)
 {
     AV_SCOPE("OpenGlBackend::run");
-    if (!current_ && !context_.make_current()) {
+    if (!context_.make_current()) {
         lines_.name("the context could not be made current for", glproto::cmd_id_to_string(command_id));
         return false;
     }
@@ -180,7 +222,7 @@ void OpenGlBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
 void OpenGlBackend::end_batch()
 {
     AV_SCOPE("OpenGlBackend::end_batch");
-    if (current_) publish_errors();
+    if (current_ && context_.make_current()) publish_errors();
     current_ = false;
 }
 
@@ -262,6 +304,7 @@ void OpenGlBackend::abandon(const SourceMemory &memory, uint64_t handle)
 bool OpenGlBackend::bind_fence(uint64_t token, void *fence)
 {
     AV_SCOPE("OpenGlBackend::bind_fence");
+    if (!context_.make_current()) return false;
     if (fences_.crowded()) retire_passed_fence();
     const Status bound = fences_.bind(token, fence);
     if (bound == Status::ok) return true;
@@ -278,7 +321,7 @@ bool OpenGlBackend::bind_fence(uint64_t token, void *fence)
 void OpenGlBackend::retire_passed_fence()
 {
     AV_SCOPE("OpenGlBackend::retire_passed_fence");
-    if (gl_.glClientWaitSync == nullptr) return;
+    if (gl_.glClientWaitSync == nullptr || !context_.make_current()) return;
     const uint32_t reached =
         gl_.glClientWaitSync(static_cast<GLsync>(fences_.oldest()), gl_sync_flush_commands_bit, 0u);
     if (reached != gl_already_signaled && reached != gl_condition_satisfied) return;
