@@ -232,6 +232,17 @@ private:
      * window. It gets a host texture of its own, refreshed from the guest's
      * pages at each present wherever they changed. */
     bool open_guest_surface(ResourceRecord &resource, const D3D10DDIARG_OPENRESOURCE &args);
+    /* An allocation a present names - the buffer it reads or the surface it
+     * writes - asked to be resident for this device, once: dxgkrnl fails a
+     * present naming one this device never asked for (VidSchError
+     * SubmittingRenderForNonResidentAllocation). */
+    HRESULT keep_present_resident(ResourceRecord &named);
+    /* An opened window surface a present names as its destination, resident
+     * and given a GPU virtual address in this process, which dxgkrnl needs
+     * before it hands the present to the miniport; resident only, for a
+     * destination that has no pages to map. */
+    HRESULT address_destination(ResourceRecord &destination);
+    void    log_presented_allocation(const ResourceRecord &named);
     /* Whether the runtime asks for a texture two adapters' devices share as
      * rows (D3DWDDM1_3DDI_RESOURCE_MISC_CROSS_ADAPTER): the kernel then makes
      * it of pages the host lays its memory under, and the other adapter's
@@ -248,6 +259,13 @@ private:
     bool begin_pages_read(const ResourceRecord &resource, uint64_t &writes);
     uint64_t end_pages_read(const ResourceRecord &resource, uint64_t begun);
     void forget_guest_surface(const ResourceRecord &resource);
+    void show_to_gdi(ResourceRecord &resource);
+    void take_gdi_writes();
+    void note_call_after_resolve();
+    void learn_from_flush();
+    void forget_resolve(const ResourceRecord &resource);
+    void end_gdi_watch(ResourceRecord &resource);
+    void forget_gdi_rows(ResourceRecord &resource);
     HRESULT show_flip(const ResourceRecord &source, uint32_t subresource);
     /* What a multiplane present shows of `source` is the host's frame of it as
      * it is now: in its pages for one no host texture is shared from, under
@@ -341,7 +359,20 @@ private:
     uint32_t  feature_level_;
     /* Every window surface DWM opened on this device. */
     GrowableArray<ResourceRecord *> guest_surfaces_;
+    GrowableArray<ResourceRecord *> gdi_watched_;
+    bool                            taking_gdi_writes_;
+    /* A runtime resolves a texture for sharing and Flushes at once (the
+     * measured keyed-mutex ReleaseSync); GDI's GetDC resolves and flushes
+     * nothing, until the application's own Flush. What the last call
+     * resolved, when it returned and on which thread; the next call on that
+     * thread then holds it as the flush candidate if it is a Flush. */
+    ResourceRecord                 *resolved_;
+    uint64_t                        resolved_returned_ns_;
+    uint32_t                        resolved_thread_;
+    ResourceRecord                 *flush_candidate_;
+    uint64_t                        flush_gap_ns_;
     icd::OnceLatch  guest_lock_refused_;
+    icd::OnceLatch  redirection_unlent_;
     icd::OnceLatch  pages_read_refused_;
     icd::OnceLatch  pages_read_late_;
     icd::OnceLatch  present_refused_;

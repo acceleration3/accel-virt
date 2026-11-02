@@ -69,7 +69,11 @@ public:
     HostPoll             poll();
     /* Worker: see AvExecutorOps::gpu_progress. */
     void                 gpu_progress(uint64_t &marked, uint64_t &reached) const;
-    [[nodiscard]] Status run(const RingWindow &ring, uint64_t head, const BatchHeader &batch);
+    /* `answering`, when given, is set to where the batch ends as its command
+     * that asks for an answer begins: a synchronous call, its batch's last,
+     * which may wait on the GPU - a read back - for as long as it takes. */
+    [[nodiscard]] Status run(const RingWindow &ring, uint64_t head, const BatchHeader &batch,
+                             uint64_t *answering = nullptr);
 
     /* Batches run, whether or not they completed. */
     uint64_t batches() const;

@@ -127,6 +127,15 @@ bool D3d9Session::on_CreateTexture9(uint32_t texture, uint32_t type, uint32_t wi
         height > max_dimension || depth > max_dimension || levels > max_levels || (usage & ~usage_kept) != 0u ||
         !host_pool(pool, usage, placed))
         return false;
+    /* A default 2D or cube texture stays default: StretchRect reads from the
+     * default pool only (DXVK refuses a managed source, and a refusal removes
+     * the device), and its writes go through UpdateSurface (write_level).
+     * Not one of blocks: StretchRect never reads one, and the system-memory
+     * surface a write goes through cannot be made for a level smaller than a
+     * block - a DXT1 texture's 2x2 level. */
+    const D3d9FormatLayout layout(format);
+    const bool             blocks = layout.element_width() > 1u || layout.element_height() > 1u;
+    if (pool == D3DPOOL_DEFAULT && type != type_volume && !blocks) placed = D3DPOOL_DEFAULT;
     IDirect3DDevice9 *const host = device();
     const D3DFORMAT         as = static_cast<D3DFORMAT>(format);
     IUnknown               *made = nullptr;
@@ -216,7 +225,14 @@ bool D3d9Session::write_level(uint32_t texture, uint32_t subresource, const d3d9
     const HRESULT  opened = flat != nullptr ? flat->LockRect(level, &locked, &area, lock)
                                             : cube->LockRect(static_cast<D3DCUBEMAP_FACES>(face), level, &locked, &area,
                                                              lock);
-    if (FAILED(opened)) return false;
+    if (FAILED(opened)) {
+        IDirect3DSurface9 *target = nullptr;
+        if (FAILED(flat != nullptr ? flat->GetSurfaceLevel(level, &target)
+                                   : cube->GetCubeMapSurface(static_cast<D3DCUBEMAP_FACES>(face), level, &target)))
+            return false;
+        ScopeExit release([target] { target->Release(); });
+        return write_through_memory(target, static_cast<uint32_t>(desc.Format), box, write, row_pitch, data);
+    }
     const bool fits = static_cast<uint32_t>(locked.Pitch) >= write.row_bytes();
     for (uint32_t row = 0u; fits && row < write.rows(); row++)
         memcpy(static_cast<uint8_t *>(locked.pBits) + uint64_t{row} * static_cast<uint32_t>(locked.Pitch),
@@ -283,13 +299,25 @@ bool D3d9Session::write_surface(uint32_t id, uint32_t subresource, const d3d9pro
         target->UnlockRect();
         return fits;
     }
+    return write_through_memory(target, static_cast<uint32_t>(desc.Format), box, write, row_pitch, data);
+}
+
+bool D3d9Session::write_through_memory(IDirect3DSurface9 *target, uint32_t format, const d3d9proto::Box &box,
+                                       const D3d9TextureWrite &write, uint32_t row_pitch, const uint8_t *data)
+{
+    AV_SCOPE("D3d9Session::write_through_memory");
     IDirect3DSurface9 *staging = nullptr;
-    if (FAILED(device()->CreateOffscreenPlainSurface(box.right - box.left, box.bottom - box.top, desc.Format,
-                                                     D3DPOOL_SYSTEMMEM, &staging, nullptr)))
+    if (FAILED(device()->CreateOffscreenPlainSurface(box.right - box.left, box.bottom - box.top,
+                                                     static_cast<D3DFORMAT>(format), D3DPOOL_SYSTEMMEM, &staging,
+                                                     nullptr)))
         return false;
-    ScopeExit release([staging] { staging->Release(); });
+    ScopeExit      release([staging] { staging->Release(); });
+    D3DLOCKED_RECT locked = {};
     if (FAILED(staging->LockRect(&locked, nullptr, 0u))) return false;
-    const bool fits = copy(locked);
+    const bool fits = static_cast<uint32_t>(locked.Pitch) >= write.row_bytes();
+    for (uint32_t row = 0u; fits && row < write.rows(); row++)
+        memcpy(static_cast<uint8_t *>(locked.pBits) + uint64_t{row} * static_cast<uint32_t>(locked.Pitch),
+               data + uint64_t{row} * row_pitch, write.row_bytes());
     staging->UnlockRect();
     const POINT at = {static_cast<LONG>(box.left), static_cast<LONG>(box.top)};
     return fits && SUCCEEDED(device()->UpdateSurface(staging, nullptr, target, &at));

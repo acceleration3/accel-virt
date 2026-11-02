@@ -24,6 +24,11 @@ public:
      * says so where they end. */
     [[nodiscard]] Status read(uint64_t offset, uint8_t *bytes, size_t count);
     [[nodiscard]] Status write(uint64_t offset, const uint8_t *bytes, size_t count);
+    /* `count` bytes from `from` of this window to `to` of `destination`'s, one
+     * extent's piece at a time and through no buffer; invalid_parameter,
+     * copying nothing, unless both ranges lie inside their windows. A guest may
+     * name the same pages for both, so a piece moves as memmove does. */
+    [[nodiscard]] Status copy_to(WindowCursor &destination, uint64_t from, uint64_t to, uint64_t count);
 
 private:
     /* The byte at `offset`, with `bytes` how many of the extent's follow from

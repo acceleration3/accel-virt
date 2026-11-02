@@ -20,6 +20,7 @@ namespace av {
 
 class ControlRequest;
 class FenceInterrupts;
+class GuestRamLendings;
 class Host;
 struct PresentEngineProbe;
 
@@ -38,10 +39,12 @@ public:
     [[nodiscard]] Status initialize();
     /* Main loop. The guest's page from now on, counting from ticket 1, and
      * every present taken before forgotten: 0 lets the page go. Image sources
-     * are read from `snapshots`. invalid_state before initialize; the page's
+     * are read from `snapshots`, and copied by the GPU into the memory of
+     * whichever of `lendings` their destination pages lie over. `lendings`
+     * outlives the engine. invalid_state before initialize; the page's
      * refusal (PresentPageWindow::map), which leaves no page; no_memory when
      * no thread starts. */
-    [[nodiscard]] Status attach(uint64_t address, const PresentFrames &snapshots);
+    [[nodiscard]] Status attach(uint64_t address, const PresentFrames &snapshots, GuestRamLendings &lendings);
     /* Main loop. A virtio reset: the thread stopped, the page let go, and every
      * present not yet moved forgotten. */
     void                 detach();
@@ -49,6 +52,11 @@ public:
      * error when refused - a refusal completes in its turn all the same, but
      * without a page there is no turn to take. */
     uint32_t             queue(ControlRequest &request);
+    /* Main loop, around a swap of guest RAM runs (RunSwapGate): the engine
+     * moves no present from now until resume_moves, and returns once the one it
+     * was moving - a CPU move, or a GPU copy it waits for - is done. */
+    void                 hold_moves();
+    void                 resume_moves();
     /* The thread's body, entered through AvPresentEngineRun. */
     void                 run();
 
@@ -66,19 +74,32 @@ private:
     /* The thread: the oldest present not moved, once there is one; null once
      * stopping. */
     QueuedPresent *next();
+    /* The thread: said once in the log, and not again until the next page,
+     * why `present` went through the CPU. */
+    void           note_fallback(QueuedPresent::Fallback fallback);
     /* The thread: `present` has moved, or failed to. */
     void           complete(QueuedPresent &present, Status moved);
     void           stop_thread();
+    /* The gate of the lendings let go of. */
+    void           unregister();
 
     Host                        &host_;
     FenceInterrupts             &interrupts_;
     void                        *lock_;
     void                        *wake_;
+    /* Signalled when a present is done moving, for hold_moves. */
+    void                        *idle_;
     void                        *thread_;
     bool                         stopping_;
+    /* Under the lock: a swap holds moves off, and the thread is moving one. */
+    bool                         holding_;
+    bool                         moving_;
     PresentPageWindow            page_;
     /* Set while the thread is stopped, read by it after. */
     PresentFrames             snapshots_;
+    GuestRamLendings         *lendings_;
+    /* Which fallbacks the log has said, by the thread alone. */
+    bool                         told_[static_cast<uint32_t>(QueuedPresent::Fallback::count)];
     ObjectStorage<QueuedPresent> slots_[depth];
     /* The ring: `held_` slots from `first_`, the first `moved_` of them moved
      * and waiting for the main loop to let them go. */

@@ -135,7 +135,7 @@ renderer ([`docs/renderer.md`](docs/renderer.md)).
 | Vulkan | Khronos loader → `avvk.dll` | the host's Vulkan driver | Vulkan 1.3, with the host device's extensions under the ICD's extension policy |
 | OpenGL | `opengl32.dll` → `avgl.dll` | EGL + the host's GL | up to 4.6, core and compatibility profiles, WGL pixel formats and sharing |
 | OpenCL | Khronos loader → `avcl.dll` | the host's OpenCL | OpenCL 3.0, including SVM and `cl_khr_gl_sharing` |
-| Direct3D 9 | DXVK's Windows `d3d9.dll` beside the application → `avvk.dll` (`avvk32.dll` for a 32-bit one) | the host's Vulkan driver | no native D3D9 user-mode driver yet |
+| Direct3D 9 | `d3d9.dll` → `avumd.dll` (`OpenAdapter`) | DXVK's `d3d9` | a native user-mode driver |
 
 Every row works in 32-bit processes too. The package installs an x86 build of
 each user-mode driver, and Windows gives it to a WoW64 process through the
@@ -164,10 +164,6 @@ Tested beyond the probes and sample suites:
 - **32-bit processes need their own loaders.** A 32-bit Vulkan or OpenCL
   application finds `vulkan-1.dll` and `OpenCL.dll` in `C:\Windows\SysWOW64`,
   and Windows ships neither (see [Installing](#installing)).
-- **No native Direct3D 9.** `avumd.dll` exports `OpenAdapter10_2` and
-  `OpenAdapter12` only. A D3D8 or D3D9 program runs by putting DXVK's Windows
-  `d3d9.dll` beside it, which then runs on the Vulkan ICD. That is the path
-  `avd3d9probe.exe` checks.
 
 **Display:**
 - **One display per adapter**, and one refresh rate for all its modes: 60 Hz by

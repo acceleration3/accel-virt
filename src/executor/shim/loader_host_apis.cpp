@@ -19,6 +19,7 @@ LoaderHostApis::LoaderHostApis(ExecutorLog &log)
     for (ObjectStorage<HostShares> &shares : shares_) static_cast<void>(shares.construct(heap_, log.shares()));
     for (ObjectStorage<D3d11HostDevice> &device : d3d11_devices_) static_cast<void>(device.construct(log.d3d11()));
     for (ObjectStorage<D3d12HostDevice> &device : d3d12_devices_) static_cast<void>(device.construct(log.d3d12()));
+    for (D3d9HostDevice &device : d3d9_devices_) device.bind(log.d3d9());
     for (ObjectStorage<SharedSurfaces> &surfaces : surfaces_) static_cast<void>(surfaces.construct(heap_));
     for (uint32_t i = 0u; i < HostGpuSet::max_gpus; i++)
         static_cast<void>(exporters_[i].construct(compositors_[i]));

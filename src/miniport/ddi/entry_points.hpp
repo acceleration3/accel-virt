@@ -121,7 +121,6 @@ int32_t AvDdiSetDisplayPrivateDriverFormat(void *context, const av::DxgkargSetDi
 int32_t AvDdiCreateContext(void *device, av::DxgkargCreateContextRecord *request);
 int32_t AvDdiDestroyContext(void *context);
 int32_t AvDdiRender(void *context, av::DxgkargRenderRecord *request);
-int32_t AvDdiRenderKm(void *context, av::DxgkargRenderRecord *request);
 int32_t AvDdiPatch(void *context, const av::DxgkargPatchRecord *request);
 int32_t AvDdiSubmitCommand(void *context, const av::DxgkargSubmitCommandRecord *request);
 int32_t AvDdiPreemptCommand(void *context, const av::DxgkargPreemptCommandRecord *request);

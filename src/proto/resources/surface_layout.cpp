@@ -40,6 +40,11 @@ uint64_t SurfaceLayout::bytes() const
     AV_SCOPE("SurfaceLayout::bytes");
     return uint64_t{pitch_} * height_;
 }
+uint64_t SurfaceLayout::pages() const
+{
+    AV_SCOPE("SurfaceLayout::pages");
+    return (bytes() + page_bytes - 1u) / page_bytes;
+}
 bool     SurfaceLayout::is_surface() const
 {
     AV_SCOPE("SurfaceLayout::is_surface");

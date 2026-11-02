@@ -33,9 +33,8 @@ public:
 private:
     static constexpr uint32_t staging_format = 21u;   /* D3DDDIFMT_A8R8G8B8 */
     enum : int32_t { shared_primary = 1, shadow = 2, staging = 3, gdi = 4 };
-    enum : int32_t { gdi_texture = 1, gdi_staging_cpu_visible = 2, gdi_staging = 3, gdi_lookup_table = 4,
-                     gdi_existing_sys_mem = 5, gdi_texture_cpu_visible = 6, gdi_texture_cross_adapter = 7,
-                     gdi_texture_cpu_visible_cross_adapter = 8 };
+    enum : int32_t { gdi_texture = 1, gdi_staging_cpu_visible = 2, gdi_staging = 3, gdi_texture_cpu_visible = 6,
+                     gdi_texture_cross_adapter = 7, gdi_texture_cpu_visible_cross_adapter = 8 };
 
     [[nodiscard]] Status layout_of(uint32_t width, uint32_t height, uint32_t format, SurfaceLayout &layout) const;
     [[nodiscard]] Status describe_shared_primary(AllocationDescriptor &descriptor) const;

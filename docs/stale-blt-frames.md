@@ -123,8 +123,13 @@ The fix is to leave the legacy path:
 2. That makes the reader `avumd` in DWM's process - a read this driver can
    order after the engine's write. The ordering is the escape that was built
    and withdrawn here: a begin that waits for the pages' last present and a
-   sequence the end compares (the branch's history has it, `PagesReadRecord`,
-   `PresentWaiters`, `PresentWrites`), or better, the host-side copy of
+   sequence the end compares (`PagesReadRecord`, `PresentWaiters`,
+   `PresentWrites`) - and, since a compare that fails only defers the band, and
+   under continuous presents nearly every compose overlapped a write and the
+   window starved on stale content, a gate: a begin opens a read
+   (`PresentReads`) that the presents into the pages wait for until the end,
+   so the compare fails only when a hold ran out (docs/protocol.md, "Pages
+   read record"). Or better, the host-side copy of
    docs/d3d-desktop.md §3.5 - the frame copied on the host GPU into the
    texture DWM composes from, ordered with DWM's draws on the host's queue, so
    no pixel crosses the guest's CPU at all.
@@ -239,3 +244,147 @@ mapping it took earlier, and syncs through none of the paths above. That is
 consistent with the submit-time move not changing the tear rate. Who that
 reader is remains open: candidates are win32k's sprite and redirection code
 reading the CDD surface's mapping at DWM's request.
+
+## The path taken: software device bitmaps, and the address the app's device maps
+
+`PresentationCaps` is `SupportSoftwareDeviceBitmaps` and nothing else (the
+kernel-mode command buffer experiment is withdrawn: CDD never accelerated GDI
+for this adapter). With the bit CDD makes a window's redirection surface a
+GDISURFACE allocation, `d3d9.dll` opens it into the application's device, and
+every present names it as `hDstResource`. The two things that kept the first
+attempt blank are answered:
+
+- **dxgkrnl rejects the present before `DxgkDdiPresent`** when the destination
+  has no GPU virtual address in the presenting process
+  (`SubmitPresentWithDmaBuffer`: "the virtual address is not assigned to the
+  destination allocation"). `D3d9Device::open_resource` therefore maps the
+  opened surface through `pfnMapGpuVirtualAddressCb` on the device's paging
+  queue (`PresentedAllocations::keep_addressable`) and frees the address with
+  the resource. Nothing on the GPU reads through it - the miniport resolves
+  allocations by handle - so the paging fence is not waited for.
+- **The miniport had no pages to write.** A `gdi` allocation was left in
+  VidMm's own system memory, which is never mapped into the aperture. It is
+  pinned in the aperture and mapped cached like a staging one
+  (`Allocation::report_to`), so `DxgkDdiPresent` writes the redirected blt
+  through its pages and the `PresentWrites` ordering of the window's reader
+  holds as before.
+
+Not measured yet: that the D3D9 runtime fills `pfnMapGpuVirtualAddressCb`
+(`d3d9.dll` imports `D3DKMTMapGpuVirtualAddress` and `D3DKMTFreeGpuVirtualAddress`
+beside the paging queue calls the device already uses), and that `DxgkDdiPresent`
+is reached with the destination rectangle the client area sits at.
+
+## The same for a Direct3D 10/11 blt-model window
+
+With the bit, DXGI opens the redirection surface of a `DXGI_SWAP_EFFECT_DISCARD`
+window into the application's D3D11 device as well (`D3d11Device::open_resource`
+-> `open_guest_surface`, the path DWM's reads use) and names it as `hDstResource`
+of `Present`/`Present1`. Two things differ from the D3D9 path:
+
+- **The surface is addressed when first presented into, not when opened.**
+  DWM's device opens the same kind of surface, reads it and never presents into
+  it, so a residency wait and a GPU virtual address there would only cost its
+  compose. `D3d11Device::address_destination` runs `keep_addressable` before the
+  first present naming the surface and the address is freed in
+  `destroy_resource`.
+- **A blt-model present with a destination is read back like one without**
+  (`present_pages`): the host's pixels are staged at a point named in the
+  present's private data, or read into the buffer's pages, and the miniport
+  moves them into the surface (`Adapter::move_presented_pixels`). Before, a
+  present with a destination went to the kernel with no frame staged at all.
+
+The host texture and CPU shadow `open_guest_surface` makes for the application's
+open are unused by it (nothing binds the surface); they are one allocation and
+one upload at open.
+
+Not measured: where the hung `Present1` waited. Everything this driver does in
+the present before and after `pfnPresentCb` is bounded (`PresentOrder::submitted`
+waits for nothing on a blt chain, `PresentWaiters::admit_write` for 20 ms), so
+the wait is inside dxgkrnl's present of a destination that was neither resident
+nor addressable.
+
+### The first Direct3D 11 present is lost with `Blt|RedirectedBlt|CrossAdapter`
+
+Guest, `d3d11_flip blt`: the first `IDXGISwapChain::Present` returns
+`DXGI_ERROR_DEVICE_REMOVED` (reason `DEVICE_HUNG`), `D3DKMTPresent` answers
+`0xC01E0200`, and dxgkrnl marks the device in error with
+`VidSchErrorSubmittingRenderForNonResidentAllocation`. ETW `Present` flags are
+`0x4011081`.
+
+- **`CrossAdapter` (`D3DKMT_PRESENT` bit 0x04000000) is the runtime's, and
+  dxgkrnl does not act on it before the miniport.** In `DXGCONTEXT::Present`
+  (build 26200, decompiled) its only reader is an assertion that a device with
+  no display adapter carries it ("`GetDisplayAdapter() != NULL ||
+  pPresent->Flags.CrossAdapter`"); `SubmitPresent` and
+  `SubmitPresentWithDmaBuffer` never branch on it. `d3dkmthk.h` says what it
+  is for: `hAdapter` is "iGpu adapter for PHT redirection. Valid only when the
+  CrossAdapter flag is set" - the present history token goes to another
+  adapter. So DXGI believes the window's compositor is not this device's
+  adapter. That is not decided by anything avumd reports (the Direct3D 11 DDI
+  has no cross-adapter capability); why it holds for the adapter that has the
+  output is **not established**.
+- **What `SubmitPresentWithDmaBuffer` checks on a GPU-virtual-address context**
+  (not a flip): the destination's GPU virtual address in the presenting
+  process - zero rejects the present with `STATUS_INVALID_PARAMETER`, "the
+  virtual address is not assigned to the destination allocation" - and
+  nothing of the source's, whose address it looks up and hands on. Both
+  allocations are named in the DMA buffer's allocation list, so both have to be
+  resident for the device. The destination is (`address_destination`); the
+  source was asked at its creation (`PresentedAllocations::make`) with the
+  answer dropped, so `D3d11Device::keep_present_resident` asks again, once, at
+  the first present naming any buffer or surface, and says it once
+  (`a present's allocation made resident`). Not shown to be the cause: a
+  device already resident never errors for it.
+- **CDD's type 8 is back.** `D3DKMDT_GDISURFACETYPE_TEXTURE_CPUVISIBLE_CROSSADAPTER`
+  (8) is described as type 7 is (`StandardAllocation::describe_gdi`): pitch
+  `align(width * bpp, 128)`, which dxgkrnl checks, and dxgkrnl itself asks for
+  the global share handle. An opened `cross_adapter` surface now gets a GPU
+  virtual address range as a GDI one does, so a present into it is not
+  dropped.
+- **Risks, unmeasured.** A `cross_adapter` allocation is not pinned in the
+  aperture (its pages are the process's own, lent to the host), so the miniport
+  has no pages to write when one is a present's destination: `Adapter::present`
+  logs `present surfaces reachable ... destination 0 kind 6` and moves nothing,
+  and DWM's `avumd` reads it through the host lending, not through
+  `open_guest_surface`. Direct3D 9 refuses an opened allocation that is not a
+  `gdi` one (`D3d9Device::refuse_open`), so if CDD made type 8 for a window
+  that was type 6 while it was refused, Direct3D 9 windows now fail to open it.
+  Both are said in the log line each prints.
+
+## What GDI reads with the bit on: `GetDC` on a DXGI surface
+
+With the bit, `IDXGISurface1::GetDC` on a GDI-compatible texture calls the
+driver's `ResolveSharedResource` and hands GDI the allocation's own pages. There
+is no staging copy, and nothing calls the driver at `ReleaseDC`. Direct2D's DC
+render targets take this path, and a no-op there leaves GDI drawing on an empty
+surface and the GPU never seeing what GDI drew. WizTree (a Delphi VCL style
+engine) scales its caption-button skin through Direct2D into DIBs and alpha
+blends those into its title bar, so it had no minimize, maximize or close
+button and no combo box arrow. It looked like a first-launch-after-boot bug
+because a bit-off driver had filled those pages for the rest of the boot.
+
+`D3d11Device::show_to_gdi` reads the host's pixels into the pages at the resolve
+and keeps a copy of the rows; `take_gdi_writes` compares the pages to the copy
+at later calls and uploads what changed. Cold boot, WizTree first: the buttons
+are drawn, and `d2dprobe` reads 2560 of 2560 pixels back on every Direct2D case.
+
+The driver cannot ask whether a texture is GDI-compatible, or keyed: the runtime
+keeps `D3D11_RESOURCE_MISC_GDI_COMPATIBLE` and `SHARED_KEYEDMUTEX` from `MiscFlags`,
+and both kinds arrive as `misc=0x2` with the same bind flags. It resolves on every
+keyed `ReleaseSync` as well, for the other process, which reads through the host's
+object and needs no pages. Read back each time, that was 660 ms a frame at 2560x1440.
+What tells them apart is the runtime's own `Flush`: it comes straight after the
+resolve on a release (1.3 to 14.8 us from its return, n=12), while the next call
+after a `GetDC` is 65.8 us away at the least (n=68), since GDI has made a DC and
+released it. A `Flush` within 30 us marks the texture as shared, and it is never
+read back again: 21 ms once, then 0.07 ms a frame.
+
+So what is not served: `GetDC` on a texture that is also keyed, or in a second
+process that opened it (`allocation_owned`). `show_to_gdi` also goes by the formats
+`GetDC` takes, B8G8R8A8 and B8G8R8X8. Nothing measured so far does either.
+
+Direct3D 9's `GetDC` goes through the driver's lock, so it needs none of this:
+`d3d9dc` (32 and 64 bit) reads GPU pixels through GDI and GDI pixels through the
+GPU on lockable render targets, default-pool surfaces and the back buffer. The
+runtime refuses `GetDC` on a non-lockable render target before the driver hears
+of it.

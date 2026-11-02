@@ -68,6 +68,12 @@ public:
      * GPU can open it as a dma-buf; VK_MAX_MEMORY_TYPES when there is none,
      * which allocate_exportable refuses: VRAM is no stand-in. */
     uint32_t           system_memory_type(uint32_t allowed) const;
+    /* Of `allowed`, memory the CPU sees the GPU's writes in without an
+     * invalidate: host visible and coherent, host cached first because the
+     * guest maps the same pages write-back. VK_MAX_MEMORY_TYPES when none is
+     * allowed - a type that is not host visible says nothing of what a CPU
+     * sees, and one that is visible and not coherent would be read stale. */
+    uint32_t           coherent_memory_type(uint32_t allowed) const;
     /* The device's memory types and heaps: none before it is loaded. */
     void                  memory_properties(VkPhysicalDeviceMemoryProperties &answer) const;
     /* `size` bytes of `type`, exportable as a dma-buf and dedicated to
@@ -122,6 +128,12 @@ public:
                                uint32_t count, const VkImageMemoryBarrier *barriers) const;
     void               copy_image(VkCommandBuffer buffer, VkImage source, VkImage destination,
                                   const VkImageCopy &region) const;
+    /* `count` regions of `source`, in TRANSFER_SRC_OPTIMAL, into `destination`. */
+    void               copy_image_to_buffer(VkCommandBuffer buffer, VkImage source, VkBuffer destination,
+                                            uint32_t count, const VkBufferImageCopy *regions) const;
+    /* Everything `from` wrote is available to `to`, memory as a whole. */
+    void               memory_barrier(VkCommandBuffer buffer, VkPipelineStageFlags from, VkPipelineStageFlags to,
+                                      const VkMemoryBarrier &barrier) const;
     [[nodiscard]] bool submit(VkQueue queue, const VkSubmitInfo &submit) const;
     void               queue_idle(VkQueue queue) const;
 
@@ -164,6 +176,7 @@ private:
     PFN_vkResetCommandBuffer         reset_;
     PFN_vkCmdPipelineBarrier         barrier_;
     PFN_vkCmdCopyImage               copy_image_;
+    PFN_vkCmdCopyImageToBuffer       copy_image_to_buffer_;
     PFN_vkQueueSubmit                submit_;
     PFN_vkQueueWaitIdle              queue_idle_;
     /* vkAvLoseDeviceAV, which only the loss layer answers. */

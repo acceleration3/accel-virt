@@ -127,8 +127,7 @@ Status RingConsumer::consume_next()
     });
     if (ordering_ != nullptr) ordering_->wait_before(*this, batch.published_at());
     note_clock(batch.published_at());
-    __atomic_store_n(&running_end_, head_ + batch.span(), __ATOMIC_RELEASE);
-    const Status ran = executor_.run(ring_, head_, batch);
+    const Status ran = executor_.run(ring_, head_, batch, &running_end_);
     __atomic_store_n(&running_end_, 0u, __ATOMIC_RELEASE);
     if (ran != Status::ok) {
         if (!executor_.abandoned()) fault(executor_.fault(), "the batch could not run, fence", batch.fence_id());

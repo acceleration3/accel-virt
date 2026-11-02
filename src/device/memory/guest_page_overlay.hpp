@@ -27,6 +27,7 @@ class ControlRequest;
 class GuestRamLending;
 class Host;
 class LentPages;
+class RunSwapGate;
 struct GuestPageOverlayProbe;
 
 class GuestPageOverlay {
@@ -35,8 +36,9 @@ public:
     static constexpr uint64_t page_size = 4096u;
 
     /* Its pages are claimed in `lent` for `owner`, the lending it is part of;
-     * its records live in `blocks`. */
-    GuestPageOverlay(BlockSource &blocks, LentPages &lent, GuestRamLending &owner);
+     * its records live in `blocks`. Runs are swapped with `gate` holding the
+     * writers still: once for each add and each restore, not for each run. */
+    GuestPageOverlay(BlockSource &blocks, LentPages &lent, RunSwapGate &gate, GuestRamLending &owner);
     /* Restored already: a restore needs a host, which a destructor has not
      * got. */
     ~GuestPageOverlay();
@@ -63,6 +65,13 @@ public:
     uint32_t             extents() const;
     uint64_t             extent_address(uint32_t index) const;
     uint64_t             extent_length(uint32_t index) const;
+    /* Whether the guest bytes [address, address + length) are laid in one
+     * piece of the memory - inside one entry, or across entries that follow
+     * each other in guest memory as they do in the dma-buf - and where in the
+     * dma-buf they start, in `offset`. The search starts at extent `hint`,
+     * the last entry an earlier range ended in, and leaves the one this ends
+     * in: a list read in order costs a step an entry. */
+    [[nodiscard]] bool   locate(uint64_t address, uint64_t length, uint32_t &hint, uint64_t &offset) const;
 
     bool invariants_hold() const;
 
@@ -76,6 +85,8 @@ private:
     struct Extent {
         uint64_t address_;
         uint64_t length_;
+        /* Where in the dma-buf the entry starts. */
+        uint64_t offset_;
     };
 
     [[nodiscard]] Status lay_entry(Host &host, uint64_t address, uint64_t length, int fd, uint64_t size);
@@ -83,6 +94,7 @@ private:
     [[nodiscard]] Status lay_run(Host &host, void *pointer, uint64_t length, uint64_t address, int fd);
 
     LentPages           &lent_;
+    RunSwapGate         &gate_;
     GuestRamLending     &owner_;
     GrowableArray<Run>    runs_;
     GrowableArray<Extent> extents_;

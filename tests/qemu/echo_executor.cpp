@@ -469,6 +469,10 @@ std::uint32_t map_frame(void *, std::uint32_t, std::uint64_t, std::uint32_t, std
     return AV_UNKNOWN;
 }
 void unmap_frame(void *, std::uint32_t, std::uint64_t, std::uint32_t) {}
+std::uint32_t copy_frame(void *, std::uint32_t, std::uint64_t, std::uint32_t, std::uint32_t, const AvFrameCopy *)
+{
+    return AV_UNKNOWN;
+}
 
 /* Shared surfaces (docs/external-export.md): what the guest let go of, under a lock, since
  * the export socket asks from a thread of its own and the release comes on
@@ -554,6 +558,7 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               export_image,
                               map_frame,
                               unmap_frame,
+                              copy_frame,
                               export_surface,
                               sync_surface,
                               nullptr,

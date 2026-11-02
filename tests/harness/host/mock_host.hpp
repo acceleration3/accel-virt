@@ -77,6 +77,11 @@ public:
      * region, or one not whole pages, is refused. Counted until restored. */
     Status   overlay_guest_run(void *run, std::uint64_t bytes, int fd, std::uint64_t offset) override;
     Status   restore_guest_run(void *run, std::uint64_t bytes) override;
+    bool     pause_guest() override;
+    void     resume_guest() override;
+    /* How often the guest was held out of its memory, and let go. */
+    std::uint32_t guest_pauses() const;
+    std::uint32_t guest_resumes() const;
     void     release_range(void *base, std::uint64_t bytes) override;
     std::uint64_t hostmem_size() override;
     /* Maps the descriptor's pages for real, as QEMU does with MAP_FIXED, so
@@ -527,6 +532,8 @@ private:
     std::uint32_t   fail_overlay_ = 0u;
     std::uint32_t   fail_restore_ = 0u;
     std::uint64_t   overlaid_ = 0u;
+    std::uint32_t   guest_pauses_ = 0u;
+    std::uint32_t   guest_resumes_ = 0u;
     int             counted_[max_counted_descriptors];   /* -1 for a free slot */
     RecordingFile   recordings_[max_recordings];
     std::uint32_t   fail_recording_create_;

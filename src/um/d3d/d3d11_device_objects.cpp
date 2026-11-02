@@ -303,6 +303,9 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
         return;
     }
     forget_guest_surface(resource);
+    forget_gdi_rows(resource);
+    forget_resolve(resource);
+    allocations_.release_address(resource.gpu_address, resource.gpu_pages);
     forget_maps(resource.stamp.id());
     destroy_object(resource.stamp.id());
     /* Behind the destroy: the host's draws over the texture may be queued still. */

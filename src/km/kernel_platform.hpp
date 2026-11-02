@@ -57,6 +57,7 @@ public:
     uint64_t interrupt_time() const override;
     uint64_t performance_counter(uint64_t &frequency) const override;
     void     store_atomic(uint64_t &target, uint64_t value) override;
+    uint64_t add_atomic(uint64_t &target, uint64_t delta) override;
     uint64_t load_atomic(uint64_t &source) override;
     void     stall(uint32_t microseconds) override;
     void     initialize_wake_event(void *storage) override;

@@ -32,6 +32,7 @@ bool ExecutorLibrary::complete(const AvExecutorOps &ops) const
            ops.imported_handle != nullptr && ops.share_object != nullptr && ops.open_object != nullptr &&
            ops.close_object != nullptr && ops.release_shared != nullptr && ops.read_image != nullptr &&
            ops.export_image != nullptr && ops.map_frame != nullptr && ops.unmap_frame != nullptr &&
+           ops.copy_frame != nullptr &&
            ops.export_surface != nullptr && ops.sync_surface != nullptr && ops.answer_part != nullptr;
 }
 
@@ -250,6 +251,15 @@ void ExecutorLibrary::unmap_frame(const SurfacePoint &frame) const
 {
     AV_SCOPE("ExecutorLibrary::unmap_frame");
     if (domain_ != 0u) ops_->unmap_frame(ops_->opaque, domain_, frame.surface(), frame.point());
+}
+
+Status ExecutorLibrary::copy_frame(const SurfacePoint &frame, uint32_t wait_ms, const AvFrameCopy &copy) const
+{
+    AV_SCOPE("ExecutorLibrary::copy_frame");
+    if (domain_ == 0u) return Status::not_supported;
+    const uint32_t answer = ops_->copy_frame(ops_->opaque, domain_, frame.surface(), frame.point(), wait_ms, &copy);
+    if (answer == AV_EXECUTED) return Status::ok;
+    return answer == AV_UNKNOWN ? Status::not_found : Status::not_supported;
 }
 
 /* What a library hands over is only believed as far as AV_EXECUTED: the

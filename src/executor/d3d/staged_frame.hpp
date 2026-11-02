@@ -10,7 +10,11 @@
  * size, what a read fills in, and the verdict on a frame made on a device
  * that was lost since. What differs - mapping the copy once the GPU has made
  * it, and unmapping it - is virtual: each API's is a real implementation, and
- * the mock one makes SharedSurfaces testable without a GPU. */
+ * the mock one makes SharedSurfaces testable without a GPU.
+ *
+ * A frame whose API stages in a Vulkan image can also be copied by the GPU
+ * straight into memory the host lent (copy): a hook only those APIs override,
+ * the others declining so the present reads their copy instead. */
 #ifndef AV_STAGED_FRAME_HPP
 #define AV_STAGED_FRAME_HPP
 
@@ -24,6 +28,10 @@ namespace av {
 class StagedFrame {
 public:
     enum class Reading { mapped, copying, failed };
+    /* copied: the bytes are in the lent memory. declined: this frame cannot be
+     * copied that way, and read still gives it. timed_out: the GPU never
+     * finished, or the frame is not readable at all. */
+    enum class Copying { copied, declined, timed_out };
 
     StagedFrame(const StagedFrame &) = delete;
     StagedFrame &operator=(const StagedFrame &) = delete;
@@ -36,6 +44,10 @@ public:
      * never two at once, and never with the lock of SharedSurfaces held: it
      * may take its API's own. */
     Reading            read(AvFrameView &view);
+    /* `target`'s regions of the frame copied on the GPU into the lent memory
+     * it names, done within `wait_ms`. Any thread, never two at once, and
+     * never with the lock of SharedSurfaces held, as read. */
+    Copying            copy(const AvFrameCopy &target, uint32_t wait_ms);
     /* Unmapped if it was, and back in its pool for another frame. Any thread,
      * never with the lock of SharedSurfaces held. */
     void               release();
@@ -62,6 +74,8 @@ protected:
     virtual Reading map_when_copied(const uint8_t *&pixels, uint32_t &row_pitch) = 0;
     /* The copy unmapped, if map_when_copied mapped it. */
     virtual void    unmap() = 0;
+    /* The copy for copy(); declines unless an API overrides it. */
+    virtual Copying copy_into(const AvFrameCopy &target, uint32_t wait_ms);
 
 private:
     FrameClaim claim_;

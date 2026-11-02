@@ -57,12 +57,19 @@ struct D3d9Resource {
     /* The runtime resource that allocation was made under: `runtime` for a
      * primary's, null for one made at a present. */
     HANDLE               allocation_resource;
+    /* The VidPn source a primary is shown on; 0 for anything else. */
+    uint32_t             vidpn_source;
     uint32_t             allocation_pitch;
     /* A kernel surface another party made - the redirection surface of a
      * window - which the runtime opened into this device to present into: the
      * kernel moves a present's pixels into its pages, the host never hears of
      * it, and the allocation is the runtime's to free, not this device's. */
     bool                 opened;
+    /* Where this process's GPU virtual space maps an opened surface, for
+     * `gpu_pages` pages: dxgkrnl rejects a present whose destination has no
+     * address. 0 for a surface the device made, or one not yet mapped. */
+    uint64_t             gpu_address;
+    uint64_t             gpu_pages;
     uint64_t             shared_key;
     /* Each present of the resource, counted from 1 (PresentPointRecord). */
     d3d::PresentCount    presents;

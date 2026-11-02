@@ -122,6 +122,112 @@ difference.
   time on that host in its power-saver profile (cores at 0.7 to 0.9 GHz), and
   the host desktop's own 20 to 29% of the same render engine.
 
+- **2026-10-31**: a 2560x1440 Direct3D 9 window with
+  `SupportSoftwareDeviceBitmaps` reported. DWM's render thread ran 5.6 ms a
+  frame instead of 0.65, in `memcmp` and `memmove` under
+  `D3d11Device::refresh_guest_surface`, and its capture check moved from 0.6 ms
+  after the vblank to 5.8 (p90 8.1, max 79). Present to capture was 31 to 42 ms
+  at the median and 59 to 67 at p95, against 30 to 31 and 34 to 35 without the
+  bit, on a host that was busy. Lending the surface's pages to the host
+  (`D3d11Device::open_cross_adapter`) takes that read out of the compose: with
+  the bit, 59 captures a second of a GDI monitor (36 before), no read of the
+  pages at all, and `d3d9_dirty_present` never more than a frame behind at a
+  present every 4 ms (55 before), none torn.
+
+- **2026-11-01**: frames on screen, through a mirror on a 360 Hz output, measured
+  per frame with a 60 Hz source. Only 64% stayed exactly six refreshes (5, 6 or 7,
+  13.9 to 19.4 ms, however even their commits), with hitches of 25 to 60 ms in
+  about 1%. Four causes.
+  - remotewin's `DisplayLock` brought commits down until 5% missed the compositor's
+    latch, so it parked them on the edge and a millisecond of wander moved a frame
+    by a whole refresh. Commits now stay a margin past the latch, which the lock
+    finds by sweeping the phase once.
+  - Each retiming (`VblankSchedule::align`) can make the guest's DWM drop frames
+    for about 200 ms, and the lock retimed about once a second: 20 of 21 capture
+    gaps followed one, most within 40 ms. Why DWM reacts so is not known. Settled,
+    the lock no longer asks.
+  - The compositor states its mode's refresh, 359.979 Hz on this monitor, which
+    really runs at 359.975, and a millihertz cannot hold a phase anyway: rounding
+    leaves up to 8 parts in a million, a retiming every 100 s. The lock measures
+    the rate from its present stamps and the timing carries microhertz, and a
+    relative shift rather than a moment on the host's clock, so it cannot be wrong
+    about where the guest's blanks are.
+  - One 35 to 60 ms gap about every 10 s was the disk. With `io='native'`, QEMU's
+    main loop submits I/O itself, and on btrfs a submit can block; the main loop
+    holds the BQL and runs slirp, so the vCPUs and the mirror's frames stopped
+    with it. Its thread slept in `folio_wait_bit_common` for 20 to 88 ms, often 31,
+    with no accel-virt function on its stack and no major fault. With
+    `io='threads'`, 66 blocks (307 ms) in 60 s became 3 (3.6 ms).
+
+  Measured on the 360 Hz output with the lock's first fixes, for 150 s: 97.5 to
+  99.7% exactly six refreshes per 10 s, composed to presented 9.96 ms median and
+  10.04 p95, with the disk's gaps still in. The final build has run only on a
+  headless KWin at 60 Hz, on the same GPU with dma-bufs and explicit sync, for
+  180 s: 0 of 8651 gaps off, a sweep and one correction and then no timing at all,
+  composed to presented 18.74 ms (p5 18.67, p99 18.83), and the main loop blocked
+  over 5 ms not once.
+
+  The lock's latch comes only from its sweep. It once followed what commits were
+  seen to take, and a compositor sometimes catches a commit past its latch, so
+  each such frame walked the next commits later, to where they missed: to-screen
+  fell from 12 ms to 3 and composed to presented rose to 26 ms, with every frame
+  still evenly spaced. Spacing alone does not show this.
+
+  Reading a frame log: KWin discards the feedback of a surface it is not compositing,
+  so a log that stops, or `presented 0`, means a covered window or displays in DPMS
+  off (`kscreen-doctor --dpms show`) before it means a bug. `kwin_wayland --virtual
+  --socket lat-kwin` with `WAYLAND_DISPLAY=lat-kwin` for the mirror measures all of
+  this with no display, and shows the user nothing.
+
+- **2026-11-01, open**: a capture of the monitor sometimes takes a whole refresh more,
+  and stays that way until the guest reboots: present to arrival 48 ms against 31.7,
+  arrival after the capture's stamp by 4 ms rather than before it by 13, and a mirror
+  logging `composed` to `taken` of about 20 ms rather than 2. A capture of a window
+  stays at 30 ms throughout. It was first seen with `AllocationKind::surface` mapped
+  Cached, and went on removing that, so the mapping stayed out; but it came back on a
+  driver without it, after five idle hours, so that is not the whole cause. Not closing
+  apps, not a power cycle of the guest's display, and not the host's load. Judge this
+  by present to arrival: `composed` is the capture's stamp less a period, an assumption.
+
+- **2026-11-01**: those pages stay write-combined, and what reads them uses streaming
+  loads (`GuestSurfaceScan`): 80 MB/s through `memcmp`, and 642 to 11 ms a frame for a
+  read-only `GetDC` of 2560x1440.
+
+- **2026-11-01**: the guest's refresh is the lever on input delay. Input to capture in
+  the guest, real input, full-screen Direct3D 9 (`latprobe32`, `LATFULL=1 LATCURSOR=9`,
+  no `LATQUIET`), p50 / p95 / p99 in ms: 60 Hz 45 to 48 / 53 to 56 / 55 to 84; 120 Hz 24
+  / 28 / 28 to 33; 180 Hz 17 / 20 / 21 to 24; 240 Hz 13 / 16 to 17 / 19 to 21. Windows
+  said 60 Hz throughout in these runs, as `DisplayMode` offered nothing else, while
+  `DisplayLock` aimed the blanks at about 180 Hz in whole periods of the output (360 Hz
+  gave 180, 240 and below the output's own rate). Windows is told the real rate now: the
+  device's `refresh` property is the one number the mode list and the blanks run at, the
+  manager sets it (the monitor's own rate by default), and `DisplayLock` shifts the
+  blanks and never changes their rate. The costs, at 180 Hz:
+  - A frame every 5.56 ms reached the mirror (176 a second), but with a full-screen
+    probe drawing every blank the host GPU was 92% busy and QEMU took 1.66 cores.
+  - An application that paces itself to 60 fps lands on a finer grid: 14 to 23 ms
+    between frames at the mirror against 16.66 to 17.54. Better latency, less even.
+  - An application counting blanks as sixtieths of a second runs fast.
+  - One of two 180 Hz rounds fell to 60 to 140 fps for its 8 s, unexplained.
+
+  The lock said the rate alone before sweeping: a sweep over a guest changing rate
+  found a false latch and needed a second sweep. It no longer says a rate at all, so
+  nothing changes rate under a sweep except the host's own change of `refresh`, which
+  starts the output's sweep over. With the guest's rate the device's, the lock is a
+  lock only where the guest's period is the whole number of the output's periods
+  (within 50 parts per million): 60 on a 60, 180 or 360 Hz output, 144 on a 144 or
+  288 Hz one. A 144 Hz guest on a 240 Hz output, or 60 on 59.94, has commits that slide
+  round the output's period, and nothing is asked for. A guest rate that is a
+  millihertz off the output's real one, which the manager can only state to the
+  millihertz, drifts the commits by a millisecond in two minutes at 9 parts in a million
+  and is put back by one timing each time, about every ninety seconds. The final build
+  has not run on a real 360 Hz output.
+
+- **Open, not this work's**: for under a second after a process holding large shared
+  textures exits, a new frame pool fails with `DXGI_ERROR_DEVICE_REMOVED` or
+  `E_OUTOFMEMORY`. Driver 0.35.383 does it too. Shared textures are pinned in the
+  aperture, which is the likely reason; not established.
+
 ## Files
 
 | | |

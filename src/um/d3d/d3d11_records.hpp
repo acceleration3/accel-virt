@@ -51,6 +51,14 @@ struct ResourceRecord {
     /* This device made the allocation (D3d11Device::allocate), so destroying
      * the resource gives it back; an opened one is its maker's. */
     uint32_t allocation_owned;
+    /* This device has asked the kernel to keep the allocation resident for a
+     * present that names it (D3d11Device::keep_present_resident). */
+    uint32_t resident;
+    /* Where this process's GPU virtual space maps an opened window surface a
+     * present went into, for `gpu_pages` pages (D3d11Device::address_destination);
+     * 0 for any other resource, and for a surface not presented into yet. */
+    uint64_t gpu_address;
+    uint64_t gpu_pages;
     uint32_t refreshed; /* the frame a guest surface was last refreshed in (refresh_bound_guest_surfaces) */
     uint32_t shadow_watched; /* the shadow is WatchedShadows' write-watched region */
     /* A deferred context's copy whose shadow is its own (D3d11Device::own_shadow),
@@ -65,6 +73,21 @@ struct ResourceRecord {
      * read may be half a frame (docs/stale-blt-frames.md). The next refresh
      * sends them with whatever it finds then. */
     d3d::RowBand pending_rows;
+    /* What GDI was last shown of this texture (D3d11Device::show_to_gdi), to see
+     * what it drew; held from the first DC asked of it to its destruction. */
+    uint8_t *gdi_rows;
+    /* The calls left to look for GDI's writes in; 0 when none are expected. */
+    uint32_t gdi_watch;
+    /* The thread that asked for the DC (D3d11Device::show_to_gdi), whose calls
+     * the watch counts. */
+    uint32_t gdi_thread;
+    /* When the watch began, in the device's PerformanceClock ticks: another
+     * thread's call ends a watch that long outlived its own thread's. */
+    uint64_t gdi_watch_began;
+    /* The runtime resolves this texture for sharing, not for GDI: its
+     * ResolveSharedResource was seen followed at once by the runtime's own
+     * Flush (D3d11Device::learn_from_flush). GDI is never shown it. */
+    uint32_t resolved_for_sharing;
     void    *runtime_resource; /* D3D10DDI_HRTRESOURCE.handle */
     uint8_t *shadow;
     size_t   shadow_bytes;

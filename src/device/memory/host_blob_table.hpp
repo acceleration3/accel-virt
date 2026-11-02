@@ -73,6 +73,8 @@ public:
      * others of its process. A table not given any has lendings of its own,
      * shared with nobody. */
     void                 share_lendings(GuestRamLendings &lendings);
+    /* The lendings in use: shared, or this table's own. */
+    GuestRamLendings &lendings();
     /* Main loop. Placed at `offset` of the hostmem region, and how it is
      * cached there (AV_MEMORY_*) in `caching`. not_found for no blob `id`;
      * invalid_parameter for an offset outside the region, over another

@@ -63,6 +63,33 @@ HRESULT PresentedAllocations::keep_resident(D3DKMT_HANDLE allocation)
     return resident;
 }
 
+HRESULT PresentedAllocations::keep_addressable(D3DKMT_HANDLE allocation, uint64_t pages, uint64_t &address)
+{
+    AV_SCOPE("PresentedAllocations::keep_addressable");
+    address = 0u;
+    const HRESULT resident = keep_resident(allocation);
+    if (FAILED(resident)) return resident;
+    const HRESULT mapped = paging_.object().map_address(allocation, pages, address);
+    if (FAILED(mapped) && lines_.first("the kernel would not map a presented surface's GPU virtual address", mapped))
+        LogLine(lines_)
+            .text("the kernel would not map a presented surface's GPU virtual address ")
+            .hex(static_cast<uint32_t>(mapped), 8u)
+            .write();
+    return mapped;
+}
+
+void PresentedAllocations::release_address(uint64_t address, uint64_t pages)
+{
+    AV_SCOPE("PresentedAllocations::release_address");
+    if (address == 0u) return;
+    const HRESULT freed = paging_.object().unmap_address(address, pages);
+    if (FAILED(freed) && lines_.first("the kernel would not free a presented surface's GPU virtual address", freed))
+        LogLine(lines_)
+            .text("the kernel would not free a presented surface's GPU virtual address ")
+            .hex(static_cast<uint32_t>(freed), 8u)
+            .write();
+}
+
 HRESULT PresentedAllocations::make_context(HANDLE &context)
 {
     AV_SCOPE("PresentedAllocations::make_context");

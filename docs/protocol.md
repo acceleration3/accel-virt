@@ -1062,27 +1062,59 @@ written (docs/stale-blt-frames.md).
 | 28 | u32 | reserved | 0 |
 
 The miniport counts the presents written into each allocation's pages as a
-seqlock: the count goes odd when a present into them is about to be queued
-or moved, and even again once it is queued to the engine under a ticket, or
-moved in place. It also keeps the latest ticket queued into them.
+seqlock: the count moves when a present into them is about to be queued or
+moved, and again once it is queued to the engine under a ticket, or moved in
+place. It counts the presents open apart from the sequence, so two presents
+into the same pages at once do not look settled. It also keeps the latest
+ticket queued into them and the epoch of the engine that numbered it; a ticket
+of another epoch than the engine's now is of an engine a power cycle took, and
+is not waited for.
 
-- **begin** waits, up to `wait microseconds`, until the count is even and the
-  present engine's page (see Present engine) says the latest ticket has
-  completed - a device with no engine has no ticket to wait for. It answers
-  `writes`, the even count the read may begin at, and `complete` 1. A wait
-  that ran out answers the count as it is and `complete` 0: the pages may
-  hold part of a present, and the reader decides what to show. At most four
-  readers wait at once; a fifth is answered at once with `complete` 0, as one whose wait ran out.
-- **end** does not wait. It answers `writes`, the count now, and `complete`
-  1. A reader whose end answers a count other than its begin's read while a
-  present was written, and does not show what it read.
+A read is a gate for the presents into the pages. A begin opens a read on the
+allocation, and `DxgkDdiPresent` for a present whose destination is that
+allocation waits - up to 20 ms, at `PASSIVE` - until no read is open on it,
+before the present is queued or moved; so no present begins while the pages
+are being read, and a reader's two counts match.
+
+- **begin** opens the read, and then waits, up to `wait microseconds`
+  (capped by the miniport at 100 ms, whatever the process sent), until no
+  present is open on the pages and the present engine's page (see Present
+  engine) says the latest ticket of its epoch has completed - a device with no
+  engine has no ticket to wait for. The read is opened first, so a present
+  that arrives meanwhile is held rather than written under the read; one that
+  was already past its wait is one the begin waits for. It answers `writes`,
+  the count the read may begin at, and `complete` 1. A wait that ran out
+  answers the count as it is and `complete` 0: the pages may hold part of a
+  present, and the reader decides what to show. At most four sleepers - readers
+  here, presents waiting for a read - sleep at once; a fifth is answered at
+  once as one whose wait ran out (a reader with `complete` 0, a present that
+  goes ahead).
+- **end** closes the read, wakes the presents held for it, does not wait, and
+  answers `writes`, the count now, and `complete` 1. With the gate the count
+  is the begin's unless a hold ran out; a reader whose end answers another
+  count read while a present was written, and does not show what it read.
+
+A read that is never ended - its process died between the two escapes, and
+nothing tells the driver - does not close the gate for good: a read is open
+for 100 ms from its begin and no longer, after which presents are not held for
+it, and the next begin on the allocation forgets it. A present held 20 ms for
+a read that is still open goes ahead and writes: a reader that is gone or stuck
+must not stop the window. An end of a read already forgotten, or of none, is no
+error. The state dump counts `reads_opened`, `reads_expired` (forgotten
+unended), `writers_held` (presents that found a read open), `writer_hold_timeouts`
+(presents that waited out their 20 ms) and `reader_timeouts` (begins whose wait
+ran out); a `writer_hold_timeouts` that climbs is a reader that is blocked on
+something a present holds.
 
 Every refusal is `STATUS_INVALID_PARAMETER` and writes nothing back:
 - another length, magic, version or action, a reserved field that is not 0;
 - allocation 0, or a handle `dxgkrnl` knows no allocation of this driver by;
 - an answer already filled in (`writes` or `complete` not 0).
 
-A wait that runs out is not a refusal: the reader reads it from `complete`.
+A wait that runs out is not a refusal: the reader reads it from `complete`. The
+escape is sent only by the process that has the allocation's handle, and a
+process that begins reads over and over without ending them holds the
+presents into that one window 20 ms at a time and no more.
 
 ### Wake event record (user mode -> guest driver, escape)
 

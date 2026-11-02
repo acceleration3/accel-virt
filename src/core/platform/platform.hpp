@@ -138,6 +138,9 @@ public:
     /* InterlockedExchange64, and a read no concurrent store can tear. Any IRQL. */
     virtual void     store_atomic(uint64_t &target, uint64_t value) = 0;
     virtual uint64_t load_atomic(uint64_t &source) = 0;
+    /* InterlockedExchangeAdd64: adds `delta` to `target` in one step, so two
+     * threads adding never lose one, and answers the sum. Any IRQL. */
+    virtual uint64_t add_atomic(uint64_t &target, uint64_t delta) = 0;
     /* KeQueryPerformanceCounter: the count, and its ticks per second. Any IRQL. */
     virtual uint64_t performance_counter(uint64_t &frequency) const = 0;
     /* Busy-waits; legal at any IRQL, so keep it short. */

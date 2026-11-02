@@ -32,11 +32,21 @@ public:
     void                     release();
     const VulkanDeviceTable &table() const;
     QueueWork               &work();
+    /* DXVK's queue, for work of the executor's own (FrameBufferCopy). */
+    BorrowedQueue           &queue();
 
     /* The image behind `surface` and the layout it is in, once DXVK has
      * carried out a clear it deferred: DXVK clears an image when it next uses
      * it itself, which a copy of the executor's is not. */
     [[nodiscard]] bool surface_image(IDirect3DSurface9 *surface, VkImage &image, VkImageLayout &layout);
+    /* The same, and how DXVK made the image (`described`). */
+    [[nodiscard]] bool surface_image(IDirect3DSurface9 *surface, VkImage &image, VkImageLayout &layout,
+                                     VkImageCreateInfo &described);
+    /* The Direct3D 9 device held, as a thread that is not the one calling it
+     * must hold it to record into it (DXVK's multithreaded device lock), until
+     * unlock_device. Neither nests: unlock_device lets go of the one lock. */
+    void               lock_device();
+    void               unlock_device();
 
 private:
     IDirect3DDevice9     *device_;

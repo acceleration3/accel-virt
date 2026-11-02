@@ -32,6 +32,7 @@
 #include "core/support/keyed_slots.hpp"
 #include "device/abi/av_executor.h"
 #include "device/shim/posix_lock.hpp"
+#include "executor/d3d/staged_frame.hpp"
 #include "executor/monotonic_clock.hpp"
 #include "proto/resources/surface_point.hpp"
 
@@ -70,6 +71,12 @@ public:
      * point its writer passed without staging - this surface is a blt's from
      * now on - and for a frame being read already. */
     [[nodiscard]] bool map(const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view);
+    /* The present engine: `frame`'s regions copied on the GPU into the lent
+     * memory `target` names, waiting up to `wait_ms` for its writer to reach
+     * it and again for the GPU to finish. copied leaves the frame claimed, as
+     * map does, for unmap to let go; declined leaves it kept for map;
+     * timed_out - never there, or the GPU never finished - lets it go. */
+    [[nodiscard]] StagedFrame::Copying copy(const SurfacePoint &frame, uint32_t wait_ms, const AvFrameCopy &target);
     /* `frame` let go, mapped or not: its staging goes back to its pool. */
     void               unmap(const SurfacePoint &frame);
     /* The guest let go of `surface` everywhere; 0 for every surface, as a
@@ -103,6 +110,10 @@ private:
         bool         reading_;
     };
     enum class Look { mapped, wait, refused };
+
+    /* `frame`'s slot, claimed by a copy that has `done`: kept claimed, freed
+     * for the next look, or emptied. */
+    void settle(const SurfacePoint &frame, StagedFrame::Copying done);
 
     /* Under the lock: the row of `surface`, or null. */
     Surface *known(uint64_t surface);

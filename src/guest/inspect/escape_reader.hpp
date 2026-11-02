@@ -28,11 +28,11 @@ public:
     EscapeReader(const EscapeReader &) = delete;
     EscapeReader &operator=(const EscapeReader &) = delete;
 
-    /* Reads the whole of `kind`, replacing what was held. not_found without
-     * an avgpu adapter; the escape's own failure; malformed for an answer
+    /* Reads the whole of `kind` from the avgpu adapter of `luid` - the first
+     * for 0 - replacing what was held. not_found without that adapter; the escape's own failure; malformed for an answer
      * that is not one to the request, a total that changed or a window left
      * short; too_large past max_total; no_memory. Nothing is held unless ok. */
-    [[nodiscard]] Status read(TraceEscapeRecord::Kind kind);
+    [[nodiscard]] Status read(TraceEscapeRecord::Kind kind, uint64_t luid = 0u);
 
     const uint8_t *bytes() const;
     size_t         length() const;

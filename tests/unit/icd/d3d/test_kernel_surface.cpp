@@ -170,7 +170,7 @@ TEST(kernel_surface, an_open_of_anything_but_this_driver_s_shared_surface_finds_
   /* This driver's mark over an identity that is no record: no key. */
   std::uint8_t garbage[KernelSurface::allocation_bytes];
   std::memset(garbage, 0xff, sizeof garbage);
-  CHECK_STATUS(opened.open(resource, KernelSurface::resource_bytes, garbage, sizeof garbage), Status::ok);
+  CHECK_STATUS(opened.open(resource, KernelSurface::resource_bytes, garbage, sizeof garbage), Status::malformed);
   CHECK_EQ(opened.key(), 0u); }
 
 /* The allocation of a primary is scanned out at its source; any other

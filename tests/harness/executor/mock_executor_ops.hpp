@@ -168,6 +168,8 @@ public:
     /* map_frame answers `view` for `surface` at `point` until it is unmapped. */
     void                 serve_frame(std::uint64_t surface, std::uint32_t point, const AvFrameView &view);
     std::uint32_t        frame_unmaps() const;
+    /* copy_frame answers `answer` (AV_EXECUTED, AV_FRAME_UNCOPYABLE) for the frame served. */
+    void                 copy_frames_with(std::uint32_t answer);
     /* export_surface answers `image` for `surface`, and sync_surface `writes`
      * and `fence` - neither descriptor looked at here; every other surface is
      * AV_UNKNOWN. */
@@ -296,6 +298,7 @@ private:
     std::uint32_t              frame_point_ = 0u;
     AvFrameView               frame_ = {};
     std::uint32_t              frame_unmaps_ = 0u;
+    std::uint32_t              frame_copy_answer_ = AV_FRAME_UNCOPYABLE;
     std::uint64_t              surface_ = 0u;
     AvExportedImage            surface_image_ = {};
     std::uint64_t              surface_writes_ = 0u;

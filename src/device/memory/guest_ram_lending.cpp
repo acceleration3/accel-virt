@@ -7,9 +7,9 @@
 
 namespace av {
 
-GuestRamLending::GuestRamLending(BlockSource &blocks, LentPages &pages, uint64_t size, int fd, ContextPlane &plane,
-                                 uint64_t key)
-    : size_(size), fd_(fd), overlay_(blocks, pages, *this), holders_(blocks, Pool::paged)
+GuestRamLending::GuestRamLending(BlockSource &blocks, LentPages &pages, RunSwapGate &gate, LendingLife &life,
+                                 uint64_t id, uint64_t size, int fd, ContextPlane &plane, uint64_t key)
+    : life_(life), id_(id), size_(size), fd_(fd), overlay_(blocks, pages, gate, *this), holders_(blocks, Pool::paged)
 {
     AV_SCOPE("GuestRamLending::GuestRamLending");
     static_cast<void>(holders_.append(Holder{&plane, key}));
@@ -18,6 +18,30 @@ GuestRamLending::GuestRamLending(BlockSource &blocks, LentPages &pages, uint64_t
 GuestRamLending::~GuestRamLending()
 {
     AV_SCOPE("GuestRamLending::~GuestRamLending");
+}
+
+uint64_t GuestRamLending::id() const
+{
+    AV_SCOPE("GuestRamLending::id");
+    return id_;
+}
+
+LendingLife &GuestRamLending::life() const
+{
+    AV_SCOPE("GuestRamLending::life");
+    return life_;
+}
+
+int GuestRamLending::descriptor() const
+{
+    AV_SCOPE("GuestRamLending::descriptor");
+    return fd_;
+}
+
+bool GuestRamLending::locate(uint64_t address, uint64_t length, uint32_t &hint, uint64_t &offset) const
+{
+    AV_SCOPE("GuestRamLending::locate");
+    return overlay_.locate(address, length, hint, offset);
 }
 
 uint64_t GuestRamLending::size() const

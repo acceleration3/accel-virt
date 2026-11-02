@@ -172,6 +172,15 @@ void ExecutorRoot::unmap_frame(uint32_t domain, const SurfacePoint &frame)
     if (surfaces != nullptr) surfaces->unmap(frame);
 }
 
+StagedFrame::Copying ExecutorRoot::copy_frame(uint32_t domain, const SurfacePoint &frame, uint32_t wait_ms,
+                                              const AvFrameCopy &copy)
+{
+    AV_SCOPE("ExecutorRoot::copy_frame");
+    const HostGpu *const  gpu = gpu_of(domain);
+    SharedSurfaces *const surfaces = gpu != nullptr ? apis_->surfaces(gpu->index()) : nullptr;
+    return surfaces != nullptr ? surfaces->copy(frame, wait_ms, copy) : StagedFrame::Copying::declined;
+}
+
 bool ExecutorRoot::export_surface(uint32_t domain, uint64_t surface, uint32_t flags, AvExportedImage &image)
 {
     AV_SCOPE("ExecutorRoot::export_surface");

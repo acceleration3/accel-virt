@@ -81,6 +81,7 @@ HRESULT D3d9Device::allocate_primary(D3d9Resource &resource, const D3DDDIARG_CRE
     if (FAILED(made)) return made;
     resource.allocation = allocation;
     resource.allocation_resource = create.hResource;
+    resource.vidpn_source = create.VidPnSourceId;
     resource.allocation_pitch = surface.pitch();
     resource.shared_key = surface.key();
     /* DWM may open the key as soon as the kernel hands it the handle: the
@@ -96,6 +97,7 @@ HRESULT D3d9Device::show_primary(D3d9Resource &primary, uint32_t index)
     AV_SCOPE("D3d9Device::show_primary");
     uint32_t id = 0u, subresource = 0u;
     if (!surface_of(primary, index, id, subresource)) return E_INVALIDARG;
+    if (present_order_.constructed()) present_order_.object().await_flip_shown();
     if (!d3d9proto::av_d3d9_PresentPoint9(wire(), id, subresource, primary.shared_key, 0u) ||
         wire().flush() != Status::ok)
         return lost(__func__);
@@ -236,9 +238,10 @@ HRESULT D3d9Device::present(const D3DDDIARG_PRESENT *args)
     present.hSrcAllocation = source->allocation;
     present.hDstAllocation = destination == nullptr ? 0u : destination->allocation;
     present.hContext = context_;
-    const HRESULT presented = present_order_.object().submitted(kernel_.present(present),
-        source->allocation_resource != nullptr ? d3d::PresentOrder::Reuse::after_context
-                                               : d3d::PresentOrder::Reuse::immediate);
+    const HRESULT presented =
+        source->allocation_resource != nullptr
+            ? present_order_.object().flipped(kernel_.present(present), source->vidpn_source)
+            : present_order_.object().submitted(kernel_.present(present), d3d::PresentOrder::Reuse::immediate);
     if (FAILED(presented)) withdraw_point(*source);
     source->named_point = 0u;
     trace("presented", static_cast<uint32_t>(presented), static_cast<uint32_t>(clock_.microseconds() - began), 0u, 0u);

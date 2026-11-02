@@ -93,7 +93,7 @@ bool BatchExecutor::ready() const
 }
 
 /* The copy is taken once; the ring's bytes are not read again for this batch. */
-Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHeader &batch)
+Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHeader &batch, uint64_t *answering)
 {
     AV_SCOPE("BatchExecutor::run");
     host_.require_worker("BatchExecutor::run");
@@ -124,6 +124,8 @@ Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHead
     });
     while ((status = stream.next(header, payload)) == Status::ok) {
         if (abandoned()) return Status::invalid_state;
+        if (answering != nullptr && header.generates_reply())
+            __atomic_store_n(answering, head + batch.span(), __ATOMIC_RELEASE);
         status = run_command(header, payload, answered, answer);
         if (status != Status::ok) return failed(batch.fence_id(), status);
     }

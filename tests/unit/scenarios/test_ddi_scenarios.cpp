@@ -1653,7 +1653,8 @@ TEST(ddi_scenario, the_committed_path_reports_no_driver_transformation_and_the_p
   CHECK_STATUS(dxgkrnl.initialize(&driver.table()), Status::ok);
   const DdiSlot skipped[] = {DdiSlot::DxgkDdiDescribePageTable, DdiSlot::DxgkDdiUpdatePageTable,
                              DdiSlot::DxgkDdiUpdatePageDirectory, DdiSlot::DxgkDdiMovePageDirectory,
-                             DdiSlot::DxgkDdiSubmitRender, DdiSlot::DxgkDdiCreateAllocation2};
+                             DdiSlot::DxgkDdiSubmitRender, DdiSlot::DxgkDdiCreateAllocation2,
+                             DdiSlot::DxgkDdiRenderKm};
   for (DdiSlot slot : skipped) CHECK(driver.table().routine(slot) == nullptr);
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);

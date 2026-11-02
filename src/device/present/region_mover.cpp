@@ -39,6 +39,7 @@ Status RegionMover::move_row(uint64_t from, uint64_t to, uint64_t bytes)
 {
     AV_SCOPE("RegionMover::move_row");
     const bool blt = request_.operation() == PresentOperation::blt;
+    if (blt && !request_.swaps_red_and_blue()) return source_.copy_to(destination_, from, to, bytes);
     auto *const chunk = reinterpret_cast<uint8_t *>(chunk_);
     for (uint64_t done = 0u; done < bytes;) {
         const size_t piece = bytes - done < sizeof chunk_ ? static_cast<size_t>(bytes - done) : sizeof chunk_;

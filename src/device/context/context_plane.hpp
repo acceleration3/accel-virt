@@ -99,6 +99,14 @@ public:
     virtual bool reads_frames() const = 0;
     virtual bool map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) = 0;
     virtual void unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) = 0;
+    /* Any thread: the frame under `frame` copied on the GPU into the lent
+     * memory `copy` names, and done (ExecutorLibrary::copy_frame): ok;
+     * not_found when it never came or the GPU never finished; not_supported
+     * where it cannot be copied that way, which a renderer process always
+     * answers, and map_frame then reads it. Let go with unmap_frame as
+     * map_frame's is. */
+    [[nodiscard]] virtual Status copy_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms,
+                                            const AvFrameCopy &copy) = 0;
     /* Any thread: whether a surface the guest shared can be handed to a
      * process outside QEMU here (docs/external-export.md), and the one
      * shared as `surface` exported as its own memory, or the copies into it

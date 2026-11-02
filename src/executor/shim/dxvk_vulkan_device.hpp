@@ -26,6 +26,7 @@ struct D3D11_TEXTURE2D_DESC1;
 
 namespace av {
 
+class BorrowedQueue;
 class OwnedFd;
 class DxvkVulkanDevice {
 public:
@@ -40,7 +41,14 @@ public:
     bool                     connected() const;
     void                     release();
     const VulkanDeviceTable &table() const;
+    /* DXVK's queue, for work of the executor's own (FrameBufferCopy). */
+    BorrowedQueue           &queue();
 
+    /* The image behind `texture` and the layout it is in, once DXVK has carried
+     * out what it deferred, and how DXVK made it (`described`). Under the
+     * Direct3D 11 device's lock: it records into the immediate context. */
+    [[nodiscard]] bool texture_image(ID3D11Texture2D *texture, VkImage &image, VkImageLayout &layout,
+                                     VkImageCreateInfo &described) const;
     /* `image` as a texture of DXVK's, described as `desc`; the caller owns the
      * reference, and keeps the image alive as long as the texture is. */
     [[nodiscard]] bool wrap(const D3D11_TEXTURE2D_DESC1 &desc, VkImage image, ID3D11Texture2D *&texture) const;

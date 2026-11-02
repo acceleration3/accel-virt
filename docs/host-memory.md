@@ -300,9 +300,22 @@ Limits:
   could not be given back, so it is refused before anything moves.
 - Each run is a mapping of the QEMU process (`vm.max_map_count`); one lending
   is at most 1 GiB (`AvContextTable::max_adopted_bytes`).
-- A run is swapped by copy-then-map, so a write another of the process's
-  threads makes to those pages in that instant can be lost; the API calls
-  that lend and release are the moments an application does not write them.
+- A run is swapped by copy-then-map, so a write to its pages between the
+  two would be lost. A redirection surface is written by GDI, the present
+  engine and the GPU whatever DWM is doing, so every lend and every give-back
+  holds the writers still around the whole of its swaps (`RunSwapGate`): each
+  present engine finishes the present it is moving - a GPU copy it waits for
+  included - and moves no other, and the guest's processors are held out of
+  KVM_RUN (`Host::pause_guest`; the glue uses `accel_ioctl_inhibit_begin`,
+  which waits for them to leave KVM_RUN and, unlike `pause_all_vcpus`, keeps
+  the main loop's lock, so no other handler of the device runs in between). One
+  hold covers all the runs of a lend or a give-back, whose cost is the vCPUs'
+  exit from KVM_RUN plus the copies - about a millisecond for the 14 MB of a
+  2560x1440 surface, not measured here. Under TCG the guest's processors are
+  not held (the swap goes on as it did), and a stopped guest needs none. The
+  lending's life flag (`LendingLife`) is set before the RAM is given back, so
+  a present accepted before and moved after copies on the CPU into the pages
+  the guest has got back, and not into a dma-buf nothing maps.
 - The device in av-renderer's process cannot overlay QEMU's RAM: there the
   lending is refused and the APIs copy.
 

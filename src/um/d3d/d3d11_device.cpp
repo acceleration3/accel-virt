@@ -40,7 +40,7 @@ D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, KeyedLog
     : session_(session), memory_(memory), shadows_(memory), maps_(memory), lines_(log), refused_(lines_), loss_(lines_), caps_(caps), runtime_{}, core_layer_{}, kernel_(), lender_(session), clock_(), allocations_(kernel_, lines_, clock_),
       core_(nullptr), dxgi_(nullptr), channel_(), slices_(), parent_(nullptr), recording_lock_(), caller_(), call_mutex_(), calls_(call_mutex_, caller_), recording_(),
       recorded_(), context_(nullptr), present_order_(), waits_(), feature_level_(0u),
-      guest_surfaces_(memory, Pool::paged), guest_lock_refused_(), pages_read_refused_(), pages_read_late_(), present_refused_(), present_flags_(~0u), follow_refused_(), token_refused_(), frame_(1u),
+      guest_surfaces_(memory, Pool::paged), gdi_watched_(memory, Pool::paged), taking_gdi_writes_(false), resolved_(nullptr), resolved_returned_ns_(0u), resolved_thread_(0u), flush_candidate_(nullptr), flush_gap_ns_(0u), guest_lock_refused_(), redirection_unlent_(), pages_read_refused_(), pages_read_late_(), present_refused_(), present_flags_(~0u), follow_refused_(), token_refused_(), frame_(1u),
       trace_(trace), rows_(rows), context_number_(trace.number_context())
 {
     AV_SCOPE("D3d11Device::D3d11Device");
@@ -83,7 +83,7 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
     feature_level_ = level < sizeof(feature_levels) / sizeof(feature_levels[0]) ? feature_levels[level] : 0u;
     const HRESULT joined = session_.join(adapter);
     if (FAILED(joined)) return joined;
-    static_cast<void>(present_order_.construct(kernel_.callbacks(), kernel_.runtime(), context_, session_.transport(), lines_));
+    static_cast<void>(present_order_.construct(kernel_.callbacks(), kernel_.runtime(), context_, session_, lines_));
     static_cast<void>(waits_.construct(kernel_.callbacks(), kernel_.runtime(), session_.transport(), session_.lock(), lines_, context_));
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), session_.next_id()));
     uint32_t hresult = 1u, made = 0u;
@@ -194,11 +194,15 @@ void D3d11Device::lock_calls()
 {
     AV_SCOPE("D3d11Device::lock_calls");
     calls_.acquire();
+    /* Before the scan below, which takes milliseconds and is not the gap. */
+    note_call_after_resolve();
+    if (gdi_watched_.size() != 0u && !taking_gdi_writes_) take_gdi_writes();
 }
 
 void D3d11Device::unlock_calls()
 {
     AV_SCOPE("D3d11Device::unlock_calls");
+    flush_candidate_ = nullptr;
     calls_.release();
 }
 
@@ -360,6 +364,7 @@ void D3d11Device::destroy_object(uint32_t id)
 BOOL D3d11Device::flush(UINT, UINT)
 {
     AV_SCOPE("D3d11Device::flush");
+    learn_from_flush();
     if (wire().application_flush() != Status::ok) {
         lost(__func__);
         return TRUE;

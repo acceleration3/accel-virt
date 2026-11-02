@@ -46,7 +46,6 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiCreateContext, reinterpret_cast<DdiRoutine>(&AvDdiCreateContext)},
         {DdiSlot::DxgkDdiDestroyContext, reinterpret_cast<DdiRoutine>(&AvDdiDestroyContext)},
         {DdiSlot::DxgkDdiRender, reinterpret_cast<DdiRoutine>(&AvDdiRender)},
-        {DdiSlot::DxgkDdiRenderKm, reinterpret_cast<DdiRoutine>(&AvDdiRenderKm)},
         {DdiSlot::DxgkDdiPatch, reinterpret_cast<DdiRoutine>(&AvDdiPatch)},
         {DdiSlot::DxgkDdiSubmitCommand, reinterpret_cast<DdiRoutine>(&AvDdiSubmitCommand)},
         {DdiSlot::DxgkDdiPreemptCommand, reinterpret_cast<DdiRoutine>(&AvDdiPreemptCommand)},

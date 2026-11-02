@@ -6,10 +6,10 @@
 
 namespace av {
 
-D3d11FramePool::D3d11FramePool(D3d11HostDevice &device) : frames_()
+D3d11FramePool::D3d11FramePool(D3d11HostDevice &device) : copies_(), frames_()
 {
     AV_SCOPE("D3d11FramePool::D3d11FramePool");
-    frames_.each([&](Frame &frame) { frame.bind(device); });
+    frames_.each([&](Frame &frame) { frame.bind(device, copies_); });
 }
 
 D3d11FramePool::~D3d11FramePool()
@@ -33,11 +33,12 @@ StagedFrame *D3d11FramePool::stage(ID3D11Texture2D *source, uint32_t subresource
 void D3d11FramePool::clear()
 {
     AV_SCOPE("D3d11FramePool::clear");
+    copies_.close();
     frames_.each([](Frame &frame) { frame.drop(); });
 }
 
 D3d11FramePool::Frame::Frame()
-    : device_(nullptr), held_(nullptr), texture_(nullptr), staged_(false), format_(0u), mapped_(false)
+    : device_(nullptr), copies_(nullptr), held_(nullptr), texture_(nullptr), staged_(false), format_(0u), mapped_(false), copy_value_(0u), copy_epoch_(0u)
 {
     AV_SCOPE("D3d11FramePool::Frame::Frame");
 }
@@ -45,14 +46,17 @@ D3d11FramePool::Frame::Frame()
 D3d11FramePool::Frame::~Frame()
 {
     AV_SCOPE("D3d11FramePool::Frame::~Frame");
-    if (held_ != nullptr) held_->Release();
+    /* A copy that is not done keeps its texture: a leak, where a release is a
+     * use after free. */
+    if (held_ != nullptr && !copy_pending()) held_->Release();
     if (texture_ != nullptr) texture_->Release();
 }
 
-void D3d11FramePool::Frame::bind(D3d11HostDevice &device)
+void D3d11FramePool::Frame::bind(D3d11HostDevice &device, FrameBufferCopy &copies)
 {
     AV_SCOPE("D3d11FramePool::Frame::bind");
     device_ = &device;
+    copies_ = &copies;
 }
 
 bool D3d11FramePool::Frame::fits(uint32_t width, uint32_t height, uint32_t format) const
@@ -99,12 +103,20 @@ bool D3d11FramePool::Frame::copy_to_staging()
     return true;
 }
 
+bool D3d11FramePool::Frame::copy_pending()
+{
+    AV_SCOPE("D3d11FramePool::Frame::copy_pending");
+    const bool pending = copy_value_ != 0u && !copies_->finished(copy_epoch_, copy_value_, settle_ms);
+    copy_value_ = 0u;
+    return pending;
+}
+
 void D3d11FramePool::Frame::drop()
 {
     AV_SCOPE("D3d11FramePool::Frame::drop");
     if (texture_ != nullptr && mapped_) device_->context()->Unmap(texture_, 0u);
     if (texture_ != nullptr) texture_->Release();
-    if (held_ != nullptr) held_->Release();
+    if (held_ != nullptr && !copy_pending()) held_->Release();
     texture_ = nullptr;
     held_ = nullptr;
     staged_ = false;
@@ -132,6 +144,36 @@ StagedFrame::Reading D3d11FramePool::Frame::map_when_copied(const uint8_t *&pixe
     pixels = static_cast<const uint8_t *>(mapped.pData);
     row_pitch = mapped.RowPitch;
     return Reading::mapped;
+}
+
+/* Recorded under the device's lock, as the session's own commands are, and
+ * waited for outside it. */
+StagedFrame::Copying D3d11FramePool::Frame::copy_into(const AvFrameCopy &target, uint32_t wait_ms)
+{
+    AV_SCOPE("D3d11FramePool::Frame::copy_into");
+    VkImage           image = VK_NULL_HANDLE;
+    VkImageLayout     layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImageCreateInfo described = {};
+    described.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    uint64_t          value = 0u;
+    bool              submitted = false;
+    device_->lock(nullptr);
+    /* A frame of a device that was lost is never copied. */
+    if (held_ == nullptr || device_->lost()) {
+        device_->unlock();
+        return Copying::timed_out;
+    }
+    DxvkVulkanDevice &vulkan = device_->vulkan();
+    if (vulkan.connected() && (copies_->opened() || copies_->open(vulkan.table(), vulkan.queue())))
+        submitted = vulkan.texture_image(held_, image, layout, described) &&
+                    copies_->submit(image, layout, described, target, value);
+    if (value != 0u) {
+        copy_value_ = value;
+        copy_epoch_ = copies_->epoch();
+    }
+    device_->unlock();
+    if (!submitted) return Copying::declined;
+    return copies_->wait(value, wait_ms) ? Copying::copied : Copying::timed_out;
 }
 
 void D3d11FramePool::Frame::unmap()

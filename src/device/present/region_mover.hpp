@@ -2,6 +2,7 @@
  * device mapped (PresentCommands): a blt reads each row of the source and
  * writes it into the destination, red and blue swapped when the request says
  * the two surfaces disagree; a colour fill writes the colour. A row goes
+ * straight from one surface to the other unless it is swapped, when it goes
  * through this object's buffer a chunk at a time, so a pixel split across two
  * extents is still swapped whole. A row starts at y * pitch + x * 4 in its
  * surface; one that is not wholly inside it is refused, and the rows before

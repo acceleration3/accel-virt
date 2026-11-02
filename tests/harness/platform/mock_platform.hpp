@@ -104,6 +104,7 @@ public:
     /* One thread: a plain store and load. */
     void          store_atomic(std::uint64_t &target, std::uint64_t value) override;
     std::uint64_t load_atomic(std::uint64_t &source) override;
+    std::uint64_t add_atomic(std::uint64_t &target, std::uint64_t delta) override;
     void     stall(std::uint32_t microseconds) override;
     /* The first byte of the storage is whether the event is set. */
     void     initialize_wake_event(void *storage) override;

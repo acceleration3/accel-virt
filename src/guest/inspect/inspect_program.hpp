@@ -44,7 +44,7 @@ private:
     Exit list(const char *out);
     Exit trace(uint32_t pid, const char *module, const char *out);
     Exit state(uint32_t pid, const char *module, const char *out);
-    Exit kernel(TraceEscapeRecord::Kind kind, const char *out);
+    Exit kernel(TraceEscapeRecord::Kind kind, uint64_t luid, const char *out);
     Exit dump_file(SnapshotFile &file, const char *section);
     /* `<prefix>av-<kind>-<module>-<pid>`. */
     void name(TextBuffer &out, const char *prefix, const char *kind, const char *module, uint32_t pid) const;

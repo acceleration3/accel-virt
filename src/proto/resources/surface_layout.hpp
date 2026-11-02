@@ -18,6 +18,9 @@ public:
     uint32_t pitch() const;
     /* pitch * height, which cannot overflow 64 bits. */
     uint64_t bytes() const;
+    /* bytes() in 4 KiB pages, a part page counted whole: what a GPU virtual
+     * address range over the surface spans. */
+    uint64_t pages() const;
     bool     is_surface() const;
     /* Whether a pixel's bytes run red first - A8B8G8R8 and X8B8G8R8, what a
      * Direct3D R8G8B8A8 surface is - rather than blue first like A8R8G8B8, the
@@ -25,6 +28,8 @@ public:
     bool     red_first() const;
 
 private:
+    static constexpr uint64_t page_bytes = 4096u;
+
     uint32_t width_;
     uint32_t height_;
     uint32_t format_;

@@ -37,6 +37,7 @@ class DriverLog;
 }  // namespace av
 
 namespace av {
+class BeamPosition;
 class BlockSource;
 class HostAllocation;
 class Kmt;
@@ -73,6 +74,8 @@ public:
      * session's device, and its answer copied back over them; scoped there to
      * the calling process. */
     [[nodiscard]] Status escape(uint8_t *data, uint32_t size);
+    /* Where the scan-out of the adapter's VidPn `source` is now. */
+    [[nodiscard]] Status scan_line(uint32_t source, BeamPosition &position);
     /* One device fewer; the last closes the session. */
     void    leave();
     uint32_t users() const;

@@ -117,6 +117,13 @@ public:
     /* Main loop. The RAM at `run` its file's own pages again, holding what
      * the overlay held: not_supported when it could not be. */
     [[nodiscard]] virtual Status restore_guest_run(void *run, uint64_t bytes) = 0;
+    /* Main loop. The guest's processors held out of its memory until
+     * resume_guest, around a swap of runs: true when held (and resume_guest
+     * must follow), false when nothing is - the guest is stopped already, the
+     * host cannot hold it, or it has no processors. The main loop's lock is
+     * kept. */
+    [[nodiscard]] virtual bool   pause_guest() = 0;
+    virtual void                 resume_guest() = 0;
 
     /* The size of the region host blobs are placed in (the hostmem BAR). */
     virtual uint64_t hostmem_size() = 0;

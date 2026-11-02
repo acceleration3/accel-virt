@@ -21,6 +21,8 @@ public:
     VulkanTimeline(const VulkanTimeline &) = delete;
     VulkanTimeline &operator=(const VulkanTimeline &) = delete;
 
+    /* At 0 on `table`'s device, for work on that device alone. */
+    [[nodiscard]] bool make_local(const VulkanDeviceTable &table);
     /* At 0 on `table`'s device, exportable as an OPAQUE_FD. */
     [[nodiscard]] bool make_exportable(const VulkanDeviceTable &table);
     /* Over the OPAQUE_FD `descriptor`, which is the timeline's once it is

@@ -6,6 +6,7 @@
 #include "device/control/control_request.hpp"
 #include "device/control/present_engine_commands.hpp"
 #include "device/fence/fence_interrupts.hpp"
+#include "device/memory/guest_ram_lendings.hpp"
 #include "device/present/present_engine.hpp"
 #include "device/present/present_frames.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -40,8 +41,9 @@ struct Rig {
     PresentScene    scene;
     PresentEngine   engine;
     av::PresentFrames snapshots;
+    av::GuestRamLendings lendings;
 
-    Rig() : host(), interrupts(host), scene(host), engine(host, interrupts), snapshots()
+    Rig() : host(), interrupts(host), scene(host), engine(host, interrupts), snapshots(), lendings(host)
     {
         static_cast<void>(engine.initialize());
     }
@@ -52,7 +54,7 @@ struct Rig {
     {
         MockRequest    mock(built.bytes(), built.size());
         ControlRequest request(host, &mock);
-        return PresentEngineCommands(host, engine, snapshots).answer(request, type) ? mock.response_type() : 0u;
+        return PresentEngineCommands(host, engine, snapshots, lendings).answer(request, type) ? mock.response_type() : 0u;
     }
     std::uint32_t attach(std::uint64_t address)
     {

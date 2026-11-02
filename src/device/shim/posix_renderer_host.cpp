@@ -466,6 +466,17 @@ Status PosixRendererHost::restore_guest_run(void *, uint64_t)
     return Status::not_supported;
 }
 
+bool PosixRendererHost::pause_guest()
+{
+    AV_SCOPE("PosixRendererHost::pause_guest");
+    return false;
+}
+
+void PosixRendererHost::resume_guest()
+{
+    AV_SCOPE("PosixRendererHost::resume_guest");
+}
+
 uint64_t PosixRendererHost::hostmem_size()
 {
     AV_SCOPE("PosixRendererHost::hostmem_size");

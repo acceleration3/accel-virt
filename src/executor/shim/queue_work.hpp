@@ -37,6 +37,13 @@ public:
      * done. The source is left in `layout`, the destination GENERAL. */
     [[nodiscard]] bool copy(VkImage source, VkImageLayout layout, VkImage destination, uint32_t width,
                             uint32_t height, const VulkanTimeline &signal, uint64_t value);
+    /* `regions` of `source`, in `layout`, into `destination` - a buffer over
+     * memory the CPU reads - behind everything the runtime recorded; `signal`
+     * reaches `value` once the bytes are written and visible to the host. The
+     * source is left in `layout`. */
+    [[nodiscard]] bool copy_to_buffer(VkImage source, VkImageLayout layout, VkBuffer destination,
+                                      const VkBufferImageCopy *regions, uint32_t count, const VulkanTimeline &signal,
+                                      uint64_t value);
     /* Everything the runtime submits after this waits for `timeline` to reach
      * `value`. */
     [[nodiscard]] bool wait(const VulkanTimeline &timeline, uint64_t value);
@@ -46,10 +53,13 @@ public:
     void               idle();
 
 private:
-    /* A command buffer whose last copy is done, waiting for it if not. */
+    /* A command buffer whose last copy is done, waiting for it if not; null
+     * if it is still not done after a second. */
     VkCommandBuffer next_buffer();
     void            record(VkCommandBuffer buffer, VkImage source, VkImageLayout layout, VkImage destination,
                            uint32_t width, uint32_t height) const;
+    void            record_to_buffer(VkCommandBuffer buffer, VkImage source, VkImageLayout layout,
+                                     VkBuffer destination, const VkBufferImageCopy *regions, uint32_t count) const;
     /* `buffer`, recorded, submitted to signal `value` on `signal`; kept in
      * `slot` until that is reached. */
     [[nodiscard]] bool send(uint32_t slot, VkCommandBuffer buffer, const VulkanTimeline &signal, uint64_t value);

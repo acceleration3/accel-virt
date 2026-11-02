@@ -124,6 +124,15 @@ constexpr int32_t more_dma_buffer = static_cast<int32_t>(0xC01E0001u);
 /* Platform::interrupt_time counts 100 ns. */
 constexpr uint64_t ticks_per_microsecond = 10u;
 
+/* How long a reader's begin may be told to wait for a present in flight, whatever
+ * the process asked: the escape's field is the process's to set. */
+constexpr uint32_t longest_read_wait_microseconds = 100000u;
+
+/* How long a present is held for a read open on its destination. A read is
+ * about a millisecond, so this is a reader that is gone or stuck; the present
+ * goes ahead and the reader sees the write sequence move. */
+constexpr uint64_t present_hold_ticks = 200000u;   /* 20 ms */
+
 /* What basicdisplay.sys reports for its one output (docs/ddi-sequences.md). */
 enum : int32_t {
     type_video_output         = 1,   /* TypeVideoOutput */
@@ -143,11 +152,10 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform), overlays_(platform, sources_),
       shared_(platform), allocations_(platform, segment_, memory_, shared_),
       devices_(platform, allocations_, shared_, dxgkrnl_), contexts_(platform, devices_, geometry_),
-      render_km_(platform, devices_),
       av_contexts_(platform, dxgkrnl_, allocations_, window_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
       native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), present_waiters_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
-      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u), presents_unticketed_(0u), presents_ticketed_(0u), presents_parked_(0u), presents_refused_(0u), presents_unpointed_(0u), last_present_flags_(0u), last_present_status_(0), last_present_destination_kind_(0u),
+      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u), presents_unticketed_(0u), presents_ticketed_(0u), presents_parked_(0u), presents_refused_(0u), presents_unpointed_(0u), reads_opened_(0u), reads_expired_(0u), last_present_flags_(0u), last_present_status_(0), last_present_destination_kind_(0u),
       display_changed_(0u), display_announced_(0u), scanout_period_(DisplayMode().period()), started_(false), luid_(0u), present_(true)
       {
           AV_SCOPE("Adapter::Adapter");
@@ -821,11 +829,13 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
 }
 
 /* A process reading the pages presents write into: DWM's user-mode driver
- * refreshing its texture of a window's surface (PagesReadRecord). Both
- * actions answer the allocation's write sequence; a begin first waits until
- * the present engine has moved every present queued into the pages, and says
- * in `complete` whether it did - a wait that ran out is no refusal, the reader
- * decides what to show. Every refusal is STATUS_INVALID_PARAMETER. */
+ * refreshing its texture of a window's surface (PagesReadRecord). A begin
+ * opens a read, which the presents into the pages wait for until its end,
+ * and then waits until the present engine has moved every present already
+ * queued into the pages, saying in `complete` whether it did - a wait that
+ * ran out is no refusal, the reader decides what to show. Both actions
+ * answer the allocation's write sequence. Every refusal is
+ * STATUS_INVALID_PARAMETER. */
 int32_t Adapter::pages_read(const DxgkargEscapeRecord &escape)
 {
     AV_SCOPE("Adapter::pages_read");
@@ -836,22 +846,62 @@ int32_t Adapter::pages_read(const DxgkargEscapeRecord &escape)
     AcquiredHandleData acquired(dxgkrnl_, record.allocation());
     Allocation *const  allocation = acquired.acquire() == Status::ok ? allocations_.find(acquired.data()) : nullptr;
     if (allocation == nullptr) return NtStatus(Status::invalid_parameter).value();
-    PresentWrites &writes = allocation->writes();
-    uint64_t       sequence = writes.sequence();
-    bool           complete = true;
-    if (record.action() == PagesReadRecord::Action::begin) {
-        const PresentPageView *const engine = presents_.constructed() ? &presents_.object().progress() : nullptr;
-        const Status waited =
-            present_waiters_.wait_for(writes, engine, uint64_t{record.wait_microseconds()} * ticks_per_microsecond,
-                                      sequence);
-        complete = waited == Status::ok;
-        if (waited == Status::not_found && budget_.allows())
-            platform_.log("avgpu: a reader of presented pages waited out its time");
-        if (waited == Status::no_space && budget_.allows())
-            platform_.log("avgpu: more readers of presented pages than slots to wait in");
-    }
+    uint64_t sequence = allocation->writes().sequence();
+    bool     complete = true;
+    if (record.action() == PagesReadRecord::Action::begin)
+        complete = begin_pages_read(*allocation, record.wait_microseconds(), sequence);
+    else
+        end_pages_read(*allocation);
     static_cast<void>(record.answered(sequence, complete).encode(bytes, PagesReadRecord::encoded_size));   /* decode checked the length */
     return NtStatus(Status::ok).value();
+}
+
+/* The read is opened before the wait, not after: a present that came in
+ * between would be one the wait had already seen settled, and written under
+ * the read. A present already past its own wait for reads is one this wait
+ * sees. */
+bool Adapter::begin_pages_read(Allocation &allocation, uint32_t wait_microseconds, uint64_t &sequence)
+{
+    AV_SCOPE("Adapter::begin_pages_read");
+    if (allocation.reads().open()) {
+        static_cast<void>(platform_.add_atomic(reads_expired_, 1u));
+        if (budget_.allows()) platform_.log("avgpu: a read of presented pages was never ended and has been forgotten");
+    }
+    static_cast<void>(platform_.add_atomic(reads_opened_, 1u));
+    const uint32_t waiting = wait_microseconds < longest_read_wait_microseconds ? wait_microseconds
+                                                                                : longest_read_wait_microseconds;
+    const PresentPageView *const engine = presents_.constructed() ? &presents_.object().progress() : nullptr;
+    const uint32_t               epoch = presents_.constructed() ? presents_.object().epoch() : 0u;
+    const Status                 waited = present_waiters_.wait_for(allocation.writes(), engine, epoch,
+                                                                    uint64_t{waiting} * ticks_per_microsecond, sequence);
+    if (waited == Status::not_found && budget_.allows())
+        platform_.log("avgpu: a reader of presented pages waited out its time");
+    if (waited == Status::no_space && budget_.allows())
+        platform_.log("avgpu: more readers of presented pages than slots to wait in");
+    return waited == Status::ok;
+}
+
+void Adapter::end_pages_read(Allocation &allocation)
+{
+    AV_SCOPE("Adapter::end_pages_read");
+    allocation.reads().close();
+    present_waiters_.wake();
+}
+
+/* A present into pages a reader is reading waits for its end, so the reader
+ * never sees the write begin. One held past its bound goes ahead and writes:
+ * a reader that is gone must not stop the window. */
+void Adapter::admit_present_write(Allocation &destination)
+{
+    AV_SCOPE("Adapter::admit_present_write");
+    PresentWrites &writes = destination.writes();
+    const Status   admitted = present_waiters_.admit_write(destination.reads(), writes, present_hold_ticks);
+    if (admitted == Status::ok) return;
+    writes.opening();
+    if (admitted == Status::not_found && budget_.allows())
+        platform_.log("avgpu: a present waited out a read of the pages it writes");
+    if (admitted == Status::no_space && budget_.allows())
+        platform_.log("avgpu: more waiters on presented pages than slots to wait in");
 }
 
 /* A process asking for a chunk of the host window on its av context, or
@@ -1177,14 +1227,6 @@ int32_t Adapter::render(void *context, DxgkargRenderRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::render");
     if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
     return NtStatus(RenderRequest(platform_, *request).render()).value();
-}
-
-int32_t Adapter::render_km(void *context, DxgkargRenderRecord *request)
-{
-    AV_SCOPE("Adapter::render_km");
-    platform_.require_irql_at_most(Irql::passive, "Adapter::render_km");
-    if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return render_km_.render(*request).value();
 }
 
 int32_t Adapter::patch(const DxgkargPatchRecord *request)
@@ -1746,17 +1788,20 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
             platform_.log("avgpu: a present of a pointed surface has no point named: the window keeps its last frame");
         return 0u;
     }
-    PresentTicket ticket(platform_, budget_, presents_.constructed() && present_ ? &presents_.object() : nullptr,
-                         immediate_mover(), image_of(request, source, points));
-    PresentBlit   blit(platform_, ticket, source != nullptr ? &read : nullptr, written);
     /* A reader of the destination's pages orders itself after this write: the
-     * count is odd while the present is queued or moved, and names the ticket
-     * that moves the pixels once the engine has them. Closed on every path,
-     * including the refusal below, so a reader is never left waiting on it. */
+     * sequence moves while the present is queued or moved, and names the
+     * ticket that moves the pixels once the engine has them. The present is
+     * opened before anything is queued, after any read open on the pages, and
+     * closed on every path from here, including the refusal below, so a
+     * reader is never left waiting on it. */
+    admit_present_write(destination->allocation());
+    PresentQueue *const queue = presents_.constructed() && present_ ? &presents_.object() : nullptr;
+    const uint32_t      ticket_epoch = queue != nullptr ? queue->epoch() : 0u;
+    PresentTicket ticket(platform_, budget_, queue, immediate_mover(), image_of(request, source, points));
+    PresentBlit   blit(platform_, ticket, source != nullptr ? &read : nullptr, written);
     PresentWrites &writes = destination->allocation().writes();
-    writes.opening();
     ScopeExit written_into([&] {
-        writes.written(ticket.ticket());
+        writes.written(ticket.ticket(), ticket_epoch);
         present_waiters_.wake();
     });
     const Rectangle into(request.DstRect.left, request.DstRect.top, request.DstRect.right, request.DstRect.bottom);
@@ -2714,10 +2759,14 @@ void Adapter::report(StateWriter &writer)
     writer.number("presents_made", platform_.load_atomic(presents_made_));
     writer.number("presents_refused", presents_refused_);
     writer.number("presents_unpointed", presents_unpointed_);
+    writer.number("reads_opened", platform_.load_atomic(reads_opened_));
+    writer.number("reads_expired", platform_.load_atomic(reads_expired_));
+    writer.number("writers_held", present_waiters_.holds());
+    writer.number("writer_hold_timeouts", present_waiters_.hold_timeouts());
+    writer.number("reader_timeouts", present_waiters_.timeouts());
     writer.hex("last_present_flags", last_present_flags_);
     writer.hex("last_present_status", static_cast<uint32_t>(last_present_status_));
     writer.number("last_present_destination_kind", last_present_destination_kind_);
-    render_km_.report(writer);
     writer.hex("display_changed", display_changed_);
     writer.hex("aperture_bytes", segment_.size());
     writer.flag("host_visible", host_visible_.offered());

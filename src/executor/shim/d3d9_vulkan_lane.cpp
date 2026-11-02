@@ -72,9 +72,36 @@ QueueWork &D3d9VulkanLane::work()
     return work_;
 }
 
+BorrowedQueue &D3d9VulkanLane::queue()
+{
+    AV_SCOPE("D3d9VulkanLane::queue");
+    return queue_;
+}
+
 /* A transition to the layout the image is already in makes DXVK prepare the
  * image, which carries out a clear it deferred. */
 bool D3d9VulkanLane::surface_image(IDirect3DSurface9 *surface, VkImage &image, VkImageLayout &layout)
+{
+    AV_SCOPE("D3d9VulkanLane::surface_image");
+    VkImageCreateInfo described = {};
+    described.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    return surface_image(surface, image, layout, described);
+}
+
+void D3d9VulkanLane::lock_device()
+{
+    AV_SCOPE("D3d9VulkanLane::lock_device");
+    if (interop_ != nullptr) interop_->LockDevice();
+}
+
+void D3d9VulkanLane::unlock_device()
+{
+    AV_SCOPE("D3d9VulkanLane::unlock_device");
+    if (interop_ != nullptr) interop_->UnlockDevice();
+}
+
+bool D3d9VulkanLane::surface_image(IDirect3DSurface9 *surface, VkImage &image, VkImageLayout &layout,
+                                   VkImageCreateInfo &described)
 {
     AV_SCOPE("D3d9VulkanLane::surface_image");
     image = VK_NULL_HANDLE;
@@ -84,7 +111,7 @@ bool D3d9VulkanLane::surface_image(IDirect3DSurface9 *surface, VkImage &image, V
     if (FAILED(surface->QueryInterface(__uuidof(ID3D9VkInteropTexture), reinterpret_cast<void **>(&texture))))
         return false;
     ScopeExit release_texture([texture] { texture->Release(); });
-    if (FAILED(texture->GetVulkanImageInfo(&image, &layout, nullptr)) || image == VK_NULL_HANDLE) return false;
+    if (FAILED(texture->GetVulkanImageInfo(&image, &layout, &described)) || image == VK_NULL_HANDLE) return false;
     const VkImageSubresourceRange whole = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u};
     interop_->TransitionTextureLayout(texture, &whole, layout, layout);
     return true;

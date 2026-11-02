@@ -241,6 +241,17 @@ TEST(mock_platform_atomic, a_load_hook_runs_before_each_load_reads_so_a_store_ca
   CHECK_EQ(platform.load_atomic(word), 7u);
   CHECK_EQ(landing.calls, 2u); }
 
+TEST(mock_platform_atomic, an_add_answers_the_sum_and_wraps_like_the_interlocked_one)
+{ MockPlatform platform;
+  std::uint64_t word = 5u;
+  platform.set_irql(Irql::isr);
+  CHECK_EQ(platform.add_atomic(word, 3u), 8u);
+  CHECK_EQ(word, 8u);
+  CHECK_EQ(platform.add_atomic(word, ~std::uint64_t{0}), 7u);   /* adding the all-ones is subtracting one */
+  CHECK_EQ(platform.load_atomic(word), 7u);
+  platform.set_irql(Irql::passive);
+  CHECK_EQ(platform.unclaimed_violations(), 0u); }
+
 TEST(mock_platform_time, saturates_instead_of_wrapping)
 { MockPlatform platform;
   platform.advance_time(~std::uint64_t{0});

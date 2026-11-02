@@ -19,7 +19,7 @@ VulkanBuffer::~VulkanBuffer()
 
 /* A buffer whose device address is taken needs memory allocated for it. */
 bool VulkanBuffer::import(const VulkanDeviceTable &table, OwnedFd &descriptor, VkDeviceSize size,
-                          VkBufferUsageFlags usage)
+                          VkBufferUsageFlags usage, Placement placement)
 {
     AV_SCOPE("VulkanBuffer::import");
     const uint32_t types = table.dma_buf_types(descriptor.fd());
@@ -38,7 +38,10 @@ bool VulkanBuffer::import(const VulkanDeviceTable &table, OwnedFd &descriptor, V
                                  ? static_cast<const void *>(&addressed)
                                  : static_cast<const void *>(&dedicated);
     /* The memory is the dma-buf's size: a buffer needing more cannot be bound. */
-    const uint32_t type = needs.size <= size ? table.memory_type(types & needs.memoryTypeBits) : VK_MAX_MEMORY_TYPES;
+    const uint32_t allowed = types & needs.memoryTypeBits;
+    const uint32_t chosen = placement == Placement::coherent ? table.coherent_memory_type(allowed)
+                                                              : table.memory_type(allowed);
+    const uint32_t type = needs.size <= size ? chosen : VK_MAX_MEMORY_TYPES;
     if (table.import_memory(descriptor, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, size, type, next, memory_) &&
         table.bind_buffer(buffer_, memory_))
         return true;
@@ -56,7 +59,13 @@ bool VulkanBuffer::import_dma_buf_to_draw(const VulkanDeviceTable &table, OwnedF
         VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
         VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
         VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    return import(table, descriptor, size, drawn);
+    return import(table, descriptor, size, drawn, Placement::fastest);
+}
+
+bool VulkanBuffer::import_dma_buf_to_receive(const VulkanDeviceTable &table, OwnedFd &descriptor, VkDeviceSize size)
+{
+    AV_SCOPE("VulkanBuffer::import_dma_buf_to_receive");
+    return import(table, descriptor, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT, Placement::coherent);
 }
 
 void VulkanBuffer::release()

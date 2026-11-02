@@ -102,7 +102,7 @@ HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVIC
     if (FAILED(context)) return context;
     const HRESULT joined = session_.join(kmt_adapter);
     if (FAILED(joined)) return joined;
-    static_cast<void>(present_order_.construct(kernel_.callbacks(), kernel_.runtime(), context_, session_.transport(), lines_));
+    static_cast<void>(present_order_.construct(kernel_.callbacks(), kernel_.runtime(), context_, session_, lines_));
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), session_.next_id()));
     uint32_t hresult = 1u;
     if (!channel_.object().open9(hresult) || hresult != 0u) {

@@ -718,6 +718,12 @@ std::uint64_t MockPlatform::load_atomic(std::uint64_t &source)
     return source;
 }
 
+std::uint64_t MockPlatform::add_atomic(std::uint64_t &target, std::uint64_t delta)
+{
+    target += delta;
+    return target;
+}
+
 void MockPlatform::on_load(StallCallback callback, void *context)
 {
     load_callback_ = callback;

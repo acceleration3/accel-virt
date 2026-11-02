@@ -44,7 +44,6 @@
 #include "miniport/scheduling/execution_node.hpp"
 #include "miniport/scheduling/hw_queue_contexts.hpp"
 #include "miniport/scheduling/native_fence_table.hpp"
-#include "miniport/scheduling/render_km_tally.hpp"
 #include "miniport/scheduling/hw_queue_submissions.hpp"
 #include "miniport/scheduling/doorbell_table.hpp"
 #include "miniport/scheduling/hw_queue_table.hpp"
@@ -187,9 +186,6 @@ public:
     int32_t create_context(void *device, DxgkargCreateContextRecord *request);
     int32_t destroy_context(void *context);
     int32_t render(void *context, DxgkargRenderRecord *request);
-    /* A GDI context's command buffer, which CDD sends once the adapter reports
-     * SupportKernelModeCommandBuffer: counted, not run. */
-    int32_t render_km(void *context, DxgkargRenderRecord *request);
     int32_t patch(const DxgkargPatchRecord *request);
     /* DISPATCH: queues the fence and asks for the DPC that completes it. */
     int32_t submit_command(const DxgkargSubmitCommandRecord *request);
@@ -397,6 +393,14 @@ private:
     /* A reader of an allocation's presented pages beginning or ending its read
      * (PagesReadRecord): a begin waits until the pages are settled. */
     int32_t          pages_read(const DxgkargEscapeRecord &escape);
+    /* A begin opens the read and waits for the presents already in flight into
+     * the pages, saying whether it did; an end closes it and lets the presents
+     * held for it go. */
+    [[nodiscard]] bool begin_pages_read(Allocation &allocation, uint32_t wait_microseconds, uint64_t &sequence);
+    void             end_pages_read(Allocation &allocation);
+    /* PASSIVE. Opens a write into `destination`'s pages once no read is open
+     * on them, or once waiting for one has run out. */
+    void             admit_present_write(Allocation &destination);
     int32_t          publish_own_tail(const DxgkargEscapeRecord &escape);
     /* SubmitCommandVirtual for an av context: published, rung, and held on
      * the node until the fence page says the host finished it. */
@@ -524,7 +528,6 @@ private:
     AllocationTable                allocations_;
     DeviceTable                    devices_;
     ContextTable                   contexts_;
-    RenderKmTally                  render_km_;
     AvContextTable                av_contexts_;
     HwQueueTable                   hw_queues_;
     HwQueueSubmissions             hw_submissions_;
@@ -584,6 +587,10 @@ private:
      * state dump sees why a window shows nothing, where DbgPrint is not read. */
     uint64_t                       presents_refused_;
     uint64_t                       presents_unpointed_;
+    /* Reads of presented pages opened, and those that were never ended and
+     * expired: atomic, since escapes of two processes can run at once. */
+    uint64_t                       reads_opened_;
+    uint64_t                       reads_expired_;
     uint32_t                       last_present_flags_;
     int32_t                        last_present_status_;
     uint32_t                       last_present_destination_kind_;

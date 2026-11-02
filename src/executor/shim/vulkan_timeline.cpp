@@ -18,6 +18,17 @@ VulkanTimeline::~VulkanTimeline()
     release();
 }
 
+bool VulkanTimeline::make_local(const VulkanDeviceTable &table)
+{
+    AV_SCOPE("VulkanTimeline::make_local");
+    if (made()) return false;
+    const VkSemaphoreTypeCreateInfo typed = {VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO, nullptr,
+                                             VK_SEMAPHORE_TYPE_TIMELINE, 0u};
+    if (!table.create_semaphore(&typed, semaphore_)) return false;
+    table_ = &table;
+    return true;
+}
+
 bool VulkanTimeline::make_exportable(const VulkanDeviceTable &table)
 {
     AV_SCOPE("VulkanTimeline::make_exportable");

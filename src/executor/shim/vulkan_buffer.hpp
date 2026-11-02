@@ -26,13 +26,23 @@ public:
      * address DXVK takes of every buffer. The descriptor is the memory's once
      * it is made, and stays held otherwise. */
     [[nodiscard]] bool import_dma_buf_to_draw(const VulkanDeviceTable &table, OwnedFd &descriptor, VkDeviceSize size);
+    /* The dma-buf `descriptor` - the guest's pages lent to the GPU - as a
+     * buffer the GPU copies images into (FrameBufferCopy). The memory is a
+     * type the CPU sees the GPU's writes in without an invalidate
+     * (VulkanDeviceTable::coherent_memory_type), since the guest maps the same
+     * pages cached; false when there is none. As above, the descriptor is the
+     * memory's once it is made, and stays held otherwise. */
+    [[nodiscard]] bool import_dma_buf_to_receive(const VulkanDeviceTable &table, OwnedFd &descriptor,
+                                                 VkDeviceSize size);
     void               release();
     bool               made() const;
     VkBuffer           buffer() const;
 
 private:
+    enum class Placement { fastest, coherent };
+
     [[nodiscard]] bool import(const VulkanDeviceTable &table, OwnedFd &descriptor, VkDeviceSize size,
-                              VkBufferUsageFlags usage);
+                              VkBufferUsageFlags usage, Placement placement);
 
     const VulkanDeviceTable *table_;
     VkBuffer                 buffer_;

@@ -103,13 +103,14 @@ TEST(standard_allocation_describe, shadow_and_staging_answer_their_pitch)
 
 TEST(standard_allocation_describe, gdi_surfaces_are_cpu_visible_only_when_they_say_so)
 { MockPlatform platform;
-  struct Case { std::int32_t type; bool cpu_visible; };
-  const Case cases[] = {{1, false}, {2, true}, {3, false}, {4, true}, {5, true}, {6, true}};
+  /* The CPU-visible texture is the surface DWM composes from lent rows. */
+  struct Case { std::int32_t type; bool cpu_visible; std::uint32_t pitch; };
+  const Case cases[] = {{1, false, 64u}, {2, true, 64u}, {3, false, 64u}, {6, true, 128u}};
   for (const Case &c : cases) {
       D3dkmdtGdiSurfaceDataRecord surface = {16u, 16u, a8r8g8b8, c.type, 0u, 0u};
       Request request(gdi, &surface);
       CHECK_STATUS(request.describe(platform), Status::ok);
-      CHECK_EQ(surface.Pitch, 64u);
+      CHECK_EQ(surface.Pitch, c.pitch);
       const AllocationDescriptor descriptor = request.descriptor();
       CHECK(descriptor.kind() == AllocationKind::gdi);
       CHECK(descriptor.cpu_visible() == c.cpu_visible);
@@ -164,7 +165,7 @@ TEST(standard_allocation_describe, a_cross_adapter_texture_has_dxgkrnls_pitch_an
   CHECK_STATUS(Request(gdi, &unknown).describe(platform), Status::invalid_parameter);
   CHECK_EQ(unknown.Pitch, 0xEEu); }
 
-/* The OS's own CPU-visible cross-adapter bitmap (D3DKMDT_GDISURFACE_TEXTURE_CPUVISIBLE_CROSSADAPTER)
+/* The OS's own CPU-visible cross-adapter bitmap (D3DKMDT_GDISURFACETYPE_TEXTURE_CPUVISIBLE_CROSSADAPTER)
  * is the process's pages as type 7 is: the same pitch dxgkrnl checks, the same pages. */
 TEST(standard_allocation_describe, a_cpu_visible_cross_adapter_texture_is_laid_out_as_a_cross_adapter_texture)
 { MockPlatform platform;
@@ -184,20 +185,9 @@ TEST(standard_allocation_describe, a_cpu_visible_cross_adapter_texture_is_laid_o
   CHECK_STATUS(Request(gdi, &unknown).describe(platform), Status::invalid_parameter);
   CHECK_EQ(unknown.Pitch, 0xEEu); }
 
-/* CDD's lookup table and its bitmaps over the process's memory carry only the
- * 32-bit formats this driver lays out: another format is refused, not guessed. */
-TEST(standard_allocation_describe, a_lookup_table_or_existing_memory_surface_of_an_unlaid_out_format_is_refused)
-{ MockPlatform platform;
-  const std::int32_t types[] = {4, 5};
-  for (std::int32_t type : types) {
-      D3dkmdtGdiSurfaceDataRecord surface = {16u, 16u, r5g6b5, type, 0u, 0xEEu};
-      CHECK_STATUS(Request(gdi, &surface).describe(platform), Status::invalid_parameter);
-      CHECK_EQ(surface.Pitch, 0xEEu);
-  } }
-
 TEST(standard_allocation_describe, refuses_what_it_cannot_describe)
 { MockPlatform platform;
-  const std::int32_t unsupported_gdi[] = {0, 9, -1};
+  const std::int32_t unsupported_gdi[] = {0, 4, 5, 9};
   for (std::int32_t type : unsupported_gdi) {
       D3dkmdtGdiSurfaceDataRecord surface = {16u, 16u, a8r8g8b8, type, 0u, 0u};
       CHECK_STATUS(Request(gdi, &surface).describe(platform), Status::invalid_parameter);

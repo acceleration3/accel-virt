@@ -45,6 +45,7 @@
 #include "proto/escape/host_window_record.hpp"
 #include "proto/resources/host_blob_id.hpp"
 #include "proto/resources/host_memory_request.hpp"
+#include "miniport/memory/present_reads.hpp"
 #include "proto/escape/pages_read_record.hpp"
 #include "proto/escape/trace_escape_record.hpp"
 #include "miniport/ddi/dxgkarg_get_root_page_table_size_record.hpp"
@@ -73,8 +74,6 @@
 #include "miniport/ddi/dxgkarg_recommend_monitor_modes_record.hpp"
 #include "miniport/ddi/dxgkarg_recommend_vidpn_topology_record.hpp"
 #include "core/platform/log_budget.hpp"
-#include "miniport/ddi/dxgk_renderkm_command_record.hpp"
-#include "core/trace/state_writer.hpp"
 #include "miniport/ddi/dxgkarg_render_record.hpp"
 #include "miniport/ddi/dxgkarg_reset_engine_record.hpp"
 #include "miniport/ddi/dxgkarg_reset_hw_engine_record.hpp"
@@ -613,7 +612,7 @@ public:
     MappedSurface(Fixture &fixture, av::FakeHandleTable &handles, void *device, av::AllocationKind kind,
                   bool shared = false)
         : platform_(fixture.platform()), block_(nullptr), frames_{}, encoded_{}, handle_(nullptr),
-          open_handle_(nullptr), kmt_handle_(0u)
+          open_handle_(nullptr), kmt_handle_(0u), segment_(0u)
     {
         block_ = static_cast<std::uint8_t *>(platform_.allocate_contiguous(page));
         CHECK(block_ != nullptr);
@@ -640,6 +639,7 @@ public:
         create.pAllocationInfo = &info;
         CHECK_EQ(nt(fixture.adapter().create_allocation(&create)), success);
         handle_ = info.hAllocation;
+        segment_ = info.PreferredSegment;
         av::DxgkBuildPagingBufferMapApertureSegmentRecord mapping = {};
         mapping.hAllocation = handle_;
         mapping.SegmentId = av::ApertureSegment::segment_id;
@@ -676,6 +676,8 @@ public:
     void *handle() const { return handle_; }
     /* The D3DKMT_HANDLE a process names the allocation by, in an escape. */
     std::uint32_t kmt_handle() const { return kmt_handle_; }
+    /* The segment the create asked VidMm to put it in. */
+    std::uint32_t preferred_segment() const { return segment_; }
 
     void paint_all(std::uint32_t value)
     {
@@ -705,6 +707,7 @@ private:
     void             *handle_;
     void             *open_handle_;
     std::uint32_t     kmt_handle_;
+    std::uint32_t     segment_;
 };
 
 /* The escape a reader of presented pages sends around each read, and the
@@ -770,6 +773,109 @@ public:
 
 private:
     char text_[16u * 1024u + 1u];
+};
+
+/* A device with the present engine and one window's two surfaces: a blt
+ * present from the shadow into the shared primary, which the engine queues,
+ * and the escapes of a reader of the primary's pages. */
+class PresentRig {
+public:
+    explicit PresentRig(Fixture &fixture)
+        : fixture_(fixture), device_(started_device(fixture)), context_(),
+          handles_(), source_(fixture, handles_, device_.hDevice, av::AllocationKind::shadow),
+          destination_(fixture, handles_, device_.hDevice, av::AllocationKind::shared_primary),
+          reader_(fixture, destination_.kmt_handle()), info_{}, dma_{}, private_data_{}, present_{}
+    {
+        context_.Flags = 0x4u;
+        CHECK_EQ(nt(fixture.adapter().create_context(device_.hDevice, &context_)), success);
+        source_.paint_all(MappedSurface::colour);
+        destination_.paint_all(0u);
+        info_[1].hDeviceSpecificAllocation = source_.open_handle();
+        info_[2].hDeviceSpecificAllocation = destination_.open_handle();
+        present_.pDmaBuffer = dma_;
+        present_.DmaSize = sizeof dma_;
+        present_.pDmaBufferPrivateData = private_data_;
+        present_.DmaBufferPrivateDataSize = sizeof private_data_;
+        present_.Flags = 1u;   /* Blt */
+        present_.pAllocationList = info_;
+        const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+        present_.SrcRect = {0, 0, side, side};
+        present_.DstRect = {0, 0, side, side};
+    }
+    ~PresentRig()
+    {
+        CHECK_EQ(handles_.outstanding(), 0u);
+        fixture_.stop_presents();
+        CHECK_EQ(nt(fixture_.adapter().destroy_context(context_.hContext)), success);
+        CHECK_EQ(nt(fixture_.adapter().destroy_device(device_.hDevice)), success);
+    }
+    PresentRig(const PresentRig &) = delete;
+    PresentRig &operator=(const PresentRig &) = delete;
+
+    /* One more present into the primary: queued on the engine, not moved. */
+    std::uint32_t present()
+    {
+        std::memset(private_data_, 0, sizeof private_data_);
+        present_.pDmaBufferPrivateData = private_data_;
+        present_.DmaBufferPrivateDataSize = sizeof private_data_;
+        return nt(fixture_.adapter().present(context_.hContext, &present_));
+    }
+    PagesReader &reader() { return reader_; }
+
+    /* Every slot a sleeper may use taken at once: four readers asleep in their
+     * begins on a present the engine never moves, one more begin that finds
+     * none, and a present held for the first's read that finds none either.
+     * Each sleeper's stall is where the next arrives. Leaves six reads open. */
+    void crowd_the_slots()
+    {
+        CHECK_EQ(present(), success);
+        CHECK_EQ(reader_.begin(0u), success);
+        struct Crowd {
+            PresentRig   *rig;
+            PagesReader  *readers[5];
+            std::uint32_t arrivals;
+        } crowd{this, {}, 0u};
+        PagesReader readers[5] = {PagesReader(fixture_, destination_.kmt_handle()),
+                                  PagesReader(fixture_, destination_.kmt_handle()),
+                                  PagesReader(fixture_, destination_.kmt_handle()),
+                                  PagesReader(fixture_, destination_.kmt_handle()),
+                                  PagesReader(fixture_, destination_.kmt_handle())};
+        for (std::uint32_t index = 0u; index < 5u; index++) crowd.readers[index] = &readers[index];
+        fixture_.platform().on_stall(
+            [](void *context) {
+                auto *const now = static_cast<Crowd *>(context);
+                const std::uint32_t arrival = now->arrivals++;
+                if (arrival < 3u) CHECK_EQ(now->readers[arrival]->begin(1000000u), success);
+                if (arrival != 3u) return;
+                CHECK_EQ(now->readers[3]->begin(1000000u), success);
+                CHECK(!now->readers[3]->complete());   /* told at once, not made to wait */
+                CHECK_EQ(now->rig->present(), success);
+            },
+            &crowd);
+        CHECK_EQ(readers[4].begin(1000000u), success);   /* the sleepers' first */
+        fixture_.platform().on_stall(nullptr, nullptr);
+    }
+
+private:
+    static av::DxgkargCreateDeviceRecord started_device(Fixture &fixture)
+    {
+        fixture.answer_asks();
+        av::DxgkargCreateDeviceRecord device = {};
+        CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+        return device;
+    }
+
+    Fixture                                &fixture_;
+    av::DxgkargCreateDeviceRecord           device_;
+    av::DxgkargCreateContextRecord          context_;
+    av::FakeHandleTable                     handles_;
+    MappedSurface                           source_;
+    MappedSurface                           destination_;
+    PagesReader                             reader_;
+    av::DxgkPresentAllocationInfoRecord     info_[3];
+    std::uint8_t                            dma_[512];
+    std::uint8_t                            private_data_[av::PresentTicketRecord::encoded_size];
+    av::DxgkargPresentRecord                present_;
 };
 
 }  // namespace
@@ -1961,6 +2067,88 @@ TEST(adapter_present, an_application_s_blt_on_a_virtual_context_moves_its_pixels
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
+/* With software device bitmaps reported, a window's redirection surface is a
+ * GDI surface and dxgkrnl hands the redirected blt to the miniport with it as
+ * the destination. The create has to ask for the aperture - VidMm maps nothing
+ * of a surface in its own system memory, so the miniport would have no pages
+ * to write - and the blt then lands in the pages the aperture mapped. */
+TEST(adapter_present, a_blt_into_a_gdi_surface_moves_its_pixels_through_the_aperture_it_asked_for)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::gdi);
+  CHECK_EQ(destination.preferred_segment(), av::ApertureSegment::segment_id);
+  CHECK(source.preferred_segment() != av::ApertureSegment::segment_id);
+  source.paint_all(MappedSurface::colour);
+  destination.paint_all(0u);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t             dma[512] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.Flags = 1u;   /* Blt */
+  present.pAllocationList = info;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(destination.count(MappedSurface::colour), MappedSurface::side * MappedSurface::side);
+  CHECK(!fixture.platform().logged_line("avgpu: present unmoved"));
+  const StateDump dump(fixture);
+  CHECK(dump.holds("presents_unmoved=0"));
+  CHECK(dump.holds("last_present_destination_kind=4"));
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* A Direct3D 11 blt-model present, as dxgkrnl hands it over: the swap chain's
+ * buffer (a surface allocation, no point named, so read from its pages) into a
+ * window's redirection surface made as a cross-adapter texture (CDD's type 8).
+ * Both are resolved by handle, whatever their kinds; only the destination's
+ * pages decide whether the pixels can move, and a cross-adapter allocation is
+ * not pinned in the aperture, so it says which side it could not reach. */
+TEST(adapter_present, a_buffer_is_blitted_from_its_pages_into_a_cross_adapter_surface)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::surface);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::cross_adapter);
+  CHECK(destination.preferred_segment() != av::ApertureSegment::segment_id);
+  source.paint_all(MappedSurface::colour);
+  destination.paint_all(0u);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t             dma[512] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.Flags = 1u;   /* Blt */
+  present.pAllocationList = info;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(destination.count(MappedSurface::colour), MappedSurface::side * MappedSurface::side);
+  CHECK(!fixture.platform().logged_line("avgpu: present unmoved"));
+  const StateDump dump(fixture);
+  CHECK(dump.holds("presents_unmoved=0"));
+  CHECK(dump.holds("last_present_destination_kind=6"));
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
 /* A present whose sub-rectangles do not fit one DMA buffer is written over
  * several passes, each its own packet: each pass moves the sub-rectangles it
  * wrote, so every one of them arrives - and a pass with room for none moves
@@ -2325,6 +2513,162 @@ TEST(adapter_present, a_present_moved_in_place_leaves_its_reader_nothing_to_wait
   CHECK(fixture.adapter().invariants_hold());
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* A read of presented pages is a gate for the presents into them: the miniport
+ * opens it at the begin, and a present waits for the end (PagesReadRecord), so
+ * what the reader sees is never half a frame and the write count it answers
+ * is the same at both ends. */
+TEST(adapter_present, a_present_into_pages_being_read_waits_for_the_end_of_the_read)
+{ Fixture fixture;
+  fixture.offer_present_engine();
+  CHECK_EQ(fixture.start(), success);
+  PresentRig rig(fixture);
+  CHECK_EQ(rig.reader().begin(0u), success);
+  CHECK_EQ(rig.reader().writes(), 0u);
+  CHECK(rig.reader().complete());
+  struct Ending {
+      PresentRig   *rig;
+      std::uint32_t ends;
+      std::uint32_t status;
+  } ending{&rig, 0u, 0u};
+  fixture.platform().on_stall(
+      [](void *context) {
+          auto *const now = static_cast<Ending *>(context);
+          if (now->ends++ == 0u) now->status = now->rig->reader().end();
+      },
+      &ending);
+  CHECK_EQ(rig.present(), success);
+  fixture.platform().on_stall(nullptr, nullptr);
+  CHECK_EQ(ending.ends, 1u);   /* the present was asleep once, and the end woke it */
+  CHECK_EQ(ending.status, success);
+  CHECK_EQ(rig.reader().writes(), 0u);   /* the end answers the sequence as it stood: no present opened under the read */
+  CHECK_EQ(fixture.platform().slept_ticks(), 0u);
+  CHECK(!fixture.platform().logged_line("avgpu: a present waited out a read of the pages it writes"));
+  CHECK_EQ(rig.reader().begin(0u), success);
+  CHECK_EQ(rig.reader().writes(), 2u);   /* the present opened and queued once the read had ended */
+  CHECK(!rig.reader().complete());       /* still queued on the engine */
+  CHECK_EQ(rig.reader().end(), success);
+  const StateDump dump(fixture);
+  CHECK(dump.holds("reads_opened=2 reads_expired=0 writers_held=1 writer_hold_timeouts=0 reader_timeouts=1"));
+  CHECK(fixture.adapter().invariants_hold()); }
+
+/* A reader that is slow or gone cannot hold the window: the present waits its
+ * bound, writes anyway, and counts that it did. The reader's late end is no
+ * error. */
+TEST(adapter_present, a_present_held_for_a_read_that_never_ends_waits_its_bound_and_writes_anyway)
+{ Fixture fixture;
+  fixture.offer_present_engine();
+  CHECK_EQ(fixture.start(), success);
+  PresentRig rig(fixture);
+  CHECK_EQ(rig.reader().begin(0u), success);
+  const std::uint64_t slept = fixture.platform().slept_ticks();
+  CHECK_EQ(rig.present(), success);
+  CHECK_EQ(fixture.platform().slept_ticks() - slept, 200000u);   /* 20 ms, no more */
+  CHECK(fixture.platform().logged_line("avgpu: a present waited out a read of the pages it writes"));
+  const StateDump dump(fixture);
+  CHECK(dump.holds("reads_opened=1 reads_expired=0 writers_held=1 writer_hold_timeouts=1 reader_timeouts=0"));
+  CHECK_EQ(rig.reader().end(), success);
+  CHECK_EQ(rig.reader().writes(), 2u);   /* the present was opened and queued under the read: the reader sees it */
+  CHECK(fixture.adapter().invariants_hold()); }
+
+/* After the bound the gate has let go of a reader that died: the next present
+ * is not held at all, and the next begin forgets the dead read so that the
+ * reader's own end closes the gate. */
+TEST(adapter_present, a_read_never_ended_expires_and_is_forgotten_by_the_next_begin)
+{ Fixture fixture;
+  fixture.offer_present_engine();
+  CHECK_EQ(fixture.start(), success);
+  PresentRig rig(fixture);
+  CHECK_EQ(rig.reader().begin(0u), success);   /* its reader never ends it */
+  fixture.platform().advance_time(av::PresentReads::expiry_ticks);
+  const std::uint64_t slept = fixture.platform().slept_ticks();
+  CHECK_EQ(rig.present(), success);
+  CHECK_EQ(fixture.platform().slept_ticks(), slept);   /* not held */
+  CHECK_EQ(rig.reader().begin(0u), success);
+  CHECK(fixture.platform().logged_line("avgpu: a read of presented pages was never ended and has been forgotten"));
+  CHECK_EQ(rig.reader().end(), success);
+  CHECK_EQ(rig.present(), success);
+  CHECK_EQ(fixture.platform().slept_ticks(), slept);   /* one end closed the gate: the dead read is not counted */
+  const StateDump dump(fixture);
+  CHECK(dump.holds("reads_opened=2 reads_expired=1 writers_held=0 writer_hold_timeouts=0"));
+  CHECK(fixture.adapter().invariants_hold()); }
+
+/* A read is the reader's to open for as long as it takes the present in
+ * flight to move: that wait is the one a process names the length of, and the
+ * miniport bounds it. */
+TEST(adapter_present, a_begin_waits_for_a_present_in_flight_no_longer_than_the_miniport_allows)
+{ Fixture fixture;
+  fixture.offer_present_engine();
+  CHECK_EQ(fixture.start(), success);
+  PresentRig rig(fixture);
+  CHECK_EQ(rig.present(), success);   /* queued, and the engine never moves it */
+  const std::uint64_t slept = fixture.platform().slept_ticks();
+  CHECK_EQ(rig.reader().begin(0xFFFFFFFFu), success);   /* an hour and more, as the process asked */
+  CHECK(!rig.reader().complete());
+  CHECK_EQ(fixture.platform().slept_ticks() - slept, 1000000u);   /* 100 ms */
+  CHECK_EQ(rig.reader().writes(), 2u);
+  CHECK_EQ(rig.reader().end(), success);
+  const StateDump dump(fixture);
+  CHECK(dump.holds("writers_held=0 writer_hold_timeouts=0 reader_timeouts=1"));
+  CHECK(fixture.adapter().invariants_hold()); }
+
+/* A present queued before a power cycle names a ticket of an engine that went
+ * with it: the next engine counts from one again, and a reader must not wait
+ * for a number that engine may never reach. */
+TEST(adapter_present, a_ticket_of_the_engine_before_a_power_cycle_is_not_waited_for_after_it)
+{ Fixture fixture;
+  fixture.offer_present_engine();
+  CHECK_EQ(fixture.start(), success);
+  PresentRig rig(fixture);
+  for (std::uint32_t queued = 0u; queued < 5u; queued++) CHECK_EQ(rig.present(), success);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  fixture.forget_control();
+  fixture.answer_asks();
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  const std::uint64_t slept = fixture.platform().slept_ticks();
+  CHECK_EQ(rig.reader().begin(0u), success);
+  CHECK(rig.reader().complete());   /* the new engine has moved nothing, and has been asked for nothing */
+  CHECK_EQ(fixture.platform().slept_ticks(), slept);
+  CHECK_EQ(rig.reader().end(), success);
+  CHECK(fixture.adapter().invariants_hold()); }
+
+/* The sleepers of a gate are the four slots, readers and presents alike; the
+ * one that finds none is told, not queued - a reader's begin answers
+ * incomplete, a present goes ahead - and each says so. */
+TEST(adapter_present, a_reader_or_a_present_that_finds_every_slot_taken_is_told_and_does_not_wait)
+{ Fixture fixture;
+  fixture.offer_present_engine();
+  CHECK_EQ(fixture.start(), success);
+  PresentRig rig(fixture);
+  rig.crowd_the_slots();
+  CHECK(fixture.platform().logged_line("avgpu: more readers of presented pages than slots to wait in"));
+  CHECK(fixture.platform().logged_line("avgpu: more waiters on presented pages than slots to wait in"));
+  for (std::uint32_t reads = 0u; reads < 6u; reads++) CHECK_EQ(rig.reader().end(), success);
+  const StateDump dump(fixture);
+  CHECK(dump.holds("reads_opened=6 "));
+  CHECK(fixture.adapter().invariants_hold()); }
+
+/* Once the window's log budget is spent the gate goes on doing what it does
+ * and says nothing more. */
+TEST(adapter_present, the_gate_is_silent_once_the_log_budget_is_spent)
+{ Fixture fixture;
+  fixture.offer_present_engine();
+  CHECK_EQ(fixture.start(), success);
+  PresentRig rig(fixture);
+  const av::DxgkargRecommendVidPnTopologyRecord topology = {};
+  for (std::uint32_t line = 0u; line <= av::LogBudget::lines_per_window; line++)
+      static_cast<void>(fixture.adapter().recommend_vidpn_topology(&topology));
+  const std::uint32_t spent = fixture.platform().logged();
+  rig.crowd_the_slots();
+  CHECK_EQ(rig.reader().begin(0u), success);   /* the crowd slept long enough for its reads to expire: forgotten */
+  fixture.platform().advance_time(av::PresentReads::expiry_ticks);
+  CHECK_EQ(rig.reader().begin(0u), success);   /* and this one too */
+  CHECK_EQ(rig.present(), success);
+  CHECK_EQ(fixture.platform().logged(), spent);
+  for (std::uint32_t reads = 0u; reads < 9u; reads++) CHECK_EQ(rig.reader().end(), success);
+  const StateDump dump(fixture);
+  CHECK(dump.holds("reads_expired=2 "));
+  CHECK(fixture.adapter().invariants_hold()); }
 
 /* A queued blt whose DMA buffer has no room to name its ticket cannot hold its
  * packet: it is counted, and said while the log budget lasts. */
@@ -3637,7 +3981,7 @@ TEST(adapter_escape, the_trace_escape_answers_the_state_of_the_adapter_without_a
    * source, and every table empty and free. */
   const char *const expected =
       "adapter/0 started=true present=true powering_down=false presented_fence=0 present_rows=0"
-      " presents_unmoved=0 presents_unticketed=0 presents_ticketed=0 presents_parked=0 presents_made=0 presents_refused=0 presents_unpointed=0 last_present_flags=0x0000000000000000 last_present_status=0x0000000000000000 last_present_destination_kind=0 renderkm_calls=0 renderkm_bitblt=0 renderkm_colorfill=0 renderkm_alphablend=0 renderkm_stretchblt=0 renderkm_transparentblt=0 renderkm_cleartypeblend=0 renderkm_escape=0 renderkm_unknown=0 renderkm_last_bitblt_source_kind=0 renderkm_last_bitblt_destination_kind=0 display_changed=0x0000000000000000 aperture_bytes=0x0000000200000000 host_visible=false"
+      " presents_unmoved=0 presents_unticketed=0 presents_ticketed=0 presents_parked=0 presents_made=0 presents_refused=0 presents_unpointed=0 reads_opened=0 reads_expired=0 writers_held=0 writer_hold_timeouts=0 reader_timeouts=0 last_present_flags=0x0000000000000000 last_present_status=0x0000000000000000 last_present_destination_kind=0 display_changed=0x0000000000000000 aperture_bytes=0x0000000200000000 host_visible=false"
       " host_visible_base=0x0000000000000000 host_visible_bytes=0x0000000000000000 vsync_enables=0 vsync_reported=0\n"
       "adapter/0/device_table/0 busy=false devices=0 opens=0\n"
       "adapter/0/allocation_table/0 busy=false live=0\n"
@@ -3999,60 +4343,6 @@ TEST(adapter_render, needs_a_live_context_then_renders)
   CHECK_EQ(nt(fixture.adapter().render(context.hContext, &render)), success);
   CHECK_EQ(dma[2], 3u);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
-  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
-
-/* CDD's context once the adapter reports SupportKernelModeCommandBuffer: dxgkrnl
- * creates it with GdiContext, and with VirtualAddressing in the mode this
- * adapter runs, and sends it RenderKm buffers. */
-TEST(adapter_render_km, counts_a_gdi_context_s_commands_and_its_submission_completes_like_any_other)
-{ Fixture fixture;
-  CHECK_EQ(fixture.start(), success);
-  av::DxgkargCreateDeviceRecord device = {};
-  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
-  const std::uint32_t gdi = 0x2u, gdi_virtual = 0x6u;
-  const std::uint32_t kinds[] = {gdi, gdi_virtual};
-  for (const std::uint32_t flags : kinds) {
-      av::DxgkargCreateContextRecord context = {};
-      context.Flags = flags;
-      CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
-      CHECK_EQ(static_cast<av::Context *>(context.hContext)->flags(), flags);
-      av::DxgkRenderkmCommandRecord commands[2] = {};
-      commands[0].OpCode = static_cast<std::uint32_t>(av::DxgkRenderkmOperation::colorfill);
-      commands[0].CommandSize = sizeof(av::DxgkRenderkmCommandRecord);
-      commands[1].OpCode = static_cast<std::uint32_t>(av::DxgkRenderkmOperation::bitblt);
-      commands[1].CommandSize = sizeof(av::DxgkRenderkmCommandRecord);
-      std::uint8_t dma[16] = {};
-      av::DxgkargRenderRecord render = {};
-      render.pCommand = commands;
-      render.CommandLength = sizeof commands;
-      render.pDmaBuffer = dma;
-      render.DmaSize = sizeof dma;
-      CHECK_EQ(nt(fixture.adapter().render_km(&fixture, &render)), invalid_parameter);
-      CHECK_EQ(nt(fixture.adapter().render_km(context.hContext, nullptr)), invalid_parameter);
-      CHECK_EQ(nt(fixture.adapter().render_km(context.hContext, &render)), success);
-      CHECK(render.pDmaBuffer == dma + 4);
-      const std::uint32_t before = fixture.dxgkrnl().dpcs_queued();
-      if (flags == gdi) {
-          av::DxgkargSubmitCommandRecord submit = {};
-          submit.SubmissionFenceId = 1u;
-          fixture.platform().set_irql(Irql::dispatch);
-          CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), success);
-          fixture.platform().set_irql(Irql::passive);
-      } else {
-          av::DxgkargSubmitCommandVirtualRecord submit = {};
-          submit.hContext = context.hContext;
-          submit.SubmissionFenceId = 2u;
-          submit.DmaBufferVirtualAddress = 0x8000000000ull;
-          CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
-      }
-      CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), before + 1u);
-      CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
-  }
-  char bytes[8192] = {};
-  av::StateWriter writer(bytes, sizeof bytes);
-  fixture.adapter().report(writer);
-  CHECK(std::strstr(writer.dump(),
-                    "renderkm_calls=2 renderkm_bitblt=2 renderkm_colorfill=2 renderkm_alphablend=0") != nullptr);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
 TEST(adapter_patch, patches_or_refuses_a_missing_block)

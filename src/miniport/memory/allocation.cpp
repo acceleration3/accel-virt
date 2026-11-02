@@ -12,7 +12,7 @@ namespace av {
 Allocation::Allocation(Platform &platform, const MemorySegments &segments,
                        const AllocationDescriptor &descriptor, uint64_t size)
     : platform_(platform), segments_(segments), descriptor_(descriptor), size_(size), opens_(0u), shared_id_(0u), resource_(nullptr), owner_(nullptr), process_(nullptr),
-      aperture_(platform, static_cast<uint32_t>(size / page_bytes)), writes_(platform)
+      aperture_(platform, static_cast<uint32_t>(size / page_bytes)), writes_(platform), reads_(platform)
       {
           AV_SCOPE("Allocation::Allocation");
       }
@@ -50,6 +50,12 @@ PresentWrites &Allocation::writes()
     return writes_;
 }
 
+PresentReads &Allocation::reads()
+{
+    AV_SCOPE("Allocation::reads");
+    return reads_;
+}
+
 void                        Allocation::shared_as(uint64_t id)
 {
     AV_SCOPE("Allocation::shared_as");
@@ -85,12 +91,15 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
     const bool scanned_out = descriptor_.kind() == AllocationKind::shared_primary;
     /* A user-mode driver's surface is blitted by the miniport from its pages
      * and read back into by the host, so it wants them known too - and so does
-     * a staging surface, which is where an application's blt-model present
-     * lands: dxgkrnl builds the blt into the window's redirection surface,
-     * which CDD makes as a staging surface and the miniport writes through its
-     * pages. */
+     * a staging or GDI surface, which is where an application's blt-model
+     * present lands: the window's redirection surface is a staging surface
+     * for the legacy path and a GDI one once the driver reports software
+     * device bitmaps, and the miniport writes either through its pages. A GDI
+     * surface left in VidMm's own system memory is never mapped into the
+     * aperture, so the present would find no pages to write. */
     const AllocationKind kind = descriptor_.kind();
-    const bool pinned = scanned_out || kind == AllocationKind::surface || kind == AllocationKind::staging;
+    const bool pinned = scanned_out || kind == AllocationKind::surface || kind == AllocationKind::staging ||
+                        kind == AllocationKind::gdi;
     const uint32_t segment = pinned ? ApertureSegment::segment_id : segments_.system_memory_segment_id();
     info.PreferredSegment = segment;
     info.SupportedReadSegmentSet = 1u << (segment - 1u);
@@ -118,7 +127,7 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * system memory segment, where the process's pages are. The one-row heap
      * (an existing heap's allocation, of no format) keeps the flags it always
      * had: only the texture is known to be accepted cached. */
-    const bool cached = kind == AllocationKind::staging ||
+    const bool cached = kind == AllocationKind::staging || kind == AllocationKind::gdi ||
                         (kind == AllocationKind::cross_adapter && descriptor_.layout().format() != 0u);
     info.Flags = (descriptor_.cpu_visible() ? flag_cpu_visible : 0u) | (cached ? flag_cached : 0u) |
                  (pinned ? flag_accessed_physically : 0u);

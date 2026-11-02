@@ -59,11 +59,14 @@ public:
     bool     faulted() const;
     uint64_t head() const;
     /* From another worker: when the guest published the oldest batch this ring
-     * holds and has not begun to run, or UINT64_MAX for none. One running is
-     * not waited for: until it has recorded its last command it holds its
-     * API's device lock, which orders a later batch behind it anyway, and once
-     * it has, all it can still be doing is waiting on the GPU for an answer -
-     * a read back - that nothing published after it depends on. */
+     * holds and has not finished recording, or UINT64_MAX for none. One
+     * running is waited for: no device lock orders a later batch behind it -
+     * Direct3D 9's devices take none, and an 11 batch takes the lock at its
+     * first command, which another batch can reach first - and a capture
+     * reading a shared buffer before the composition drawing into it ran
+     * returned the frame before. Only its last command, once it asks for an
+     * answer, is not: that is a synchronous call - a read back waiting on
+     * the GPU - that nothing published after it depends on. */
     uint64_t earliest_pending() const;
     /* Any thread: the guest has published a batch not yet taken. */
     bool     has_work() const;
@@ -104,8 +107,8 @@ private:
     RingProgress progress_;
     HeldCompletions held_;
     uint64_t     head_;
-    /* Where the batch running ends, 0 while none runs; another worker's
-     * earliest_pending looks past it. */
+    /* Where the batch running ends once it reaches the command it answers,
+     * 0 before; another worker's earliest_pending looks past it. */
     uint64_t     running_end_;
     uint64_t     last_fence_;
     uint64_t     batches_;

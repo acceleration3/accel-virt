@@ -54,6 +54,12 @@ D3d9HostDevice::~D3d9HostDevice()
     close();
 }
 
+void D3d9HostDevice::bind(DriverLog &log)
+{
+    AV_SCOPE("D3d9HostDevice::bind");
+    frames_.bind(log);
+}
+
 bool D3d9HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
 {
     AV_SCOPE("D3d9HostDevice::open");

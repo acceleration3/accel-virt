@@ -93,6 +93,8 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     table_.restore_guest_run = [](void *opaque, void *run, std::uint64_t size) {
         return host_of(opaque).restore_guest_run(run, size) == Status::ok ? 0 : 1;
     };
+    table_.pause_guest = [](void *opaque) { return host_of(opaque).pause_guest() ? 0 : 1; };
+    table_.resume_guest = [](void *opaque) { host_of(opaque).resume_guest(); };
     table_.hostmem_size = [](void *opaque) { return host_of(opaque).hostmem_size(); };
     table_.place_in_hostmem = [](void *opaque, int fd, std::uint64_t size, std::uint64_t offset) {
         return host_of(opaque).place_in_hostmem(fd, size, offset) == Status::ok ? 0 : 1;

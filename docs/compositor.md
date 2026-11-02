@@ -47,6 +47,7 @@ the APIs hand each other, and the timelines they order their work by:
 | `QueueWork` | Copies and waits recorded on a borrowed queue, under its lock, from a ring of command buffers that are reused once their timeline value is reached. |
 | `D3d9VulkanLane` | A Direct3D 9 device's Vulkan side: its table, its queue, and a surface's image and layout, with DXVK's deferred clears forced first. |
 | `DxvkVulkanDevice` | The same for Direct3D 11: imports a timeline and waits on it on DXVK's queue. |
+| `FrameBufferCopy` | A staged frame's image copied by the GPU into guest pages lent to it: the lending's dma-buf imported once as a buffer (keyed by the lending's id, a few kept), `vkCmdCopyImageToBuffer` on the frame's own queue, a timeline to wait on. Direct3D 9 (`D3d9FrameCopier`) and 11 share it; Direct3D 12 declines. |
 
 OpenGL and OpenCL do not take these classes. They import the same dma-buf
 and timeline fds through their own extensions.
@@ -107,7 +108,13 @@ blt-model test in Direct3D 9 and in Direct3D 11.
   readback only where the destination is staging that GDI reads. So the frame
   must reach that allocation's pages.
 - **What the copy costs now.** The frame is staged on the host GPU at a present
-  point, and the present engine makes the one CPU copy into the pages.
+  point. Where the destination pages lie whole, in order, inside one lending
+  and the colours need no swap, the present engine has the executor's GPU copy
+  the frame into the lending's dma-buf (`AvExecutorOps::copy_frame`) and
+  waits for it before the ticket completes - no CPU copy. Otherwise the
+  present engine makes the one CPU copy into the pages, source to destination
+  with no buffer between (`RegionMover`), and says once in the log why the GPU
+  was not asked.
   - Direct3D 11 and 12 name the point in the present's private data.
   - Direct3D 9 names it by escape (`NextPointRecord`), because d3d9.dll drops
     the present's private data. Until this branch, every Direct3D 9 windowed

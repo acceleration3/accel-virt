@@ -94,22 +94,29 @@ Status StandardAllocation::describe_gdi(AllocationDescriptor &descriptor) const
     AV_SCOPE("StandardAllocation::describe_gdi");
     auto &surface = *static_cast<D3dkmdtGdiSurfaceDataRecord *>(request_.pCreateSurfaceData);
     /* The cross-adapter texture is always the process's own pages, so the
-     * CPU-visible variant is the same allocation. */
+     * CPU-visible variant - the one CDD makes of a window's redirection
+     * surface under SupportSoftwareDeviceBitmaps - is the same allocation. */
     if (surface.Type == gdi_texture_cross_adapter || surface.Type == gdi_texture_cpu_visible_cross_adapter)
         return describe_cross_adapter(descriptor);
+    /* The surface DWM opens is lent to the host as rows (open_cross_adapter), so
+     * it takes the rows a texture over lent memory can be: its pages stay where
+     * the miniport can write them. */
+    if (surface.Type == gdi_texture_cpu_visible) {
+        const uint32_t format = static_cast<uint32_t>(surface.Format);
+        const CrossAdapterLayout rows(surface.Width, surface.Height, format, CrossAdapterFormat(format).bytes_per_pixel());
+        if (!rows.valid()) return Status::invalid_parameter;
+        surface.Pitch = rows.pitch();
+        descriptor = AllocationDescriptor(AllocationKind::gdi, true, rows.surface(), rows.bytes(), ScanoutTarget());
+        return Status::ok;
+    }
     const bool texture = surface.Type == gdi_texture || surface.Type == gdi_texture_cpu_visible;
     const bool staging_surface = surface.Type == gdi_staging || surface.Type == gdi_staging_cpu_visible;
-    /* What CDD makes beside its surfaces once it draws through kernel-mode
-     * command buffers (ClearType's gamma table, a bitmap over memory the
-     * process owns): GDI fills both with the CPU. */
-    const bool cdd_memory = surface.Type == gdi_lookup_table || surface.Type == gdi_existing_sys_mem;
-    if (!texture && !staging_surface && !cdd_memory) return Status::invalid_parameter;
+    if (!texture && !staging_surface) return Status::invalid_parameter;
     SurfaceLayout layout;
     const Status status = layout_of(surface.Width, surface.Height, static_cast<uint32_t>(surface.Format), layout);
     if (status != Status::ok) return status;
     surface.Pitch = layout.pitch();
-    const bool cpu_visible =
-        surface.Type == gdi_texture_cpu_visible || surface.Type == gdi_staging_cpu_visible || cdd_memory;
+    const bool cpu_visible = surface.Type == gdi_texture_cpu_visible || surface.Type == gdi_staging_cpu_visible;
     descriptor = AllocationDescriptor(AllocationKind::gdi, cpu_visible, layout, layout.bytes(), ScanoutTarget());
     return Status::ok;
 }

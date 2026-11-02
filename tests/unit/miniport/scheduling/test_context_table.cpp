@@ -115,24 +115,6 @@ TEST(context_table_create, accepts_a_context_with_gpu_virtual_addressing_and_har
   CHECK(fixture.contexts().invariants_hold());
   CHECK_EQ(fixture.contexts().find(request.hContext)->flags(), 0x15u); }
 
-/* CDD's context under SupportKernelModeCommandBuffer: with GPU virtual
- * addressing in the mode this adapter runs, and without in the legacy one. */
-TEST(context_table_create, accepts_a_gdi_context_with_and_without_gpu_virtual_addressing)
-{ const std::uint32_t kinds[] = {0x2u, 0x6u};
-  for (const std::uint32_t flags : kinds) {
-      Fixture fixture;
-      DxgkargCreateContextRecord request = {};
-      request.Flags = flags;
-      CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::ok);
-      CHECK(fixture.contexts().invariants_hold());
-      Context *context = fixture.contexts().find(request.hContext);
-      CHECK(context != nullptr);
-      CHECK_EQ(context->flags(), flags);
-      CHECK(!context->is_av());
-      CHECK_EQ(request.ContextInfoDmaBufferSize, 0x10000u);
-      CHECK_EQ(request.ContextInfoAllocationListSize, 256u);
-  } }
-
 /* Feature 049: the second node is the hardware-scheduled one, and a context
  * lands there only when the process asked for a queue to run it. */
 TEST(context_table_create, accepts_a_context_on_the_hardware_scheduled_node)

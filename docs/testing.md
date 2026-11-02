@@ -48,7 +48,6 @@ service owning a collection); nothing here is a namespace with static methods.
 | `Context` | object | One execution context: its device, node and flags |
 | `ExecutionNode` | object | One node's pending packets, completed and preempted from the DPC |
 | `RenderRequest` / `PatchRequest` | object | One command buffer into its DMA buffer; one submission's addresses |
-| `RenderKmTally` | system | CDD's kernel-mode command buffers: walked and counted by operation, none run |
 | `SubmissionRing` | object | Head/tail, wrap, full/empty, slot lifetime |
 | `MonitoredFence` | object | Value, monotonicity, registered thresholds |
 | `TimeoutDetector` | system | Progress tracking, timeout decision, preempt/reset state machine |

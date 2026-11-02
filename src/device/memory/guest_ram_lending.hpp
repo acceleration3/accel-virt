@@ -28,17 +28,29 @@ namespace av {
 class ContextPlane;
 class ControlRequest;
 class Host;
+class LendingLife;
 class LentPages;
+class RunSwapGate;
 
 class GuestRamLending {
 public:
     /* A lending of `size` bytes of the dma-buf `fd`, which it owns from now
      * on, made by blob `key` of `plane`. */
-    GuestRamLending(BlockSource &blocks, LentPages &pages, uint64_t size, int fd, ContextPlane &plane, uint64_t key);
+    GuestRamLending(BlockSource &blocks, LentPages &pages, RunSwapGate &gate, LendingLife &life, uint64_t id,
+                    uint64_t size, int fd, ContextPlane &plane, uint64_t key);
     ~GuestRamLending();
     GuestRamLending(const GuestRamLending &) = delete;
     GuestRamLending &operator=(const GuestRamLending &) = delete;
 
+    /* What names this memory for as long as it lives and never again after:
+     * a holder of something imported from it forgets it by this. */
+    uint64_t id() const;
+    /* The dma-buf, which the lending owns: valid until give_back, so a user
+     * on another thread duplicates it on the main loop. */
+    int      descriptor() const;
+    /* Whether it still exists, which a present on another thread may ask after
+     * the lending is gone (GuestRamLendings::watch). */
+    LendingLife &life() const;
     uint64_t size() const;
     /* The guest address the first page lent starts at; 0 before any is laid. */
     uint64_t start() const;
@@ -48,6 +60,9 @@ public:
     /* The lender's pieces: the next `entries` runs named at `offset` of
      * `request` laid over the memory (GuestPageOverlay::add). */
     [[nodiscard]] Status lay(Host &host, ControlRequest &request, size_t offset, uint32_t entries);
+    /* Where in the memory the guest bytes [address, address + length) start,
+     * if they lie in one piece of it (GuestPageOverlay::locate). */
+    [[nodiscard]] bool   locate(uint64_t address, uint64_t length, uint32_t &hint, uint64_t &offset) const;
     /* A joiner's pieces: the next `entries` named at `offset` of `request`
      * must be the entries the lender laid, from entry `next` on, which it
      * advances. invalid_parameter for any difference. */
@@ -74,6 +89,8 @@ private:
         uint64_t      key_;
     };
 
+    LendingLife          &life_;
+    uint64_t              id_;
     uint64_t              size_;
     int                   fd_;
     GuestPageOverlay      overlay_;

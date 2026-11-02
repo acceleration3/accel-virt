@@ -16,6 +16,7 @@
 #include "device/abi/av_executor.h"
 #include "executor/context_session.hpp"
 #include "executor/d3d/d3d_backend.hpp"
+#include "executor/d3d/staged_frame.hpp"
 #include "executor/executor_domains.hpp"
 #include "executor/gpu_clock_hold.hpp"
 #include "executor/host_gpu_set.hpp"
@@ -91,6 +92,11 @@ public:
      * (SharedSurfaces). Any thread. */
     bool     map_frame(uint32_t domain, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view);
     void     unmap_frame(uint32_t domain, const SurfacePoint &frame);
+    /* The same frame copied on the GPU into the lent memory `copy` names
+     * (SharedSurfaces::copy); declined for a domain or GPU with no surfaces.
+     * Any thread. */
+    StagedFrame::Copying copy_frame(uint32_t domain, const SurfacePoint &frame, uint32_t wait_ms,
+                                    const AvFrameCopy &copy);
     /* The surface shared as `surface` in `domain` as its own memory, for a
      * process outside QEMU (D3d11HostDevice::export_surface), and the copies
      * into it the host has run with a sync_file for them

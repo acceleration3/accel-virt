@@ -203,6 +203,7 @@ void D3d9Device::release_resource(D3d9Resource &resource)
     if (resource.subresources != nullptr) memory_.release(resource.subresources);
     resource.subresources = nullptr;
     if (!resource.opened) allocations_.give_back(resource.allocation, resource.allocation_resource);
+    else allocations_.release_address(resource.gpu_address, resource.gpu_pages);
 }
 
 /* The redirection surface of a window, which d3d9.dll opens into the device
@@ -244,8 +245,11 @@ HRESULT D3d9Device::open_resource(D3DDDIARG_OPENRESOURCE *args)
     made->opened = true;
     /* A present names it as its destination in the blt dxgkrnl builds, and
      * dxgkrnl puts the device in error for an allocation this device never
-     * asked to be resident (PagingQueue). */
-    if (FAILED(allocations_.keep_resident(made->allocation))) {
+     * asked to be resident (PagingQueue). With a GPU virtual address context
+     * it also drops the present, before the miniport hears of it, when the
+     * destination has no address in this process. */
+    made->gpu_pages = layout.pages();
+    if (FAILED(allocations_.keep_addressable(made->allocation, made->gpu_pages, made->gpu_address))) {
         release_resource(*made);
         static_cast<void>(resources_.destroy(made));
         return E_FAIL;

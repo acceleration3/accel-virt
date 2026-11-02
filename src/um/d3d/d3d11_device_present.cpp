@@ -25,6 +25,24 @@
 
 namespace av::d3d11 {
 
+namespace {
+
+/* What IDXGISurface1::GetDC takes: DXGI's B8G8R8A8 and B8G8R8X8 formats, with
+ * R10G10B10_XR_BIAS_A2 between them. D3D11_RESOURCE_MISC_GDI_COMPATIBLE would
+ * say it outright, but the runtime keeps that flag from the driver: measured,
+ * no texture GDI drew on has it in MiscFlags. */
+constexpr uint32_t gdi_format_first = 87u;
+constexpr uint32_t gdi_format_last = 93u;
+constexpr uint32_t gdi_format_excluded = 89u;
+/* The runtime's own Flush after a resolve, measured: 1.3 to 14.8 us from the
+ * resolve's return to its entry. The next call after a GetDC, which has created
+ * a DC and released it: 65.8 us at the least. A Flush the runtime is slower with
+ * only leaves the next resolve to be read back, and tried again. */
+constexpr uint64_t runtime_flush_ns = 30'000u;
+constexpr uint64_t longest_gdi_watch_seconds = 1u;
+
+}  // namespace
+
 HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATERESOURCE &create,
                               D3D10DDI_HRTRESOURCE runtime)
 {
@@ -80,13 +98,22 @@ HRESULT D3d11Device::publish(ResourceRecord &resource, uint32_t subresource)
 /* Where the kernel reads a frame from is the buffer's presentation model
  * (SwapChainBuffer), not the present's flags - the runtime marks a windowed
  * present of either model Blt. A flipped buffer is composed, and a primary
- * scanned out, from the host's own texture under its key; only a blt-model
- * present with no destination is copied from the buffer's pages. A buffer the
- * host holds no texture for is only ever its pages. */
+ * scanned out, from the host's own texture under its key; a blt-model
+ * present is copied from the buffer's pages, into the window's redirection
+ * surface when the runtime opened it as the destination (address_destination).
+ * A buffer the host holds no texture for is only ever its pages. */
 HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
                                      void *dxgi_context)
 {
     AV_SCOPE("D3d11Device::present_surface");
+    /* Before any frame is staged for it: a present dxgkrnl drops names a
+     * point nothing consumes. */
+    const HRESULT resident = keep_present_resident(source);
+    if (FAILED(resident)) return resident;
+    if (destination != nullptr) {
+        const HRESULT addressed = address_destination(*destination);
+        if (FAILED(addressed)) return addressed;
+    }
     if (source.shared_key == 0u) return present_pages(source, subresource, destination, dxgi_context);
     /* A flush, not a round trip: the present waits in its context behind the
      * batch this publishes (present_to_kernel), and DWM and the scanout wait
@@ -97,11 +124,62 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
     switch (source.present_model) {
     case d3d::SwapChainBuffer::Model::flip:
     case d3d::SwapChainBuffer::Model::scanout: break;
-    case d3d::SwapChainBuffer::Model::blt:
-        if (destination == nullptr) return present_pages(source, subresource, destination, dxgi_context);
-        break;
+    case d3d::SwapChainBuffer::Model::blt: return present_pages(source, subresource, destination, dxgi_context);
     }
     return present_to_kernel(source, destination, dxgi_context, 0u);
+}
+
+/* A buffer this device made was asked to be resident when it was made
+ * (PresentedAllocations::make), and that answer is only said, not kept: the
+ * present asks again for any that is not known to be, once. A surface another
+ * device made - a window's redirection surface - is never asked for until a
+ * present names it. */
+HRESULT D3d11Device::keep_present_resident(ResourceRecord &named)
+{
+    AV_SCOPE("D3d11Device::keep_present_resident");
+    if (named.allocation == 0u || named.resident != 0u) return S_OK;
+    const HRESULT resident = allocations_.keep_resident(named.allocation);
+    if (FAILED(resident)) return resident;
+    named.resident = 1u;
+    log_presented_allocation(named);
+    return S_OK;
+}
+
+/* The window's redirection surface a blt-model present names as its
+ * destination is another device's allocation, opened here (open_guest_surface).
+ * dxgkrnl builds the blt into it from the destination's GPU virtual address in
+ * this process and drops the present, before DxgkDdiPresent and with nothing
+ * said, when it has none; and it fails a present naming an allocation this
+ * device never asked to be resident (PresentedAllocations::keep_addressable,
+ * docs/stale-blt-frames.md). Only a surface a device presents into needs
+ * either - DWM's, opened to read, never does - so the first present into it
+ * is when it is made; the address is freed with the resource. */
+HRESULT D3d11Device::address_destination(ResourceRecord &destination)
+{
+    AV_SCOPE("D3d11Device::address_destination");
+    if (destination.gpu_pages == 0u || destination.gpu_address != 0u) return keep_present_resident(destination);
+    const HRESULT addressed =
+        allocations_.keep_addressable(destination.allocation, destination.gpu_pages, destination.gpu_address);
+    if (FAILED(addressed)) return addressed;
+    destination.resident = 1u;
+    log_presented_allocation(destination);
+    return S_OK;
+}
+
+/* The one trace of which allocations a present names are the kernel's to
+ * keep, where a device the kernel put in error says only that one was not. */
+void D3d11Device::log_presented_allocation(const ResourceRecord &named)
+{
+    AV_SCOPE("D3d11Device::log_presented_allocation");
+    if (!lines_.first("a present's allocation made resident", named.allocation)) return;
+    LogLine(lines_)
+        .text("a present's allocation made resident ")
+        .hex(named.allocation, 8u)
+        .text(" pages ")
+        .number(static_cast<uint32_t>(named.gpu_pages))
+        .text(" address ")
+        .hex(named.gpu_address, 16u)
+        .write();
 }
 
 /* A swap chain's flip names no frame (point 0): the host copies the buffer,
@@ -121,6 +199,9 @@ HRESULT D3d11Device::show_flip(const ResourceRecord &source, uint32_t subresourc
     const bool flip = source.present_model == d3d::SwapChainBuffer::Model::flip &&
                       (source.bind & D3D10_DDI_BIND_PRESENT) != 0u;
     if (!flip && source.present_model != d3d::SwapChainBuffer::Model::scanout) return S_OK;
+    /* The copy lands in what DWM composes from: not before the flip before it
+     * is shown (FlipShownWait). */
+    if (present_order_.constructed()) present_order_.object().await_flip_shown();
     if (d3dproto::av_d3d_PresentPoint(wire(), source.stamp.id(), subresource, 0u)) return S_OK;
     return lost(__func__);
 }
@@ -177,9 +258,10 @@ HRESULT D3d11Device::present_to_kernel(ResourceRecord &source, ResourceRecord *d
     present.hContext = context_;
     present.PrivateDriverDataSize = named ? static_cast<UINT>(sizeof record) : 0u;
     present.pPrivateDriverData = named ? record : nullptr;
-    const HRESULT presented = present_order_.object().submitted(dxgi_->pfnPresentCb(runtime_.handle, &present),
-        source.present_model != d3d::SwapChainBuffer::Model::blt
-            ? d3d::PresentOrder::Reuse::after_context : d3d::PresentOrder::Reuse::immediate);
+    const HRESULT handed = dxgi_->pfnPresentCb(runtime_.handle, &present);
+    const HRESULT presented = source.present_model != d3d::SwapChainBuffer::Model::blt
+                                  ? present_order_.object().flipped(handed, source.vidpn_source)
+                                  : present_order_.object().submitted(handed, d3d::PresentOrder::Reuse::immediate);
     /* The runtime turns a refused present into a removed device without
      * saying why; the answer is only ever seen here. */
     if (FAILED(presented) && present_refused_.first()) {
@@ -404,12 +486,18 @@ HRESULT D3d11Device::rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDE
     uint32_t ids[max_rotation] = {};
     for (UINT index = 0u; index < args->Resources; index++) ids[index] = record(args->pResources[index]).stamp.id();
     if (!d3dproto::av_d3d_RotateResources11(wire(), args->Resources, ids)) return E_OUTOFMEMORY;
+    /* The rows GDI was last shown belong to the allocation a record had, not
+     * the one it is about to have: the next DC refreshes them. */
+    for (UINT index = 0u; index < args->Resources; index++) end_gdi_watch(record(args->pResources[index]));
+    resolved_ = nullptr;
+    flush_candidate_ = nullptr;
     const ResourceRecord first = record(args->pResources[0]);
     for (UINT index = 0u; index < args->Resources; index++) {
         ResourceRecord &to = record(args->pResources[index]);
         const ResourceRecord &from = index + 1u < args->Resources ? record(args->pResources[index + 1u]) : first;
         to.allocation = from.allocation;
         to.allocation_owned = from.allocation_owned;
+        to.resident = from.resident;
         to.allocation_pitch = from.allocation_pitch;
         to.shared_key = from.shared_key;
         to.presents = from.presents;
@@ -424,13 +512,167 @@ HRESULT D3d11Device::rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDE
     return S_OK;
 }
 
-HRESULT D3d11Device::resolve_shared_resource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *)
+/* Another process reads a shared resource through the host's own object, so
+ * for it there is only the work before this to submit. GDI does not: under
+ * software device bitmaps the runtime asks for this and then hands GDI the
+ * allocation itself, with no copy and no call when GDI is done (a DXGI GetDC;
+ * without the bit it copies through a staging texture instead). On hardware
+ * those are the texture's own pixels. Here they are the host's, so they are
+ * read into the allocation now: this is the one moment anyone has asked.
+ *
+ * The runtime also resolves a keyed-mutex texture at every ReleaseSync, for
+ * the other process, which needs no pages, and the creation of the two is the
+ * same to the driver. The calls tell them apart: ReleaseSync's resolve is
+ * followed directly by the runtime's Flush, and GetDC's is not (nothing GDI
+ * does finishes in microseconds: it must make a DC and release it first). So
+ * the resolve is remembered with when it returned, and a Flush that is the
+ * next call on its thread within runtime_flush_ns marks the texture
+ * resolved_for_sharing: it is read back once, never again. */
+HRESULT D3d11Device::resolve_shared_resource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *args)
 {
     AV_SCOPE("D3d11Device::resolve_shared_resource");
-    /* Another process reads a shared resource through the host's own object,
-     * so there is nothing to resolve into guest memory - only the work before
-     * it to submit. */
-    return wire().flush() == Status::ok ? S_OK : lost(__func__);
+    if (wire().flush() != Status::ok) return lost(__func__);
+    if (parent_ == nullptr && args != nullptr && args->hResource != 0u) {
+        ResourceRecord &resource = record(args->hResource);
+        show_to_gdi(resource);
+        resolved_ = &resource;
+        resolved_thread_ = caller_.thread_id();
+        resolved_returned_ns_ = clock_.now_nanoseconds();
+    }
+    return S_OK;
+}
+
+/* Entered under the call lock, before the scan of a GDI watch: the gap is to
+ * the call's entry, not to the end of a scan. A call on another thread is not
+ * the one after the resolve, and does not forget it. */
+void D3d11Device::note_call_after_resolve()
+{
+    AV_SCOPE("D3d11Device::note_call_after_resolve");
+    if (resolved_ == nullptr || caller_.thread_id() != resolved_thread_) return;
+    flush_candidate_ = resolved_;
+    flush_gap_ns_ = clock_.now_nanoseconds() - resolved_returned_ns_;
+    resolved_ = nullptr;
+}
+
+void D3d11Device::learn_from_flush()
+{
+    AV_SCOPE("D3d11Device::learn_from_flush");
+    if (flush_candidate_ == nullptr) return;
+    ResourceRecord &resource = *flush_candidate_;
+    flush_candidate_ = nullptr;
+    if (flush_gap_ns_ > runtime_flush_ns) return;
+    resource.resolved_for_sharing = 1u;
+    forget_gdi_rows(resource);
+}
+
+void D3d11Device::forget_resolve(const ResourceRecord &resource)
+{
+    AV_SCOPE("D3d11Device::forget_resolve");
+    if (resolved_ == &resource) resolved_ = nullptr;
+    if (flush_candidate_ == &resource) flush_candidate_ = nullptr;
+}
+
+void D3d11Device::show_to_gdi(ResourceRecord &resource)
+{
+    AV_SCOPE("D3d11Device::show_to_gdi");
+    if (resource.resolved_for_sharing != 0u) return;
+    /* An opened surface's pages are its creator's to fill: a redirection
+     * surface's hold what GDI drew. */
+    if (resource.allocation_owned == 0u || resource.format < gdi_format_first || resource.format > gdi_format_last ||
+        resource.format == gdi_format_excluded)
+        return;
+    if (resource.allocation == 0u || resource.dimension != D3D10DDIRESOURCE_TEXTURE2D || resource.mips != 1u ||
+        resource.layers != 1u || resource.samples > 1u || resource.lent != nullptr)
+        return;
+    const size_t bytes = static_cast<size_t>(resource.allocation_pitch) * resource.height;
+    /* Room for the watch on every call: a watch that ran out is begun again
+     * here, and nothing else makes room for it. */
+    const bool room = gdi_watched_.reserve(gdi_watched_.size() + 1u) == Status::ok;
+    if (room && resource.gdi_rows == nullptr)
+        resource.gdi_rows = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
+    /* GDI is handed the pixels whether or not what it draws can be watched for. */
+    if (FAILED(publish(resource, 0u))) {
+        lines_.once("a texture GDI asked for could not be read back");
+        return;
+    }
+    if (resource.gdi_rows == nullptr) {
+        lines_.once("a texture GDI asked for could not be watched for what GDI draws on it");
+        return;
+    }
+    const auto *const pixels = static_cast<const uint8_t *>(kernel_.lock_to_read(resource.allocation));
+    if (pixels == nullptr) return;
+    d3d::GuestSurfaceScan(resource.gdi_rows, resource.allocation_pitch, resource.height).copy_all(pixels);
+    kernel_.unlock(resource.allocation);
+    if (resource.gdi_watch == 0u && (!room || gdi_watched_.append(&resource) != Status::ok)) {
+        lines_.once("a texture GDI asked for could not be watched for what GDI draws on it");
+        return;
+    }
+    /* Nothing says when GDI has finished, and the runtime makes calls of its
+     * own before GDI draws: the rows are looked at through the next calls,
+     * until a write shows or these run out. */
+    constexpr uint32_t calls_to_watch = 32u;
+    resource.gdi_watch = calls_to_watch;
+    resource.gdi_thread = caller_.thread_id();
+    resource.gdi_watch_began = clock_.ticks();
+}
+
+/* What GDI drew goes to the host ahead of whatever this call records, so the
+ * call sees it. Any thread's call may find a write and send it, but only the
+ * thread GDI was handed the DC on counts the watch down or ends it on a
+ * write: another thread's call can land while GDI is halfway through drawing,
+ * and would end the watch before the rest. A worker that took the DC and
+ * parked would leave the watch, and a scan of the texture on every call,
+ * running for good, so another thread's call ends a watch that has run for
+ * `longest_gdi_watch_seconds`. The device's PerformanceClock is the clock:
+ * the Windows-facing time every call of this driver is already measured by. */
+void D3d11Device::take_gdi_writes()
+{
+    AV_SCOPE("D3d11Device::take_gdi_writes");
+    taking_gdi_writes_ = true;
+    const uint32_t self = caller_.thread_id();
+    const uint64_t now = clock_.ticks();
+    for (uint32_t index = gdi_watched_.size(); index-- > 0u;) {
+        ResourceRecord &resource = *gdi_watched_.at(index);
+        const auto *const pixels = static_cast<const uint8_t *>(kernel_.lock_to_read(resource.allocation));
+        if (pixels == nullptr) {
+            end_gdi_watch(resource);
+            continue;
+        }
+        d3d::GuestSurfaceScan scan(resource.gdi_rows, resource.allocation_pitch, resource.height);
+        const d3d::RowBand band = scan.differing(pixels);
+        kernel_.unlock(resource.allocation);
+        if (!band.empty()) {
+            const D3D10_DDI_BOX box = {0, static_cast<LONG>(band.first()), 0, static_cast<LONG>(resource.width),
+                                       static_cast<LONG>(band.end()), 1};
+            upload(resource, 0u, &box, resource.gdi_rows + band.first() * static_cast<size_t>(resource.allocation_pitch),
+                   resource.allocation_pitch, 0u, 0u);
+        }
+        if (resource.gdi_thread != self) {
+            if (now - resource.gdi_watch_began >= longest_gdi_watch_seconds * clock_.frequency()) end_gdi_watch(resource);
+            continue;
+        }
+        if (!band.empty() || --resource.gdi_watch == 0u) end_gdi_watch(resource);
+    }
+    taking_gdi_writes_ = false;
+}
+
+void D3d11Device::end_gdi_watch(ResourceRecord &resource)
+{
+    AV_SCOPE("D3d11Device::end_gdi_watch");
+    resource.gdi_watch = 0u;
+    for (uint32_t index = 0u; index < gdi_watched_.size(); index++) {
+        if (gdi_watched_.at(index) != &resource) continue;
+        gdi_watched_.remove_swap(index);
+        return;
+    }
+}
+
+void D3d11Device::forget_gdi_rows(ResourceRecord &resource)
+{
+    AV_SCOPE("D3d11Device::forget_gdi_rows");
+    end_gdi_watch(resource);
+    if (resource.gdi_rows != nullptr) memory_.release(resource.gdi_rows);
+    resource.gdi_rows = nullptr;
 }
 
 HRESULT D3d11Device::set_display_mode(DXGI_DDI_ARG_SETDISPLAYMODE *args)
@@ -479,11 +721,17 @@ bool D3d11Device::open_cross_adapter(ResourceRecord &resource, const D3D10DDIARG
     if (opened.pPrivateDriverData == nullptr ||
         descriptor.decode(static_cast<const uint8_t *>(opened.pPrivateDriverData), opened.PrivateDriverDataSize) !=
             Status::ok ||
-        descriptor.kind() != AllocationKind::cross_adapter || descriptor.layout().format() == 0u)
+        descriptor.layout().format() == 0u)
         return false;
+    /* A window's redirection surface as CDD makes it: the host composes from
+     * the pages themselves, so no compose reads them on the CPU (and one that
+     * cannot be lent is still read, by open_guest_surface). */
+    const bool redirection = descriptor.kind() == AllocationKind::gdi && descriptor.cpu_visible();
+    if (descriptor.kind() != AllocationKind::cross_adapter && !redirection) return false;
     const SurfaceLayout &layout = descriptor.layout();
     D3d9PresentFormat    presented(0u);
     if (!presented.take_ddi(layout.format())) {
+        if (redirection) return false;
         lines_.write("a cross-adapter texture of a format this driver does not know");
         set_error(E_INVALIDARG);
         return true;
@@ -495,12 +743,19 @@ bool D3d11Device::open_cross_adapter(ResourceRecord &resource, const D3D10DDIARG
     resource.layers = 1u;
     resource.mips = 1u;
     resource.samples = 1u;
-    resource.format = presented.dxgi();
+    resource.format = redirection ? presented.viewed() : presented.dxgi();
     resource.bind = D3D10_DDI_BIND_SHADER_RESOURCE | D3D10_DDI_BIND_RENDER_TARGET;
     resource.allocation_pitch = layout.pitch();
+    /* A window's redirection surface the kernel made as a cross-adapter
+     * texture is presented into as a GDI one is (address_destination). */
+    resource.gpu_pages = layout.pages();
     /* The very pages the creator's device lent on its adapter, lent here
      * on this one: the device finds they are the same and joins them. */
     if (lender_.lend(resource.allocation, descriptor.size(), resource.lent) != Status::ok) {
+        if (redirection) {
+            if (redirection_unlent_.first()) lines_.write("a window's redirection surface could not be lent: it is read");
+            return false;
+        }
         lines_.write("the device took no opened cross-adapter texture's pages");
         set_error(E_OUTOFMEMORY);
         return true;
@@ -546,6 +801,8 @@ bool D3d11Device::open_guest_surface(ResourceRecord &resource, const D3D10DDIARG
     resource.format = presented.viewed();
     resource.bind = D3D10_DDI_BIND_SHADER_RESOURCE | D3D10_DDI_BIND_RENDER_TARGET;
     resource.allocation_pitch = layout.pitch();
+    /* The pages a present into it would need an address for (address_destination). */
+    resource.gpu_pages = descriptor.kind() == AllocationKind::gdi ? layout.pages() : 0u;
     d3dproto::ResourceDesc desc = {};
     desc.dimension = resource.dimension;
     desc.width = resource.width;
@@ -603,10 +860,12 @@ void D3d11Device::refresh_bound_guest_surfaces(const D3D10DDI_HSHADERRESOURCEVIE
 }
 
 /* The pages are read ordered after the present engine's write into them, and
- * a present queued during the read defers the band to the next refresh: DWM
- * composes again for that present, and a band shown now could be half a frame
- * (docs/stale-blt-frames.md). Only rows that differ from what was last sent
- * cross. */
+ * the miniport holds every present into them from the begin to the end, so
+ * the two sequences it answers match. They differ only when the hold ran out
+ * (a read slower than the miniport's bound, or a begin that waited out its
+ * time): the band is then deferred to the next refresh, since one shown now
+ * could be half a frame (docs/stale-blt-frames.md). Only rows that differ from
+ * what was last sent cross. */
 void D3d11Device::refresh_guest_surface(ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::refresh_guest_surface");

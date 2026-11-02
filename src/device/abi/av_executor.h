@@ -47,8 +47,10 @@ extern "C" {
  * is handed a copy of the surface in system memory. 25 gave the library
  * alias_memory, by which the memory one adapter's device lent names the same
  * memory in another's, so Direct3D resources two adapters share are one
- * memory on the host. */
-#define AV_EXECUTOR_ABI_VERSION 25u
+ * memory on the host. 26 gave it copy_frame, by which a present's snapshot
+ * is copied on the GPU into the lent memory the destination pages lie over,
+ * with no CPU copy between. */
+#define AV_EXECUTOR_ABI_VERSION 26u
 #define AV_EXECUTOR_OPS_SYMBOL "av_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -176,6 +178,12 @@ typedef struct AvScanoutPlane {
  * in `reserved` of the image it zeroes. */
 #define AV_EXPORT_UNAVAILABLE 2u
 
+/* copy_frame's answer for a frame that is there and cannot be copied this
+ * way - the memory cannot be imported where the frame is, the API stages
+ * nowhere a copy reaches, the colours are not four bytes: map_frame still
+ * reads it. Not AV_UNKNOWN, which is a frame that never came. */
+#define AV_FRAME_UNCOPYABLE 4u
+
 /* A staged frame mapped for reading (map_frame): `height` rows of `width`
  * four-byte pixels, `row_pitch` bytes apart, in the frame's own byte order.
  * Valid until unmap_frame. */
@@ -186,6 +194,41 @@ typedef struct AvFrameView {
     uint32_t height;
     uint32_t reserved;
 } AvFrameView;
+
+/* The most regions one copy_frame names. */
+#define AV_FRAME_COPY_MOST_REGIONS 256u
+
+/* One rectangle copy_frame moves, in pixels: from the frame at
+ * (source_x, source_y) to row destination_y, column destination_x of the
+ * destination. */
+typedef struct AvFrameRegion {
+    uint32_t source_x;
+    uint32_t source_y;
+    uint32_t destination_x;
+    uint32_t destination_y;
+    uint32_t width;
+    uint32_t height;
+} AvFrameRegion;
+
+/* Where copy_frame puts a frame: `size` bytes of the dma-buf `dma_buf`, whose
+ * memory is the lending `lending` - an identity no other memory ever has, so
+ * the library may keep what it imported under it - with row 0 of the
+ * destination at byte `offset` and each row `pitch` bytes after the last. The
+ * descriptor stays the caller's, which keeps it open for the call; a library
+ * that imports it imports a copy. */
+typedef struct AvFrameCopy {
+    int dma_buf;
+    uint32_t pitch;
+    uint64_t lending;
+    uint64_t size;
+    uint64_t offset;
+    const AvFrameRegion *regions; /* `count` of them, at most AV_FRAME_COPY_MOST_REGIONS */
+    uint32_t count;
+    uint32_t reserved;
+    /* No lending with an id below this is live: whatever the library kept of
+     * one may go, once the copies into it are done. 0 for none known. */
+    uint64_t oldest_live;
+} AvFrameCopy;
 
 typedef struct AvExecutorOps {
     uint32_t abi_version;
@@ -339,6 +382,17 @@ typedef struct AvExecutorOps {
                           AvFrameView *view);
     /* That frame let go, mapped or not. Any thread. */
     void (*unmap_frame)(void *opaque, uint32_t domain, uint64_t surface, uint32_t point);
+    /* The same frame, its `copy->count` regions copied on the GPU into the
+     * lent memory `copy` names and done by the time this returns: AV_EXECUTED,
+     * AV_UNKNOWN when the frame is not there within `wait_ms` or the GPU does
+     * not finish in that long (the frame is lost to the present, and the copy
+     * may still land later - after any earlier copy into the same lending
+     * through this library, before any later one), or
+     * AV_FRAME_UNCOPYABLE with the frame still there to map_frame. The frame
+     * is claimed as map_frame claims it: unmap_frame lets it go either way.
+     * Any thread. */
+    uint32_t (*copy_frame)(void *opaque, uint32_t domain, uint64_t surface, uint32_t point, uint32_t wait_ms,
+                           const AvFrameCopy *copy);
     /* The surface the guest shared as `surface` in `domain`, as its own
      * memory, a dma-buf a process outside QEMU imports with no copy
      * (docs/external-export.md): AV_EXECUTED with `image` filled, its fd the

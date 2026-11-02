@@ -33,6 +33,15 @@ public:
     /* S_OK once `allocation` is resident, waiting for the paging the kernel
      * queued for it; the kernel's refusal otherwise. */
     [[nodiscard]] HRESULT make_resident(D3DKMT_HANDLE allocation);
+    /* The first `pages` 4 KiB pages of `allocation` mapped read/write at an
+     * address of this process's GPU virtual space the kernel picks, `address`.
+     * The paging the kernel queued for it is not waited for: nothing on a GPU
+     * reads through the address - dxgkrnl only checks one is assigned. E_NOTIMPL
+     * when the runtime gave the device no callback to map with, the kernel's
+     * refusal otherwise. */
+    [[nodiscard]] HRESULT map_address(D3DKMT_HANDLE allocation, uint64_t pages, uint64_t &address);
+    /* The `pages` pages mapped at `address` given back; S_OK for nothing, 0. */
+    [[nodiscard]] HRESULT unmap_address(uint64_t address, uint64_t pages);
 
 private:
     [[nodiscard]] HRESULT open();

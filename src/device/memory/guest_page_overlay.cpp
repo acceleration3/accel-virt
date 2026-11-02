@@ -3,7 +3,9 @@
 #include "core/trace/function_scope.hpp"
 #include "device/control/control_request.hpp"
 #include "device/host/host.hpp"
+#include "core/support/scope_exit.hpp"
 #include "device/memory/lent_pages.hpp"
+#include "device/memory/run_swap_gate.hpp"
 #include "proto/wire/wire_reader.hpp"
 
 namespace av {
@@ -14,8 +16,8 @@ constexpr const char *unrestored = "virtio-gpu-av: a lent guest run could not be
 
 }  // namespace
 
-GuestPageOverlay::GuestPageOverlay(BlockSource &blocks, LentPages &lent, GuestRamLending &owner)
-    : lent_(lent), owner_(owner), runs_(blocks, Pool::paged), extents_(blocks, Pool::paged), covered_(0u)
+GuestPageOverlay::GuestPageOverlay(BlockSource &blocks, LentPages &lent, RunSwapGate &gate, GuestRamLending &owner)
+    : lent_(lent), gate_(gate), owner_(owner), runs_(blocks, Pool::paged), extents_(blocks, Pool::paged), covered_(0u)
 {
     AV_SCOPE("GuestPageOverlay::GuestPageOverlay");
 }
@@ -34,6 +36,8 @@ Status GuestPageOverlay::add(Host &host, ControlRequest &request, size_t offset,
     uint8_t entry[entry_size] = {};
     if (entries == 0u || request.read(offset + size_t{entries - 1u} * entry_size, entry, sizeof entry) != sizeof entry)
         return Status::invalid_parameter;
+    const bool held = gate_.begin(host);
+    const ScopeExit let_go([this, &host, held] { gate_.end(host, held); });
     for (uint32_t index = 0u; index < entries; index++) {
         static_cast<void>(request.read(offset + index * entry_size, entry, sizeof entry));
         WireReader     reader(entry, sizeof entry);
@@ -71,7 +75,7 @@ Status GuestPageOverlay::lay_entry(Host &host, uint64_t address, uint64_t length
         address += mapped;
         length -= mapped;
     }
-    static_cast<void>(extents_.append(Extent{first, whole}));
+    static_cast<void>(extents_.append(Extent{first, whole, covered_ - whole}));
     return Status::ok;
 }
 
@@ -91,6 +95,8 @@ Status GuestPageOverlay::lay_run(Host &host, void *pointer, uint64_t length, uin
 void GuestPageOverlay::restore(Host &host)
 {
     AV_SCOPE("GuestPageOverlay::restore");
+    const bool held = gate_.begin(host);
+    const ScopeExit let_go([this, &host, held] { gate_.end(host, held); });
     for (uint32_t index = runs_.size(); index-- != 0u;) {
         const Run &run = runs_.at(index);
         if (host.restore_guest_run(run.pointer_, run.length_) != Status::ok) host.log(unrestored);
@@ -130,6 +136,30 @@ uint64_t GuestPageOverlay::extent_length(uint32_t index) const
 {
     AV_SCOPE("GuestPageOverlay::extent_length");
     return extents_.at(index).length_;
+}
+
+bool GuestPageOverlay::locate(uint64_t address, uint64_t length, uint32_t &hint, uint64_t &offset) const
+{
+    AV_SCOPE("GuestPageOverlay::locate");
+    const uint32_t count = extents_.size();
+    if (length == 0u || address + length < address) return false;
+    for (uint32_t step = 0u; step < count; step++) {
+        const uint32_t index = (hint + step) % count;
+        const Extent  &first = extents_.at(index);
+        if (address < first.address_ || address - first.address_ >= first.length_) continue;
+        offset = first.offset_ + (address - first.address_);
+        uint64_t reached = first.length_ - (address - first.address_);
+        uint32_t last = index;
+        for (; reached < length; last++) {
+            const Extent &before = extents_.at(last);
+            if (last + 1u >= count || extents_.at(last + 1u).address_ != before.address_ + before.length_)
+                return false;
+            reached += extents_.at(last + 1u).length_;
+        }
+        hint = last;
+        return true;
+    }
+    return false;
 }
 
 /* The bytes laid are the runs' sum, and every laid page is lent. */

@@ -9,14 +9,17 @@
 namespace av {
 
 class ControlRequest;
+class GuestRamLendings;
 class Host;
 class PresentEngine;
 class PresentFrames;
 
 class PresentEngineCommands {
 public:
-    /* The engine reads image sources from `snapshots`, from the page on. */
-    PresentEngineCommands(Host &host, PresentEngine &engine, const PresentFrames &snapshots);
+    /* The engine reads image sources from `snapshots`, from the page on, and
+     * has the GPU copy them into the memory of `lendings`. */
+    PresentEngineCommands(Host &host, PresentEngine &engine, const PresentFrames &snapshots,
+                          GuestRamLendings &lendings);
     PresentEngineCommands(const PresentEngineCommands &) = delete;
     PresentEngineCommands &operator=(const PresentEngineCommands &) = delete;
 
@@ -29,6 +32,7 @@ private:
     Host                   &host_;
     PresentEngine          &engine_;
     const PresentFrames &snapshots_;
+    GuestRamLendings &lendings_;
 };
 
 }  // namespace av

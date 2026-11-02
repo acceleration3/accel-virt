@@ -24,6 +24,9 @@
 #include <sys/stat.h>
 #include <sys/un.h>
 #include "qemu/rcu.h"
+#include "system/accel-blocker.h"
+#include "system/kvm.h"
+#include "system/runstate.h"
 #include "qemu/event_notifier.h"
 #include "qapi/error.h"
 #include "system/dma.h"
@@ -335,6 +338,30 @@ static int av_restore_guest_run(void *opaque, void *run, uint64_t size)
         return 1;
     }
     return av_move_run(run, size, staging);
+}
+
+/* A run is swapped by copy-then-remap, so a write between the two is lost
+ * (docs/host-memory.md). The guest's processors are the writers that cannot be
+ * told when to stop, so they are held out of KVM_RUN for the whole of a lend
+ * or a restore (accel_ioctl_inhibit_begin: it waits for the vCPUs to leave
+ * KVM_RUN, keeps new entries out, and - unlike pause_all_vcpus - does not drop
+ * the main loop's lock, so no other handler of this device runs in the
+ * middle). It asserts the lock is held, which the device checks first; a vCPU
+ * thread that took the lock for an MMIO write is a vCPU outside KVM_RUN, which
+ * is fine. Under TCG vCPUs do no ioctls and are not held (not supported: the
+ * swap goes on as before); a stopped guest has no writers. */
+static int av_pause_guest(void *opaque)
+{
+    if (!bql_locked() || !kvm_enabled() || !runstate_is_running()) {
+        return 1;
+    }
+    accel_ioctl_inhibit_begin();
+    return 0;
+}
+
+static void av_resume_guest(void *opaque)
+{
+    accel_ioctl_inhibit_end();
 }
 
 static void av_release_range(void *opaque, void *base, uint64_t size)
@@ -1143,6 +1170,8 @@ void virtio_gpu_av_host_init(VirtIOGPUAv *r)
         .release_range = av_release_range,
         .overlay_guest_run = av_overlay_guest_run,
         .restore_guest_run = av_restore_guest_run,
+        .pause_guest = av_pause_guest,
+        .resume_guest = av_resume_guest,
         .hostmem_size = av_hostmem_size,
         .place_in_hostmem = av_place_in_hostmem,
         .remove_from_hostmem = av_remove_from_hostmem,

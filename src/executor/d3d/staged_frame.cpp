@@ -37,6 +37,19 @@ StagedFrame::Reading StagedFrame::read(AvFrameView &view)
     return Reading::mapped;
 }
 
+StagedFrame::Copying StagedFrame::copy(const AvFrameCopy &target, uint32_t wait_ms)
+{
+    AV_SCOPE("StagedFrame::copy");
+    if (forsaken()) return Copying::timed_out;
+    return copy_into(target, wait_ms);
+}
+
+StagedFrame::Copying StagedFrame::copy_into(const AvFrameCopy &, uint32_t)
+{
+    AV_SCOPE("StagedFrame::copy_into");
+    return Copying::declined;
+}
+
 void StagedFrame::release()
 {
     AV_SCOPE("StagedFrame::release");

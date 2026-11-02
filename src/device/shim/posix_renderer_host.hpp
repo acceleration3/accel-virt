@@ -93,6 +93,8 @@ public:
     /* Host blobs live in QEMU's process, never in the renderer's. */
     [[nodiscard]] Status overlay_guest_run(void *run, uint64_t bytes, int fd, uint64_t offset) override;
     [[nodiscard]] Status restore_guest_run(void *run, uint64_t bytes) override;
+    [[nodiscard]] bool   pause_guest() override;
+    void                 resume_guest() override;
 
     uint64_t             hostmem_size() override;
     [[nodiscard]] Status place_in_hostmem(int fd, uint64_t size, uint64_t offset) override;

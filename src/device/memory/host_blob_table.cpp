@@ -162,6 +162,12 @@ void HostBlobTable::share_lendings(GuestRamLendings &lendings)
     lendings_ = &lendings;
 }
 
+GuestRamLendings &HostBlobTable::lendings()
+{
+    AV_SCOPE("HostBlobTable::lendings");
+    return *lendings_;
+}
+
 Status HostBlobTable::adopt(uint32_t id, ControlRequest &request, size_t offset, uint32_t entries)
 {
     AV_SCOPE("HostBlobTable::adopt");

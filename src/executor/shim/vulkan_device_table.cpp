@@ -22,7 +22,7 @@ VulkanDeviceTable::VulkanDeviceTable()
       bind_(nullptr), layout_(nullptr), memory_fd_(nullptr), create_semaphore_(nullptr), destroy_semaphore_(nullptr),
       import_semaphore_(nullptr), semaphore_fd_(nullptr), wait_semaphores_(nullptr), create_pool_(nullptr),
       destroy_pool_(nullptr), allocate_buffers_(nullptr), begin_(nullptr), end_(nullptr), reset_(nullptr),
-      barrier_(nullptr), copy_image_(nullptr), submit_(nullptr), queue_idle_(nullptr), lose_(nullptr)
+      barrier_(nullptr), copy_image_(nullptr), copy_image_to_buffer_(nullptr), submit_(nullptr), queue_idle_(nullptr), lose_(nullptr)
 {
     AV_SCOPE("VulkanDeviceTable::VulkanDeviceTable");
 }
@@ -73,6 +73,7 @@ bool VulkanDeviceTable::load(VkInstance instance, VkPhysicalDevice physical, VkD
     reset_ = reinterpret_cast<PFN_vkResetCommandBuffer>(entry("vkResetCommandBuffer"));
     barrier_ = reinterpret_cast<PFN_vkCmdPipelineBarrier>(entry("vkCmdPipelineBarrier"));
     copy_image_ = reinterpret_cast<PFN_vkCmdCopyImage>(entry("vkCmdCopyImage"));
+    copy_image_to_buffer_ = reinterpret_cast<PFN_vkCmdCopyImageToBuffer>(entry("vkCmdCopyImageToBuffer"));
     submit_ = reinterpret_cast<PFN_vkQueueSubmit>(entry("vkQueueSubmit"));
     queue_idle_ = reinterpret_cast<PFN_vkQueueWaitIdle>(entry("vkQueueWaitIdle"));
     lose_ = reinterpret_cast<void (*)(VkDevice)>(entry("vkAvLoseDeviceAV"));
@@ -274,6 +275,20 @@ uint32_t VulkanDeviceTable::system_memory_type(uint32_t allowed) const
         if ((allowed & (1u << type)) != 0u && (flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u &&
             (flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == 0u)
             return type;
+    }
+    return VK_MAX_MEMORY_TYPES;
+}
+
+uint32_t VulkanDeviceTable::coherent_memory_type(uint32_t allowed) const
+{
+    AV_SCOPE("VulkanDeviceTable::coherent_memory_type");
+    constexpr VkMemoryPropertyFlags coherent = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    constexpr VkMemoryPropertyFlags cached = coherent | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+    for (uint32_t pass = 0u; pass < 2u; pass++) {
+        const VkMemoryPropertyFlags wanted = pass == 0u ? cached : coherent;
+        for (uint32_t type = 0u; type < memory_.memoryTypeCount; type++)
+            if ((allowed & (1u << type)) != 0u && (memory_.memoryTypes[type].propertyFlags & wanted) == wanted)
+                return type;
     }
     return VK_MAX_MEMORY_TYPES;
 }
@@ -548,6 +563,21 @@ void VulkanDeviceTable::copy_image(VkCommandBuffer buffer, VkImage source, VkIma
     if (loaded())
         copy_image_(buffer, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destination,
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1u, &region);
+}
+
+void VulkanDeviceTable::copy_image_to_buffer(VkCommandBuffer buffer, VkImage source, VkBuffer destination,
+                                             uint32_t count, const VkBufferImageCopy *regions) const
+{
+    AV_SCOPE("VulkanDeviceTable::copy_image_to_buffer");
+    if (loaded() && copy_image_to_buffer_ != nullptr)
+        copy_image_to_buffer_(buffer, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, destination, count, regions);
+}
+
+void VulkanDeviceTable::memory_barrier(VkCommandBuffer buffer, VkPipelineStageFlags from, VkPipelineStageFlags to,
+                                       const VkMemoryBarrier &barrier) const
+{
+    AV_SCOPE("VulkanDeviceTable::memory_barrier");
+    if (loaded()) barrier_(buffer, from, to, 0u, 1u, &barrier, 0u, nullptr, 0u, nullptr);
 }
 
 bool VulkanDeviceTable::submit(VkQueue queue, const VkSubmitInfo &submitted) const

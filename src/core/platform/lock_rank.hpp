@@ -30,6 +30,8 @@ enum class LockRank : uint16_t {
     dpc = 150u,                /* spin lock: the adapter's DPC, which KeInsertQueueDpc may run on two
                                   processors at once; completions must reach dxgkrnl one at a time, in order */
     av_context_slots = 190u,  /* spin lock: which av contexts are live, around a submission and the DPC's serve */
+    present_reads = 193u,      /* spin lock: one allocation's open reads of presented pages, around the
+                                  gate's look and the write it admits */
     present_waiters = 195u,    /* spin lock: which readers of presented pages sleep in which slot, around a
                                   wait's look and the DPC's and the present's wake */
     execution_node = 200u,     /* spin lock: SubmitCommand, PreemptCommand and the DPC */

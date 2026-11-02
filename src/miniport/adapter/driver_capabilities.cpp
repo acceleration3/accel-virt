@@ -34,14 +34,19 @@ Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) con
     caps.MemoryManagementCaps = memory_cross_adapter_resource | memory_virtual_addressing | memory_gpu_mmu;
     caps.GpuEngineTopologyNbAsymetricProcessingNodes = node_count;
     caps.FlipCaps = flip_on_vsync_mmio;
-    /* SupportSoftwareDeviceBitmaps stays unreported: with it, d3d9.dll opens
-     * the window's redirection surface into the application's device and
-     * expects the user-mode driver to copy each frame into it (D3D9On12 does;
-     * the kernel moves nothing), which avumd does not do yet - every Direct3D
-     * 9 window would be blank. The legacy path that bit leaves has the tear
-     * docs/stale-blt-frames.md describes, and leaving it is what the kernel
-     * mode command buffer bit is for. */
-    caps.PresentationCaps = presentation_kernel_mode_command_buffer | presentation_gdi_limits;
+    /* With 0, dxgkrnl presents a windowed blt-model application through its
+     * blt-via-GDI fallback: a CPU copy into the window's redirection DIB that
+     * DWM reads with no handshake, so a frame is composed half written
+     * (docs/stale-blt-frames.md). With software device bitmaps CDD makes that
+     * surface a GDI standard allocation, d3d9.dll opens it into the
+     * application's device - which maps a GPU virtual address for it, as
+     * dxgkrnl rejects the present of a GPU-VA context whose destination has
+     * none - and every present names it, so dxgkrnl hands the redirected blt
+     * to DxgkDdiPresent, where the present engine moves the pixels. DWM composes
+     * from those pages lent to the host (open_cross_adapter): read on the CPU
+     * in every compose, this bit cost its render thread 5 ms a frame at
+     * 2560x1440 (docs/frame-pacing.md). */
+    caps.PresentationCaps = presentation_software_device_bitmaps | presentation_gdi_software_limits;
     caps.SupportPerEngineTDR = 1u;
     /* Overlay planes, which dxgkrnl takes only beside DirectFlip and from one
      * to ten of them (DXGADAPTER::Initialize); it then clears both again unless

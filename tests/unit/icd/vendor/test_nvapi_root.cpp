@@ -137,7 +137,7 @@ TEST(nvapi_root, memory_info_answers_each_version_and_refuses_another)
   CHECK_EQ(future.dedicatedVideoMemory, 0u);
   CHECK_EQ(machine.root().memory_info(gpu, nullptr), NvapiRoot::invalid_argument); }
 
-/* The driver package's version as NVAPI writes a driver's, and the primary
+/* The user-mode driver's version as NVAPI writes a driver's, and the primary
  * display: the one display NVIDIA GPUs drive here, and the GPU driving it. */
 TEST(nvapi_root, the_driver_version_and_the_primary_display_with_its_gpu)
 { Machine machine;
@@ -145,7 +145,7 @@ TEST(nvapi_root, the_driver_version_and_the_primary_display_with_its_gpu)
   std::uint32_t driver = 0u;
   char          branch[NvapiRoot::short_string] = {};
   CHECK_EQ(machine.root().driver_and_branch_version(&driver, branch), NvapiRoot::ok);
-  CHECK_EQ(driver, 3505u);
+  CHECK_EQ(driver, 50000u);
   CHECK(std::strcmp(branch, "avgpu 0.35.5.0") == 0);
   void *display = nullptr;
   CHECK_EQ(machine.root().enum_display(0u, &display), NvapiRoot::ok);

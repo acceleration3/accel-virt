@@ -40,6 +40,16 @@ public:
      * redirection surface, which a present names as its destination - asked
      * to be resident for this device; the kernel's refusal is said once. */
     [[nodiscard]] HRESULT keep_resident(D3DKMT_HANDLE allocation);
+    /* The same, and addressable: `pages` 4 KiB pages of the opened surface
+     * mapped at a GPU virtual address of this process, `address`. dxgkrnl
+     * looks up the destination's address in the presenting process before it
+     * calls the miniport, and rejects a present of a GPU virtual addressing
+     * context whose destination has none, with nothing said (DXGCONTEXT::
+     * SubmitPresentWithDmaBuffer). Each refusal is said once, with the answer. */
+    [[nodiscard]] HRESULT keep_addressable(D3DKMT_HANDLE allocation, uint64_t pages, uint64_t &address);
+    /* The address `keep_addressable` gave, given back once the surface is
+     * closed; nothing for 0. */
+    void release_address(uint64_t address, uint64_t pages);
     /* The device's own context, on the one engine the miniport runs. */
     [[nodiscard]] HRESULT make_context(HANDLE &context);
 

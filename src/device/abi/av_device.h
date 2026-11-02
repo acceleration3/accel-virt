@@ -126,6 +126,15 @@ typedef struct AvHostOps {
     /* Main loop. The RAM at `run` its own file's again, holding what the
      * overlay held: nonzero when it could not be. */
     int (*restore_guest_run)(void *opaque, void *run, uint64_t size);
+    /* Main loop. The guest's processors held out of guest memory - none is
+     * running guest code, and none starts - until resume_guest, so that a
+     * write they would make cannot fall between the copy and the remap of a
+     * run swap: 0 when held, and resume_guest then follows; nonzero when
+     * nothing is held (the guest is stopped already, or the accelerator has
+     * no way to hold it, or this is not the main loop). NULL: never held. The
+     * main loop's lock is not released. */
+    int (*pause_guest)(void *opaque);
+    void (*resume_guest)(void *opaque);
     uint64_t (*hostmem_size)(void *opaque);
     /* The `size` bytes of the dma-buf `fd` - host GPU memory the executor
      * allocated (docs/host-memory.md) - mapped at `offset` of the hostmem

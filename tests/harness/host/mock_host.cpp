@@ -985,6 +985,22 @@ Status MockHost::overlay_guest_run(void *run, std::uint64_t bytes, int fd, std::
     return Status::ok;
 }
 
+bool MockHost::pause_guest()
+{
+    StateLock lock(state_);
+    guest_pauses_++;
+    return true;
+}
+
+void MockHost::resume_guest()
+{
+    StateLock lock(state_);
+    guest_resumes_++;
+}
+
+std::uint32_t MockHost::guest_pauses() const { return guest_pauses_; }
+std::uint32_t MockHost::guest_resumes() const { return guest_resumes_; }
+
 Status MockHost::restore_guest_run(void *run, std::uint64_t bytes)
 {
     StateLock lock(state_);

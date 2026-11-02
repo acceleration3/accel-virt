@@ -102,6 +102,12 @@ public:
     /* A present's staged frame, mapped and let go. Any thread. */
     bool map_frame(const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) const;
     void unmap_frame(const SurfacePoint &frame) const;
+    /* The frame copied on the GPU into the lent memory `copy` names
+     * (AvExecutorOps::copy_frame), and done: ok; not_found when the frame did
+     * not come in `wait_ms` or the GPU did not finish in that long; not_supported
+     * where the library cannot copy it that way - no domain included - and
+     * map_frame still reads it. Any thread. */
+    [[nodiscard]] Status copy_frame(const SurfacePoint &frame, uint32_t wait_ms, const AvFrameCopy &copy) const;
     /* A shared surface handed to a process outside QEMU, and the copies into
      * it with a sync_file for them: false, with nothing handed over, without
      * a domain or for a surface the library does not know. `flags` are AV_EXPORT_*. Any thread. */
