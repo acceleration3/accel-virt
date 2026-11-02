@@ -59,7 +59,6 @@ public:
     bool read_image(uint64_t key, void *pixels, uint32_t stride, uint32_t width, uint32_t height) const;
     bool map_frame(const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) const;
     void unmap_frame(const SurfacePoint &frame) const;
-    [[nodiscard]] Status copy_frame(const SurfacePoint &frame, uint32_t wait_ms, const AvFrameCopy &copy) const;
     bool export_surface(uint64_t surface, uint32_t flags, AvExportedImage &image) const;
     bool sync_surface(uint64_t surface, uint32_t flags, uint64_t &writes, int &fd) const;
 

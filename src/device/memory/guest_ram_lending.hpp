@@ -14,27 +14,20 @@ namespace av {
 class ContextPlane;
 class ControlRequest;
 class Host;
-class LendingLife;
 class LentPages;
-class RunSwapGate;
 
 class GuestRamLending {
 public:
-    GuestRamLending(BlockSource &blocks, LentPages &pages, RunSwapGate &gate, LendingLife &life, uint64_t id,
-                    uint64_t size, int fd, ContextPlane &plane, uint64_t key);
+    GuestRamLending(BlockSource &blocks, LentPages &pages, uint64_t size, int fd, ContextPlane &plane, uint64_t key);
     ~GuestRamLending();
     GuestRamLending(const GuestRamLending &) = delete;
     GuestRamLending &operator=(const GuestRamLending &) = delete;
 
-    uint64_t id() const;
-    int      descriptor() const;
-    LendingLife &life() const;
     uint64_t size() const;
     uint64_t start() const;
     bool     complete() const;
 
     [[nodiscard]] Status lay(Host &host, ControlRequest &request, size_t offset, uint32_t entries);
-    [[nodiscard]] bool   locate(uint64_t address, uint64_t length, uint32_t &hint, uint64_t &offset) const;
     [[nodiscard]] Status verify(ControlRequest &request, size_t offset, uint32_t entries, uint32_t &next) const;
 
     [[nodiscard]] Status join(ContextPlane &plane, uint64_t key);
@@ -52,8 +45,6 @@ private:
         uint64_t      key_;
     };
 
-    LendingLife          &life_;
-    uint64_t              id_;
     uint64_t              size_;
     int                   fd_;
     GuestPageOverlay      overlay_;

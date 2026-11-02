@@ -15,6 +15,7 @@ class HostAllocation;
 }
 
 namespace av::d3d11 {
+
 struct ResourceRecord {
     static constexpr uint32_t tag = 0x52524B56u;
 
@@ -36,20 +37,12 @@ struct ResourceRecord {
     uint32_t allocation;
     uint32_t allocation_pitch;
     uint32_t allocation_owned;
-    uint32_t resident;
-    uint64_t gpu_address;
-    uint64_t gpu_pages;
     uint32_t refreshed;
     uint32_t shadow_watched;
     uint32_t shadow_local;
     uint64_t shared_key;
     d3d::PresentCount presents;
     d3d::RowBand pending_rows;
-    uint8_t *gdi_rows;
-    uint32_t gdi_watch;
-    uint32_t gdi_thread;
-    uint64_t gdi_watch_began;
-    uint32_t resolved_for_sharing;
     void    *runtime_resource;
     uint8_t *shadow;
     size_t   shadow_bytes;

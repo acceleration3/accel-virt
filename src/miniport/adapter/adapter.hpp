@@ -42,6 +42,7 @@
 #include "miniport/scheduling/execution_node.hpp"
 #include "miniport/scheduling/hw_queue_contexts.hpp"
 #include "miniport/scheduling/native_fence_table.hpp"
+#include "miniport/scheduling/render_km_tally.hpp"
 #include "miniport/scheduling/hw_queue_submissions.hpp"
 #include "miniport/scheduling/doorbell_table.hpp"
 #include "miniport/scheduling/hw_queue_table.hpp"
@@ -175,6 +176,7 @@ public:
     int32_t create_context(void *device, DxgkargCreateContextRecord *request);
     int32_t destroy_context(void *context);
     int32_t render(void *context, DxgkargRenderRecord *request);
+    int32_t render_km(void *context, DxgkargRenderRecord *request);
     int32_t patch(const DxgkargPatchRecord *request);
     int32_t submit_command(const DxgkargSubmitCommandRecord *request);
     int32_t preempt_command(const DxgkargPreemptCommandRecord *request);
@@ -307,9 +309,6 @@ private:
     int32_t          wake_event(const DxgkargEscapeRecord &escape);
     int32_t          next_point(const DxgkargEscapeRecord &escape);
     int32_t          pages_read(const DxgkargEscapeRecord &escape);
-    [[nodiscard]] bool begin_pages_read(Allocation &allocation, uint32_t wait_microseconds, uint64_t &sequence);
-    void             end_pages_read(Allocation &allocation);
-    void             admit_present_write(Allocation &destination);
     int32_t          publish_own_tail(const DxgkargEscapeRecord &escape);
     [[nodiscard]] Status submit_av(const DxgkargSubmitCommandVirtualRecord &request, uint64_t &awaited);
     [[nodiscard]] Status submit_follow(const Context &context, const FollowRecord &follow, uint32_t fence,
@@ -377,6 +376,7 @@ private:
     AllocationTable                allocations_;
     DeviceTable                    devices_;
     ContextTable                   contexts_;
+    RenderKmTally                  render_km_;
     AvContextTable                av_contexts_;
     HwQueueTable                   hw_queues_;
     HwQueueSubmissions             hw_submissions_;
@@ -408,8 +408,6 @@ private:
     uint64_t                       presents_parked_;
     uint64_t                       presents_refused_;
     uint64_t                       presents_unpointed_;
-    uint64_t                       reads_opened_;
-    uint64_t                       reads_expired_;
     uint32_t                       last_present_flags_;
     int32_t                        last_present_status_;
     uint32_t                       last_present_destination_kind_;

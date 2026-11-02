@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "qemu/osdep.h"
 #include "qemu/error-report.h"
 #include "qemu/main-loop.h"
@@ -12,9 +11,6 @@
 #include <sys/stat.h>
 #include <sys/un.h>
 #include "qemu/rcu.h"
-#include "system/accel-blocker.h"
-#include "system/kvm.h"
-#include "system/runstate.h"
 #include "qemu/event_notifier.h"
 #include "qapi/error.h"
 #include "system/dma.h"
@@ -298,20 +294,6 @@ static int av_restore_guest_run(void *opaque, void *run, uint64_t size)
         return 1;
     }
     return av_move_run(run, size, staging);
-}
-
-static int av_pause_guest(void *opaque)
-{
-    if (!bql_locked() || !kvm_enabled() || !runstate_is_running()) {
-        return 1;
-    }
-    accel_ioctl_inhibit_begin();
-    return 0;
-}
-
-static void av_resume_guest(void *opaque)
-{
-    accel_ioctl_inhibit_end();
 }
 
 static void av_release_range(void *opaque, void *base, uint64_t size)
@@ -1056,8 +1038,6 @@ void virtio_gpu_av_host_init(VirtIOGPUAv *r)
         .release_range = av_release_range,
         .overlay_guest_run = av_overlay_guest_run,
         .restore_guest_run = av_restore_guest_run,
-        .pause_guest = av_pause_guest,
-        .resume_guest = av_resume_guest,
         .hostmem_size = av_hostmem_size,
         .place_in_hostmem = av_place_in_hostmem,
         .remove_from_hostmem = av_remove_from_hostmem,

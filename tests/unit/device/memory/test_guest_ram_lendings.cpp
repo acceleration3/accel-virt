@@ -1,8 +1,6 @@
 #include "core/support/status.hpp"
 #include "device/control/control_request.hpp"
 #include "device/memory/guest_ram_lendings.hpp"
-#include "device/memory/lending_life.hpp"
-#include "device/memory/lent_run.hpp"
 #include "harness/context/recording_context_plane.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
@@ -153,51 +151,3 @@ TEST(guest_ram_lending_verify, a_joiners_entries_must_be_the_ones_the_lender_lai
   CHECK_STATUS(lender->verify(other_request, header, 1u, next), Status::invalid_parameter);
   CHECK_EQ(next, 0u);
   fixture.lendings().leave(fixture.host(), *lender, fixture.first(), 7u); }
-
-TEST(guest_ram_lendings_locate, finds_the_lending_and_the_offset_of_a_run_in_order)
-{ Fixture fixture;
-  GuestRamLending *const lender = fixture.lend_two_pages();
-  const std::uint64_t first = ram + 2u * page;
-  const auto locate = [&](const EntryList &list, av::LentRun &run) {
-      MockRequest    mock(list.bytes(), list.size());
-      ControlRequest request(fixture.host(), &mock);
-      return fixture.lendings().locate(request, header, 2u, run);
-  };
-  const auto locate_one = [&](const EntryList &list, av::LentRun &run) {
-      MockRequest    mock(list.bytes(), list.size());
-      ControlRequest request(fixture.host(), &mock);
-      return fixture.lendings().locate(request, header, 1u, run);
-  };
-  av::LentRun run;
-  CHECK_STATUS(locate_one(EntryList(1u).add(first + page, static_cast<std::uint32_t>(page)), run), Status::ok);
-  CHECK(run.lending() == lender);
-  CHECK_EQ(run.offset(), page);
-  CHECK_EQ(run.length(), page);
-  CHECK_STATUS(locate(EntryList(2u).add(first, static_cast<std::uint32_t>(page)).add(first + page, static_cast<std::uint32_t>(page)), run),
-               Status::ok);
-  CHECK_EQ(run.offset(), 0u);
-  CHECK_EQ(run.length(), 2u * page);
-  CHECK_STATUS(locate(EntryList(2u).add(first + page, static_cast<std::uint32_t>(page)).add(first, static_cast<std::uint32_t>(page)), run),
-               Status::not_supported);
-  CHECK_STATUS(locate_one(EntryList(1u).add(first + page, static_cast<std::uint32_t>(2u * page)), run), Status::not_supported);
-  CHECK_STATUS(locate_one(EntryList(1u).add(ram + 8u * page, static_cast<std::uint32_t>(page)), run), Status::not_found);
-  CHECK_STATUS(locate(EntryList(1u).add(first, static_cast<std::uint32_t>(page)), run), Status::invalid_parameter);
-  fixture.lendings().leave(fixture.host(), *lender, fixture.first(), 7u);
-  CHECK(fixture.lendings().invariants_hold()); }
-
-TEST(guest_ram_lendings_swaps, hold_the_writers_still_once_for_each_lay_and_each_give_back)
-{ Fixture fixture;
-  CHECK_EQ(fixture.host().guest_pauses(), 0u);
-  GuestRamLending *const lender = fixture.lend_two_pages();
-  CHECK_EQ(fixture.host().guest_pauses(), 1u);
-  CHECK_EQ(fixture.host().guest_resumes(), 1u);
-  av::LendingLife *const watched = fixture.lendings().watch(*lender);
-  CHECK(!watched->given_back());
-  CHECK_EQ(fixture.lendings().oldest_live(), lender->id());
-  fixture.lendings().leave(fixture.host(), *lender, fixture.first(), 7u);
-  CHECK_EQ(fixture.host().guest_pauses(), 2u);
-  CHECK_EQ(fixture.host().guest_resumes(), 2u);
-  CHECK(watched->given_back());
-  CHECK_EQ(fixture.lendings().oldest_live(), 0u);
-  fixture.lendings().unwatch(watched);
-  CHECK(fixture.lendings().invariants_hold()); }

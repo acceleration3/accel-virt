@@ -19,8 +19,6 @@ public:
     PagingQueue &operator=(const PagingQueue &) = delete;
 
     [[nodiscard]] HRESULT make_resident(D3DKMT_HANDLE allocation);
-    [[nodiscard]] HRESULT map_address(D3DKMT_HANDLE allocation, uint64_t pages, uint64_t &address);
-    [[nodiscard]] HRESULT unmap_address(uint64_t address, uint64_t pages);
 
 private:
     [[nodiscard]] HRESULT open();

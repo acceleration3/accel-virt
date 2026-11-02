@@ -1,6 +1,5 @@
 #include "executor/shim/dxvk_vulkan_device.hpp"
 
-#include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/owned_fd.hpp"
 #include "executor/shim/d3d_headers.hpp"
@@ -70,31 +69,6 @@ const VulkanDeviceTable &DxvkVulkanDevice::table() const
 {
     AV_SCOPE("DxvkVulkanDevice::table");
     return table_;
-}
-
-BorrowedQueue &DxvkVulkanDevice::queue()
-{
-    AV_SCOPE("DxvkVulkanDevice::queue");
-    return queue_;
-}
-
-bool DxvkVulkanDevice::texture_image(ID3D11Texture2D *texture, VkImage &image, VkImageLayout &layout,
-                                     VkImageCreateInfo &described) const
-{
-    AV_SCOPE("DxvkVulkanDevice::texture_image");
-    image = VK_NULL_HANDLE;
-    layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    IDXGIVkInteropSurface *surface = nullptr;
-    if (interop_ == nullptr || texture == nullptr ||
-        FAILED(texture->QueryInterface(__uuidof(IDXGIVkInteropSurface), reinterpret_cast<void **>(&surface))))
-        return false;
-    ScopeExit release_surface([surface] { surface->Release(); });
-    described = {};
-    described.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    if (FAILED(surface->GetVulkanImageInfo(&image, &layout, &described)) || image == VK_NULL_HANDLE) return false;
-    const VkImageSubresourceRange whole = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u};
-    interop_->TransitionSurfaceLayout(surface, &whole, layout, layout);
-    return true;
 }
 
 bool DxvkVulkanDevice::wrap(const D3D11_TEXTURE2D_DESC1 &desc, VkImage image, ID3D11Texture2D *&texture) const

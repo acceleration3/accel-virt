@@ -2,34 +2,28 @@
 #define AV_UM_PRESENT_ORDER_HPP
 
 #include "um/d3d/batch_follower.hpp"
-#include "um/d3d/flip_shown_wait.hpp"
 #include "um/d3d/kernel_context_gate.hpp"
 
 namespace av::d3d {
-
-class D3dSession;
 
 class PresentOrder {
 public:
     enum class Reuse { immediate, after_context };
 
-    PresentOrder(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device, HANDLE context, D3dSession &session,
-                 KeyedLog &lines);
+    PresentOrder(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device, HANDLE context,
+                 KmtTransport &transport, KeyedLog &lines);
     ~PresentOrder();
     PresentOrder(const PresentOrder &) = delete;
     PresentOrder &operator=(const PresentOrder &) = delete;
 
     [[nodiscard]] HRESULT follow();
     [[nodiscard]] HRESULT submitted(HRESULT status, Reuse reuse);
-    [[nodiscard]] HRESULT flipped(HRESULT status, uint32_t source);
-    void                  await_flip_shown();
 
 private:
     HANDLE context_;
     KmtTransport &transport_;
     BatchFollower follower_;
     KernelContextGate gate_;
-    FlipShownWait shown_;
 };
 
 }

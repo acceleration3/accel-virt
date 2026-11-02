@@ -9,6 +9,7 @@
 namespace av {
 
 namespace {
+
 constexpr uint64_t drm_format_mod_linear = 0u;
 
 constexpr int receive_ok = 0;
@@ -232,18 +233,6 @@ Status TableHost::overlay_guest_run(void *run, uint64_t bytes, int fd, uint64_t 
 {
     AV_SCOPE("TableHost::overlay_guest_run");
     return ops_.overlay_guest_run(ops_.opaque, run, bytes, fd, offset) == 0 ? Status::ok : Status::not_supported;
-}
-
-bool TableHost::pause_guest()
-{
-    AV_SCOPE("TableHost::pause_guest");
-    return ops_.pause_guest != nullptr && ops_.pause_guest(ops_.opaque) == 0;
-}
-
-void TableHost::resume_guest()
-{
-    AV_SCOPE("TableHost::resume_guest");
-    if (ops_.resume_guest != nullptr) ops_.resume_guest(ops_.opaque);
 }
 
 Status TableHost::restore_guest_run(void *run, uint64_t bytes)

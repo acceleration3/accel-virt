@@ -1,60 +1,18 @@
 #include "executor/shim/d3d9_frame_pool.hpp"
 
-#include "core/log/driver_log.hpp"
-#include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/shim/d3d_headers.hpp"
 
 namespace av {
 
-D3d9FramePool::D3d9FramePool() : log_(nullptr), full_told_(false), copiers_lock_(), copiers_{}, frames_()
+D3d9FramePool::D3d9FramePool() : frames_()
 {
     AV_SCOPE("D3d9FramePool::D3d9FramePool");
-    frames_.each([&](Frame &frame) { frame.bind(*this); });
 }
 
 D3d9FramePool::~D3d9FramePool()
 {
     AV_SCOPE("D3d9FramePool::~D3d9FramePool");
-}
-
-void D3d9FramePool::bind(DriverLog &log)
-{
-    AV_SCOPE("D3d9FramePool::bind");
-    log_ = &log;
-}
-
-D3d9FrameCopier *D3d9FramePool::lend_copier(IDirect3DDevice9 *device)
-{
-    AV_SCOPE("D3d9FramePool::lend_copier");
-    const ThreadLockHold held(copiers_lock_);
-    Copier *free = nullptr;
-    for (Copier &slot : copiers_) {
-        if (slot.uses_ != 0u && slot.copier_.device() == device) {
-            slot.uses_++;
-            return &slot.copier_;
-        }
-        if (slot.uses_ == 0u && free == nullptr) free = &slot;
-    }
-    if (free == nullptr) {
-        if (log_ != nullptr && !full_told_) log_->write("Direct3D 9 presents are read back: the GPU copy serves only a few guest devices at once");
-        full_told_ = true;
-        return nullptr;
-    }
-    if (!free->copier_.connect(device)) return nullptr;
-    free->uses_ = 1u;
-    return &free->copier_;
-}
-
-void D3d9FramePool::return_copier(D3d9FrameCopier *copier)
-{
-    AV_SCOPE("D3d9FramePool::return_copier");
-    const ThreadLockHold held(copiers_lock_);
-    for (Copier &slot : copiers_) {
-        if (&slot.copier_ != copier) continue;
-        if (--slot.uses_ == 0u) slot.copier_.close();
-        return;
-    }
 }
 
 StagedFrame *D3d9FramePool::stage(IDirect3DDevice9 *device, IDirect3DSurface9 *source, uint32_t width,
@@ -80,16 +38,10 @@ void D3d9FramePool::clear()
 }
 
 D3d9FramePool::Frame::Frame()
-    : pool_(nullptr), device_(nullptr), surface_(nullptr), held_(nullptr), copied_(nullptr), multisampled_(false),
-      staged_(false), format_(0u), mapped_(false), pixels_(nullptr), pitch_(0u), copier_(nullptr), copier_asked_(false), copy_value_(0u)
+    : device_(nullptr), surface_(nullptr), held_(nullptr), copied_(nullptr), multisampled_(false), staged_(false),
+      format_(0u), mapped_(false), pixels_(nullptr), pitch_(0u)
 {
     AV_SCOPE("D3d9FramePool::Frame::Frame");
-}
-
-void D3d9FramePool::Frame::bind(D3d9FramePool &pool)
-{
-    AV_SCOPE("D3d9FramePool::Frame::bind");
-    pool_ = &pool;
 }
 
 D3d9FramePool::Frame::~Frame()
@@ -154,15 +106,10 @@ void D3d9FramePool::Frame::drop()
 {
     AV_SCOPE("D3d9FramePool::Frame::drop");
     if (surface_ != nullptr && mapped_) surface_->UnlockRect();
-    const bool pinned = copier_ != nullptr && copy_value_ != 0u && !copier_->wait(copy_value_, settle_ms);
-    copy_value_ = 0u;
-    if (copier_ != nullptr) pool_->return_copier(copier_);
-    copier_ = nullptr;
-    copier_asked_ = false;
     if (surface_ != nullptr) surface_->Release();
-    if (held_ != nullptr && !pinned) held_->Release();
+    if (held_ != nullptr) held_->Release();
     if (copied_ != nullptr) copied_->Release();
-    if (device_ != nullptr && !pinned) device_->Release();
+    if (device_ != nullptr) device_->Release();
     surface_ = nullptr;
     held_ = nullptr;
     multisampled_ = false;
@@ -190,21 +137,6 @@ StagedFrame::Reading D3d9FramePool::Frame::map_when_copied(const uint8_t *&pixel
     pixels = pixels_;
     row_pitch = pitch_;
     return Reading::mapped;
-}
-
-StagedFrame::Copying D3d9FramePool::Frame::copy_into(const AvFrameCopy &target, uint32_t wait_ms)
-{
-    AV_SCOPE("D3d9FramePool::Frame::copy_into");
-    if (held_ == nullptr) return Copying::declined;
-    if (copier_ == nullptr && !copier_asked_) {
-        copier_asked_ = true;
-        copier_ = pool_->lend_copier(device_);
-    }
-    if (copier_ == nullptr) return Copying::declined;
-    uint64_t value = 0u;
-    const Copying done = copier_->copy(held_, target, wait_ms, value);
-    if (value != 0u) copy_value_ = value;
-    return done;
 }
 
 void D3d9FramePool::Frame::unmap()

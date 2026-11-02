@@ -78,13 +78,6 @@ Status D3dSession::escape(uint8_t *data, uint32_t size)
     return connection_.kmt().escape(connection_.adapter(), connection_.device(), 0u, data, size);
 }
 
-Status D3dSession::scan_line(uint32_t source, BeamPosition &position)
-{
-    AV_SCOPE("D3dSession::scan_line");
-    if (!connection_.opened()) return Status::invalid_state;
-    return connection_.kmt().scan_line(connection_.adapter(), source, position);
-}
-
 HRESULT D3dSession::open(uint32_t adapter)
 {
     AV_SCOPE("D3dSession::open");

@@ -115,6 +115,22 @@ TEST(context_table_create, accepts_a_context_with_gpu_virtual_addressing_and_har
   CHECK(fixture.contexts().invariants_hold());
   CHECK_EQ(fixture.contexts().find(request.hContext)->flags(), 0x15u); }
 
+TEST(context_table_create, accepts_a_gdi_context_with_and_without_gpu_virtual_addressing)
+{ const std::uint32_t kinds[] = {0x2u, 0x6u};
+  for (const std::uint32_t flags : kinds) {
+      Fixture fixture;
+      DxgkargCreateContextRecord request = {};
+      request.Flags = flags;
+      CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::ok);
+      CHECK(fixture.contexts().invariants_hold());
+      Context *context = fixture.contexts().find(request.hContext);
+      CHECK(context != nullptr);
+      CHECK_EQ(context->flags(), flags);
+      CHECK(!context->is_av());
+      CHECK_EQ(request.ContextInfoDmaBufferSize, 0x10000u);
+      CHECK_EQ(request.ContextInfoAllocationListSize, 256u);
+  } }
+
 TEST(context_table_create, accepts_a_context_on_the_hardware_scheduled_node)
 { Fixture fixture;
   DxgkargCreateContextRecord request = {};
@@ -169,6 +185,7 @@ TEST(context_table_invariants, a_broken_pool_is_detected)
   CHECK(!fixture.contexts().invariants_hold()); }
 
 namespace {
+
 std::size_t av_private_data(std::uint8_t *bytes, std::size_t capacity)
 { AvContextRecord record(SubApi::vulkan, 16u, 2u, 4096u);
   if (record.encode(bytes, capacity) != Status::ok) return 0u;
@@ -245,6 +262,7 @@ TEST(context_table_report, writes_each_context_and_its_device)
   fixture.platform().set_irql(av::Irql::passive); }
 
 namespace {
+
 void *context_on(Fixture &fixture, void *device, bool av_context)
 { std::uint8_t data[AvContextRecord::encoded_size] = {};
   DxgkargCreateContextRecord request = {};

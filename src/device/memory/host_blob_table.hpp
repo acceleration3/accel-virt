@@ -35,7 +35,6 @@ public:
     [[nodiscard]] Status create_over_guest(uint32_t id, uint32_t context, HostMemoryRequest request, uint64_t size);
     [[nodiscard]] Status adopt(uint32_t id, ControlRequest &request, size_t offset, uint32_t entries);
     void                 share_lendings(GuestRamLendings &lendings);
-    GuestRamLendings &lendings();
     [[nodiscard]] Status map(uint32_t id, uint64_t offset, uint32_t &caching);
     [[nodiscard]] Status unmap(uint32_t id);
     [[nodiscard]] Status release(uint32_t id);

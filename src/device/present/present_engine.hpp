@@ -13,7 +13,6 @@ namespace av {
 
 class ControlRequest;
 class FenceInterrupts;
-class GuestRamLendings;
 class Host;
 struct PresentEngineProbe;
 
@@ -27,11 +26,9 @@ public:
     PresentEngine &operator=(const PresentEngine &) = delete;
 
     [[nodiscard]] Status initialize();
-    [[nodiscard]] Status attach(uint64_t address, const PresentFrames &snapshots, GuestRamLendings &lendings);
+    [[nodiscard]] Status attach(uint64_t address, const PresentFrames &snapshots);
     void                 detach();
     uint32_t             queue(ControlRequest &request);
-    void                 hold_moves();
-    void                 resume_moves();
     void                 run();
 
     bool invariants_hold() const;
@@ -42,24 +39,17 @@ private:
     uint32_t       take(ControlRequest &request, uint64_t ticket);
     bool           refuse();
     QueuedPresent *next();
-    void           note_fallback(QueuedPresent::Fallback fallback);
     void           complete(QueuedPresent &present, Status moved);
     void           stop_thread();
-    void           unregister();
 
     Host                        &host_;
     FenceInterrupts             &interrupts_;
     void                        *lock_;
     void                        *wake_;
-    void                        *idle_;
     void                        *thread_;
     bool                         stopping_;
-    bool                         holding_;
-    bool                         moving_;
     PresentPageWindow            page_;
     PresentFrames             snapshots_;
-    GuestRamLendings         *lendings_;
-    bool                         told_[static_cast<uint32_t>(QueuedPresent::Fallback::count)];
     ObjectStorage<QueuedPresent> slots_[depth];
     uint32_t                     first_;
     uint32_t                     moved_;

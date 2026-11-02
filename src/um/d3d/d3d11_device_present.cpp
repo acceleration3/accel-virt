@@ -16,15 +16,6 @@
 
 namespace av::d3d11 {
 
-namespace {
-constexpr uint32_t gdi_format_first = 87u;
-constexpr uint32_t gdi_format_last = 93u;
-constexpr uint32_t gdi_format_excluded = 89u;
-constexpr uint64_t runtime_flush_ns = 30'000u;
-constexpr uint64_t longest_gdi_watch_seconds = 1u;
-
-}
-
 HRESULT D3d11Device::allocate(ResourceRecord &resource, const D3D11DDIARG_CREATERESOURCE &create,
                               D3D10DDI_HRTRESOURCE runtime)
 {
@@ -73,12 +64,6 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
                                      void *dxgi_context)
 {
     AV_SCOPE("D3d11Device::present_surface");
-    const HRESULT resident = keep_present_resident(source);
-    if (FAILED(resident)) return resident;
-    if (destination != nullptr) {
-        const HRESULT addressed = address_destination(*destination);
-        if (FAILED(addressed)) return addressed;
-    }
     if (source.shared_key == 0u) return present_pages(source, subresource, destination, dxgi_context);
     if (FAILED(show_flip(source, subresource)) || wire().flush() != Status::ok) {
         return lost(__func__);
@@ -86,46 +71,11 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
     switch (source.present_model) {
     case d3d::SwapChainBuffer::Model::flip:
     case d3d::SwapChainBuffer::Model::scanout: break;
-    case d3d::SwapChainBuffer::Model::blt: return present_pages(source, subresource, destination, dxgi_context);
+    case d3d::SwapChainBuffer::Model::blt:
+        if (destination == nullptr) return present_pages(source, subresource, destination, dxgi_context);
+        break;
     }
     return present_to_kernel(source, destination, dxgi_context, 0u);
-}
-
-HRESULT D3d11Device::keep_present_resident(ResourceRecord &named)
-{
-    AV_SCOPE("D3d11Device::keep_present_resident");
-    if (named.allocation == 0u || named.resident != 0u) return S_OK;
-    const HRESULT resident = allocations_.keep_resident(named.allocation);
-    if (FAILED(resident)) return resident;
-    named.resident = 1u;
-    log_presented_allocation(named);
-    return S_OK;
-}
-
-HRESULT D3d11Device::address_destination(ResourceRecord &destination)
-{
-    AV_SCOPE("D3d11Device::address_destination");
-    if (destination.gpu_pages == 0u || destination.gpu_address != 0u) return keep_present_resident(destination);
-    const HRESULT addressed =
-        allocations_.keep_addressable(destination.allocation, destination.gpu_pages, destination.gpu_address);
-    if (FAILED(addressed)) return addressed;
-    destination.resident = 1u;
-    log_presented_allocation(destination);
-    return S_OK;
-}
-
-void D3d11Device::log_presented_allocation(const ResourceRecord &named)
-{
-    AV_SCOPE("D3d11Device::log_presented_allocation");
-    if (!lines_.first("a present's allocation made resident", named.allocation)) return;
-    LogLine(lines_)
-        .text("a present's allocation made resident ")
-        .hex(named.allocation, 8u)
-        .text(" pages ")
-        .number(static_cast<uint32_t>(named.gpu_pages))
-        .text(" address ")
-        .hex(named.gpu_address, 16u)
-        .write();
 }
 
 HRESULT D3d11Device::show_flip(const ResourceRecord &source, uint32_t subresource)
@@ -134,7 +84,6 @@ HRESULT D3d11Device::show_flip(const ResourceRecord &source, uint32_t subresourc
     const bool flip = source.present_model == d3d::SwapChainBuffer::Model::flip &&
                       (source.bind & D3D10_DDI_BIND_PRESENT) != 0u;
     if (!flip && source.present_model != d3d::SwapChainBuffer::Model::scanout) return S_OK;
-    if (present_order_.constructed()) present_order_.object().await_flip_shown();
     if (d3dproto::av_d3d_PresentPoint(wire(), source.stamp.id(), subresource, 0u)) return S_OK;
     return lost(__func__);
 }
@@ -184,10 +133,9 @@ HRESULT D3d11Device::present_to_kernel(ResourceRecord &source, ResourceRecord *d
     present.hContext = context_;
     present.PrivateDriverDataSize = named ? static_cast<UINT>(sizeof record) : 0u;
     present.pPrivateDriverData = named ? record : nullptr;
-    const HRESULT handed = dxgi_->pfnPresentCb(runtime_.handle, &present);
-    const HRESULT presented = source.present_model != d3d::SwapChainBuffer::Model::blt
-                                  ? present_order_.object().flipped(handed, source.vidpn_source)
-                                  : present_order_.object().submitted(handed, d3d::PresentOrder::Reuse::immediate);
+    const HRESULT presented = present_order_.object().submitted(dxgi_->pfnPresentCb(runtime_.handle, &present),
+        source.present_model != d3d::SwapChainBuffer::Model::blt
+            ? d3d::PresentOrder::Reuse::after_context : d3d::PresentOrder::Reuse::immediate);
     if (FAILED(presented) && present_refused_.first()) {
         log_present("the kernel refused a present", static_cast<uint32_t>(presented), source);
     }
@@ -227,6 +175,7 @@ HRESULT D3d11Device::follow_host()
         .write();
     return followed;
 }
+
 
 HRESULT D3d11Device::present(DXGI_DDI_ARG_PRESENT *args)
 {
@@ -390,16 +339,12 @@ HRESULT D3d11Device::rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDE
     uint32_t ids[max_rotation] = {};
     for (UINT index = 0u; index < args->Resources; index++) ids[index] = record(args->pResources[index]).stamp.id();
     if (!d3dproto::av_d3d_RotateResources11(wire(), args->Resources, ids)) return E_OUTOFMEMORY;
-    for (UINT index = 0u; index < args->Resources; index++) end_gdi_watch(record(args->pResources[index]));
-    resolved_ = nullptr;
-    flush_candidate_ = nullptr;
     const ResourceRecord first = record(args->pResources[0]);
     for (UINT index = 0u; index < args->Resources; index++) {
         ResourceRecord &to = record(args->pResources[index]);
         const ResourceRecord &from = index + 1u < args->Resources ? record(args->pResources[index + 1u]) : first;
         to.allocation = from.allocation;
         to.allocation_owned = from.allocation_owned;
-        to.resident = from.resident;
         to.allocation_pitch = from.allocation_pitch;
         to.shared_key = from.shared_key;
         to.presents = from.presents;
@@ -412,131 +357,10 @@ HRESULT D3d11Device::rotate_resource_identities(DXGI_DDI_ARG_ROTATE_RESOURCE_IDE
     return S_OK;
 }
 
-HRESULT D3d11Device::resolve_shared_resource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *args)
+HRESULT D3d11Device::resolve_shared_resource(DXGI_DDI_ARG_RESOLVESHAREDRESOURCE *)
 {
     AV_SCOPE("D3d11Device::resolve_shared_resource");
-    if (wire().flush() != Status::ok) return lost(__func__);
-    if (parent_ == nullptr && args != nullptr && args->hResource != 0u) {
-        ResourceRecord &resource = record(args->hResource);
-        show_to_gdi(resource);
-        resolved_ = &resource;
-        resolved_thread_ = caller_.thread_id();
-        resolved_returned_ns_ = clock_.now_nanoseconds();
-    }
-    return S_OK;
-}
-
-void D3d11Device::note_call_after_resolve()
-{
-    AV_SCOPE("D3d11Device::note_call_after_resolve");
-    if (resolved_ == nullptr || caller_.thread_id() != resolved_thread_) return;
-    flush_candidate_ = resolved_;
-    flush_gap_ns_ = clock_.now_nanoseconds() - resolved_returned_ns_;
-    resolved_ = nullptr;
-}
-
-void D3d11Device::learn_from_flush()
-{
-    AV_SCOPE("D3d11Device::learn_from_flush");
-    if (flush_candidate_ == nullptr) return;
-    ResourceRecord &resource = *flush_candidate_;
-    flush_candidate_ = nullptr;
-    if (flush_gap_ns_ > runtime_flush_ns) return;
-    resource.resolved_for_sharing = 1u;
-    forget_gdi_rows(resource);
-}
-
-void D3d11Device::forget_resolve(const ResourceRecord &resource)
-{
-    AV_SCOPE("D3d11Device::forget_resolve");
-    if (resolved_ == &resource) resolved_ = nullptr;
-    if (flush_candidate_ == &resource) flush_candidate_ = nullptr;
-}
-
-void D3d11Device::show_to_gdi(ResourceRecord &resource)
-{
-    AV_SCOPE("D3d11Device::show_to_gdi");
-    if (resource.resolved_for_sharing != 0u) return;
-    if (resource.allocation_owned == 0u || resource.format < gdi_format_first || resource.format > gdi_format_last ||
-        resource.format == gdi_format_excluded)
-        return;
-    if (resource.allocation == 0u || resource.dimension != D3D10DDIRESOURCE_TEXTURE2D || resource.mips != 1u ||
-        resource.layers != 1u || resource.samples > 1u || resource.lent != nullptr)
-        return;
-    const size_t bytes = static_cast<size_t>(resource.allocation_pitch) * resource.height;
-    const bool room = gdi_watched_.reserve(gdi_watched_.size() + 1u) == Status::ok;
-    if (room && resource.gdi_rows == nullptr)
-        resource.gdi_rows = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
-    if (FAILED(publish(resource, 0u))) {
-        lines_.once("a texture GDI asked for could not be read back");
-        return;
-    }
-    if (resource.gdi_rows == nullptr) {
-        lines_.once("a texture GDI asked for could not be watched for what GDI draws on it");
-        return;
-    }
-    const auto *const pixels = static_cast<const uint8_t *>(kernel_.lock_to_read(resource.allocation));
-    if (pixels == nullptr) return;
-    d3d::GuestSurfaceScan(resource.gdi_rows, resource.allocation_pitch, resource.height).copy_all(pixels);
-    kernel_.unlock(resource.allocation);
-    if (resource.gdi_watch == 0u && (!room || gdi_watched_.append(&resource) != Status::ok)) {
-        lines_.once("a texture GDI asked for could not be watched for what GDI draws on it");
-        return;
-    }
-    constexpr uint32_t calls_to_watch = 32u;
-    resource.gdi_watch = calls_to_watch;
-    resource.gdi_thread = caller_.thread_id();
-    resource.gdi_watch_began = clock_.ticks();
-}
-
-void D3d11Device::take_gdi_writes()
-{
-    AV_SCOPE("D3d11Device::take_gdi_writes");
-    taking_gdi_writes_ = true;
-    const uint32_t self = caller_.thread_id();
-    const uint64_t now = clock_.ticks();
-    for (uint32_t index = gdi_watched_.size(); index-- > 0u;) {
-        ResourceRecord &resource = *gdi_watched_.at(index);
-        const auto *const pixels = static_cast<const uint8_t *>(kernel_.lock_to_read(resource.allocation));
-        if (pixels == nullptr) {
-            end_gdi_watch(resource);
-            continue;
-        }
-        d3d::GuestSurfaceScan scan(resource.gdi_rows, resource.allocation_pitch, resource.height);
-        const d3d::RowBand band = scan.differing(pixels);
-        kernel_.unlock(resource.allocation);
-        if (!band.empty()) {
-            const D3D10_DDI_BOX box = {0, static_cast<LONG>(band.first()), 0, static_cast<LONG>(resource.width),
-                                       static_cast<LONG>(band.end()), 1};
-            upload(resource, 0u, &box, resource.gdi_rows + band.first() * static_cast<size_t>(resource.allocation_pitch),
-                   resource.allocation_pitch, 0u, 0u);
-        }
-        if (resource.gdi_thread != self) {
-            if (now - resource.gdi_watch_began >= longest_gdi_watch_seconds * clock_.frequency()) end_gdi_watch(resource);
-            continue;
-        }
-        if (!band.empty() || --resource.gdi_watch == 0u) end_gdi_watch(resource);
-    }
-    taking_gdi_writes_ = false;
-}
-
-void D3d11Device::end_gdi_watch(ResourceRecord &resource)
-{
-    AV_SCOPE("D3d11Device::end_gdi_watch");
-    resource.gdi_watch = 0u;
-    for (uint32_t index = 0u; index < gdi_watched_.size(); index++) {
-        if (gdi_watched_.at(index) != &resource) continue;
-        gdi_watched_.remove_swap(index);
-        return;
-    }
-}
-
-void D3d11Device::forget_gdi_rows(ResourceRecord &resource)
-{
-    AV_SCOPE("D3d11Device::forget_gdi_rows");
-    end_gdi_watch(resource);
-    if (resource.gdi_rows != nullptr) memory_.release(resource.gdi_rows);
-    resource.gdi_rows = nullptr;
+    return wire().flush() == Status::ok ? S_OK : lost(__func__);
 }
 
 HRESULT D3d11Device::set_display_mode(DXGI_DDI_ARG_SETDISPLAYMODE *args)
@@ -582,14 +406,11 @@ bool D3d11Device::open_cross_adapter(ResourceRecord &resource, const D3D10DDIARG
     if (opened.pPrivateDriverData == nullptr ||
         descriptor.decode(static_cast<const uint8_t *>(opened.pPrivateDriverData), opened.PrivateDriverDataSize) !=
             Status::ok ||
-        descriptor.layout().format() == 0u)
+        descriptor.kind() != AllocationKind::cross_adapter || descriptor.layout().format() == 0u)
         return false;
-    const bool redirection = descriptor.kind() == AllocationKind::gdi && descriptor.cpu_visible();
-    if (descriptor.kind() != AllocationKind::cross_adapter && !redirection) return false;
     const SurfaceLayout &layout = descriptor.layout();
     D3d9PresentFormat    presented(0u);
     if (!presented.take_ddi(layout.format())) {
-        if (redirection) return false;
         lines_.write("a cross-adapter texture of a format this driver does not know");
         set_error(E_INVALIDARG);
         return true;
@@ -601,15 +422,10 @@ bool D3d11Device::open_cross_adapter(ResourceRecord &resource, const D3D10DDIARG
     resource.layers = 1u;
     resource.mips = 1u;
     resource.samples = 1u;
-    resource.format = redirection ? presented.viewed() : presented.dxgi();
+    resource.format = presented.dxgi();
     resource.bind = D3D10_DDI_BIND_SHADER_RESOURCE | D3D10_DDI_BIND_RENDER_TARGET;
     resource.allocation_pitch = layout.pitch();
-    resource.gpu_pages = layout.pages();
     if (lender_.lend(resource.allocation, descriptor.size(), resource.lent) != Status::ok) {
-        if (redirection) {
-            if (redirection_unlent_.first()) lines_.write("a window's redirection surface could not be lent: it is read");
-            return false;
-        }
         lines_.write("the device took no opened cross-adapter texture's pages");
         set_error(E_OUTOFMEMORY);
         return true;
@@ -655,7 +471,6 @@ bool D3d11Device::open_guest_surface(ResourceRecord &resource, const D3D10DDIARG
     resource.format = presented.viewed();
     resource.bind = D3D10_DDI_BIND_SHADER_RESOURCE | D3D10_DDI_BIND_RENDER_TARGET;
     resource.allocation_pitch = layout.pitch();
-    resource.gpu_pages = descriptor.kind() == AllocationKind::gdi ? layout.pages() : 0u;
     d3dproto::ResourceDesc desc = {};
     desc.dimension = resource.dimension;
     desc.width = resource.width;

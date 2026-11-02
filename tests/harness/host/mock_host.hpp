@@ -62,10 +62,6 @@ public:
     Status   alias_guest_run(void *run, std::uint64_t bytes, void *at) override;
     Status   overlay_guest_run(void *run, std::uint64_t bytes, int fd, std::uint64_t offset) override;
     Status   restore_guest_run(void *run, std::uint64_t bytes) override;
-    bool     pause_guest() override;
-    void     resume_guest() override;
-    std::uint32_t guest_pauses() const;
-    std::uint32_t guest_resumes() const;
     void     release_range(void *base, std::uint64_t bytes) override;
     std::uint64_t hostmem_size() override;
     Status   place_in_hostmem(int fd, std::uint64_t size, std::uint64_t offset) override;
@@ -397,8 +393,6 @@ private:
     std::uint32_t   fail_overlay_ = 0u;
     std::uint32_t   fail_restore_ = 0u;
     std::uint64_t   overlaid_ = 0u;
-    std::uint32_t   guest_pauses_ = 0u;
-    std::uint32_t   guest_resumes_ = 0u;
     int             counted_[max_counted_descriptors];
     RecordingFile   recordings_[max_recordings];
     std::uint32_t   fail_recording_create_;

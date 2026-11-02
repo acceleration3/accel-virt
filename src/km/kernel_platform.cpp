@@ -433,14 +433,6 @@ void KernelPlatform::store_atomic(uint64_t &target, uint64_t value)
     static_cast<void>(InterlockedExchange64(reinterpret_cast<LONG64 *>(&target), static_cast<LONG64>(value)));
 }
 
-uint64_t KernelPlatform::add_atomic(uint64_t &target, uint64_t delta)
-{
-    AV_SCOPE("KernelPlatform::add_atomic");
-    const auto before = static_cast<uint64_t>(
-        InterlockedExchangeAdd64(reinterpret_cast<LONG64 *>(&target), static_cast<LONG64>(delta)));
-    return before + delta;
-}
-
 uint64_t KernelPlatform::load_atomic(uint64_t &source)
 {
     AV_SCOPE("KernelPlatform::load_atomic");

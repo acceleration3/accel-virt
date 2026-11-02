@@ -140,9 +140,6 @@ private:
                      D3D10DDI_HRTRESOURCE runtime);
     HRESULT publish(ResourceRecord &resource, uint32_t subresource);
     bool open_guest_surface(ResourceRecord &resource, const D3D10DDIARG_OPENRESOURCE &args);
-    HRESULT keep_present_resident(ResourceRecord &named);
-    HRESULT address_destination(ResourceRecord &destination);
-    void    log_presented_allocation(const ResourceRecord &named);
     bool is_cross_adapter(const D3D11DDIARG_CREATERESOURCE &args, const ResourceRecord &resource) const;
     bool open_cross_adapter(ResourceRecord &resource, const D3D10DDIARG_OPENRESOURCE &args);
     void refresh_guest_surfaces();
@@ -151,13 +148,6 @@ private:
     bool begin_pages_read(const ResourceRecord &resource, uint64_t &writes);
     uint64_t end_pages_read(const ResourceRecord &resource, uint64_t begun);
     void forget_guest_surface(const ResourceRecord &resource);
-    void show_to_gdi(ResourceRecord &resource);
-    void take_gdi_writes();
-    void note_call_after_resolve();
-    void learn_from_flush();
-    void forget_resolve(const ResourceRecord &resource);
-    void end_gdi_watch(ResourceRecord &resource);
-    void forget_gdi_rows(ResourceRecord &resource);
     HRESULT show_flip(const ResourceRecord &source, uint32_t subresource);
     HRESULT stage_plane(ResourceRecord &source, uint32_t subresource);
     template <typename Plane>
@@ -220,15 +210,7 @@ private:
     ObjectStorage<d3d::CrossAdapterWaits> waits_;
     uint32_t  feature_level_;
     GrowableArray<ResourceRecord *> guest_surfaces_;
-    GrowableArray<ResourceRecord *> gdi_watched_;
-    bool                            taking_gdi_writes_;
-    ResourceRecord                 *resolved_;
-    uint64_t                        resolved_returned_ns_;
-    uint32_t                        resolved_thread_;
-    ResourceRecord                 *flush_candidate_;
-    uint64_t                        flush_gap_ns_;
     icd::OnceLatch  guest_lock_refused_;
-    icd::OnceLatch  redirection_unlent_;
     icd::OnceLatch  pages_read_refused_;
     icd::OnceLatch  pages_read_late_;
     icd::OnceLatch  present_refused_;

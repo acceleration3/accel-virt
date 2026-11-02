@@ -28,7 +28,6 @@ public:
     uint32_t           memory_type(uint32_t allowed) const;
     uint32_t           raw_memory_type(uint32_t allowed) const;
     uint32_t           system_memory_type(uint32_t allowed) const;
-    uint32_t           coherent_memory_type(uint32_t allowed) const;
     void                  memory_properties(VkPhysicalDeviceMemoryProperties &answer) const;
     [[nodiscard]] bool    allocate_exportable(VkDeviceSize size, uint32_t type, VkDeviceMemory &memory) const;
     [[nodiscard]] bool    allocate_exportable(VkImage image, VkDeviceSize size, uint32_t type,
@@ -69,10 +68,6 @@ public:
                                uint32_t count, const VkImageMemoryBarrier *barriers) const;
     void               copy_image(VkCommandBuffer buffer, VkImage source, VkImage destination,
                                   const VkImageCopy &region) const;
-    void               copy_image_to_buffer(VkCommandBuffer buffer, VkImage source, VkBuffer destination,
-                                            uint32_t count, const VkBufferImageCopy *regions) const;
-    void               memory_barrier(VkCommandBuffer buffer, VkPipelineStageFlags from, VkPipelineStageFlags to,
-                                      const VkMemoryBarrier &barrier) const;
     [[nodiscard]] bool submit(VkQueue queue, const VkSubmitInfo &submit) const;
     void               queue_idle(VkQueue queue) const;
 
@@ -113,7 +108,6 @@ private:
     PFN_vkResetCommandBuffer         reset_;
     PFN_vkCmdPipelineBarrier         barrier_;
     PFN_vkCmdCopyImage               copy_image_;
-    PFN_vkCmdCopyImageToBuffer       copy_image_to_buffer_;
     PFN_vkQueueSubmit                submit_;
     PFN_vkQueueWaitIdle              queue_idle_;
     void (*lose_)(VkDevice device);

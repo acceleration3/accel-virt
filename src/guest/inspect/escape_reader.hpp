@@ -23,7 +23,7 @@ public:
     EscapeReader(const EscapeReader &) = delete;
     EscapeReader &operator=(const EscapeReader &) = delete;
 
-    [[nodiscard]] Status read(TraceEscapeRecord::Kind kind, uint64_t luid = 0u);
+    [[nodiscard]] Status read(TraceEscapeRecord::Kind kind);
 
     const uint8_t *bytes() const;
     size_t         length() const;

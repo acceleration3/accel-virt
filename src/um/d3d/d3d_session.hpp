@@ -23,7 +23,6 @@ class DriverLog;
 }
 
 namespace av {
-class BeamPosition;
 class BlockSource;
 class HostAllocation;
 class Kmt;
@@ -46,7 +45,6 @@ public:
 
     HRESULT join(uint32_t adapter);
     [[nodiscard]] Status escape(uint8_t *data, uint32_t size);
-    [[nodiscard]] Status scan_line(uint32_t source, BeamPosition &position);
     void    leave();
     uint32_t users() const;
     bool      lost() const;

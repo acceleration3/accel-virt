@@ -202,14 +202,6 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         if (surface == mock.frame_surface_ && point == mock.frame_point_) mock.frame_surface_ = 0u;
         mock.frame_unmaps_++;
     };
-    table_.copy_frame = [](void *opaque, std::uint32_t domain, std::uint64_t surface, std::uint32_t point,
-                           std::uint32_t, const AvFrameCopy *copy) -> std::uint32_t {
-        MockExecutorOps &mock = mock_of(opaque);
-        mock.last_domain_ = domain;
-        if (copy == nullptr || surface == 0u || surface != mock.frame_surface_ || point != mock.frame_point_)
-            return AV_UNKNOWN;
-        return mock.frame_copy_answer_;
-    };
     table_.export_surface = [](void *opaque, std::uint32_t domain, std::uint64_t surface, std::uint32_t,
                                AvExportedImage *image) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
@@ -625,7 +617,6 @@ void MockExecutorOps::serve_frame(std::uint64_t surface, std::uint32_t point, co
 }
 
 std::uint32_t MockExecutorOps::frame_unmaps() const { return frame_unmaps_; }
-void          MockExecutorOps::copy_frames_with(std::uint32_t answer) { frame_copy_answer_ = answer; }
 
 void MockExecutorOps::serve_surface(std::uint64_t surface, const AvExportedImage &image, std::uint64_t writes,
                                     int fence)

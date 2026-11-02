@@ -526,12 +526,6 @@ void RendererContextPlane::unmap_frame(const uint8_t *, const SurfacePoint &)
     AV_SCOPE("RendererContextPlane::unmap_frame");
 }
 
-Status RendererContextPlane::copy_frame(const uint8_t *, const SurfacePoint &, uint32_t, const AvFrameCopy &)
-{
-    AV_SCOPE("RendererContextPlane::copy_frame");
-    return Status::not_supported;
-}
-
 bool RendererContextPlane::exports_surfaces() const
 {
     AV_SCOPE("RendererContextPlane::exports_surfaces");

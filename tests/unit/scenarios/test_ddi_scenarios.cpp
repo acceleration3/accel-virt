@@ -426,6 +426,7 @@ TEST(ddi_scenario, add_device_past_the_adapter_ceiling_is_no_memory)
   CHECK_EQ(driver.platform().logged(), 10u);
   CHECK(std::strstr(driver.platform().last_log(), "no free adapter slot") != nullptr); }
 
+
 namespace {
 
 constexpr std::int32_t revision_mismatch = static_cast<std::int32_t>(0xC0000059u);
@@ -494,6 +495,8 @@ TEST(ddi_scenario, escape_and_debug_collection_through_the_table)
   CHECK_EQ(collect_routine(device.fdo().context(), &collect), 0);
   CHECK_EQ(report[6], 1u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
+
+
 
 TEST(ddi_scenario, vidmm_accepts_the_aperture_segment_after_start)
 { LoadedDriver driver;
@@ -912,6 +915,7 @@ TEST(ddi_scenario, a_device_that_changed_across_hibernation_refuses_its_contexts
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 namespace {
+
 class SharedRuntime {
 public:
     static constexpr std::uint64_t bytes = 4u * 4096u;
@@ -1242,6 +1246,7 @@ TEST(ddi_scenario, remove_device_with_devices_and_allocations_outstanding)
     CHECK_EQ(device.fdo().remove_device(), 0); }
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations()); }
 
+
 TEST(ddi_scenario, render_patch_submit_and_three_fences_complete_through_the_dpc)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -1300,6 +1305,7 @@ TEST(ddi_scenario, a_render_that_overruns_is_refused_and_nothing_is_submitted)
     CHECK_EQ(vidsch.completed(), 0u); }
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
+
 TEST(ddi_scenario, a_timeout_is_recovered_from_twice)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -1327,6 +1333,7 @@ TEST(ddi_scenario, a_timeout_is_recovered_from_twice)
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
 
 TEST(ddi_scenario, a_mode_change_from_edid_to_commit)
 { LoadedDriver driver;
@@ -1381,6 +1388,7 @@ TEST(ddi_scenario, a_second_path_is_refused_and_a_mode_off_the_list_is_never_off
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
+
 TEST(ddi_scenario, a_primary_scans_out_at_vsync_while_presents_complete)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -1423,6 +1431,7 @@ TEST(ddi_scenario, a_primary_scans_out_at_vsync_while_presents_complete)
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
 
 TEST(ddi_scenario, the_pointer_reaches_the_cursor_queue_and_the_legacy_surface_declines)
 { LoadedDriver driver;
@@ -1481,14 +1490,14 @@ TEST(ddi_scenario, the_pointer_reaches_the_cursor_queue_and_the_legacy_surface_d
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
+
 TEST(ddi_scenario, the_committed_path_reports_no_driver_transformation_and_the_placeholders_stay_empty)
 { LoadedDriver driver;
   FakeDxgkrnl dxgkrnl;
   CHECK_STATUS(dxgkrnl.initialize(&driver.table()), Status::ok);
   const DdiSlot skipped[] = {DdiSlot::DxgkDdiDescribePageTable, DdiSlot::DxgkDdiUpdatePageTable,
                              DdiSlot::DxgkDdiUpdatePageDirectory, DdiSlot::DxgkDdiMovePageDirectory,
-                             DdiSlot::DxgkDdiSubmitRender, DdiSlot::DxgkDdiCreateAllocation2,
-                             DdiSlot::DxgkDdiRenderKm};
+                             DdiSlot::DxgkDdiSubmitRender, DdiSlot::DxgkDdiCreateAllocation2};
   for (DdiSlot slot : skipped) CHECK(driver.table().routine(slot) == nullptr);
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
@@ -1504,6 +1513,7 @@ TEST(ddi_scenario, the_committed_path_reports_no_driver_transformation_and_the_p
   CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
 
 TEST(ddi_scenario, an_engine_reset_then_the_device_disappears)
 { LoadedDriver driver;
@@ -1535,6 +1545,7 @@ TEST(ddi_scenario, an_engine_reset_then_the_device_disappears)
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
+
 TEST(ddi_scenario, node_metadata_clock_calibration_and_vsync_state_through_the_table)
 { LoadedDriver driver;
   CHECK(driver.table().routine(DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport) == nullptr);
@@ -1565,6 +1576,7 @@ TEST(ddi_scenario, node_metadata_clock_calibration_and_vsync_state_through_the_t
   CHECK_EQ(device.dxgkrnl().interrupts(), 1u);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
 
 TEST(ddi_scenario, a_gpu_mmu_adapter_pages_submits_by_virtual_address_and_flips_at_device_irql)
 { LoadedDriver driver;
@@ -1640,6 +1652,7 @@ TEST(ddi_scenario, a_gpu_mmu_adapter_pages_submits_by_virtual_address_and_flips_
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
+
 TEST(ddi_scenario, start_declines_hdr_priority_and_the_monitor_link_is_plain)
 { LoadedDriver driver;
   const DdiTable &table = driver.table();
@@ -1666,6 +1679,7 @@ TEST(ddi_scenario, start_declines_hdr_priority_and_the_monitor_link_is_plain)
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
 
 TEST(ddi_scenario, hardware_queues_submit_complete_through_progress_fences_and_reset)
 { LoadedDriver driver;
@@ -1705,6 +1719,7 @@ TEST(ddi_scenario, hardware_queues_submit_complete_through_progress_fences_and_r
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
+
 TEST(ddi_scenario, a_wddm_2_3_adapter_starts_and_scans_out_with_the_later_slots_null)
 { LoadedDriver driver;
   const DdiTable &table = driver.table();
@@ -1738,6 +1753,7 @@ TEST(ddi_scenario, a_wddm_2_3_adapter_starts_and_scans_out_with_the_later_slots_
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
 
 TEST(ddi_scenario, a_system_memory_primary_flips_immediately_and_gpu_va_presents_complete)
 { LoadedDriver driver;
@@ -1791,6 +1807,7 @@ TEST(ddi_scenario, a_system_memory_primary_flips_immediately_and_gpu_va_presents
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
+
 TEST(ddi_scenario, a_wddm_2_9_adapter_flips_without_a_hardware_flip_queue)
 { LoadedDriver driver;
   const DdiTable &table = driver.table();
@@ -1817,6 +1834,7 @@ TEST(ddi_scenario, a_wddm_2_9_adapter_flips_without_a_hardware_flip_queue)
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
+
 TEST(ddi_scenario, a_wddm_3_0_adapter_allocates_a_primary_with_the_later_slots_null)
 { LoadedDriver driver;
   const DdiTable &table = driver.table();
@@ -1835,6 +1853,7 @@ TEST(ddi_scenario, a_wddm_3_0_adapter_allocates_a_primary_with_the_later_slots_n
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
 
 TEST(ddi_scenario, the_doorbell_ddis_refuse_a_queue_whose_context_holds_no_page)
 { LoadedDriver driver;
@@ -1885,6 +1904,7 @@ TEST(ddi_scenario, the_doorbell_ddis_refuse_a_queue_whose_context_holds_no_page)
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
+
 TEST(ddi_scenario, a_wddm_3_1_adapter_starts_with_its_doorbells_and_its_native_fences)
 { LoadedDriver driver;
   const DdiTable &table = driver.table();
@@ -1918,6 +1938,7 @@ TEST(ddi_scenario, a_wddm_3_1_adapter_starts_with_its_doorbells_and_its_native_f
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
+
 TEST(ddi_scenario, a_wddm_3_2_display_adapter_starts_with_the_3_2_slots_null)
 { LoadedDriver driver;
   const DdiTable &table = driver.table();
@@ -1941,6 +1962,7 @@ TEST(ddi_scenario, a_wddm_3_2_display_adapter_starts_with_the_3_2_slots_null)
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
 
 TEST(ddi_scenario, two_displays_get_a_source_a_child_and_a_scanout_each)
 { LoadedDriver driver;

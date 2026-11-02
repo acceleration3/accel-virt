@@ -97,7 +97,6 @@ public:
     bool          opened_as(AvExecutor *executor, std::uint64_t object_id, std::uint64_t &wire_handle);
     void                 serve_frame(std::uint64_t surface, std::uint32_t point, const AvFrameView &view);
     std::uint32_t        frame_unmaps() const;
-    void                 copy_frames_with(std::uint32_t answer);
     void                 serve_surface(std::uint64_t surface, const AvExportedImage &image, std::uint64_t writes,
                                        int fence);
     std::uint32_t        last_domain() const;
@@ -209,7 +208,6 @@ private:
     std::uint32_t              frame_point_ = 0u;
     AvFrameView               frame_ = {};
     std::uint32_t              frame_unmaps_ = 0u;
-    std::uint32_t              frame_copy_answer_ = AV_FRAME_UNCOPYABLE;
     std::uint64_t              surface_ = 0u;
     AvExportedImage            surface_image_ = {};
     std::uint64_t              surface_writes_ = 0u;

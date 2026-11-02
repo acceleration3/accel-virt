@@ -192,13 +192,6 @@ void LocalContextPlane::unmap_frame(const uint8_t *, const SurfacePoint &frame)
     library_.unmap_frame(frame);
 }
 
-Status LocalContextPlane::copy_frame(const uint8_t *, const SurfacePoint &frame, uint32_t wait_ms,
-                                     const AvFrameCopy &copy)
-{
-    AV_SCOPE("LocalContextPlane::copy_frame");
-    return library_.copy_frame(frame, wait_ms, copy);
-}
-
 bool LocalContextPlane::exports_surfaces() const
 {
     AV_SCOPE("LocalContextPlane::exports_surfaces");

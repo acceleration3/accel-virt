@@ -59,8 +59,6 @@ public:
     bool reads_frames() const override;
     bool map_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view) override;
     void unmap_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame) override;
-    Status copy_frame(const uint8_t *gpu_uuid, const SurfacePoint &frame, uint32_t wait_ms,
-                      const AvFrameCopy &copy) override;
     bool exports_surfaces() const override;
     bool export_surface(const uint8_t *gpu_uuid, uint64_t surface, uint32_t flags, AvExportedImage &image) override;
     bool sync_surface(const uint8_t *gpu_uuid, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd) override;

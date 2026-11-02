@@ -48,6 +48,7 @@ using av::SurfaceLayout;
 using av::Violation;
 
 namespace {
+
 class Segments {
 public:
     explicit Segments(MockPlatform &platform) : aperture_(platform), segments_(platform, aperture_)
@@ -253,23 +254,7 @@ TEST(allocation_report_to, a_staging_surface_is_pinned_in_the_aperture_and_cache
   Allocation back_buffer(platform, segments.segments(), surface, 64u * 256u);
   DxgkAllocationInfoRecord drawn = {};
   back_buffer.report_to(drawn);
-  CHECK_EQ(drawn.Flags, 0x8001u);   }
-
-TEST(allocation_report_to, a_gdi_surface_is_pinned_in_the_aperture_and_cached)
-{ MockPlatform platform;
-  Segments segments(platform);
-  const bool visibility[2] = {true, false};
-  for (const bool cpu_visible : visibility) {
-      const AllocationDescriptor gdi(AllocationKind::gdi, cpu_visible, SurfaceLayout(64u, 64u, 21u, 256u),
-                                     64u * 256u, ScanoutTarget());
-      Allocation redirection(platform, segments.segments(), gdi, 64u * 256u);
-      DxgkAllocationInfoRecord info = {};
-      redirection.report_to(info);
-      CHECK_EQ(info.PreferredSegment, av::ApertureSegment::segment_id);
-      CHECK_EQ(info.SupportedReadSegmentSet, av::ApertureSegment::segment_set);
-      CHECK_EQ(info.SupportedWriteSegmentSet, av::ApertureSegment::segment_set);
-      CHECK_EQ(info.Flags, cpu_visible ? 0x8005u : 0x8004u);
-  } }
+  CHECK_EQ(drawn.Flags, 0x8001u);    }
 
 TEST(allocation_invariants, aperture_pages_that_lost_theirs_are_detected)
 { MockPlatform platform; Segments segments(platform); Allocation allocation(platform, segments.segments(), shadow, 0x1000u);
@@ -286,7 +271,7 @@ TEST(allocation_report_to, a_primary_stays_in_the_aperture)
   DxgkAllocationInfoRecord info = {};
   scanned_out.report_to(info);
   CHECK_EQ(info.PreferredSegment, av::ApertureSegment::segment_id);
-  CHECK_EQ(info.Flags, 0x8001u);   }
+  CHECK_EQ(info.Flags, 0x8001u);    }
 
 TEST(allocation_open, a_ring_belongs_to_the_device_that_opened_it)
 { MockPlatform platform;
@@ -425,7 +410,7 @@ TEST(allocation_report_to, a_context_s_name_is_not_pinned_in_the_aperture)
   CHECK_EQ(info.PreferredSegment, 2u);
   CHECK_EQ(info.SupportedReadSegmentSet, 0x2u);
   CHECK_EQ(info.SupportedWriteSegmentSet, 0x2u);
-  CHECK_EQ(info.Flags, 1u);   }
+  CHECK_EQ(info.Flags, 1u);    }
 
 TEST(allocation_pages, answers_every_page_only_once_all_are_mapped)
 { MockPlatform platform; Segments segments(platform);
@@ -503,22 +488,8 @@ TEST(allocation, counts_the_presents_written_into_its_pages_apart_from_every_oth
   CHECK_EQ(allocation.writes().sequence(), 0u);
   CHECK_EQ(allocation.writes().ticket(), 0u);
   allocation.writes().opening();
-  allocation.writes().written(4u, 1u);
+  allocation.writes().written(4u);
   CHECK_EQ(allocation.writes().sequence(), 2u);
   CHECK_EQ(allocation.writes().ticket(), 4u);
   CHECK_EQ(other.writes().sequence(), 0u);
-  CHECK(allocation.invariants_hold()); }
-
-TEST(allocation, holds_the_reads_open_on_its_pages_apart_from_every_other_allocation_s)
-{ MockPlatform platform;
-  Segments     segments(platform);
-  Allocation   allocation(platform, segments.segments(), shadow, 0x1000u);
-  Allocation   other(platform, segments.segments(), shadow, 0x1000u);
-  CHECK(!allocation.reads().open());
-  CHECK(!allocation.reads().admit(allocation.writes()));
-  CHECK_EQ(allocation.writes().sequence(), 0u);
-  CHECK(other.reads().admit(other.writes()));
-  CHECK_EQ(other.writes().sequence(), 1u);
-  allocation.reads().close();
-  CHECK(allocation.reads().admit(allocation.writes()));
   CHECK(allocation.invariants_hold()); }

@@ -27,8 +27,6 @@ public:
     [[nodiscard]] HRESULT make(KernelSurface &surface, HANDLE resource, D3DKMT_HANDLE &allocation);
     void give_back(D3DKMT_HANDLE allocation, HANDLE resource);
     [[nodiscard]] HRESULT keep_resident(D3DKMT_HANDLE allocation);
-    [[nodiscard]] HRESULT keep_addressable(D3DKMT_HANDLE allocation, uint64_t pages, uint64_t &address);
-    void release_address(uint64_t address, uint64_t pages);
     [[nodiscard]] HRESULT make_context(HANDLE &context);
 
 private:

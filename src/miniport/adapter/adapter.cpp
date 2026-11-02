@@ -117,13 +117,10 @@
 namespace av {
 
 namespace {
+
 constexpr int32_t more_dma_buffer = static_cast<int32_t>(0xC01E0001u);
 
 constexpr uint64_t ticks_per_microsecond = 10u;
-
-constexpr uint32_t longest_read_wait_microseconds = 100000u;
-
-constexpr uint64_t present_hold_ticks = 200000u;
 
 enum : int32_t {
     type_video_output         = 1,
@@ -143,10 +140,11 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform), overlays_(platform, sources_),
       shared_(platform), allocations_(platform, segment_, memory_, shared_),
       devices_(platform, allocations_, shared_, dxgkrnl_), contexts_(platform, devices_, geometry_),
+      render_km_(platform, devices_),
       av_contexts_(platform, dxgkrnl_, allocations_, window_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), hw_queue_contexts_(platform),
       native_fences_(platform), hardware_scheduling_(false), user_mode_submission_(false), node_(platform), present_waiters_(platform), progress_(platform, node_), transition_(), identity_(platform), description_(platform), notification_(platform, dxgkrnl_), dpc_lock_(platform, LockRank::dpc), vsync_(platform, dxgkrnl_, sources_),
-      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u), presents_unticketed_(0u), presents_ticketed_(0u), presents_parked_(0u), presents_refused_(0u), presents_unpointed_(0u), reads_opened_(0u), reads_expired_(0u), last_present_flags_(0u), last_present_status_(0), last_present_destination_kind_(0u),
+      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u), presents_made_(0u), presents_shown_(0u), refreshes_owed_(0u), refreshed_at_(0u), refresh_waiting_(false), present_rows_(0u), presents_unmoved_(0u), presents_unticketed_(0u), presents_ticketed_(0u), presents_parked_(0u), presents_refused_(0u), presents_unpointed_(0u), last_present_flags_(0u), last_present_status_(0), last_present_destination_kind_(0u),
       display_changed_(0u), display_announced_(0u), scanout_period_(DisplayMode().period()), started_(false), luid_(0u), present_(true)
       {
           AV_SCOPE("Adapter::Adapter");
@@ -712,55 +710,22 @@ int32_t Adapter::pages_read(const DxgkargEscapeRecord &escape)
     AcquiredHandleData acquired(dxgkrnl_, record.allocation());
     Allocation *const  allocation = acquired.acquire() == Status::ok ? allocations_.find(acquired.data()) : nullptr;
     if (allocation == nullptr) return NtStatus(Status::invalid_parameter).value();
-    uint64_t sequence = allocation->writes().sequence();
-    bool     complete = true;
-    if (record.action() == PagesReadRecord::Action::begin)
-        complete = begin_pages_read(*allocation, record.wait_microseconds(), sequence);
-    else
-        end_pages_read(*allocation);
+    PresentWrites &writes = allocation->writes();
+    uint64_t       sequence = writes.sequence();
+    bool           complete = true;
+    if (record.action() == PagesReadRecord::Action::begin) {
+        const PresentPageView *const engine = presents_.constructed() ? &presents_.object().progress() : nullptr;
+        const Status waited =
+            present_waiters_.wait_for(writes, engine, uint64_t{record.wait_microseconds()} * ticks_per_microsecond,
+                                      sequence);
+        complete = waited == Status::ok;
+        if (waited == Status::not_found && budget_.allows())
+            platform_.log("avgpu: a reader of presented pages waited out its time");
+        if (waited == Status::no_space && budget_.allows())
+            platform_.log("avgpu: more readers of presented pages than slots to wait in");
+    }
     static_cast<void>(record.answered(sequence, complete).encode(bytes, PagesReadRecord::encoded_size));
     return NtStatus(Status::ok).value();
-}
-
-bool Adapter::begin_pages_read(Allocation &allocation, uint32_t wait_microseconds, uint64_t &sequence)
-{
-    AV_SCOPE("Adapter::begin_pages_read");
-    if (allocation.reads().open()) {
-        static_cast<void>(platform_.add_atomic(reads_expired_, 1u));
-        if (budget_.allows()) platform_.log("avgpu: a read of presented pages was never ended and has been forgotten");
-    }
-    static_cast<void>(platform_.add_atomic(reads_opened_, 1u));
-    const uint32_t waiting = wait_microseconds < longest_read_wait_microseconds ? wait_microseconds
-                                                                                : longest_read_wait_microseconds;
-    const PresentPageView *const engine = presents_.constructed() ? &presents_.object().progress() : nullptr;
-    const uint32_t               epoch = presents_.constructed() ? presents_.object().epoch() : 0u;
-    const Status                 waited = present_waiters_.wait_for(allocation.writes(), engine, epoch,
-                                                                    uint64_t{waiting} * ticks_per_microsecond, sequence);
-    if (waited == Status::not_found && budget_.allows())
-        platform_.log("avgpu: a reader of presented pages waited out its time");
-    if (waited == Status::no_space && budget_.allows())
-        platform_.log("avgpu: more readers of presented pages than slots to wait in");
-    return waited == Status::ok;
-}
-
-void Adapter::end_pages_read(Allocation &allocation)
-{
-    AV_SCOPE("Adapter::end_pages_read");
-    allocation.reads().close();
-    present_waiters_.wake();
-}
-
-void Adapter::admit_present_write(Allocation &destination)
-{
-    AV_SCOPE("Adapter::admit_present_write");
-    PresentWrites &writes = destination.writes();
-    const Status   admitted = present_waiters_.admit_write(destination.reads(), writes, present_hold_ticks);
-    if (admitted == Status::ok) return;
-    writes.opening();
-    if (admitted == Status::not_found && budget_.allows())
-        platform_.log("avgpu: a present waited out a read of the pages it writes");
-    if (admitted == Status::no_space && budget_.allows())
-        platform_.log("avgpu: more waiters on presented pages than slots to wait in");
 }
 
 int32_t Adapter::window_chunk(const DxgkargEscapeRecord &escape)
@@ -1044,6 +1009,14 @@ int32_t Adapter::render(void *context, DxgkargRenderRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::render");
     if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
     return NtStatus(RenderRequest(platform_, *request).render()).value();
+}
+
+int32_t Adapter::render_km(void *context, DxgkargRenderRecord *request)
+{
+    AV_SCOPE("Adapter::render_km");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::render_km");
+    if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return render_km_.render(*request).value();
 }
 
 int32_t Adapter::patch(const DxgkargPatchRecord *request)
@@ -1543,14 +1516,13 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
             platform_.log("avgpu: a present of a pointed surface has no point named: the window keeps its last frame");
         return 0u;
     }
-    admit_present_write(destination->allocation());
-    PresentQueue *const queue = presents_.constructed() && present_ ? &presents_.object() : nullptr;
-    const uint32_t      ticket_epoch = queue != nullptr ? queue->epoch() : 0u;
-    PresentTicket ticket(platform_, budget_, queue, immediate_mover(), image_of(request, source, points));
+    PresentTicket ticket(platform_, budget_, presents_.constructed() && present_ ? &presents_.object() : nullptr,
+                         immediate_mover(), image_of(request, source, points));
     PresentBlit   blit(platform_, ticket, source != nullptr ? &read : nullptr, written);
     PresentWrites &writes = destination->allocation().writes();
+    writes.opening();
     ScopeExit written_into([&] {
-        writes.written(ticket.ticket(), ticket_epoch);
+        writes.written(ticket.ticket());
         present_waiters_.wake();
     });
     const Rectangle into(request.DstRect.left, request.DstRect.top, request.DstRect.right, request.DstRect.bottom);
@@ -2378,14 +2350,10 @@ void Adapter::report(StateWriter &writer)
     writer.number("presents_made", platform_.load_atomic(presents_made_));
     writer.number("presents_refused", presents_refused_);
     writer.number("presents_unpointed", presents_unpointed_);
-    writer.number("reads_opened", platform_.load_atomic(reads_opened_));
-    writer.number("reads_expired", platform_.load_atomic(reads_expired_));
-    writer.number("writers_held", present_waiters_.holds());
-    writer.number("writer_hold_timeouts", present_waiters_.hold_timeouts());
-    writer.number("reader_timeouts", present_waiters_.timeouts());
     writer.hex("last_present_flags", last_present_flags_);
     writer.hex("last_present_status", static_cast<uint32_t>(last_present_status_));
     writer.number("last_present_destination_kind", last_present_destination_kind_);
+    render_km_.report(writer);
     writer.hex("display_changed", display_changed_);
     writer.hex("aperture_bytes", segment_.size());
     writer.flag("host_visible", host_visible_.offered());

@@ -26,13 +26,8 @@ public:
     void                     release();
     const VulkanDeviceTable &table() const;
     QueueWork               &work();
-    BorrowedQueue           &queue();
 
     [[nodiscard]] bool surface_image(IDirect3DSurface9 *surface, VkImage &image, VkImageLayout &layout);
-    [[nodiscard]] bool surface_image(IDirect3DSurface9 *surface, VkImage &image, VkImageLayout &layout,
-                                     VkImageCreateInfo &described);
-    void               lock_device();
-    void               unlock_device();
 
 private:
     IDirect3DDevice9     *device_;

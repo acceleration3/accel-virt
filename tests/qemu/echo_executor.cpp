@@ -367,10 +367,6 @@ std::uint32_t map_frame(void *, std::uint32_t, std::uint64_t, std::uint32_t, std
     return AV_UNKNOWN;
 }
 void unmap_frame(void *, std::uint32_t, std::uint64_t, std::uint32_t) {}
-std::uint32_t copy_frame(void *, std::uint32_t, std::uint64_t, std::uint32_t, std::uint32_t, const AvFrameCopy *)
-{
-    return AV_UNKNOWN;
-}
 
 constexpr std::uint32_t surface_edge = 64u;
 constexpr std::size_t   max_released = 64u;
@@ -453,7 +449,6 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               export_image,
                               map_frame,
                               unmap_frame,
-                              copy_frame,
                               export_surface,
                               sync_surface,
                               nullptr,

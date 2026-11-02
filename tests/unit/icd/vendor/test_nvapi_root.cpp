@@ -134,7 +134,7 @@ TEST(nvapi_root, the_driver_version_and_the_primary_display_with_its_gpu)
   std::uint32_t driver = 0u;
   char          branch[NvapiRoot::short_string] = {};
   CHECK_EQ(machine.root().driver_and_branch_version(&driver, branch), NvapiRoot::ok);
-  CHECK_EQ(driver, 50000u);
+  CHECK_EQ(driver, 3505u);
   CHECK(std::strcmp(branch, "avgpu 0.35.5.0") == 0);
   void *display = nullptr;
   CHECK_EQ(machine.root().enum_display(0u, &display), NvapiRoot::ok);

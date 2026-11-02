@@ -29,13 +29,6 @@ bool PresentFrames::map(const SurfacePoint &frame, AvFrameView &view) const
     return readable() && plane_->map_frame(gpu_uuid_.raw(), frame, wait_ms, view);
 }
 
-Status PresentFrames::copy(const SurfacePoint &frame, const AvFrameCopy &copy) const
-{
-    AV_SCOPE("PresentFrames::copy");
-    if (!readable()) return Status::not_supported;
-    return plane_->copy_frame(gpu_uuid_.raw(), frame, wait_ms, copy);
-}
-
 void PresentFrames::unmap(const SurfacePoint &frame) const
 {
     AV_SCOPE("PresentFrames::unmap");

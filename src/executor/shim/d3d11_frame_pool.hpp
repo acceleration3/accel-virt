@@ -4,7 +4,6 @@
 #include "executor/d3d/frame_claim.hpp"
 #include "executor/d3d/frame_pool.hpp"
 #include "executor/d3d/staged_frame.hpp"
-#include "executor/shim/frame_buffer_copy.hpp"
 
 #include <stdint.h>
 
@@ -32,7 +31,7 @@ private:
         Frame();
         ~Frame();
 
-        void    bind(D3d11HostDevice &device, FrameBufferCopy &copies);
+        void    bind(D3d11HostDevice &device);
         bool    fits(uint32_t width, uint32_t height, uint32_t format) const;
         bool    take(ID3D11Texture2D *source, uint32_t subresource, uint32_t width, uint32_t height,
                      uint32_t format);
@@ -40,23 +39,16 @@ private:
     private:
         Reading map_when_copied(const uint8_t *&pixels, uint32_t &row_pitch) override;
         void    unmap() override;
-        Copying copy_into(const AvFrameCopy &target, uint32_t wait_ms) override;
         bool    copy_to_staging();
 
         D3d11HostDevice *device_;
-        FrameBufferCopy *copies_;
         ID3D11Texture2D *held_;
         ID3D11Texture2D *texture_;
         bool             staged_;
         uint32_t         format_;
         bool             mapped_;
-        uint64_t         copy_value_;
-        uint32_t         copy_epoch_;
-        static constexpr uint32_t settle_ms = 1000u;
-        bool    copy_pending();
     };
 
-    FrameBufferCopy  copies_;
     FramePool<Frame> frames_;
 };
 

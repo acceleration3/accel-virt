@@ -16,7 +16,6 @@ public:
     VulkanTimeline(const VulkanTimeline &) = delete;
     VulkanTimeline &operator=(const VulkanTimeline &) = delete;
 
-    [[nodiscard]] bool make_local(const VulkanDeviceTable &table);
     [[nodiscard]] bool make_exportable(const VulkanDeviceTable &table);
     [[nodiscard]] bool import_fd(const VulkanDeviceTable &table, OwnedFd &descriptor);
     [[nodiscard]] bool export_fd(OwnedFd &descriptor) const;

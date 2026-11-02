@@ -55,7 +55,7 @@ TEST(executor_library_accept, no_table_leaves_the_device_without_an_executor)
   library.close_domain(); }
 
 TEST(executor_library_accept, another_abi_version_or_any_missing_operation_is_refused)
-{ for (std::uint32_t broken = 0u; broken <= 28u; broken++) {
+{ for (std::uint32_t broken = 0u; broken <= 27u; broken++) {
       MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
       AvExecutorOps  &table = ops.editable();
       switch (broken) {
@@ -65,7 +65,6 @@ TEST(executor_library_accept, another_abi_version_or_any_missing_operation_is_re
       case 25u: table.free_memory = nullptr; break;
       case 26u: table.answer_part = nullptr; break;
       case 27u: table.alias_memory = nullptr; break;
-      case 28u: table.copy_frame = nullptr; break;
       case 3u: table.open_domain = nullptr; break;
       case 4u: table.close_domain = nullptr; break;
       case 5u: table.create = nullptr; break;
@@ -342,22 +341,6 @@ TEST(executor_library_frames, are_mapped_and_unmapped_in_the_device_s_domain)
   CHECK(!library.map_frame(SurfacePoint(0x51u, 4u), 0u, view));
   library.unmap_frame(SurfacePoint(0x51u, 3u));
   CHECK_EQ(ops.frame_unmaps(), 1u); }
-
-TEST(executor_library_frames, are_copied_into_lent_memory_or_left_to_map_frame)
-{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_D3D);
-  ExecutorLibrary library;
-  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  std::uint8_t      pixels[16] = {};
-  ops.serve_frame(0x51u, 3u, AvFrameView{pixels, 8u, 2u, 2u, 0u});
-  const AvFrameRegion region = {0u, 0u, 0u, 0u, 2u, 2u};
-  const AvFrameCopy   copy = {-1, 8u, 5u, 4096u, 0u, &region, 1u, 0u, 0u};
-  CHECK_STATUS(library.copy_frame(SurfacePoint(0x51u, 3u), 0u, copy), Status::not_supported);
-  CHECK_STATUS(library.open_domain(some_gpu), Status::ok);
-  CHECK_STATUS(library.copy_frame(SurfacePoint(0x51u, 3u), 0u, copy), Status::not_supported);
-  ops.copy_frames_with(AV_EXECUTED);
-  CHECK_STATUS(library.copy_frame(SurfacePoint(0x51u, 3u), 0u, copy), Status::ok);
-  CHECK_STATUS(library.copy_frame(SurfacePoint(0x51u, 4u), 0u, copy), Status::not_found);
-  CHECK_EQ(ops.last_domain(), library.domain()); }
 
 TEST(executor_library_surfaces, are_exported_and_synced_in_the_device_s_domain)
 { MockExecutorOps ops(AV_EXECUTOR_SUB_API_D3D);

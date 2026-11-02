@@ -92,7 +92,7 @@ bool BatchExecutor::ready() const
     return executor_.created();
 }
 
-Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHeader &batch, uint64_t *answering)
+Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHeader &batch)
 {
     AV_SCOPE("BatchExecutor::run");
     host_.require_worker("BatchExecutor::run");
@@ -119,8 +119,6 @@ Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHead
     });
     while ((status = stream.next(header, payload)) == Status::ok) {
         if (abandoned()) return Status::invalid_state;
-        if (answering != nullptr && header.generates_reply())
-            __atomic_store_n(answering, head + batch.span(), __ATOMIC_RELEASE);
         status = run_command(header, payload, answered, answer);
         if (status != Status::ok) return failed(batch.fence_id(), status);
     }

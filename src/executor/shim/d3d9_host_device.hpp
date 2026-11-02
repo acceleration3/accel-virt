@@ -14,13 +14,11 @@ struct IDirect3DSurface9;
 namespace av {
 
 class D3dRuntime;
-class DriverLog;
 class StagedFrame;
 
 class D3d9HostDevice {
 public:
     D3d9HostDevice();
-    void bind(DriverLog &log);
     ~D3d9HostDevice();
     D3d9HostDevice(const D3d9HostDevice &) = delete;
     D3d9HostDevice &operator=(const D3d9HostDevice &) = delete;

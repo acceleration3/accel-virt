@@ -17,6 +17,7 @@
 namespace av::d3d11 {
 
 namespace {
+
 constexpr uint32_t api_generate_mips = 0x1u;
 constexpr uint32_t api_texture_cube = 0x4u;
 constexpr uint32_t misc_same_bits = 0xF0u;
@@ -50,6 +51,7 @@ constexpr uint32_t stage_compute = 5u;
 constexpr uint32_t no_stream = 0xffffffffu;
 
 }
+
 
 SIZE_T D3d11Device::calc_private_resource_size(const D3D11DDIARG_CREATERESOURCE *)
 {
@@ -259,9 +261,6 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
         return;
     }
     forget_guest_surface(resource);
-    forget_gdi_rows(resource);
-    forget_resolve(resource);
-    allocations_.release_address(resource.gpu_address, resource.gpu_pages);
     forget_maps(resource.stamp.id());
     destroy_object(resource.stamp.id());
     if (resource.lent != nullptr) lender_.retire(*resource.lent);
@@ -272,6 +271,7 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
         allocations_.give_back(resource.allocation, static_cast<HANDLE>(resource.runtime_resource));
     resource = ResourceRecord{};
 }
+
 
 SIZE_T D3d11Device::calc_private_shader_resource_view_size(const D3DWDDM2_0DDIARG_CREATESHADERRESOURCEVIEW *)
 {
@@ -511,6 +511,7 @@ VOID D3d11Device::destroy_unordered_access_view(D3D11DDI_HUNORDEREDACCESSVIEW ha
     destroy_object(id_of(handle.pDrvPrivate));
 }
 
+
 void D3d11Device::create_shader(uint32_t stage, const UINT *code, D3D10DDI_HSHADER shader,
                                 const D3D11_1DDIARG_SIGNATURE_ENTRY2 *inputs, UINT input_count,
                                 const D3D11_1DDIARG_SIGNATURE_ENTRY2 *outputs, UINT output_count,
@@ -670,6 +671,7 @@ VOID D3d11Device::destroy_shader(D3D10DDI_HSHADER handle)
     if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
+
 
 SIZE_T D3d11Device::calc_private_element_layout_size(const D3D10DDIARG_CREATEELEMENTLAYOUT *)
 {

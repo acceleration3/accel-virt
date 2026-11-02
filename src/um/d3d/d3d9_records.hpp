@@ -40,11 +40,8 @@ struct D3d9Resource {
     HANDLE               runtime;
     D3DKMT_HANDLE        allocation;
     HANDLE               allocation_resource;
-    uint32_t             vidpn_source;
     uint32_t             allocation_pitch;
     bool                 opened;
-    uint64_t             gpu_address;
-    uint64_t             gpu_pages;
     uint64_t             shared_key;
     d3d::PresentCount    presents;
     uint32_t             named_point;

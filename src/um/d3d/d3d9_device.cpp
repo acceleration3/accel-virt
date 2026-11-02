@@ -92,7 +92,7 @@ HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVIC
     if (FAILED(context)) return context;
     const HRESULT joined = session_.join(kmt_adapter);
     if (FAILED(joined)) return joined;
-    static_cast<void>(present_order_.construct(kernel_.callbacks(), kernel_.runtime(), context_, session_, lines_));
+    static_cast<void>(present_order_.construct(kernel_.callbacks(), kernel_.runtime(), context_, session_.transport(), lines_));
     static_cast<void>(channel_.construct(session_.stream(), session_.lock(), session_.next_id()));
     uint32_t hresult = 1u;
     if (!channel_.object().open9(hresult) || hresult != 0u) {
@@ -194,6 +194,7 @@ void D3d9Device::not_implemented(const char *call)
     AV_SCOPE("D3d9Device::not_implemented");
     refused_.unserved(call);
 }
+
 
 bool D3d9Device::send_states()
 {
@@ -489,6 +490,7 @@ HRESULT D3d9Device::set_depth_stencil(const D3DDDIARG_SETDEPTHSTENCIL *args)
     return d3d9proto::av_d3d9_SetDepthStencil9(wire(), id, subresource) ? S_OK : lost(__func__);
 }
 
+
 HRESULT D3d9Device::create_vertex_shader_func(D3DDDIARG_CREATEVERTEXSHADERFUNC *args, const UINT *code)
 {
     AV_SCOPE("D3d9Device::create_vertex_shader_func");
@@ -547,6 +549,7 @@ HRESULT D3d9Device::delete_vertex_shader_decl(HANDLE declaration)
     return d3d9proto::av_d3d9_Destroy9(wire(), id_of(declaration)) ? S_OK : lost(__func__);
 }
 
+
 HRESULT D3d9Device::create_query(D3DDDIARG_CREATEQUERY *args)
 {
     AV_SCOPE("D3d9Device::create_query");
@@ -598,6 +601,7 @@ HRESULT D3d9Device::get_query_data(const D3DDDIARG_GETQUERYDATA *args)
     if (args->pData != nullptr && answered >= query->data_bytes) memcpy(args->pData, answer, query->data_bytes);
     return S_OK;
 }
+
 
 HRESULT D3d9Device::apply(const D3d9StateEntry &entry)
 {
@@ -705,6 +709,7 @@ HRESULT D3d9Device::state_set(D3DDDIARG_STATESET *args)
     default: not_implemented("a Direct3D 9 state block operation it has no use for"); return S_OK;
     }
 }
+
 
 HRESULT D3d9Device::update_w_info(const D3DDDIARG_WINFO *)
 {

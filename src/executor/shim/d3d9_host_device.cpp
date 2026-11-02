@@ -10,6 +10,7 @@
 namespace av {
 
 namespace {
+
 constexpr UINT unused_back_buffer = 16u;
 constexpr D3DFORMAT display = D3DFMT_X8R8G8B8;
 constexpr uint32_t  last_multisample = D3DMULTISAMPLE_16_SAMPLES;
@@ -48,12 +49,6 @@ D3d9HostDevice::~D3d9HostDevice()
 {
     AV_SCOPE("D3d9HostDevice::~D3d9HostDevice");
     close();
-}
-
-void D3d9HostDevice::bind(DriverLog &log)
-{
-    AV_SCOPE("D3d9HostDevice::bind");
-    frames_.bind(log);
 }
 
 bool D3d9HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)

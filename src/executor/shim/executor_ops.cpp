@@ -14,6 +14,7 @@
 #include <dlfcn.h>
 
 namespace {
+
 class Library {
 public:
     av::ContextSession *create(uint32_t sub_api, const AvContextOptions &options, av::ContextSession *share)
@@ -242,19 +243,6 @@ void unmap_frame(void *, uint32_t domain, uint64_t surface, uint32_t point)
     library.root().unmap_frame(domain, av::SurfacePoint(surface, point));
 }
 
-uint32_t copy_frame(void *, uint32_t domain, uint64_t surface, uint32_t point, uint32_t wait_ms,
-                    const AvFrameCopy *copy)
-{
-    AV_SCOPE("copy_frame");
-    if (copy == nullptr) return AV_FRAME_UNCOPYABLE;
-    switch (library.root().copy_frame(domain, av::SurfacePoint(surface, point), wait_ms, *copy)) {
-    case av::StagedFrame::Copying::copied: return AV_EXECUTED;
-    case av::StagedFrame::Copying::declined: return AV_FRAME_UNCOPYABLE;
-    case av::StagedFrame::Copying::timed_out: break;
-    }
-    return AV_UNKNOWN;
-}
-
 uint32_t export_surface(void *, uint32_t domain, uint64_t surface, uint32_t flags, AvExportedImage *image)
 {
     AV_SCOPE("export_surface");
@@ -334,7 +322,6 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               export_image,
                               map_frame,
                               unmap_frame,
-                              copy_frame,
                               export_surface,
                               sync_surface,
                               compose_planes,

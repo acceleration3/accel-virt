@@ -8,6 +8,7 @@
 namespace av {
 
 namespace {
+
 constexpr uint64_t most_wait_nanoseconds = 1000000000u;
 
 }
@@ -75,8 +76,7 @@ VkCommandBuffer QueueWork::next_buffer()
     AV_SCOPE("QueueWork::next_buffer");
     const uint32_t slot = next_;
     next_ = (next_ + 1u) % in_flight;
-    if (signals_[slot] != nullptr && !signals_[slot]->wait(values_[slot], most_wait_nanoseconds))
-        return VK_NULL_HANDLE;
+    if (signals_[slot] != nullptr) static_cast<void>(signals_[slot]->wait(values_[slot], most_wait_nanoseconds));
     signals_[slot] = nullptr;
     table_->reset(buffers_[slot]);
     return buffers_[slot];
@@ -113,42 +113,8 @@ bool QueueWork::copy(VkImage source, VkImageLayout layout, VkImage destination, 
     queue_->flush();
     const uint32_t        slot = next_;
     const VkCommandBuffer buffer = next_buffer();
-    if (buffer == VK_NULL_HANDLE || !table_->begin(buffer)) return false;
+    if (!table_->begin(buffer)) return false;
     record(buffer, source, layout, destination, width, height);
-    return send(slot, buffer, signal, value);
-}
-
-void QueueWork::record_to_buffer(VkCommandBuffer buffer, VkImage source, VkImageLayout layout, VkBuffer destination,
-                                 const VkBufferImageCopy *regions, uint32_t count) const
-{
-    AV_SCOPE("QueueWork::record_to_buffer");
-    const VkImageSubresourceRange whole = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u};
-    const VkImageMemoryBarrier    before = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr, VK_ACCESS_MEMORY_WRITE_BIT,
-                                         VK_ACCESS_TRANSFER_READ_BIT, layout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                         VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, source, whole};
-    table_->barrier(buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 1u, &before);
-    table_->copy_image_to_buffer(buffer, source, destination, count, regions);
-    const VkImageMemoryBarrier after = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr, VK_ACCESS_TRANSFER_READ_BIT,
-                                        VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-                                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, layout, VK_QUEUE_FAMILY_IGNORED,
-                                        VK_QUEUE_FAMILY_IGNORED, source, whole};
-    table_->barrier(buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 1u, &after);
-    const VkMemoryBarrier visible = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr, VK_ACCESS_TRANSFER_WRITE_BIT,
-                                     VK_ACCESS_HOST_READ_BIT};
-    table_->memory_barrier(buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, visible);
-}
-
-bool QueueWork::copy_to_buffer(VkImage source, VkImageLayout layout, VkBuffer destination,
-                               const VkBufferImageCopy *regions, uint32_t count, const VulkanTimeline &signal,
-                               uint64_t value)
-{
-    AV_SCOPE("QueueWork::copy_to_buffer");
-    if (!opened() || source == VK_NULL_HANDLE || destination == VK_NULL_HANDLE || !signal.made()) return false;
-    queue_->flush();
-    const uint32_t        slot = next_;
-    const VkCommandBuffer buffer = next_buffer();
-    if (buffer == VK_NULL_HANDLE || !table_->begin(buffer)) return false;
-    record_to_buffer(buffer, source, layout, destination, regions, count);
     return send(slot, buffer, signal, value);
 }
 

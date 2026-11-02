@@ -1,7 +1,6 @@
 #include "device/control/control_request.hpp"
 #include "device/control/present_engine_commands.hpp"
 #include "device/fence/fence_interrupts.hpp"
-#include "device/memory/guest_ram_lendings.hpp"
 #include "device/present/present_engine.hpp"
 #include "device/present/present_frames.hpp"
 #include "harness/host/mock_host.hpp"
@@ -65,13 +64,12 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     av::FenceInterrupts interrupts(host);
     av::PresentEngine   engine(host, interrupts);
     const av::PresentFrames none;
-    av::GuestRamLendings lendings(host);
-    if (engine.initialize() != av::Status::ok || engine.attach(page, none, lendings) != av::Status::ok) __builtin_trap();
+    if (engine.initialize() != av::Status::ok || engine.attach(page, none) != av::Status::ok) __builtin_trap();
     std::uint32_t response = 0u;
     {
         av::MockRequest    mock(data, size);
         av::ControlRequest request(host, &mock);
-        av::PresentEngineCommands commands(host, engine, none, lendings);
+        av::PresentEngineCommands commands(host, engine, none);
         if (!commands.answer(request, av::QueuedPresentRequest::type) || !mock.answered()) __builtin_trap();
         response = mock.response_type();
     }

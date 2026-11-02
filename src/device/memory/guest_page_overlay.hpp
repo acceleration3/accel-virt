@@ -15,7 +15,6 @@ class ControlRequest;
 class GuestRamLending;
 class Host;
 class LentPages;
-class RunSwapGate;
 struct GuestPageOverlayProbe;
 
 class GuestPageOverlay {
@@ -23,7 +22,7 @@ public:
     static constexpr size_t   entry_size = 16u;
     static constexpr uint64_t page_size = 4096u;
 
-    GuestPageOverlay(BlockSource &blocks, LentPages &lent, RunSwapGate &gate, GuestRamLending &owner);
+    GuestPageOverlay(BlockSource &blocks, LentPages &lent, GuestRamLending &owner);
     ~GuestPageOverlay();
     GuestPageOverlay(const GuestPageOverlay &) = delete;
     GuestPageOverlay &operator=(const GuestPageOverlay &) = delete;
@@ -36,7 +35,6 @@ public:
     uint32_t             extents() const;
     uint64_t             extent_address(uint32_t index) const;
     uint64_t             extent_length(uint32_t index) const;
-    [[nodiscard]] bool   locate(uint64_t address, uint64_t length, uint32_t &hint, uint64_t &offset) const;
 
     bool invariants_hold() const;
 
@@ -50,14 +48,12 @@ private:
     struct Extent {
         uint64_t address_;
         uint64_t length_;
-        uint64_t offset_;
     };
 
     [[nodiscard]] Status lay_entry(Host &host, uint64_t address, uint64_t length, int fd, uint64_t size);
     [[nodiscard]] Status lay_run(Host &host, void *pointer, uint64_t length, uint64_t address, int fd);
 
     LentPages           &lent_;
-    RunSwapGate         &gate_;
     GuestRamLending     &owner_;
     GrowableArray<Run>    runs_;
     GrowableArray<Extent> extents_;

@@ -14,20 +14,17 @@ public:
     PresentWrites &operator=(const PresentWrites &) = delete;
 
     void     opening();
-    void     written(uint64_t ticket, uint32_t epoch);
+    void     written(uint64_t ticket);
     uint64_t sequence();
-    bool     in_progress(uint64_t sequence);
+    bool     in_progress(uint64_t sequence) const;
     uint64_t ticket();
-    uint32_t epoch();
 
     bool invariants_hold();
 
 private:
     Platform &platform_;
     uint64_t  sequence_;
-    uint64_t  writers_;
     uint64_t  ticket_;
-    uint64_t  epoch_;
 };
 
 }

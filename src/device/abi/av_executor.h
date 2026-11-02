@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-#define AV_EXECUTOR_ABI_VERSION 26u
+#define AV_EXECUTOR_ABI_VERSION 25u
 #define AV_EXECUTOR_OPS_SYMBOL "av_executor_ops"
 
 #define AV_EXECUTOR_SUB_API_VULKAN 1u
@@ -94,8 +94,6 @@ typedef struct AvScanoutPlane {
 #define AV_EXPORT_OTHER_GPU 0x1u
 #define AV_EXPORT_UNAVAILABLE 2u
 
-#define AV_FRAME_UNCOPYABLE 4u
-
 typedef struct AvFrameView {
     const uint8_t *pixels;
     uint32_t row_pitch;
@@ -103,29 +101,6 @@ typedef struct AvFrameView {
     uint32_t height;
     uint32_t reserved;
 } AvFrameView;
-
-#define AV_FRAME_COPY_MOST_REGIONS 256u
-
-typedef struct AvFrameRegion {
-    uint32_t source_x;
-    uint32_t source_y;
-    uint32_t destination_x;
-    uint32_t destination_y;
-    uint32_t width;
-    uint32_t height;
-} AvFrameRegion;
-
-typedef struct AvFrameCopy {
-    int dma_buf;
-    uint32_t pitch;
-    uint64_t lending;
-    uint64_t size;
-    uint64_t offset;
-    const AvFrameRegion *regions;
-    uint32_t count;
-    uint32_t reserved;
-    uint64_t oldest_live;
-} AvFrameCopy;
 
 typedef struct AvExecutorOps {
     uint32_t abi_version;
@@ -166,8 +141,6 @@ typedef struct AvExecutorOps {
     uint32_t (*map_frame)(void *opaque, uint32_t domain, uint64_t surface, uint32_t point, uint32_t wait_ms,
                           AvFrameView *view);
     void (*unmap_frame)(void *opaque, uint32_t domain, uint64_t surface, uint32_t point);
-    uint32_t (*copy_frame)(void *opaque, uint32_t domain, uint64_t surface, uint32_t point, uint32_t wait_ms,
-                           const AvFrameCopy *copy);
     uint32_t (*export_surface)(void *opaque, uint32_t domain, uint64_t surface, uint32_t flags,
                                AvExportedImage *image);
     uint32_t (*sync_surface)(void *opaque, uint32_t domain, uint64_t surface, uint32_t flags, uint64_t *writes,

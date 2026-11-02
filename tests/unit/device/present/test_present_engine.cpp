@@ -1,7 +1,6 @@
 #include "device/abi/entry_points.hpp"
 #include "device/control/control_request.hpp"
 #include "device/fence/fence_interrupts.hpp"
-#include "device/memory/guest_ram_lendings.hpp"
 #include "device/present/present_engine.hpp"
 #include "harness/context/recording_context_plane.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -15,6 +14,7 @@
 #include <time.h>
 
 namespace av {
+
 struct PresentEngineProbe {
     static void   pause(PresentEngine &engine) { engine.stop_thread(); }
     static Status resume(PresentEngine &engine, Host &host)
@@ -49,10 +49,9 @@ struct Rig {
     PresentScene              scene;
     av::RecordingContextPlane plane;
     av::PresentFrames      snapshots;
-    av::GuestRamLendings      lendings;
     PresentEngine             engine;
 
-    Rig() : host(), interrupts(host), scene(host), plane(), snapshots(plane, gpu), lendings(host), engine(host, interrupts)
+    Rig() : host(), interrupts(host), scene(host), plane(), snapshots(plane, gpu), engine(host, interrupts)
     {
         CHECK_STATUS(interrupts.initialize(), Status::ok);
         CHECK_STATUS(interrupts.connect(), Status::ok);
@@ -86,7 +85,7 @@ struct Rig {
 
 TEST(present_engine, presents_are_moved_in_order_and_complete_in_the_page)
 { Rig rig;
-  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots, rig.lendings), Status::ok);
+  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::ok);
   CHECK_EQ(rig.host.live_threads(), 1u);
   PresentProgress progress;
   CHECK(rig.scene.progress(progress));
@@ -114,7 +113,7 @@ TEST(present_engine, presents_are_moved_in_order_and_complete_in_the_page)
 TEST(present_engine, nothing_is_taken_or_counted_without_a_page)
 { Rig rig;
   CHECK_EQ(rig.send(rig.scene.blt(1u, 0u, 1u)), err_invalid_parameter);
-  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots, rig.lendings), Status::ok);
+  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::ok);
   CHECK_EQ(rig.send(rig.scene.blt(1u, 0u, 1u)), ok_nodata);
   PresentProgress progress;
   CHECK(rig.reaches(1u, progress));
@@ -122,7 +121,7 @@ TEST(present_engine, nothing_is_taken_or_counted_without_a_page)
 
 TEST(present_engine, a_refusal_with_nothing_outstanding_completes_at_once)
 { Rig rig;
-  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots, rig.lendings), Status::ok);
+  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::ok);
   CHECK_EQ(rig.send(rig.scene.blt(5u, 0u, 1u)), err_invalid_parameter);
   PresentProgress progress;
   CHECK(rig.scene.progress(progress));
@@ -141,7 +140,7 @@ TEST(present_engine, a_refusal_with_nothing_outstanding_completes_at_once)
 
 TEST(present_engine, a_refusal_behind_an_outstanding_present_completes_with_it)
 { Rig rig;
-  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots, rig.lendings), Status::ok);
+  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::ok);
   PresentEngineProbe::pause(rig.engine);
   CHECK_EQ(rig.send(rig.scene.blt(1u, 0u, 1u)), ok_nodata);
   CHECK_EQ(rig.send(rig.scene.blt(9u, 1u, 1u)), err_invalid_parameter);
@@ -163,7 +162,7 @@ TEST(present_engine, a_refusal_behind_an_outstanding_present_completes_with_it)
 
 TEST(present_engine, a_present_past_the_depth_is_refused_and_completes_in_its_turn)
 { Rig rig;
-  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots, rig.lendings), Status::ok);
+  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::ok);
   PresentEngineProbe::pause(rig.engine);
   for (std::uint64_t ticket = 1u; ticket <= PresentEngine::depth; ticket++)
       CHECK_EQ(rig.send(rig.scene.blt(ticket, static_cast<std::uint32_t>(ticket), 1u)), ok_nodata);
@@ -181,7 +180,7 @@ TEST(present_engine, a_present_past_the_depth_is_refused_and_completes_in_its_tu
 
 TEST(present_engine, a_region_outside_a_surface_is_counted_refused_though_it_was_taken)
 { Rig rig;
-  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots, rig.lendings), Status::ok);
+  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::ok);
   CHECK_EQ(rig.send(rig.scene.blt(1u, PresentScene::height - 1u, 2u)), ok_nodata);
   PresentProgress progress;
   CHECK(rig.reaches(1u, progress));
@@ -189,18 +188,18 @@ TEST(present_engine, a_region_outside_a_surface_is_counted_refused_though_it_was
 
 TEST(present_engine, a_page_registered_again_counts_from_one_and_a_reset_holds_nothing)
 { Rig rig;
-  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots, rig.lendings), Status::ok);
+  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::ok);
   CHECK_EQ(rig.send(rig.scene.blt(1u, 0u, 1u)), ok_nodata);
   PresentProgress progress;
   CHECK(rig.reaches(1u, progress));
-  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots, rig.lendings), Status::ok);
+  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::ok);
   CHECK(rig.scene.progress(progress));
   CHECK_EQ(progress.completed(), 0u);
   CHECK_EQ(rig.host.live_threads(), 1u);
   CHECK_EQ(rig.send(rig.scene.blt(1u, 5u, 1u)), ok_nodata);
   CHECK(rig.reaches(1u, progress));
   CHECK(rig.scene.copied(5u, 1u));
-  CHECK_STATUS(rig.engine.attach(0u, rig.snapshots, rig.lendings), Status::ok);
+  CHECK_STATUS(rig.engine.attach(0u, rig.snapshots), Status::ok);
   CHECK_EQ(rig.host.live_threads(), 0u);
   CHECK_EQ(rig.host.live_guest_mappings(), 0u);
   CHECK_EQ(rig.send(rig.scene.blt(2u, 0u, 1u)), err_invalid_parameter);
@@ -211,10 +210,9 @@ TEST(present_engine, an_engine_that_cannot_start_holds_nothing)
   FenceInterrupts interrupts(host);
   PresentScene    scene(host);
   const av::PresentFrames none;
-  av::GuestRamLendings lendings(host);
   {
       PresentEngine engine(host, interrupts);
-      CHECK_STATUS(engine.attach(PresentScene::engine_page, none, lendings), Status::invalid_state);
+      CHECK_STATUS(engine.attach(PresentScene::engine_page, none), Status::invalid_state);
       engine.detach();
       host.fail_mutex_at(1u);
       CHECK_STATUS(engine.initialize(), Status::no_memory);
@@ -223,13 +221,13 @@ TEST(present_engine, an_engine_that_cannot_start_holds_nothing)
       CHECK_EQ(host.live_events(), 0u);
       CHECK_STATUS(engine.initialize(), Status::ok);
       CHECK_STATUS(engine.initialize(), Status::invalid_state);
-      CHECK_STATUS(engine.attach(0x80000000u, none, lendings), Status::not_found);
+      CHECK_STATUS(engine.attach(0x80000000u, none), Status::not_found);
       host.fail_thread_start_at(1u);
-      CHECK_STATUS(engine.attach(PresentScene::engine_page, none, lendings), Status::no_memory);
+      CHECK_STATUS(engine.attach(PresentScene::engine_page, none), Status::no_memory);
       CHECK_EQ(host.live_guest_mappings(), 0u);
       CHECK_EQ(host.live_threads(), 0u);
       CHECK(engine.invariants_hold());
-      CHECK_STATUS(engine.attach(PresentScene::engine_page, none, lendings), Status::ok);
+      CHECK_STATUS(engine.attach(PresentScene::engine_page, none), Status::ok);
   }
   CHECK_EQ(host.live_threads(), 0u);
   CHECK_EQ(host.live_guest_mappings(), 0u);
@@ -241,10 +239,10 @@ TEST(present_engine, an_image_source_is_moved_out_of_its_snapshot_and_the_snapsh
   static std::uint32_t    pixels[20u * 2u];
   for (std::uint32_t at = 0u; at < 40u; at++) pixels[at] = 0xA0000000u | at;
   const AvFrameView view = {reinterpret_cast<const std::uint8_t *>(pixels), pitch, 16u, 2u, 0u};
-  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots, rig.lendings), Status::ok);
+  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::ok);
   CHECK_EQ(rig.send(rig.scene.image(1u, 0x51u)), 0x1205u);
   rig.plane.serve_frame(av::SurfacePoint(0x52u, 1u), view);
-  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots, rig.lendings), Status::ok);
+  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::ok);
   CHECK_EQ(rig.send(rig.scene.image(1u, 0x52u)), ok_nodata);
   PresentProgress progress;
   CHECK(rig.reaches(1u, progress));

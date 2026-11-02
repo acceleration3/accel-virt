@@ -6,15 +6,13 @@
 namespace av {
 
 class ControlRequest;
-class GuestRamLendings;
 class Host;
 class PresentEngine;
 class PresentFrames;
 
 class PresentEngineCommands {
 public:
-    PresentEngineCommands(Host &host, PresentEngine &engine, const PresentFrames &snapshots,
-                          GuestRamLendings &lendings);
+    PresentEngineCommands(Host &host, PresentEngine &engine, const PresentFrames &snapshots);
     PresentEngineCommands(const PresentEngineCommands &) = delete;
     PresentEngineCommands &operator=(const PresentEngineCommands &) = delete;
 
@@ -26,7 +24,6 @@ private:
     Host                   &host_;
     PresentEngine          &engine_;
     const PresentFrames &snapshots_;
-    GuestRamLendings &lendings_;
 };
 
 }

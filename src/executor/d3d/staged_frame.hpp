@@ -11,7 +11,6 @@ namespace av {
 class StagedFrame {
 public:
     enum class Reading { mapped, copying, failed };
-    enum class Copying { copied, declined, timed_out };
 
     StagedFrame(const StagedFrame &) = delete;
     StagedFrame &operator=(const StagedFrame &) = delete;
@@ -19,7 +18,6 @@ public:
     [[nodiscard]] bool claim();
     bool               out() const;
     Reading            read(AvFrameView &view);
-    Copying            copy(const AvFrameCopy &target, uint32_t wait_ms);
     void               release();
     void               forsake();
 
@@ -35,7 +33,6 @@ protected:
 
     virtual Reading map_when_copied(const uint8_t *&pixels, uint32_t &row_pitch) = 0;
     virtual void    unmap() = 0;
-    virtual Copying copy_into(const AvFrameCopy &target, uint32_t wait_ms);
 
 private:
     FrameClaim claim_;

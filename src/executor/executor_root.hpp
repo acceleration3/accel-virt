@@ -7,7 +7,6 @@
 #include "device/abi/av_executor.h"
 #include "executor/context_session.hpp"
 #include "executor/d3d/d3d_backend.hpp"
-#include "executor/d3d/staged_frame.hpp"
 #include "executor/executor_domains.hpp"
 #include "executor/gpu_clock_hold.hpp"
 #include "executor/host_gpu_set.hpp"
@@ -55,8 +54,6 @@ public:
     bool     read_image(uint32_t domain, uint64_t id, void *pixels, uint32_t stride, uint32_t width, uint32_t height);
     bool     map_frame(uint32_t domain, const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view);
     void     unmap_frame(uint32_t domain, const SurfacePoint &frame);
-    StagedFrame::Copying copy_frame(uint32_t domain, const SurfacePoint &frame, uint32_t wait_ms,
-                                    const AvFrameCopy &copy);
     bool     export_surface(uint32_t domain, uint64_t surface, uint32_t flags, AvExportedImage &image);
     bool     sync_surface(uint32_t domain, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd);
 

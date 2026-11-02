@@ -4,8 +4,7 @@
 
 namespace av {
 
-PresentWrites::PresentWrites(Platform &platform)
-    : platform_(platform), sequence_(0u), writers_(0u), ticket_(0u), epoch_(0u)
+PresentWrites::PresentWrites(Platform &platform) : platform_(platform), sequence_(0u), ticket_(0u)
 {
     AV_SCOPE("PresentWrites::PresentWrites");
 }
@@ -14,20 +13,15 @@ void PresentWrites::opening()
 {
     AV_SCOPE("PresentWrites::opening");
     platform_.require_irql_at_most(Irql::dispatch, "PresentWrites::opening");
-    static_cast<void>(platform_.add_atomic(writers_, 1u));
-    static_cast<void>(platform_.add_atomic(sequence_, 1u));
+    platform_.store_atomic(sequence_, platform_.load_atomic(sequence_) + 1u);
 }
 
-void PresentWrites::written(uint64_t ticket, uint32_t epoch)
+void PresentWrites::written(uint64_t ticket)
 {
     AV_SCOPE("PresentWrites::written");
     platform_.require_irql_at_most(Irql::dispatch, "PresentWrites::written");
-    if (ticket != 0u) {
-        platform_.store_atomic(epoch_, epoch);
-        platform_.store_atomic(ticket_, ticket);
-    }
-    static_cast<void>(platform_.add_atomic(sequence_, 1u));
-    static_cast<void>(platform_.add_atomic(writers_, ~uint64_t{0}));
+    if (ticket != 0u) platform_.store_atomic(ticket_, ticket);
+    platform_.store_atomic(sequence_, platform_.load_atomic(sequence_) + 1u);
 }
 
 uint64_t PresentWrites::sequence()
@@ -37,11 +31,11 @@ uint64_t PresentWrites::sequence()
     return platform_.load_atomic(sequence_);
 }
 
-bool PresentWrites::in_progress(uint64_t sequence)
+bool PresentWrites::in_progress(uint64_t sequence) const
 {
     AV_SCOPE("PresentWrites::in_progress");
     platform_.require_irql_at_most(Irql::dispatch, "PresentWrites::in_progress");
-    return (sequence & 1u) != 0u || platform_.load_atomic(writers_) != 0u;
+    return (sequence & 1u) != 0u;
 }
 
 uint64_t PresentWrites::ticket()
@@ -51,19 +45,10 @@ uint64_t PresentWrites::ticket()
     return platform_.load_atomic(ticket_);
 }
 
-uint32_t PresentWrites::epoch()
-{
-    AV_SCOPE("PresentWrites::epoch");
-    platform_.require_irql_at_most(Irql::dispatch, "PresentWrites::epoch");
-    return static_cast<uint32_t>(platform_.load_atomic(epoch_));
-}
-
 bool PresentWrites::invariants_hold()
 {
     AV_SCOPE("PresentWrites::invariants_hold");
-    const uint64_t sequence = platform_.load_atomic(sequence_);
-    const bool     ticketed_after_opening = platform_.load_atomic(ticket_) == 0u || sequence != 0u;
-    return ticketed_after_opening && platform_.load_atomic(writers_) <= sequence;
+    return platform_.load_atomic(ticket_) == 0u || platform_.load_atomic(sequence_) != 0u;
 }
 
 }

@@ -19,12 +19,12 @@ EscapeReader::~EscapeReader()
     drop();
 }
 
-Status EscapeReader::read(TraceEscapeRecord::Kind kind, uint64_t luid)
+Status EscapeReader::read(TraceEscapeRecord::Kind kind)
 {
     AV_SCOPE("EscapeReader::read");
     drop();
     AdapterSearch     search(kmt_);
-    if (search.find_avgpu(luid) != Status::ok) return Status::not_found;
+    if (search.find_avgpu(0u) != Status::ok) return Status::not_found;
     const Status status = read_from(search.adapter(), kind);
     if (status != Status::ok) drop();
     static_cast<void>(search.close());

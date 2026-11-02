@@ -2,7 +2,6 @@
 #define AV_ALLOCATION_HPP
 
 #include "miniport/memory/aperture_pages.hpp"
-#include "miniport/memory/present_reads.hpp"
 #include "miniport/memory/present_writes.hpp"
 #include "core/platform/platform.hpp"
 #include "core/support/status.hpp"
@@ -39,7 +38,6 @@ public:
     Resource                   *resource() const;
     void                        belongs_to(Resource *resource);
     PresentWrites              &writes();
-    PresentReads               &reads();
 
     void report_to(DxgkAllocationInfoRecord &info);
     [[nodiscard]] Status open(const void *device, const void *process);
@@ -73,7 +71,6 @@ private:
     const void          *process_;
     AperturePages        aperture_;
     PresentWrites        writes_;
-    PresentReads         reads_;
 
     friend struct AllocationProbe;
 };

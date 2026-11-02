@@ -67,7 +67,6 @@ public:
     virtual uint64_t interrupt_time() const = 0;
     virtual void     store_atomic(uint64_t &target, uint64_t value) = 0;
     virtual uint64_t load_atomic(uint64_t &source) = 0;
-    virtual uint64_t add_atomic(uint64_t &target, uint64_t delta) = 0;
     virtual uint64_t performance_counter(uint64_t &frequency) const = 0;
     virtual void     stall(uint32_t microseconds) = 0;
     virtual void initialize_wake_event(void *storage) = 0;

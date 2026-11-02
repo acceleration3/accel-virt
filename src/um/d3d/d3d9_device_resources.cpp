@@ -20,6 +20,7 @@
 namespace av::d3d9 {
 
 namespace {
+
 constexpr char relocked_key[] = "relocked";
 constexpr uint32_t surface_render_target = 1u;
 constexpr uint32_t surface_depth_stencil = 2u;
@@ -45,6 +46,7 @@ constexpr uint32_t filter_point = 1u;
 constexpr uint32_t filter_linear = 2u;
 
 }
+
 
 HRESULT D3d9Device::create_resource(D3DDDIARG_CREATERESOURCE *args)
 {
@@ -177,7 +179,6 @@ void D3d9Device::release_resource(D3d9Resource &resource)
     if (resource.subresources != nullptr) memory_.release(resource.subresources);
     resource.subresources = nullptr;
     if (!resource.opened) allocations_.give_back(resource.allocation, resource.allocation_resource);
-    else allocations_.release_address(resource.gpu_address, resource.gpu_pages);
 }
 
 HRESULT D3d9Device::open_resource(D3DDDIARG_OPENRESOURCE *args)
@@ -214,8 +215,7 @@ HRESULT D3d9Device::open_resource(D3DDDIARG_OPENRESOURCE *args)
     made->allocation = info.hAllocation;
     made->allocation_pitch = layout.pitch();
     made->opened = true;
-    made->gpu_pages = layout.pages();
-    if (FAILED(allocations_.keep_addressable(made->allocation, made->gpu_pages, made->gpu_address))) {
+    if (FAILED(allocations_.keep_resident(made->allocation))) {
         release_resource(*made);
         static_cast<void>(resources_.destroy(made));
         return E_FAIL;
@@ -265,6 +265,7 @@ bool D3d9Device::surface_of(const D3d9Resource &resource, uint32_t index, uint32
     default: return false;
     }
 }
+
 
 uint32_t D3d9Device::row_pitch(const D3d9Resource &resource, const D3d9Subresource &subresource) const
 {
@@ -397,6 +398,7 @@ HRESULT D3d9Device::unlock_subresource(const D3d9Resource &resource, D3d9Subreso
                          subresource.shadow_slice_pitch, flags);
 }
 
+
 HRESULT D3d9Device::write_buffer(uint32_t id, uint32_t offset, const void *data, uint32_t bytes, uint32_t flags)
 {
     AV_SCOPE("D3d9Device::write_buffer");
@@ -500,6 +502,7 @@ HRESULT D3d9Device::read_surface(const D3d9Resource &resource, uint32_t index, u
     rows = pitch == 0u ? 0u : static_cast<uint32_t>(read / pitch);
     return S_OK;
 }
+
 
 HRESULT D3d9Device::tex_blt(const D3DDDIARG_TEXBLT *args)
 {

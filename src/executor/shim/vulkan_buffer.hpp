@@ -16,17 +16,13 @@ public:
     VulkanBuffer &operator=(const VulkanBuffer &) = delete;
 
     [[nodiscard]] bool import_dma_buf_to_draw(const VulkanDeviceTable &table, OwnedFd &descriptor, VkDeviceSize size);
-    [[nodiscard]] bool import_dma_buf_to_receive(const VulkanDeviceTable &table, OwnedFd &descriptor,
-                                                 VkDeviceSize size);
     void               release();
     bool               made() const;
     VkBuffer           buffer() const;
 
 private:
-    enum class Placement { fastest, coherent };
-
     [[nodiscard]] bool import(const VulkanDeviceTable &table, OwnedFd &descriptor, VkDeviceSize size,
-                              VkBufferUsageFlags usage, Placement placement);
+                              VkBufferUsageFlags usage);
 
     const VulkanDeviceTable *table_;
     VkBuffer                 buffer_;

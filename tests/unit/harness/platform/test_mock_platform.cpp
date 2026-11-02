@@ -31,6 +31,7 @@ private:
 
 }
 
+
 TEST(mock_platform_irql, a_call_above_its_ceiling_is_recorded)
 { MockPlatform platform;
   platform.set_irql(Irql::dispatch);
@@ -191,6 +192,7 @@ TEST(mock_platform_invariant, a_broken_invariant_is_recorded)
   platform.report_broken_invariant("probe_invariant", "probe");
   CHECK(platform.claim(Violation::broken_invariant)); }
 
+
 TEST(mock_platform_time, stands_still_until_advanced)
 { MockPlatform platform;
   CHECK_EQ(platform.interrupt_time(), platform.interrupt_time()); }
@@ -237,23 +239,13 @@ TEST(mock_platform_atomic, a_load_hook_runs_before_each_load_reads_so_a_store_ca
   CHECK_EQ(platform.load_atomic(word), 7u);
   CHECK_EQ(landing.calls, 2u); }
 
-TEST(mock_platform_atomic, an_add_answers_the_sum_and_wraps_like_the_interlocked_one)
-{ MockPlatform platform;
-  std::uint64_t word = 5u;
-  platform.set_irql(Irql::isr);
-  CHECK_EQ(platform.add_atomic(word, 3u), 8u);
-  CHECK_EQ(word, 8u);
-  CHECK_EQ(platform.add_atomic(word, ~std::uint64_t{0}), 7u);
-  CHECK_EQ(platform.load_atomic(word), 7u);
-  platform.set_irql(Irql::passive);
-  CHECK_EQ(platform.unclaimed_violations(), 0u); }
-
 TEST(mock_platform_time, saturates_instead_of_wrapping)
 { MockPlatform platform;
   platform.advance_time(~std::uint64_t{0});
   platform.advance_time(1u);
   CHECK(platform.interrupt_time() == ~std::uint64_t{0});
   CHECK(platform.claim(Violation::time_overflow)); }
+
 
 TEST(mock_platform_destruction, an_unclaimed_violation_fails_the_test)
 { { MockPlatform platform;
@@ -293,6 +285,7 @@ TEST(mock_platform_memory, zero_and_copy_touch_only_their_bytes)
   platform.zero(bytes + 1, 2u);
   platform.copy(copy, bytes, 3u);
   CHECK_EQ(copy[0], 1); CHECK_EQ(copy[1], 0); CHECK_EQ(copy[2], 0); CHECK_EQ(copy[3], 9); }
+
 
 TEST(mock_platform_contiguous, blocks_get_distinct_page_aligned_physical_addresses)
 { MockPlatform platform;
@@ -540,6 +533,7 @@ TEST(mock_platform_map_to_process, refuses_misuse_and_fails_on_request)
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
 namespace {
+
 std::uint8_t backed_page[0x1000] = {};
 
 void *backing_of(void *context, std::uint64_t physical, std::uint64_t)

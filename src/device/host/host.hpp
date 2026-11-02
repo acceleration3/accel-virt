@@ -60,8 +60,6 @@ public:
     virtual void                 release_range(void *base, uint64_t bytes) = 0;
     [[nodiscard]] virtual Status overlay_guest_run(void *run, uint64_t bytes, int fd, uint64_t offset) = 0;
     [[nodiscard]] virtual Status restore_guest_run(void *run, uint64_t bytes) = 0;
-    [[nodiscard]] virtual bool   pause_guest() = 0;
-    virtual void                 resume_guest() = 0;
 
     virtual uint64_t hostmem_size() = 0;
     [[nodiscard]] virtual Status place_in_hostmem(int fd, uint64_t size, uint64_t offset) = 0;

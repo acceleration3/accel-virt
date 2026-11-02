@@ -103,13 +103,13 @@ TEST(standard_allocation_describe, shadow_and_staging_answer_their_pitch)
 
 TEST(standard_allocation_describe, gdi_surfaces_are_cpu_visible_only_when_they_say_so)
 { MockPlatform platform;
-  struct Case { std::int32_t type; bool cpu_visible; std::uint32_t pitch; };
-  const Case cases[] = {{1, false, 64u}, {2, true, 64u}, {3, false, 64u}, {6, true, 128u}};
+  struct Case { std::int32_t type; bool cpu_visible; };
+  const Case cases[] = {{1, false}, {2, true}, {3, false}, {4, true}, {5, true}, {6, true}};
   for (const Case &c : cases) {
       D3dkmdtGdiSurfaceDataRecord surface = {16u, 16u, a8r8g8b8, c.type, 0u, 0u};
       Request request(gdi, &surface);
       CHECK_STATUS(request.describe(platform), Status::ok);
-      CHECK_EQ(surface.Pitch, c.pitch);
+      CHECK_EQ(surface.Pitch, 64u);
       const AllocationDescriptor descriptor = request.descriptor();
       CHECK(descriptor.kind() == AllocationKind::gdi);
       CHECK(descriptor.cpu_visible() == c.cpu_visible);
@@ -175,9 +175,18 @@ TEST(standard_allocation_describe, a_cpu_visible_cross_adapter_texture_is_laid_o
   CHECK_STATUS(Request(gdi, &unknown).describe(platform), Status::invalid_parameter);
   CHECK_EQ(unknown.Pitch, 0xEEu); }
 
+TEST(standard_allocation_describe, a_lookup_table_or_existing_memory_surface_of_an_unlaid_out_format_is_refused)
+{ MockPlatform platform;
+  const std::int32_t types[] = {4, 5};
+  for (std::int32_t type : types) {
+      D3dkmdtGdiSurfaceDataRecord surface = {16u, 16u, r5g6b5, type, 0u, 0xEEu};
+      CHECK_STATUS(Request(gdi, &surface).describe(platform), Status::invalid_parameter);
+      CHECK_EQ(surface.Pitch, 0xEEu);
+  } }
+
 TEST(standard_allocation_describe, refuses_what_it_cannot_describe)
 { MockPlatform platform;
-  const std::int32_t unsupported_gdi[] = {0, 4, 5, 9};
+  const std::int32_t unsupported_gdi[] = {0, 9, -1};
   for (std::int32_t type : unsupported_gdi) {
       D3dkmdtGdiSurfaceDataRecord surface = {16u, 16u, a8r8g8b8, type, 0u, 0u};
       CHECK_STATUS(Request(gdi, &surface).describe(platform), Status::invalid_parameter);

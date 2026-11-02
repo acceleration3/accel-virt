@@ -39,23 +39,6 @@ Status WindowCursor::write(uint64_t offset, const uint8_t *bytes, size_t count)
     return Status::ok;
 }
 
-Status WindowCursor::copy_to(WindowCursor &destination, uint64_t from, uint64_t to, uint64_t count)
-{
-    AV_SCOPE("WindowCursor::copy_to");
-    if (!contains(from, count) || !destination.contains(to, count)) return Status::invalid_parameter;
-    for (uint64_t done = 0u; done < count;) {
-        uint64_t             readable = 0u, writable = 0u;
-        const uint8_t *const source = at(from + done, readable);
-        uint8_t *const       target = destination.at(to + done, writable);
-        if (source == nullptr || target == nullptr) return Status::invalid_parameter;
-        uint64_t piece = readable < writable ? readable : writable;
-        if (piece > count - done) piece = count - done;
-        __builtin_memmove(target, source, static_cast<size_t>(piece));
-        done += piece;
-    }
-    return Status::ok;
-}
-
 uint8_t *WindowCursor::at(uint64_t offset, uint64_t &bytes)
 {
     AV_SCOPE("WindowCursor::at");

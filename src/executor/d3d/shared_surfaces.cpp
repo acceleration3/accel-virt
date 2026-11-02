@@ -9,6 +9,7 @@
 namespace av {
 
 namespace {
+
 constexpr uint64_t poll_nanoseconds = 100000u;
 constexpr uint64_t nanoseconds_per_ms = 1000000u;
 
@@ -111,43 +112,6 @@ SharedSurfaces::Look SharedSurfaces::look(const SurfacePoint &frame, AvFrameView
     }
     if (failed != nullptr) failed->release();
     return failed != nullptr ? Look::refused : Look::wait;
-}
-
-StagedFrame::Copying SharedSurfaces::copy(const SurfacePoint &frame, uint32_t wait_ms, const AvFrameCopy &target)
-{
-    AV_SCOPE("SharedSurfaces::copy");
-    if (!frame.names()) return StagedFrame::Copying::timed_out;
-    PollBudget polls(time_, 0u, poll_nanoseconds, wait_ms * nanoseconds_per_ms);
-    while (polls.next()) {
-        Look               found = Look::wait;
-        StagedFrame *const claimed = claim(frame, found);
-        if (claimed == nullptr) {
-            if (found != Look::wait) return StagedFrame::Copying::timed_out;
-            continue;
-        }
-        const StagedFrame::Copying done = claimed->copy(target, wait_ms);
-        settle(frame, done);
-        return done;
-    }
-    return StagedFrame::Copying::timed_out;
-}
-
-void SharedSurfaces::settle(const SurfacePoint &frame, StagedFrame::Copying done)
-{
-    AV_SCOPE("SharedSurfaces::settle");
-    if (done == StagedFrame::Copying::copied) return;
-    StagedFrame *failed = nullptr;
-    {
-        const ThreadLockHold locked(lock_);
-        Slot *const          again = slot(frame);
-        if (done == StagedFrame::Copying::timed_out) {
-            failed = again->staged_;
-            *again = Slot{};
-        } else {
-            again->reading_ = false;
-        }
-    }
-    if (failed != nullptr) failed->release();
 }
 
 StagedFrame *SharedSurfaces::claim(const SurfacePoint &frame, Look &found)

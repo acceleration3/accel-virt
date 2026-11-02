@@ -65,7 +65,7 @@ TEST(driver_capabilities_report_driver_caps, claims_wddm_3_2_gpu_mmu_and_what_ea
   expected.MemoryManagementCaps = 0x70u;
   expected.GpuEngineTopologyNbAsymetricProcessingNodes = 2u;
   expected.FlipCaps = 0x2u;
-  expected.PresentationCaps = 0x1006c003u;
+  expected.PresentationCaps = 0x6c804u;
   expected.SupportPerEngineTDR = 1u;
   expected.SupportDirectFlip = 1u;
   expected.SupportMultiPlaneOverlay = 1u;
@@ -75,6 +75,14 @@ TEST(driver_capabilities_report_driver_caps, claims_wddm_3_2_gpu_mmu_and_what_ea
   expected.MaxPointerHeight = 64u;
   expected.PointerCaps = 0x7u;
   CHECK(std::memcmp(&caps, &expected, sizeof caps) == 0); }
+
+TEST(driver_capabilities_report_driver_caps, reports_the_kernel_mode_command_buffer_bit_and_no_software_device_bitmaps)
+{ MockPlatform platform; const DriverCapabilities capabilities(platform);
+  DxgkDriverCapsRecord caps = {};
+  const DxgkargQueryAdapterInfoRecord record = request(nullptr, 0u, &caps, sizeof caps);
+  CHECK_STATUS(capabilities.report_driver_caps(AdapterInfoQuery(platform, record)), Status::ok);
+  CHECK_EQ(caps.PresentationCaps & 0x4u, 0x4u);
+  CHECK_EQ(caps.PresentationCaps & 0x10000000u, 0u); }
 
 TEST(driver_capabilities_report_driver_caps, claims_no_rotation_or_gamma_and_four_overlay_planes)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);

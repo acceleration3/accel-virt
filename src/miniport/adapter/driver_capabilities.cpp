@@ -32,7 +32,7 @@ Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) con
     caps.MemoryManagementCaps = memory_cross_adapter_resource | memory_virtual_addressing | memory_gpu_mmu;
     caps.GpuEngineTopologyNbAsymetricProcessingNodes = node_count;
     caps.FlipCaps = flip_on_vsync_mmio;
-    caps.PresentationCaps = presentation_software_device_bitmaps | presentation_gdi_software_limits;
+    caps.PresentationCaps = presentation_kernel_mode_command_buffer | presentation_gdi_limits;
     caps.SupportPerEngineTDR = 1u;
     caps.SupportDirectFlip = 1u;
     caps.SupportMultiPlaneOverlay = 1u;

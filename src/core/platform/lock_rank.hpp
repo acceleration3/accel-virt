@@ -20,7 +20,6 @@ enum class LockRank : uint16_t {
     control_exchanges = 120u,
     dpc = 150u,
     av_context_slots = 190u,
-    present_reads = 193u,
     present_waiters = 195u,
     execution_node = 200u,
     hw_queue_contexts = 205u,

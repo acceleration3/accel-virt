@@ -12,7 +12,7 @@ namespace av {
 Allocation::Allocation(Platform &platform, const MemorySegments &segments,
                        const AllocationDescriptor &descriptor, uint64_t size)
     : platform_(platform), segments_(segments), descriptor_(descriptor), size_(size), opens_(0u), shared_id_(0u), resource_(nullptr), owner_(nullptr), process_(nullptr),
-      aperture_(platform, static_cast<uint32_t>(size / page_bytes)), writes_(platform), reads_(platform)
+      aperture_(platform, static_cast<uint32_t>(size / page_bytes)), writes_(platform)
       {
           AV_SCOPE("Allocation::Allocation");
       }
@@ -50,12 +50,6 @@ PresentWrites &Allocation::writes()
     return writes_;
 }
 
-PresentReads &Allocation::reads()
-{
-    AV_SCOPE("Allocation::reads");
-    return reads_;
-}
-
 void                        Allocation::shared_as(uint64_t id)
 {
     AV_SCOPE("Allocation::shared_as");
@@ -83,8 +77,7 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
     info.HintedBank = 0u;
     const bool scanned_out = descriptor_.kind() == AllocationKind::shared_primary;
     const AllocationKind kind = descriptor_.kind();
-    const bool pinned = scanned_out || kind == AllocationKind::surface || kind == AllocationKind::staging ||
-                        kind == AllocationKind::gdi;
+    const bool pinned = scanned_out || kind == AllocationKind::surface || kind == AllocationKind::staging;
     const uint32_t segment = pinned ? ApertureSegment::segment_id : segments_.system_memory_segment_id();
     info.PreferredSegment = segment;
     info.SupportedReadSegmentSet = 1u << (segment - 1u);
@@ -92,7 +85,7 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
     info.EvictionSegmentSet = 0u;
     info.MaximumRenamingListLength = 0u;
     info.hAllocation = this;
-    const bool cached = kind == AllocationKind::staging || kind == AllocationKind::gdi ||
+    const bool cached = kind == AllocationKind::staging ||
                         (kind == AllocationKind::cross_adapter && descriptor_.layout().format() != 0u);
     info.Flags = (descriptor_.cpu_visible() ? flag_cpu_visible : 0u) | (cached ? flag_cached : 0u) |
                  (pinned ? flag_accessed_physically : 0u);

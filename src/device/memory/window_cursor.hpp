@@ -15,7 +15,6 @@ public:
 
     [[nodiscard]] Status read(uint64_t offset, uint8_t *bytes, size_t count);
     [[nodiscard]] Status write(uint64_t offset, const uint8_t *bytes, size_t count);
-    [[nodiscard]] Status copy_to(WindowCursor &destination, uint64_t from, uint64_t to, uint64_t count);
 
 private:
     uint8_t *at(uint64_t offset, uint64_t &bytes);

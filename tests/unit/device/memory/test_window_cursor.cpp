@@ -10,6 +10,7 @@ using av::Status;
 using av::WindowCursor;
 
 namespace {
+
 class Extents {
 public:
     Extents()
@@ -83,13 +84,3 @@ TEST(window_cursor, extents_short_of_the_window_are_refused_where_they_end)
   const std::uint8_t written[4] = {0xB0u, 0xB1u, 0xB2u, 0xB3u};
   CHECK_STATUS(cursor.write(15u, written, sizeof written), Status::invalid_parameter);
   CHECK_EQ(extents.byte(15u), 0xB0u); }
-
-TEST(window_cursor, copies_a_range_between_windows_across_the_extents_of_both)
-{ const Extents source;
-  Extents       target;
-  WindowCursor  from(source.window());
-  WindowCursor  to(target.window());
-  CHECK_STATUS(from.copy_to(to, 2u, 6u, 9u), Status::ok);
-  for (std::uint32_t at = 0u; at < 9u; at++) CHECK_EQ(target.byte(6u + at), source.byte(2u + at));
-  CHECK_STATUS(from.copy_to(to, 10u, 0u, 7u), Status::invalid_parameter);
-  CHECK_STATUS(from.copy_to(to, 0u, 12u, 5u), Status::invalid_parameter); }

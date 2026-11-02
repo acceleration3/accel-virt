@@ -52,7 +52,8 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiOpenAllocation,      DdiSlot::DxgkDdiCloseAllocation,
     DdiSlot::DxgkDdiSetDisplayPrivateDriverFormat,
     DdiSlot::DxgkDdiCreateContext,       DdiSlot::DxgkDdiDestroyContext,
-    DdiSlot::DxgkDdiRender,              DdiSlot::DxgkDdiPatch,
+    DdiSlot::DxgkDdiRender,              DdiSlot::DxgkDdiRenderKm,
+    DdiSlot::DxgkDdiPatch,
     DdiSlot::DxgkDdiSubmitCommand,       DdiSlot::DxgkDdiPreemptCommand,
     DdiSlot::DxgkDdiQueryCurrentFence,   DdiSlot::DxgkDdiBuildPagingBuffer,
     DdiSlot::DxgkDdiResetFromTimeout,    DdiSlot::DxgkDdiRestartFromTimeout,
@@ -205,6 +206,7 @@ TEST(miniport_binding, binds_and_unbinds_one_root)
   binding.unbind();
   CHECK(binding.miniport() == nullptr); }
 
+
 TEST(ddi_entry_points, add_and_remove_device_reach_the_bound_root)
 { Bound bound;
   int pdo = 0; void *context = nullptr;
@@ -269,6 +271,7 @@ TEST(miniport_invariants, a_corrupted_table_is_detected)
   CHECK(!miniport.invariants_hold()); }
 
 namespace {
+
 class RecordingExit final : public av::ImageExit {
 public:
     explicit RecordingExit(const Miniport &miniport) : miniport_(miniport) {}

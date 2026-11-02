@@ -44,11 +44,10 @@ InspectProgram::Exit InspectProgram::run(const uint16_t *line)
     if (__builtin_strcmp(line_.argument(count - 2u), "--out") != 0) return Exit::usage;
     uint32_t pid = 0u;
     if (count == 3u && __builtin_strcmp(command, "list") == 0) return list(out);
-    uint32_t luid = 0u;
-    if ((count == 3u || (count == 4u && line_.number(1u, luid))) && __builtin_strcmp(command, "kernel-trace") == 0)
-        return kernel(TraceEscapeRecord::Kind::table, luid, out);
-    if ((count == 3u || (count == 4u && line_.number(1u, luid))) && __builtin_strcmp(command, "kernel-state") == 0)
-        return kernel(TraceEscapeRecord::Kind::state, luid, out);
+    if (count == 3u && __builtin_strcmp(command, "kernel-trace") == 0)
+        return kernel(TraceEscapeRecord::Kind::table, out);
+    if (count == 3u && __builtin_strcmp(command, "kernel-state") == 0)
+        return kernel(TraceEscapeRecord::Kind::state, out);
     if (count != 5u || !line_.number(1u, pid) || !module_name(line_.argument(2u))) return Exit::usage;
     if (__builtin_strcmp(command, "trace") == 0) return trace(pid, line_.argument(2u), out);
     if (__builtin_strcmp(command, "state") == 0) return state(pid, line_.argument(2u), out);
@@ -58,8 +57,7 @@ InspectProgram::Exit InspectProgram::run(const uint16_t *line)
 const char *InspectProgram::usage() const
 {
     AV_SCOPE("InspectProgram::usage");
-    return "usage: avinspect list --out FILE\n"
-           "       avinspect kernel-trace|kernel-state [LUID] --out FILE\n"
+    return "usage: avinspect list|kernel-trace|kernel-state --out FILE\n"
            "       avinspect trace|state PID MODULE --out FILE\n";
 }
 
@@ -166,11 +164,11 @@ InspectProgram::Exit InspectProgram::dump_file(SnapshotFile &file, const char *s
     return finish(file.write(SnapshotFile::Kind::state, host_.clock(), bytes + state_length_bytes, length));
 }
 
-InspectProgram::Exit InspectProgram::kernel(TraceEscapeRecord::Kind kind, uint64_t luid, const char *out)
+InspectProgram::Exit InspectProgram::kernel(TraceEscapeRecord::Kind kind, const char *out)
 {
     AV_SCOPE("InspectProgram::kernel");
     EscapeReader reader(kmt_, memory_);
-    const Status read = reader.read(kind, luid);
+    const Status read = reader.read(kind);
     SnapshotFile file(host_, out);
     if (read != Status::ok) {
         char       reason[reason_bytes];

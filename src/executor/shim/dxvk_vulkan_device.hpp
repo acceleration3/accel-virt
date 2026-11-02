@@ -15,7 +15,6 @@ struct D3D11_TEXTURE2D_DESC1;
 
 namespace av {
 
-class BorrowedQueue;
 class OwnedFd;
 class DxvkVulkanDevice {
 public:
@@ -28,10 +27,7 @@ public:
     bool                     connected() const;
     void                     release();
     const VulkanDeviceTable &table() const;
-    BorrowedQueue           &queue();
 
-    [[nodiscard]] bool texture_image(ID3D11Texture2D *texture, VkImage &image, VkImageLayout &layout,
-                                     VkImageCreateInfo &described) const;
     [[nodiscard]] bool wrap(const D3D11_TEXTURE2D_DESC1 &desc, VkImage image, ID3D11Texture2D *&texture) const;
     [[nodiscard]] bool import_timeline(OwnedFd &descriptor, VulkanTimeline &timeline) const;
     [[nodiscard]] bool wait(const VulkanTimeline &timeline, uint64_t value);

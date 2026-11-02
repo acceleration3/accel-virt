@@ -185,7 +185,7 @@ bool VirtioGpuAv::control(void *request, uint32_t type)
            DisplayModeCommands(host_, display_modes_).answer(control, type) ||
            DisplayClockCommands(host_, clock_).answer(control, type) ||
            ScanoutPlaneCommands(host_, planes_).answer(control, type) ||
-           PresentEngineCommands(host_, presents_, snapshots, host_blobs_.lendings()).answer(control, type);
+           PresentEngineCommands(host_, presents_, snapshots).answer(control, type);
 }
 
 bool VirtioGpuAv::export_accepted(int connection, bool same_user)

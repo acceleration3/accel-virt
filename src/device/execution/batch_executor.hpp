@@ -40,8 +40,7 @@ public:
     bool                 ready() const;
     HostPoll             poll();
     void                 gpu_progress(uint64_t &marked, uint64_t &reached) const;
-    [[nodiscard]] Status run(const RingWindow &ring, uint64_t head, const BatchHeader &batch,
-                             uint64_t *answering = nullptr);
+    [[nodiscard]] Status run(const RingWindow &ring, uint64_t head, const BatchHeader &batch);
 
     uint64_t batches() const;
     uint64_t commands() const;

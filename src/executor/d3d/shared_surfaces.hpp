@@ -4,7 +4,6 @@
 #include "core/support/keyed_slots.hpp"
 #include "device/abi/av_executor.h"
 #include "device/shim/posix_lock.hpp"
-#include "executor/d3d/staged_frame.hpp"
 #include "executor/monotonic_clock.hpp"
 #include "proto/resources/surface_point.hpp"
 
@@ -28,7 +27,6 @@ public:
 
     void stage(const SurfacePoint &frame, Staging staging, FrameStager &stager);
     [[nodiscard]] bool map(const SurfacePoint &frame, uint32_t wait_ms, AvFrameView &view);
-    [[nodiscard]] StagedFrame::Copying copy(const SurfacePoint &frame, uint32_t wait_ms, const AvFrameCopy &target);
     void               unmap(const SurfacePoint &frame);
     void               release(uint64_t surface);
 
@@ -51,8 +49,6 @@ private:
         bool         reading_;
     };
     enum class Look { mapped, wait, refused };
-
-    void settle(const SurfacePoint &frame, StagedFrame::Copying done);
 
     Surface *known(uint64_t surface);
     Surface *row(uint64_t surface);

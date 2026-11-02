@@ -83,8 +83,6 @@ typedef struct AvHostOps {
     void (*release_range)(void *opaque, void *base, uint64_t size);
     int (*overlay_guest_run)(void *opaque, void *run, uint64_t size, int fd, uint64_t offset);
     int (*restore_guest_run)(void *opaque, void *run, uint64_t size);
-    int (*pause_guest)(void *opaque);
-    void (*resume_guest)(void *opaque);
     uint64_t (*hostmem_size)(void *opaque);
     int (*place_in_hostmem)(void *opaque, int fd, uint64_t size, uint64_t offset);
     void (*remove_from_hostmem)(void *opaque, uint64_t offset, uint64_t size);

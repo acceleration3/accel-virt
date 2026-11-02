@@ -14,7 +14,6 @@ TEST(present_writes, nothing_has_been_written_before_the_first_present)
   CHECK_EQ(writes.sequence(), 0u);
   CHECK(!writes.in_progress(writes.sequence()));
   CHECK_EQ(writes.ticket(), 0u);
-  CHECK_EQ(writes.epoch(), 0u);
   CHECK(writes.invariants_hold()); }
 
 TEST(present_writes, a_present_is_in_progress_from_its_opening_until_it_is_written)
@@ -24,7 +23,7 @@ TEST(present_writes, a_present_is_in_progress_from_its_opening_until_it_is_writt
   CHECK_EQ(writes.sequence(), 1u);
   CHECK(writes.in_progress(writes.sequence()));
   CHECK(writes.invariants_hold());
-  writes.written(5u, 1u);
+  writes.written(5u);
   CHECK_EQ(writes.sequence(), 2u);
   CHECK(!writes.in_progress(writes.sequence()));
   CHECK_EQ(writes.ticket(), 5u);
@@ -32,7 +31,7 @@ TEST(present_writes, a_present_is_in_progress_from_its_opening_until_it_is_writt
   writes.opening();
   CHECK(writes.in_progress(writes.sequence()));
   CHECK_EQ(writes.ticket(), 5u);
-  writes.written(6u, 1u);
+  writes.written(6u);
   CHECK_EQ(writes.sequence(), 4u);
   CHECK_EQ(writes.ticket(), 6u);
   CHECK(writes.invariants_hold()); }
@@ -41,14 +40,14 @@ TEST(present_writes, a_present_moved_in_place_counts_a_write_and_leaves_the_tick
 { MockPlatform  platform;
   PresentWrites writes(platform);
   writes.opening();
-  writes.written(0u, 0u);
+  writes.written(0u);
   CHECK_EQ(writes.sequence(), 2u);
   CHECK_EQ(writes.ticket(), 0u);
   CHECK(writes.invariants_hold());
   writes.opening();
-  writes.written(9u, 1u);
+  writes.written(9u);
   writes.opening();
-  writes.written(0u, 0u);
+  writes.written(0u);
   CHECK_EQ(writes.sequence(), 6u);
   CHECK_EQ(writes.ticket(), 9u);
   CHECK(writes.invariants_hold()); }
@@ -68,49 +67,8 @@ TEST(present_writes, is_legal_at_dispatch_for_a_present_the_dpc_and_a_reader_ali
   platform.set_irql(Irql::dispatch);
   writes.opening();
   CHECK(writes.in_progress(writes.sequence()));
-  writes.written(3u, 1u);
+  writes.written(3u);
   CHECK_EQ(writes.ticket(), 3u);
-  CHECK_EQ(writes.epoch(), 1u);
   CHECK(writes.invariants_hold());
   platform.set_irql(Irql::passive);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
-
-TEST(present_writes, the_ticket_is_kept_with_the_epoch_of_the_engine_that_numbered_it)
-{ MockPlatform  platform;
-  PresentWrites writes(platform);
-  writes.opening();
-  writes.written(40u, 1u);
-  CHECK_EQ(writes.ticket(), 40u);
-  CHECK_EQ(writes.epoch(), 1u);
-  writes.opening();
-  writes.written(0u, 7u);
-  CHECK_EQ(writes.epoch(), 1u);
-  CHECK_EQ(writes.ticket(), 40u);
-  writes.opening();
-  writes.written(2u, 2u);
-  CHECK_EQ(writes.ticket(), 2u);
-  CHECK_EQ(writes.epoch(), 2u);
-  CHECK(writes.invariants_hold()); }
-
-TEST(present_writes, two_presents_open_at_once_are_both_counted_and_both_must_be_written)
-{ MockPlatform  platform;
-  PresentWrites writes(platform);
-  writes.opening();
-  writes.opening();
-  CHECK_EQ(writes.sequence(), 2u);
-  CHECK(writes.in_progress(writes.sequence()));
-  writes.written(0u, 0u);
-  CHECK_EQ(writes.sequence(), 3u);
-  CHECK(writes.in_progress(writes.sequence()));
-  CHECK(writes.invariants_hold());
-  writes.written(0u, 0u);
-  CHECK_EQ(writes.sequence(), 4u);
-  CHECK(!writes.in_progress(writes.sequence()));
-  CHECK(writes.in_progress(writes.sequence() + 1u));
-  CHECK(writes.invariants_hold()); }
-
-TEST(present_writes_invariants, a_write_closed_that_was_never_opened_is_detected)
-{ MockPlatform  platform;
-  PresentWrites writes(platform);
-  writes.written(0u, 0u);
-  CHECK(!writes.invariants_hold()); }

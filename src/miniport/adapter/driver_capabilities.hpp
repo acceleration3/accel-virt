@@ -40,8 +40,9 @@ private:
         memory_virtual_addressing = 0x20u,
         memory_gpu_mmu = 0x40u,
         flip_on_vsync_mmio = 0x2u,
+        presentation_kernel_mode_command_buffer = 0x4u,
+        presentation_gdi_limits = (2u << 10u) | (3u << 14u) | (3u << 17u),
         presentation_software_device_bitmaps = 0x10000000u,
-        presentation_gdi_software_limits = 0x0006c003u,
         physical_gpu_mmu = 0x2u,
     };
     static constexpr int64_t any_address = -1;

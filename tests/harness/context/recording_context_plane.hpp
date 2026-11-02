@@ -96,20 +96,6 @@ public:
         snapshot_mapped_ = false;
         unmaps_++;
     }
-    Status copy_frame(const std::uint8_t *, const SurfacePoint &frame, std::uint32_t, const AvFrameCopy &copy) override
-    {
-        copies_++;
-        last_copy_ = copy;
-        last_copy_frame_ = frame;
-        for (std::uint32_t at = 0u; at < copy.count && at < AV_FRAME_COPY_MOST_REGIONS; at++)
-            last_copy_regions_[at] = copy.regions[at];
-        last_copy_.regions = last_copy_regions_;
-        return copy_answer_;
-    }
-    void           answer_copies_with(Status answer) { copy_answer_ = answer; }
-    std::uint32_t  copies() const { return copies_; }
-    const AvFrameCopy &last_copy() const { return last_copy_; }
-    const SurfacePoint &last_copy_frame() const { return last_copy_frame_; }
     struct MemoryAsked {
         std::uint32_t context;
         std::uint64_t key;
@@ -232,11 +218,6 @@ private:
     std::uint32_t   held_context_ = 0u;
     bool            served_ = false;
     std::uint32_t   unmaps_ = 0u;
-    Status          copy_answer_ = Status::not_supported;
-    std::uint32_t   copies_ = 0u;
-    AvFrameCopy     last_copy_ = {};
-    AvFrameRegion   last_copy_regions_[AV_FRAME_COPY_MOST_REGIONS] = {};
-    SurfacePoint    last_copy_frame_;
     std::uint32_t created_[capacity] = {};
     std::uint32_t created_count_ = 0u;
     std::uint32_t released_[capacity] = {};

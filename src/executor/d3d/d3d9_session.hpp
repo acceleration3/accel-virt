@@ -18,7 +18,6 @@ namespace av {
 
 class DriverLog;
 class D3d9HostDevice;
-class D3d9TextureWrite;
 class SharedSurfaces;
 class SessionShares;
 class D3d11HostDevice;
@@ -132,8 +131,6 @@ private:
                                     uint64_t data_size);
     bool               write_surface(uint32_t id, uint32_t subresource, const d3d9proto::Box &box,
                                      uint32_t row_pitch, const uint8_t *data, uint64_t data_size);
-    bool               write_through_memory(IDirect3DSurface9 *target, uint32_t format, const d3d9proto::Box &box,
-                                            const D3d9TextureWrite &write, uint32_t row_pitch, const uint8_t *data);
     const uint32_t    *padded(const uint8_t *code, uint64_t code_size);
 
     D3d9HostDevice *host_;

@@ -91,22 +91,16 @@ Status StandardAllocation::describe_gdi(AllocationDescriptor &descriptor) const
     auto &surface = *static_cast<D3dkmdtGdiSurfaceDataRecord *>(request_.pCreateSurfaceData);
     if (surface.Type == gdi_texture_cross_adapter || surface.Type == gdi_texture_cpu_visible_cross_adapter)
         return describe_cross_adapter(descriptor);
-    if (surface.Type == gdi_texture_cpu_visible) {
-        const uint32_t format = static_cast<uint32_t>(surface.Format);
-        const CrossAdapterLayout rows(surface.Width, surface.Height, format, CrossAdapterFormat(format).bytes_per_pixel());
-        if (!rows.valid()) return Status::invalid_parameter;
-        surface.Pitch = rows.pitch();
-        descriptor = AllocationDescriptor(AllocationKind::gdi, true, rows.surface(), rows.bytes(), ScanoutTarget());
-        return Status::ok;
-    }
     const bool texture = surface.Type == gdi_texture || surface.Type == gdi_texture_cpu_visible;
     const bool staging_surface = surface.Type == gdi_staging || surface.Type == gdi_staging_cpu_visible;
-    if (!texture && !staging_surface) return Status::invalid_parameter;
+    const bool cdd_memory = surface.Type == gdi_lookup_table || surface.Type == gdi_existing_sys_mem;
+    if (!texture && !staging_surface && !cdd_memory) return Status::invalid_parameter;
     SurfaceLayout layout;
     const Status status = layout_of(surface.Width, surface.Height, static_cast<uint32_t>(surface.Format), layout);
     if (status != Status::ok) return status;
     surface.Pitch = layout.pitch();
-    const bool cpu_visible = surface.Type == gdi_texture_cpu_visible || surface.Type == gdi_staging_cpu_visible;
+    const bool cpu_visible =
+        surface.Type == gdi_texture_cpu_visible || surface.Type == gdi_staging_cpu_visible || cdd_memory;
     descriptor = AllocationDescriptor(AllocationKind::gdi, cpu_visible, layout, layout.bytes(), ScanoutTarget());
     return Status::ok;
 }
