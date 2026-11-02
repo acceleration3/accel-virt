@@ -80,6 +80,8 @@ constexpr GlExtensionPolicy::Row reported_extensions[] = {
     {"GL_ARB_texture_float", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
     {"GL_ARB_texture_rectangle", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
     {"GL_ARB_multitexture", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_clip_control", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
+    {"GL_ARB_shader_draw_parameters", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
 };
 constexpr uint32_t reported_count = sizeof reported_extensions / sizeof reported_extensions[0];
 constexpr GlExtensionPolicy::Row reported_wgl_extensions[] = {
