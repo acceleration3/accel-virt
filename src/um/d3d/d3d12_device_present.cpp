@@ -45,8 +45,7 @@ HRESULT D3d12Device::show(ResourceRecord &resource, D3D12DDI_HRTRESOURCE runtime
         refused_.failed("pfnAllocateCb for a swap chain buffer", made);
         return made;
     }
-    /* Made for the runtime's resource, the allocation is the runtime's to
-     * free with it, as Direct3D 11's keyed ones are. */
+    /* Made for the runtime's resource; given back with it (give_back). */
     resource.allocation = info.hAllocation;
     resource.runtime_resource = runtime.handle;
     const uint64_t key = surface.key();

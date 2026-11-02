@@ -447,13 +447,30 @@ HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRe
     return make_resource(spanning, nullptr, heap, 0u, resource);
 }
 
+/* A share holds its texture until the guest gives the allocation back, and
+ * nothing else does: not given back, every texture shown stayed in VRAM until
+ * its device went. The resource alone names it: pfnDeallocateCb refuses a
+ * resource and a list together (KernelDevice::deallocate). */
+void D3d12Device::give_back(const ResourceRecord &resource)
+{
+    AV_SCOPE("D3d12Device::give_back");
+    if (resource.allocation == 0u) return;
+    D3D12DDICB_DEALLOCATE_0022 deallocate = {};
+    deallocate.hResource = resource.runtime_resource;
+    const HRESULT freed = core_->pfnDeallocateCb(runtime_, &deallocate);
+    if (FAILED(freed)) refused_.failed("pfnDeallocateCb for a shown resource", freed);
+}
+
 VOID D3d12Device::destroy_heap_and_resource(D3D12DDI_HHEAP heap_handle, D3D12DDI_HRESOURCE handle)
 {
     AV_SCOPE("D3d12Device::destroy_heap_and_resource");
     if (handle.pDrvPrivate != nullptr) {
         ResourceRecord &resource = *static_cast<ResourceRecord *>(handle.pDrvPrivate);
         if (resource.header.stamp.holds(ResourceRecord::tag))
+        {
             static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), resource.header.stamp.id()), "Destroy12"));
+            give_back(resource);
+        }
         resource = ResourceRecord{};
     }
     if (heap_handle.pDrvPrivate == nullptr) return;

@@ -158,6 +158,7 @@ private:
 
     /* A swap chain buffer (d3d12_device_present.cpp): the kernel allocation
      * DWM opens it by, and the host's texture shown under its identity. */
+    void give_back(const ResourceRecord &resource);
     HRESULT                  show(ResourceRecord &resource, D3D12DDI_HRTRESOURCE runtime,
                                   const D3D12DDIARG_CREATERESOURCE_0109 &args);
 
